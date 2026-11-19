@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations;
 
 /// <summary>Describes a complete expected unique-constraint definition.</summary>
+[PublicAPI]
 public sealed class ExpectedUniqueConstraintDefinition
 {
     /// <summary>Initializes an expected unique constraint.</summary>

@@ -1,5 +1,6 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
+/// <summary>Verifies PostgreSQL Generated Drop Integration contracts in independently owned test state.</summary>
 public sealed partial class PostgreSqlGeneratedDropIntegrationTests
 {
     /// <summary>Current accepted operands, not initial source absence, qualify a finite generated addition.</summary>

@@ -1,3 +1,9 @@
+// WHY: This EF migration/snapshot fixture is compiled into both native tests and
+// the isolated benchmark host. EF discovers attributed types in each consumer's
+// migrations assembly; single-project reachability cannot prove they are unused.
+// ReSharper disable UnusedType.Global
+// ReSharper disable ClassNeverInstantiated.Global
+
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Hosts the generic runtime workload independently of application models and explicit preflight.</summary>

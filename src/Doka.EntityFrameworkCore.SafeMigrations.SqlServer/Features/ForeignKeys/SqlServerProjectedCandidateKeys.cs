@@ -92,14 +92,16 @@ internal sealed class SqlServerProjectedCandidateKeys
 
                 columns.Add(new KeyColumn(reader.GetString(4), reader.GetInt32(5)));
                 BindName(table, reader.GetString(2), index);
-                var kind = reader.IsDBNull(6)
-                    ? SafeMigrationDatabaseObjectKind.Index
-                    : reader
-                        .GetString(6)
-                        .TrimEnd()
-                    == "PK"
-                        ? SafeMigrationDatabaseObjectKind.PrimaryKey
-                        : SafeMigrationDatabaseObjectKind.UniqueConstraint;
+                var kind = reader.IsDBNull(6) switch
+                {
+                    true => SafeMigrationDatabaseObjectKind.Index,
+                    false when reader
+                            .GetString(6)
+                            .TrimEnd()
+                        == "PK"
+                        => SafeMigrationDatabaseObjectKind.PrimaryKey,
+                    false => SafeMigrationDatabaseObjectKind.UniqueConstraint,
+                };
 
                 _liveIdentities[new KeyIdentity(table, index)] = new SafeMigrationLiveCandidateKey(
                     kind,
@@ -340,6 +342,9 @@ internal sealed class SqlServerProjectedCandidateKeys
             .Where(pair => pair.Value.Any(column => column.Name == name
                 || (columnId > 0 && column.Id == columnId)))
             .Select(static pair => pair.Key)
+
+            // WHY: Retain this explicit fluent snapshot instead of a collection-spread rewrite.
+            // ReSharper disable once UseCollectionExpression
             .ToArray())
         {
             keys.Remove(index);
@@ -365,13 +370,21 @@ internal sealed class SqlServerProjectedCandidateKeys
         return keys;
     }
 
+    // WHY: Every positional component participates in the generated equality/hash used by catalog-key lookup.
     private readonly record struct KeyIdentity(
+
+        // ReSharper disable once NotAccessedPositionalProperty.Local
         int Table,
         int Index
     );
 
+    // WHY: Both owner and name participate in generated equality/hash even without separate property reads.
     private readonly record struct NameIdentity(
+
+        // ReSharper disable once NotAccessedPositionalProperty.Local
         int Table,
+
+        // ReSharper disable once NotAccessedPositionalProperty.Local
         string Name
     );
 

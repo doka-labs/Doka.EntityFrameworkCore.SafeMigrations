@@ -1,5 +1,3 @@
-using System.Text.RegularExpressions;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
 /// <summary>Verifies independently captured SQL Server column/index destination identities.</summary>
@@ -70,7 +68,7 @@ public sealed class SqlServerMemberRenameEvidenceTests
     )
     {
         // Arrange
-        using var context = Context();
+        await using var context = Context();
         var analyzer = Analyzer(context);
         var operations = Operations(4);
         var analyses = Analyses(4);
@@ -107,7 +105,7 @@ public sealed class SqlServerMemberRenameEvidenceTests
     )
     {
         // Arrange
-        using var context = Context();
+        await using var context = Context();
         var analyzer = Analyzer(context);
         var operations = Operations(4);
         var analyses = Analyses(4);
@@ -115,7 +113,7 @@ public sealed class SqlServerMemberRenameEvidenceTests
         bool?[] expectedSources = [null, false, null, false];
 
         await using var connection = new CatalogStatementTestConnection(native, (sql, _) => Results(sql));
-        await using var transaction = connection.BeginTransaction();
+        await using var transaction = await connection.BeginTransactionAsync(CancellationToken.None);
 
         // Act
         await analyzer.PopulateMemberRenameTargetEvidenceAsync(
@@ -158,7 +156,7 @@ public sealed class SqlServerMemberRenameEvidenceTests
     )
     {
         // Arrange
-        using var context = Context();
+        await using var context = Context();
         var analyzer = Analyzer(context);
         var operations = Operations(290);
         var analyses = Analyses(290);
@@ -206,7 +204,7 @@ public sealed class SqlServerMemberRenameEvidenceTests
     )
     {
         // Arrange
-        using var context = Context();
+        await using var context = Context();
         var analyzer = Analyzer(context);
         var operations = Operations(4);
         var analyses = Analyses(4);
@@ -265,7 +263,7 @@ public sealed class SqlServerMemberRenameEvidenceTests
     public async Task OrdinaryOrRejectedOperationsDoNotSubmitProbes()
     {
         // Arrange
-        using var context = Context();
+        await using var context = Context();
         var analyzer = Analyzer(context);
         SafeMigrationOperation[] operations =
         [
@@ -310,6 +308,8 @@ public sealed class SqlServerMemberRenameEvidenceTests
                 ? new RenameColumnIntent("source_" + ordinal, "items", "target_" + ordinal, "MemberScope")
                 : new RenameIndexIntent("source_" + ordinal, "items", "target_" + ordinal, "MemberScope"),
             SafeMigrationPolicy.ThrowIfDifferent))
+        // WHY: Fluent terminal materialization preserves the existing snapshot and enumeration contract.
+        // ReSharper disable once UseCollectionExpression
         .ToArray();
 
     private static SafeMigrationProviderAnalysis[] Analyses(
@@ -317,6 +317,8 @@ public sealed class SqlServerMemberRenameEvidenceTests
     ) => Enumerable
         .Range(0, count)
         .Select(static _ => Live(SafeMigrationObservedState.Missing))
+        // WHY: Fluent terminal materialization preserves the existing snapshot and enumeration contract.
+        // ReSharper disable once UseCollectionExpression
         .ToArray();
 
     private static SafeMigrationProviderAnalysis Live(

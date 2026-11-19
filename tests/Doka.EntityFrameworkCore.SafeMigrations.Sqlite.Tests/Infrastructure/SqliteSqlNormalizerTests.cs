@@ -1,5 +1,8 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 
+/// <summary>
+/// Provides isolated SQLite coverage for SQL normalizer.
+/// </summary>
 public sealed class SqliteSqlNormalizerTests
 {
     /// <summary>SQLite's high-byte identifier characters cannot normalize into ASCII SQL whitespace.</summary>
@@ -86,6 +89,11 @@ public sealed class SqliteSqlNormalizerTests
         Assert.Equal(equivalent, result);
     }
 
+    /// <summary>
+    /// Equivalent ignores only redundant outer parentheses.
+    /// </summary>
+    /// <param name="left">The left defining this isolated fixture case.</param>
+    /// <param name="right">The right defining this isolated fixture case.</param>
     [Theory]
     [InlineData("((length(\"Code\") > 0))", "length(\"Code\") > 0")]
     [InlineData("(([Code] <> '(archived)'))", "[Code] <> '(archived)'")]
@@ -95,11 +103,20 @@ public sealed class SqliteSqlNormalizerTests
         string right
     )
     {
+        // Arrange: The fixed or theory-supplied SQL/value is the complete input.
+
+        // Act
         var equivalent = SqliteSqlNormalizer.Equivalent(left, right);
 
+        // Assert
         Assert.True(equivalent);
     }
 
+    /// <summary>
+    /// Equivalent preserves expression structure.
+    /// </summary>
+    /// <param name="left">The left defining this isolated fixture case.</param>
+    /// <param name="right">The right defining this isolated fixture case.</param>
     [Theory]
     [InlineData("(Code = 'a') OR (Code = 'b')", "Code = 'a' OR Code = 'b'")]
     [InlineData("([Code] = '(a)') AND ([State] = 'active')", "[Code] = '(a)' AND [State] = 'active'")]
@@ -111,8 +128,12 @@ public sealed class SqliteSqlNormalizerTests
         string right
     )
     {
+        // Arrange: The fixed or theory-supplied SQL/value is the complete input.
+
+        // Act
         var equivalent = SqliteSqlNormalizer.Equivalent(left, right);
 
+        // Assert
         Assert.False(equivalent);
     }
 }

@@ -1,6 +1,8 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-/// <summary>Exercises the ColumnsRequiredDefaultsProjectedAdds migration contracts in an independent class collection.</summary>
+/// <summary>
+/// Exercises the ColumnsRequiredDefaultsProjectedAdds migration contracts in an independent class collection.
+/// </summary>
 public sealed partial class
     MySqlColumnsRequiredDefaultsProjectedAddsIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
@@ -63,10 +65,7 @@ public sealed partial class
             context,
             cancellationToken: CancellationToken.None);
 
-        var state = await ReadAtomicRequiredAddStateAsync(
-            connectionString,
-            column,
-            cancellationToken: CancellationToken.None);
+        var state = await ReadAtomicRequiredAddStateAsync(connectionString, column, null, CancellationToken.None);
 
         var physicalType = await ScalarStringAsync(
             connectionString,
@@ -164,10 +163,7 @@ public sealed partial class
         var failure = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, operations, CancellationToken.None));
 
-        var state = await ReadAtomicRequiredAddStateAsync(
-            connectionString,
-            column,
-            cancellationToken: CancellationToken.None);
+        var state = await ReadAtomicRequiredAddStateAsync(connectionString, column, null, CancellationToken.None);
 
         var actualEngine = await ScalarStringAsync(
             connectionString,
@@ -248,10 +244,7 @@ public sealed partial class
         var failure = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, operations, CancellationToken.None));
 
-        var state = await ReadAtomicRequiredAddStateAsync(
-            connectionString,
-            column,
-            cancellationToken: CancellationToken.None);
+        var state = await ReadAtomicRequiredAddStateAsync(connectionString, column, null, CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);

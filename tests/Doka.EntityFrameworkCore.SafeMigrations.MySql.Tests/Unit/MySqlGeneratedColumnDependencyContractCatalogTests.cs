@@ -3,17 +3,6 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 /// <summary>Verifies conditional generated candidates without trusting live or future schema guesses.</summary>
 public sealed class MySqlGeneratedColumnDependencyContractCatalogTests
 {
-    private readonly ITestOutputHelper _output;
-
-    /// <summary>Receives informational allocation evidence without introducing a performance gate.</summary>
-    /// <param name="output">The test-owned evidence sink.</param>
-    public MySqlGeneratedColumnDependencyContractCatalogTests(
-        ITestOutputHelper output
-    )
-    {
-        _output = output;
-    }
-
     /// <summary>Sharing empty immutable values cannot merge operation keys or ambiguous states.</summary>
     [Fact]
     public void ParsedEmptySnapshotsShareImmutableContractWithoutMergingOperationKeys()
@@ -36,21 +25,13 @@ public sealed class MySqlGeneratedColumnDependencyContractCatalogTests
 
         var ambiguous = Safe(new DropColumnIntent("retired", "ambiguous"));
         operations.Add(ambiguous);
-        for (var warmup = 0; warmup < 4; warmup++)
-        {
-            _ = MySqlGeneratedColumnDependencyContractCatalog.Create(operations);
-        }
-
         var first = (SafeMigrationOperation)operations[1];
         var last = (SafeMigrationOperation)operations[dropCount];
-        var allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
 
         // Act
         var catalog = MySqlGeneratedColumnDependencyContractCatalog.Create(operations);
-        var allocatedBytes = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
 
         // Assert
-        _output.WriteLine($"Informational: drops={dropCount}; allocated-bytes={allocatedBytes}");
         var empty = Assert.IsType<MySqlGeneratedColumnDependencyContract>(catalog.Get(first));
         Assert.Same(empty, catalog.Get(last));
         Assert.Null(catalog.Get(Safe(new DropColumnIntent("retired_0", "rows"))));

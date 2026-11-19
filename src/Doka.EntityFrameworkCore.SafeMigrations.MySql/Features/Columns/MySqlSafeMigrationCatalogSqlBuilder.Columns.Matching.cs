@@ -90,7 +90,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         return ComposeColumnMatch(Literal(table), Literal(definition.Name), conditions);
     }
 
-    /// <summary>Writes all predicate pieces once without a joined intermediate or a condition-list backing array.</summary>
+    /// <summary>
+    /// Writes all predicate pieces once without a joined intermediate or a condition-list backing array.
+    /// </summary>
     /// <param name="tableLiteral">The already provider-rendered owner literal.</param>
     /// <param name="nameLiteral">The already provider-rendered column literal.</param>
     /// <param name="conditions">The ordered facets, with empty optional slots omitted from SQL.</param>
@@ -189,14 +191,20 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     )
     {
         var facets = new List<(List<string> Conditions, CollationContract Collation)>(definition.Columns.Count);
-        foreach (var column in definition.Columns)
+
+        // WHY: Index this stable list while preserving its order and ownership.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var columnIndex = 0; columnIndex < definition.Columns.Count; columnIndex++)
         {
-            var conditions = new List<string>
-            {
+            var column = definition.Columns[columnIndex];
+
+            List<string> conditions =
+            [
                 $"c.COLUMN_NAME = {Literal(column.Name)}",
                 BuildColumnNullabilityMatches(table, column, isMariaDb),
                 ColumnCommentMatches(column.Comment),
-            };
+            ];
 
             conditions.AddRange(BuildColumnStructuralConditions(table, column, isMariaDb, out var collation));
             facets.Add((conditions, collation));
@@ -461,19 +469,30 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     }
 
     /// <summary>Retains borrowed predicate pieces only across the synchronous string.Create callback.</summary>
-    private readonly ref struct ColumnMatchComposition(
-        string tableLiteral,
-        string nameLiteral,
-        ReadOnlySpan<string> conditions
-    )
+    private readonly ref struct ColumnMatchComposition
     {
+        /// <summary>Retains borrowed values only until their synchronous string construction completes.</summary>
+        /// <param name="tableLiteral">The already rendered owner literal.</param>
+        /// <param name="nameLiteral">The already rendered member literal.</param>
+        /// <param name="conditions">The ordered borrowed predicate pieces.</param>
+        internal ColumnMatchComposition(
+            string tableLiteral,
+            string nameLiteral,
+            ReadOnlySpan<string> conditions
+        )
+        {
+            TableLiteral = tableLiteral;
+            NameLiteral = nameLiteral;
+            Conditions = conditions;
+        }
+
         /// <summary>Gets the already rendered owner literal without another mapping call.</summary>
-        internal string TableLiteral { get; } = tableLiteral;
+        internal string TableLiteral { get; }
 
         /// <summary>Gets the already rendered column literal without changing placeholder order.</summary>
-        internal string NameLiteral { get; } = nameLiteral;
+        internal string NameLiteral { get; }
 
         /// <summary>Gets immutable borrowed facets whose lifetime ends with synchronous emission.</summary>
-        internal ReadOnlySpan<string> Conditions { get; } = conditions;
+        internal ReadOnlySpan<string> Conditions { get; }
     }
 }

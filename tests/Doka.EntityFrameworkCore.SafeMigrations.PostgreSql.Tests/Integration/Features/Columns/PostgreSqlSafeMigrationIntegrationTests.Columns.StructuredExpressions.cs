@@ -9,9 +9,11 @@ public sealed class PostgreSqlColumnsStructuredExpressionsIntegrationTests : Pos
         PostgreSqlContainerFixture fixture
     ) : base(fixture) { }
 
+    /// <summary>Structured Alias Cast Converges And Round Trips Canonical Catalog Type.</summary>
     [Fact]
     public async Task StructuredAliasCast_ConvergesAndRoundTripsCanonicalCatalogType()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -36,13 +38,13 @@ public sealed class PostgreSqlColumnsStructuredExpressionsIntegrationTests : Pos
                     ["id"])));
 
         var runner = context.GetService<ISafeMigrationRunner>();
+
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
             new SafeMigrationRunOptions("structured-alias-cast-preflight"),
             CancellationToken.None);
-
-        Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
@@ -53,57 +55,63 @@ public sealed class PostgreSqlColumnsStructuredExpressionsIntegrationTests : Pos
             new SafeMigrationRunOptions("structured-alias-cast-postflight"),
             CancellationToken.None);
 
+        // Assert
+        Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
+        Assert.Equal(builder.Operations.Count, preflight.Assessments.Count);
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
+        Assert.Equal(builder.Operations.Count, postflight.Assessments.Count);
         Assert.All(postflight.Assessments, static assessment => Assert.True(assessment.PostconditionSatisfied));
     }
 
-    [Fact]
-    public async Task StructuredCastTypes_RenderTypedNullsAcceptedByTheServer()
+    /// <summary>Structured Cast Types Render Typed Nulls Accepted By The Server.</summary>
+    /// <param name="storeType">The independently discovered native typed-NULL store type.</param>
+    [Theory]
+    [InlineData("integer")]
+    [InlineData("int4")]
+    [InlineData("int4[]")]
+    [InlineData("bigint")]
+    [InlineData("float4")]
+    [InlineData("float8")]
+    [InlineData("float")]
+    [InlineData("float(1)")]
+    [InlineData("float(24)")]
+    [InlineData("float(25)")]
+    [InlineData("float(53)")]
+    [InlineData("float(24)[]")]
+    [InlineData("bool")]
+    [InlineData("varchar(32)")]
+    [InlineData("char(8)")]
+    [InlineData("varbit(16)")]
+    [InlineData("numeric(18,4)")]
+    [InlineData("double precision")]
+    [InlineData("text")]
+    [InlineData("character varying(32)")]
+    [InlineData("bytea")]
+    [InlineData("date")]
+    [InlineData("timestamp(6)")]
+    [InlineData("timestamptz(6)")]
+    [InlineData("timestamp(6) without time zone")]
+    [InlineData("time(6)")]
+    [InlineData("timetz(6)")]
+    [InlineData("time(6) without time zone")]
+    [InlineData("uuid")]
+    public async Task StructuredCastTypes_RenderTypedNullsAcceptedByTheServer(
+        string storeType
+    )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var renderer = new PostgreSqlSafeMigrationSqlExpressionRenderer(
             context.GetService<IRelationalTypeMappingSource>(),
             context.GetService<ISqlGenerationHelper>());
 
-        var storeTypes = new[]
-        {
-            "integer",
-            "int4",
-            "int4[]",
-            "bigint",
-            "float4",
-            "float8",
-            "float",
-            "float(1)",
-            "float(24)",
-            "float(25)",
-            "float(53)",
-            "float(24)[]",
-            "bool",
-            "varchar(32)",
-            "char(8)",
-            "varbit(16)",
-            "numeric(18,4)",
-            "double precision",
-            "text",
-            "character varying(32)",
-            "bytea",
-            "date",
-            "timestamp(6)",
-            "timestamptz(6)",
-            "timestamp(6) without time zone",
-            "time(6)",
-            "timetz(6)",
-            "time(6) without time zone",
-            "uuid",
-        };
+        // Act
+        var expression = renderer.Render(SafeMigrationSql.Literal(null, storeType));
+        var failure = await Record.ExceptionAsync(() =>
+            ExecuteSqlAsync(connectionString, $"SELECT {expression};", cancellationToken: CancellationToken.None));
 
-        foreach (var storeType in storeTypes)
-        {
-            var expression = renderer.Render(SafeMigrationSql.Literal(null, storeType));
-
-            await ExecuteSqlAsync(connectionString, $"SELECT {expression};", cancellationToken: CancellationToken.None);
-        }
+        // Assert
+        Assert.Null(failure);
     }
 }

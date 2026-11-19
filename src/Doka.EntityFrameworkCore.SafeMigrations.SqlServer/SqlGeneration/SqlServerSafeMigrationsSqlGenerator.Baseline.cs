@@ -85,6 +85,8 @@ public sealed partial class SqlServerSafeMigrationsSqlGenerator
 
         var generationModel = model;
 
+        // WHY: Only the matching EF operation is mutated; all other kinds retain their original model context.
+        // ReSharper disable once ConvertIfStatementToSwitchStatement
         if (operation.Intent is RenameTableIntent rename
             && baselineOperation is RenameTableOperation renameTable)
         {
@@ -284,8 +286,15 @@ public sealed partial class SqlServerSafeMigrationsSqlGenerator
         var hasOrdinaryOperationsAcrossBoundary = false;
         var hasTemporalMetadata = false;
 
-        foreach (var operation in operations)
+        // WHY: The indexed immutable operation stream preserves temporal-boundary order.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var operationIndex = 0; operationIndex < operations.Count; operationIndex++)
         {
+            var operation = operations[operationIndex];
+
+            // WHY: Safe boundaries update ordering evidence, while the design-time sentinel only skips execution.
+            // ReSharper disable once ConvertIfStatementToSwitchStatement
             if (operation is SafeMigrationOperation)
             {
                 hasSafeBoundaryAfterOrdinary |= hasOrdinaryOperation;

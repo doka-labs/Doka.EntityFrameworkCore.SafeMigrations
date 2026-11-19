@@ -20,6 +20,11 @@ on:
         required: false
         default: ''
         type: string
+      capture-benchmark-evidence:
+        description: Explicitly run native BenchmarkDotNet Dry measurements for all five suites.
+        required: false
+        default: false
+        type: boolean
       capture-sqlserver-baseline:
         description: Retain a SQL Server BenchmarkDotNet Short run on the qualification runner.
         required: false
@@ -70,6 +75,7 @@ jobs:
       package-version: 0.0.0-ci.${{ github.run_id }}.${{ github.run_attempt }}
       artifact-name: safe-migrations-ci-${{ github.run_id }}-${{ github.run_attempt }}
       artifact-retention-days: 14
+      capture-benchmark-evidence: ${{ github.event_name == 'workflow_dispatch' && inputs.capture-benchmark-evidence }}
       capture-sqlserver-baseline: ${{ github.event_name == 'workflow_dispatch' && inputs.capture-sqlserver-baseline }}
 
   dependency-review-startup:

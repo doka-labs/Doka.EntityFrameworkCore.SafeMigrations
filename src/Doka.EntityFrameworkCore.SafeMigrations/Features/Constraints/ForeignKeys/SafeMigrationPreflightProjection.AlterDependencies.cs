@@ -15,6 +15,8 @@ internal sealed partial class SafeMigrationPreflightProjection
         var target = ResolveAlterTable(owner);
         if (_tables.TryGetValue(owner, out var projected))
         {
+            // WHY: Scan current FK values directly without adapting the concrete dictionary enumerator.
+            // ReSharper disable once ForeachCanBeConvertedToQueryUsingAnotherGetEnumerator
             foreach (var definition in projected.ForeignKeys.Values)
             {
                 if (RequiresNullableColumn(definition, target, column, columnComparer))
@@ -26,6 +28,8 @@ internal sealed partial class SafeMigrationPreflightProjection
 
         if (_prerequisites.TryGetValue(owner, out var prerequisites))
         {
+            // WHY: Stop at the first dependency without adding a capturing predicate to this lineage lookup.
+            // ReSharper disable once LoopCanBeConvertedToQuery
             foreach (var definition in prerequisites.ForeignKeys.Definitions)
             {
                 if (RequiresNullableColumn(definition, target, column, columnComparer))
@@ -62,8 +66,13 @@ internal sealed partial class SafeMigrationPreflightProjection
         // WHY: Reuse the accepted graph rather than duplicate its lifecycle in
         // a provider cache. Fresh tables, inline FKs, aliases, renames and drops
         // must contribute the same dependency facts to every column transition.
-        foreach (var name in definition.Columns)
+        // WHY: This immutable definition snapshot is indexed; retain its authored order without interface enumeration.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var nameIndex = 0; nameIndex < definition.Columns.Count; nameIndex++)
         {
+            var name = definition.Columns[nameIndex];
+
             if (columnComparer.Equals(name, column))
             {
                 return true;
@@ -139,6 +148,8 @@ internal sealed partial class SafeMigrationPreflightProjection
     {
         Add(new TableKey(definition.Table, definition.Schema), definition.Columns);
         Add(new TableKey(definition.PrincipalTable, definition.PrincipalSchema), definition.PrincipalColumns);
+
+        return;
 
         void Add(
             TableKey table,

@@ -1,5 +1,3 @@
-using System.Text.RegularExpressions;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
 /// <summary>Records catalog transport and supplies deterministic classifications without a live session.</summary>
@@ -75,6 +73,21 @@ internal sealed class SqlServerCatalogTestConnection : DbConnection
 
     /// <summary>Gets or sets whether reader execution fails after recording the submitted statements.</summary>
     public bool ThrowOnExecute { get; set; }
+
+    /// <summary>Gets or sets the fault after actual native-batch or sequential-command disposal.</summary>
+    public Exception? TransportDisposeFailure { get; set; }
+
+    /// <summary>Gets or sets the fault after disposal of a non-executing parameter factory.</summary>
+    public Exception? ParameterFactoryDisposeFailure { get; set; }
+
+    /// <summary>Gets or sets a parameter-construction failure before any reader is dispatched.</summary>
+    public Exception? ParameterCreationFailure { get; set; }
+
+    /// <summary>Gets or sets the signal proving actual transport disposal has started.</summary>
+    public TaskCompletionSource? DisposalStarted { get; set; }
+
+    /// <summary>Gets or sets the test-owned completion gate retained by actual asynchronous disposal.</summary>
+    public Task? DisposalCompletion { get; set; }
 
     /// <summary>Gets or sets whether occupancy probes return their two-column presence contract.</summary>
     public bool ReturnPresenceRows { get; set; }
@@ -282,6 +295,8 @@ internal sealed class SqlServerCatalogTestConnection : DbConnection
             parameters
                 .Cast<SqlParameter>()
                 .Select(static parameter => (SqlParameter)((ICloneable)parameter).Clone())
+                // WHY: Fluent terminal materialization preserves the existing snapshot and enumeration contract.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray());
     }
 
@@ -385,7 +400,9 @@ internal sealed class SqlServerCatalogTestConnection : DbConnection
         public override object? ExecuteScalar() => throw new NotSupportedException();
 
         /// <inheritdoc />
-        protected override DbParameter CreateDbParameter() => new SqlParameter();
+        protected override DbParameter CreateDbParameter() => _connection.ParameterCreationFailure is { } failure
+            ? throw failure
+            : new SqlParameter();
 
         /// <inheritdoc />
         protected override DbDataReader ExecuteDbDataReader(
@@ -419,25 +436,59 @@ internal sealed class SqlServerCatalogTestConnection : DbConnection
             bool disposing
         )
         {
-            if (disposing && !_disposed)
+            try
             {
-                _disposed = true;
-                _results?.Dispose();
-                _parameterHost.Dispose();
+                if (disposing && !_disposed)
+                {
+                    _disposed = true;
+                    _results?.Dispose();
+                    _parameterHost.Dispose();
 
-                // WHY: Native catalog statements still need a provider command to create typed
-                // parameters. It owns no SQL and is not a sequential transport command.
-                if (CommandText.Length == 0)
-                {
-                    _connection.ParameterFactoriesDisposed++;
-                }
-                else
-                {
-                    _connection.CommandsDisposed++;
+                    // WHY: An empty provider command creates parameters but never acts as transport.
+                    if (CommandText.Length == 0)
+                    {
+                        _connection.ParameterFactoriesDisposed++;
+                        if (_connection.ParameterFactoryDisposeFailure is { } factoryFailure)
+                        {
+                            throw factoryFailure;
+                        }
+                    }
+                    else
+                    {
+                        _connection.CommandsDisposed++;
+                        if (_connection.TransportDisposeFailure is { } transportFailure)
+                        {
+                            throw transportFailure;
+                        }
+                    }
                 }
             }
+            finally
+            {
+                base.Dispose(disposing);
+            }
+        }
 
-            base.Dispose(disposing);
+        /// <inheritdoc />
+        public override async ValueTask DisposeAsync()
+        {
+            try
+            {
+                if (CommandText.Length > 0)
+                {
+                    _connection.DisposalStarted?.TrySetResult();
+                    if (_connection.DisposalCompletion is { } completion)
+                    {
+                        await completion;
+                    }
+                }
+
+                Dispose();
+            }
+            finally
+            {
+                await base.DisposeAsync();
+            }
         }
     }
 
@@ -542,19 +593,47 @@ internal sealed class SqlServerCatalogTestConnection : DbConnection
         /// <inheritdoc />
         public override void Dispose()
         {
-            if (!_disposed)
+            try
             {
-                _disposed = true;
-                _results?.Dispose();
-                foreach (var command in _commands)
+                if (!_disposed)
                 {
-                    ((CatalogBatchCommand)command).Dispose();
+                    _disposed = true;
+                    _results?.Dispose();
+                    foreach (var command in _commands)
+                    {
+                        ((CatalogBatchCommand)command).Dispose();
+                    }
+
+                    _connection.BatchesDisposed++;
+                    if (_connection.TransportDisposeFailure is { } failure)
+                    {
+                        throw failure;
+                    }
+                }
+            }
+            finally
+            {
+                base.Dispose();
+            }
+        }
+
+        /// <inheritdoc />
+        public override async ValueTask DisposeAsync()
+        {
+            try
+            {
+                _connection.DisposalStarted?.TrySetResult();
+                if (_connection.DisposalCompletion is { } completion)
+                {
+                    await completion;
                 }
 
-                _connection.BatchesDisposed++;
+                Dispose();
             }
-
-            base.Dispose();
+            finally
+            {
+                await base.DisposeAsync();
+            }
         }
     }
 

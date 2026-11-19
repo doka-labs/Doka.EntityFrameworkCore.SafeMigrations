@@ -200,6 +200,9 @@ public sealed class MySqlExplicitBackfillMetadataTests
         var state = Assert.Single(payloads, sql => sql.EndsWith("INTO @doka_sm_state", StringComparison.Ordinal));
         var alterations = payloads
             .Where(sql => sql.StartsWith("ALTER TABLE `items`", StringComparison.Ordinal))
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         Assert.EndsWith("INTO @doka_sm_nullability_blocked", proof, StringComparison.Ordinal);
@@ -251,6 +254,9 @@ public sealed class MySqlExplicitBackfillMetadataTests
 
         var payloads = commands
             .SelectMany(command => DecodePayloads(command.CommandText))
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToList();
 
         // Assert
@@ -262,6 +268,9 @@ public sealed class MySqlExplicitBackfillMetadataTests
 
         var updates = payloads
             .Where(sql => sql.StartsWith("UPDATE `items`", StringComparison.Ordinal))
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var alterations = payloads
@@ -621,38 +630,38 @@ public sealed class MySqlExplicitBackfillMetadataTests
             "CAST(c.TABLE_NAME AS BINARY) = CAST('items'\nAS BINARY)",
             StringComparison.Ordinal)
             ? """
-              AND (CASE WHEN @@lower_case_table_names = 0
-              THEN CAST(c.TABLE_SCHEMA AS BINARY) = CAST(DATABASE()
-              AS BINARY)
-              WHEN @@lower_case_table_names IN (1, 2)
-              THEN CAST(LOWER(c.TABLE_SCHEMA) AS BINARY) = CAST(LOWER(DATABASE())
-              AS BINARY)
-              ELSE FALSE END)
-              AND (CASE WHEN @@lower_case_table_names = 0
-              THEN CAST(c.TABLE_NAME AS BINARY) = CAST('items'
-              AS BINARY)
-              WHEN @@lower_case_table_names IN (1, 2)
-              THEN CAST(LOWER(c.TABLE_NAME) AS BINARY) = CAST(LOWER('items')
-              AS BINARY)
-              ELSE FALSE END)
-              """
+            AND (CASE WHEN @@lower_case_table_names = 0
+            THEN CAST(c.TABLE_SCHEMA AS BINARY) = CAST(DATABASE()
+            AS BINARY)
+            WHEN @@lower_case_table_names IN (1, 2)
+            THEN CAST(LOWER(c.TABLE_SCHEMA) AS BINARY) = CAST(LOWER(DATABASE())
+            AS BINARY)
+            ELSE FALSE END)
+            AND (CASE WHEN @@lower_case_table_names = 0
+            THEN CAST(c.TABLE_NAME AS BINARY) = CAST('items'
+            AS BINARY)
+            WHEN @@lower_case_table_names IN (1, 2)
+            THEN CAST(LOWER(c.TABLE_NAME) AS BINARY) = CAST(LOWER('items')
+            AS BINARY)
+            ELSE FALSE END)
+            """
             : null;
 
         var expected = nativeOwner is null
             ? $"""
-                NOT (EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS c
-                WHERE c.TABLE_SCHEMA = DATABASE()
-                AND c.TABLE_NAME = 'items'
-                AND c.COLUMN_NAME = 'id'
-                AND (c.IS_NULLABLE = 'YES'))) OR ({StrictSqlModeCondition})
-                """
+            NOT (EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS c
+            WHERE c.TABLE_SCHEMA = DATABASE()
+            AND c.TABLE_NAME = 'items'
+            AND c.COLUMN_NAME = 'id'
+            AND (c.IS_NULLABLE = 'YES'))) OR ({StrictSqlModeCondition})
+            """
             : $"""
-                NOT (EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS c
-                WHERE c.TABLE_SCHEMA = DATABASE()
-                AND c.TABLE_NAME = 'items'
-                AND c.COLUMN_NAME = 'id'
-                {nativeOwner} AND (c.IS_NULLABLE = 'YES'))) OR ({StrictSqlModeCondition})
-                """;
+            NOT (EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS c
+            WHERE c.TABLE_SCHEMA = DATABASE()
+            AND c.TABLE_NAME = 'items'
+            AND c.COLUMN_NAME = 'id'
+            {nativeOwner} AND (c.IS_NULLABLE = 'YES'))) OR ({StrictSqlModeCondition})
+            """;
 
         Assert.Contains(
             expected,
@@ -777,7 +786,7 @@ public sealed class MySqlExplicitBackfillMetadataTests
     {
         const string prefix = "CONVERT(0x";
         const string suffix = " USING utf8mb4)";
-        var payloads = new List<string>();
+        List<string> payloads = [];
         var offset = 0;
         while ((offset = sql.IndexOf(prefix, offset, StringComparison.Ordinal)) >= 0)
         {
@@ -818,10 +827,10 @@ public sealed class MySqlExplicitBackfillMetadataTests
             IsFixedLength = true,
             MaxLength = 36,
             IsNullable = false,
+            ["Doka:MySql:GuidFormat"] = DokaMySqlGuidFormat.Char36,
+            ["Doka:MySql:ValueGenerationStrategy"] = MySqlValueGenerationStrategy.ClientGuid,
         };
 
-        operation["Doka:MySql:GuidFormat"] = DokaMySqlGuidFormat.Char36;
-        operation["Doka:MySql:ValueGenerationStrategy"] = MySqlValueGenerationStrategy.ClientGuid;
         operation.AddAnnotation("Doka:MySql:RequiresExplicitBackfill", value);
 
         return operation;

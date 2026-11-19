@@ -12,10 +12,12 @@ public sealed class MySqlAlterPhysicalCaptureTests
         bool native
     )
     {
+        // Arrange
         await using var connection = new CatalogStatementTestConnection(native, Results);
         var operations = Operations(513);
         var environments = Environments(operations);
 
+        // Act
         var result = await MySqlSafeMigrationProviderAnalyzer.ReadProjectedAlterPhysicalSnapshotsAsync(
             connection,
             operations,
@@ -24,6 +26,7 @@ public sealed class MySqlAlterPhysicalCaptureTests
             71,
             CancellationToken.None);
 
+        // Assert
         Assert.Equal(513, result.Count);
         Assert.Equal(4, connection.Submissions.Count);
         Assert.Equal([512, 512, 1, 1], connection.Submissions.Select(static statement => statement.Parameters.Count));
@@ -47,12 +50,17 @@ public sealed class MySqlAlterPhysicalCaptureTests
     [Fact]
     public async Task RepeatedTableTransitionsDoNotAddCaptureStatements()
     {
+        // Arrange
         await using var connection = new CatalogStatementTestConnection(true, Results);
         var operation = Operations(1)[0];
         var operations = Enumerable
             .Repeat(operation, 1000)
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
+        // Act
         var result = await MySqlSafeMigrationProviderAnalyzer.ReadProjectedAlterPhysicalSnapshotsAsync(
             connection,
             operations,
@@ -61,6 +69,7 @@ public sealed class MySqlAlterPhysicalCaptureTests
             71,
             CancellationToken.None);
 
+        // Assert
         Assert.Single(result);
         Assert.Equal(2, connection.Submissions.Count);
         Assert.All(connection.Submissions, statement => Assert.Single(statement.Parameters));
@@ -70,12 +79,14 @@ public sealed class MySqlAlterPhysicalCaptureTests
     [Fact]
     public async Task OrdinaryOperationsDoNotCaptureAlterShapes()
     {
+        // Arrange
         await using var connection = new CatalogStatementTestConnection(true, Results);
         SafeMigrationOperation[] operations =
         [
             new(new EnsureColumnIntent("records", Column("varchar(80)")), SafeMigrationPolicy.ThrowIfDifferent),
         ];
 
+        // Act
         var result = await MySqlSafeMigrationProviderAnalyzer.ReadProjectedAlterPhysicalSnapshotsAsync(
             connection,
             operations,
@@ -84,6 +95,7 @@ public sealed class MySqlAlterPhysicalCaptureTests
             71,
             CancellationToken.None);
 
+        // Assert
         Assert.Empty(result);
         Assert.Empty(connection.Submissions);
     }
@@ -99,6 +111,7 @@ public sealed class MySqlAlterPhysicalCaptureTests
         string fault
     )
     {
+        // Arrange
         await using var connection = new CatalogStatementTestConnection(
             true,
             (sql, parameters) =>
@@ -130,6 +143,7 @@ public sealed class MySqlAlterPhysicalCaptureTests
 
         var operations = Operations(1);
 
+        // Act
         var exception = await Record.ExceptionAsync(() =>
             MySqlSafeMigrationProviderAnalyzer.ReadProjectedAlterPhysicalSnapshotsAsync(
                 connection,
@@ -139,6 +153,7 @@ public sealed class MySqlAlterPhysicalCaptureTests
                 71,
                 CancellationToken.None));
 
+        // Assert
         Assert.IsType<InvalidOperationException>(exception);
         Assert.Equal(1, connection.ReadersDisposed);
         Assert.Equal(ConnectionState.Open, connection.State);
@@ -148,6 +163,7 @@ public sealed class MySqlAlterPhysicalCaptureTests
     [Fact]
     public async Task CancellationDoesNotReturnPartiallyCapturedTables()
     {
+        // Arrange
         using var cancellation = new CancellationTokenSource();
         var reads = 0;
         await using var connection = new CatalogStatementTestConnection(true, Results)
@@ -163,6 +179,7 @@ public sealed class MySqlAlterPhysicalCaptureTests
 
         var operations = Operations(2);
 
+        // Act
         var exception = await Record.ExceptionAsync(() =>
             MySqlSafeMigrationProviderAnalyzer.ReadProjectedAlterPhysicalSnapshotsAsync(
                 connection,
@@ -172,7 +189,8 @@ public sealed class MySqlAlterPhysicalCaptureTests
                 71,
                 cancellation.Token));
 
-        Assert.IsAssignableFrom<OperationCanceledException>(exception);
+        // Assert
+        Assert.IsType<OperationCanceledException>(exception, exactMatch: false);
         Assert.Equal(1, connection.ReadersDisposed);
         Assert.Equal(1, connection.BatchesDisposed);
         Assert.Equal(ConnectionState.Open, connection.State);
@@ -188,6 +206,9 @@ public sealed class MySqlAlterPhysicalCaptureTests
                 Column("varchar(80)"),
                 Column("longtext")),
             SafeMigrationPolicy.RepairIfSafe))
+
+        // WHY: Retain this explicit materialization/copy path and its collection lowering.
+        // ReSharper disable once UseCollectionExpression
         .ToArray();
 
     private static Dictionary<string, SafeMigrationIndexPhysicalEnvironment> Environments(

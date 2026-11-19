@@ -1,6 +1,3 @@
-using System.Collections.Concurrent;
-using System.Diagnostics.CodeAnalysis;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
 /// <summary>Exercises the actual xUnit runner chain with fake test cases and container-free fixtures.</summary>
@@ -72,7 +69,13 @@ public sealed class SharedContainerRunnerTests
         var lifecycle = new SharedContainerFixtureLifecycle<RunnerFixture>(() => fixture);
         var assembly = CreateAssembly();
         var sink = new RecordingSink();
-        var observedOrdinaryFixtures = new ConcurrentQueue<OrdinaryFixture>();
+        var observations = new ConcurrentQueue<(
+            object SharedFixture,
+            int SharedInitializeCount,
+            int SharedDisposeCount,
+            object OrdinaryFixture,
+            int? OrdinaryInitializeCount,
+            int? OrdinaryDisposeCount)>();
 
         Task<RunSummary> ObserveArgumentsAsync(
             object[] arguments,
@@ -81,15 +84,14 @@ public sealed class SharedContainerRunnerTests
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            Assert.Same(fixture, arguments[0]);
-            Assert.Equal(1, fixture.InitializeCount);
-            Assert.Equal(0, fixture.DisposeCount);
-            var ordinary = Assert.IsType<OrdinaryFixture>(arguments[1]);
-
-            Assert.Equal(1, ordinary.InitializeCount);
-            Assert.Equal(0, ordinary.DisposeCount);
-
-            observedOrdinaryFixtures.Enqueue(ordinary);
+            var ordinary = arguments[1] as OrdinaryFixture;
+            observations.Enqueue((
+                arguments[0],
+                fixture.InitializeCount,
+                fixture.DisposeCount,
+                arguments[1],
+                ordinary?.InitializeCount,
+                ordinary?.DisposeCount));
 
             return Task.FromResult(new RunSummary { Total = 1 });
         }
@@ -119,9 +121,25 @@ public sealed class SharedContainerRunnerTests
         Assert.Equal(0, summary.Skipped);
         Assert.Equal(1, fixture.InitializeCount);
         Assert.Equal(1, fixture.DisposeCount);
-        Assert.Equal(2, observedOrdinaryFixtures.Count);
-        Assert.All(observedOrdinaryFixtures, ordinary => Assert.Equal(1, ordinary.DisposeCount));
-        Assert.NotSame(observedOrdinaryFixtures.First(), observedOrdinaryFixtures.Last());
+        Assert.Equal(2, observations.Count);
+        Assert.All(observations,
+            observation =>
+            {
+                Assert.Same(fixture, observation.SharedFixture);
+                Assert.Equal(1, observation.SharedInitializeCount);
+                Assert.Equal(0, observation.SharedDisposeCount);
+                Assert.Equal(1, observation.OrdinaryInitializeCount);
+                Assert.Equal(0, observation.OrdinaryDisposeCount);
+                Assert.Equal(1,
+                    Assert.IsType<OrdinaryFixture>(observation.OrdinaryFixture)
+                        .DisposeCount);
+            });
+
+        Assert.NotSame(observations.First()
+                .OrdinaryFixture,
+            observations.Last()
+                .OrdinaryFixture);
+
         Assert.Empty(runner.FixtureFailures);
         Assert.DoesNotContain(sink.Messages, message => message is ITestAssemblyCleanupFailure);
     }
@@ -187,6 +205,7 @@ public sealed class SharedContainerRunnerTests
         var bothAdmitted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var observerFailure = new InvalidOperationException("admission observer failed");
+        var observedFixtures = new ConcurrentQueue<object>();
         var active = 0;
         var admitted = 0;
 
@@ -197,7 +216,7 @@ public sealed class SharedContainerRunnerTests
         {
             try
             {
-                Assert.Same(fixture, arguments[0]);
+                observedFixtures.Enqueue(arguments[0]);
 
                 Interlocked.Increment(ref active);
 
@@ -297,6 +316,8 @@ public sealed class SharedContainerRunnerTests
         Assert.False(completedBeforeRelease);
         Assert.Equal(2, summary.Total);
         Assert.Equal(0, summary.Failed);
+        Assert.Equal(2, observedFixtures.Count);
+        Assert.All(observedFixtures, observed => Assert.Same(fixture, observed));
         Assert.Equal(1, fixture.InitializeCount);
         Assert.Equal(1, fixture.DisposeCount);
     }
@@ -324,6 +345,8 @@ public sealed class SharedContainerRunnerTests
         var releaseNormals = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var releaseControl = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var observerFailure = new InvalidOperationException("collection overlap observer failed");
+        var observedFixtures = new ConcurrentQueue<object>();
+        var controlArgumentCount = -1;
         var normalActive = 0;
         var normalAdmitted = 0;
         var normalCompleted = 0;
@@ -338,7 +361,7 @@ public sealed class SharedContainerRunnerTests
         {
             try
             {
-                Assert.Same(fixture, arguments[0]);
+                observedFixtures.Enqueue(arguments[0]);
 
                 Interlocked.Increment(ref normalActive);
 
@@ -375,7 +398,7 @@ public sealed class SharedContainerRunnerTests
         {
             try
             {
-                Assert.Empty(arguments);
+                controlArgumentCount = arguments.Length;
 
                 await normalsAdmitted.Task.WaitAsync(cancellationToken);
 
@@ -490,6 +513,9 @@ public sealed class SharedContainerRunnerTests
 
         Assert.Equal(3, summary.Total);
         Assert.Equal(0, summary.Failed);
+        Assert.Equal(2, observedFixtures.Count);
+        Assert.All(observedFixtures, observed => Assert.Same(fixture, observed));
+        Assert.Equal(0, controlArgumentCount);
         Assert.Equal(1, fixture.InitializeCount);
         Assert.Equal(1, fixture.DisposeCount);
     }
@@ -641,12 +667,13 @@ public sealed class SharedContainerRunnerTests
         var admitted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var observerFailure = new InvalidOperationException("fixture teardown observer failed");
+        object? observedFixture = null;
         var executed = 0;
         var firstCase = CreateCase<FirstConsumer>(
             assembly,
             observeArguments: async (arguments, cancellationToken) =>
             {
-                Assert.Same(fixture, arguments[0]);
+                observedFixture = arguments[0];
 
                 Interlocked.Increment(ref executed);
                 admitted.SetResult();
@@ -742,6 +769,7 @@ public sealed class SharedContainerRunnerTests
         Assert.False(cleanupCompletedBeforeRelease);
         Assert.Equal(0, disposedWhileCollectionWasActive);
         Assert.Equal(1, executed);
+        Assert.Same(fixture, observedFixture);
         Assert.Equal(1, fixture.InitializeCount);
         Assert.Equal(1, fixture.DisposeCount);
         Assert.NotNull(lateSummary);
@@ -808,7 +836,7 @@ public sealed class SharedContainerRunnerTests
         var admission = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var run = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using var cancellation = new CancellationTokenSource();
-        cancellation.Cancel();
+        await cancellation.CancelAsync();
 
         // Act
         var failure = await Record.ExceptionAsync(() =>
@@ -906,7 +934,7 @@ public sealed class SharedContainerRunnerTests
 
         Assert.NotNull(hook);
 
-        return Assert.IsAssignableFrom<Task>(hook.Invoke(runner, null));
+        return Assert.IsType<Task>(hook.Invoke(runner, null), exactMatch: false);
     }
 
     /// <summary>Bridges the operation token to the actual cancellation source owned by xUnit.</summary>
@@ -941,16 +969,18 @@ public sealed class SharedContainerRunnerTests
 
         Assert.NotNull(hook);
 
-        return Assert.IsAssignableFrom<Task<RunSummary>>(
+        return Assert.IsType<Task<RunSummary>>(
             hook.Invoke(
                 runner,
-                [messageBus, testCase.TestMethod.TestClass.TestCollection, new[] { testCase }, cancellation]));
+                [messageBus, testCase.TestMethod.TestClass.TestCollection, new[] { testCase }, cancellation]),
+            exactMatch: false);
     }
 
     private sealed class SelectedProbeCase : XunitTestCase
     {
         private readonly string? _selectedSkipReason;
 
+        [UsedImplicitly]
         public SelectedProbeCase()
             : this(new RecordingSink(), CreateTestMethod<UnitConsumer>(CreateAssembly()), null) { }
 
@@ -972,6 +1002,7 @@ public sealed class SharedContainerRunnerTests
     {
         private readonly Func<object[], CancellationToken, Task<RunSummary>>? _observeArguments;
 
+        [UsedImplicitly]
         public ProbeCase()
             : this(CreateTestMethod<UnitConsumer>(CreateAssembly()), null, null) { }
 
@@ -1094,17 +1125,22 @@ public sealed class SharedContainerRunnerTests
     /// <summary>An assembly-owned fake fixture retaining independent startup and cleanup counts.</summary>
     public sealed class RunnerFixture : IAsyncLifetime
     {
+        /// <summary>Gets the protected startup behavior invoked by the assembly-owned fixture.</summary>
         public Func<Task> Initialize { get; init; } = () => Task.CompletedTask;
 
+        /// <summary>Gets the protected cleanup behavior whose actual completion remains owned by the runner.</summary>
         public Func<Task> Cleanup { get; init; } = () => Task.CompletedTask;
 
+        /// <summary>Gets the number of actual shared-fixture initialization invocations.</summary>
         public int InitializeCount { get; private set; }
 
+        /// <summary>Gets the number of actual shared-fixture disposal invocations.</summary>
         public int DisposeCount { get; private set; }
 
         /// <summary>Records real consumer constructor invocations without process-wide mutable counters.</summary>
         public ConcurrentQueue<OrdinaryFixture> ConsumerFixtures { get; } = new();
 
+        /// <inheritdoc />
         public Task InitializeAsync()
         {
             InitializeCount++;
@@ -1112,6 +1148,7 @@ public sealed class SharedContainerRunnerTests
             return Initialize();
         }
 
+        /// <inheritdoc />
         public Task DisposeAsync()
         {
             DisposeCount++;
@@ -1121,12 +1158,16 @@ public sealed class SharedContainerRunnerTests
     }
 
     /// <summary>An ordinary class-owned fixture that the shared framework must leave under xUnit ownership.</summary>
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed class OrdinaryFixture : IAsyncLifetime
     {
+        /// <summary>Gets how often xUnit initialized this independently class-owned fixture.</summary>
         public int InitializeCount { get; private set; }
 
+        /// <summary>Gets how often xUnit disposed this independently class-owned fixture.</summary>
         public int DisposeCount { get; private set; }
 
+        /// <inheritdoc />
         public Task InitializeAsync()
         {
             InitializeCount++;
@@ -1134,6 +1175,7 @@ public sealed class SharedContainerRunnerTests
             return Task.CompletedTask;
         }
 
+        /// <inheritdoc />
         public Task DisposeAsync()
         {
             DisposeCount++;
@@ -1147,9 +1189,10 @@ public sealed class SharedContainerRunnerTests
     [XunitTestCaseDiscoverer(
         "Doka.EntityFrameworkCore.SafeMigrations.Tests.SharedContainerRunnerTests+ProbeCaseDiscoverer",
         "Doka.EntityFrameworkCore.SafeMigrations.Tests")]
-    public sealed class ProbeFactAttribute : FactAttribute { }
+    public sealed class ProbeFactAttribute : FactAttribute;
 
     /// <summary>Prevents probe metadata from producing test cases in the host assembly's discovery pass.</summary>
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed class ProbeCaseDiscoverer : IXunitTestCaseDiscoverer
     {
         /// <inheritdoc />

@@ -31,6 +31,10 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             .Select(static intent => intent.OldDefinition!.Collation!.Name)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
+
+            // WHY: Retain fluent materialization and its existing snapshot
+            // ownership rather than replacing this boundary with a spread.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -76,11 +80,11 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
 
                 return new SafeMigrationCatalogProbeStatement(1, valueBytes, offset);
             },
-            async (reader, slot, _, token) =>
+            async (reader, slot, _, callbackCancellationToken) =>
             {
                 var offset = slot * SafeMigrationCatalogQueryLimits.MaximumInventoryValues;
                 var count = Math.Min(SafeMigrationCatalogQueryLimits.MaximumInventoryValues, names.Length - offset);
-                while (await reader.ReadAsync(token))
+                while (await reader.ReadAsync(callbackCancellationToken))
                 {
                     var name = reader.GetString(0);
                     if (Array.BinarySearch(names, offset, count, name, StringComparer.OrdinalIgnoreCase) < 0
@@ -90,6 +94,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                     }
                 }
             },
+            transaction: null,
+            SafeMigrationCatalogQueryLimits.MaximumParameters,
             cancellationToken);
 
         return result;

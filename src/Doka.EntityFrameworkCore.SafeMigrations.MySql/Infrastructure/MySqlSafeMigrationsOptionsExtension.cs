@@ -2,11 +2,10 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql;
 
 internal sealed class MySqlSafeMigrationsOptionsExtension : IDbContextOptionsExtension, ISafeMigrationScaffoldingOptions
 {
-    private DbContextOptionsExtensionInfo? _info;
-
     public Type? CanonicalContextType { get; private init; }
 
-    public DbContextOptionsExtensionInfo Info => _info ??= new ExtensionInfo(this);
+    /// <inheritdoc />
+    public DbContextOptionsExtensionInfo Info => field ??= new ExtensionInfo(this);
 
     public void ApplyServices(
         IServiceCollection services

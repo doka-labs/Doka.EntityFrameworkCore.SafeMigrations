@@ -1,5 +1,3 @@
-using System.Text.RegularExpressions;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
 /// <summary>Constrains lazy statement-local index certificates without timing-dependent assertions.</summary>
@@ -437,6 +435,9 @@ public sealed class PostgreSqlIndexPrerequisiteInterningTests
         return builder
             .Operations
             .Cast<SafeMigrationOperation>()
+
+            // WHY: Retain explicit fluent materialization and its independently owned result snapshot.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
     }
 
@@ -474,5 +475,8 @@ public sealed class PostgreSqlIndexPrerequisiteInterningTests
     ) => Regex
         .Matches(sql, @"SELECT (\d+),")
         .Select(static match => int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture))
+
+        // WHY: Retain explicit fluent materialization and its independently owned result snapshot.
+        // ReSharper disable once UseCollectionExpression
         .ToList();
 }

@@ -1,15 +1,15 @@
 ---
 id: D-002
 status: implemented
-date: 2026-08-26
-decision-makers: [Dominic Kalkbrenner]
+date: 2026-11-19
+decision-makers: ["Dominic Kalkbrenner"]
 consulted: []
 informed: ["@doka-labs/core-maintainers"]
 scope: "Convergence of heterogeneous legacy schemas into one canonical application migration path"
 supersedes: []
 superseded-by: []
 amends: []
-amended-by: [D-008]
+amended-by: [D-008, D-011, D-013]
 madr-version: "4.0.0"
 doka-profile-version: "1.0"
 ---
@@ -130,7 +130,7 @@ history check alone does not prove live schema equivalence.
 
 ## Pros and Cons of the Options
 
-### Explicit granular convergence against one canonical Core model
+### Explicit granular convergence against one canonical application model
 
 - Good, because one deterministic target accommodates several real starting
   states without making schema ownership implicit.
@@ -193,6 +193,10 @@ destructive migrations are silently turned into no-ops.
 - 2026-08-27: D-008 amended authoring ergonomics with source-frozen automatic scaffolding while retaining this record's explicit generated contract.
 - 2026-09-18: D-013 extended explicit convergence to SQLite with model-owned
   rebuild authorization and per-pending-migration target-model analysis.
+- 2026-11-19: Aligned last-update metadata, reciprocal amendments, option titles
+  and source/navigation format with the current documentation profile. Retained
+  the recorded status and historical approval evidence; this migration grants no
+  new architectural acceptance or publication authority.
 
 ### Implementation References
 

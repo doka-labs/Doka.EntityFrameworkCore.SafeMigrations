@@ -174,12 +174,12 @@ public sealed class MySqlGeneratedColumnModelCandidatesTests
         var model = context.GetService<IDesignTimeModel>()
             .Model;
 
-        var nativeTable = Assert.IsAssignableFrom<ITable>(
+        var nativeTable = Assert.IsType<ITable>(
             model
                 .GetRelationalModel()
-                .FindTable("model_candidate_facets", null));
+                .FindTable("model_candidate_facets", null), exactMatch: false);
 
-        var nativeColumn = Assert.IsAssignableFrom<IColumn>(nativeTable.FindColumn("result"));
+        var nativeColumn = Assert.IsType<IColumn>(nativeTable.FindColumn("result"), exactMatch: false);
 
         MigrationOperation[] operations =
         [

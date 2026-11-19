@@ -15,13 +15,15 @@ public sealed class SqlServerCatalogCompilationBudgetTests
     )
     {
         // Arrange
-        using var context = new SafeMigrationDbContext(
+        await using var context = new SafeMigrationDbContext(
             "Server=127.0.0.1,1433;Database=compiler;User ID=sa;Password=unused;TrustServerCertificate=True");
 
         await using var connection = new SqlServerCatalogTestConnection(nativeBatch)
         {
             TransformOrdinals = static ordinals => ordinals
                 .Reverse()
+                // WHY: Fluent terminal materialization preserves the existing snapshot and enumeration contract.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray(),
         };
 
@@ -125,7 +127,7 @@ public sealed class SqlServerCatalogCompilationBudgetTests
     public async Task KnownAbsentStrictTables_RetainThirtyTwoClassifierStatements()
     {
         // Arrange
-        using var context = new SafeMigrationDbContext(
+        await using var context = new SafeMigrationDbContext(
             "Server=127.0.0.1,1433;Database=compiler;User ID=sa;Password=unused;TrustServerCertificate=True");
 
         await using var connection = new SqlServerCatalogTestConnection();
@@ -258,7 +260,7 @@ public sealed class SqlServerCatalogCompilationBudgetTests
     public async Task MixedComplexAndAbsenceClassifiers_KeepTheCompilerBudget()
     {
         // Arrange
-        using var context = new SafeMigrationDbContext(
+        await using var context = new SafeMigrationDbContext(
             "Server=127.0.0.1,1433;Database=compiler;User ID=sa;Password=unused;TrustServerCertificate=True");
 
         await using var connection = new SqlServerCatalogTestConnection();

@@ -123,7 +123,7 @@ public sealed class MySqlBinaryDefaultProofRecoveryIntegrationTests : MySqlInteg
             cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.IsAssignableFrom<OperationCanceledException>(failure);
+        Assert.IsType<OperationCanceledException>(failure, exactMatch: false);
         Assert.True(observer.CancellationTriggered);
         Assert.False(observer.WasCancelledBeforeProof);
         Assert.Equal(1, observer.AcquiredProofValue);
@@ -191,11 +191,21 @@ public sealed class MySqlBinaryDefaultProofRecoveryIntegrationTests : MySqlInteg
     }
 
     /// <summary>Cancels only after a real completed proof has made operation-local evidence available.</summary>
-    private sealed class AcquiredBinaryDefaultCancellationInterceptor(CancellationTokenSource cancellation)
+    private sealed class AcquiredBinaryDefaultCancellationInterceptor
         : DbCommandInterceptor
     {
         private const string ProofReset = "SET @doka_sm_binary_default_0 = FALSE;";
         private const string PreparedExecution = "EXECUTE doka_sm_statement;";
+        private readonly CancellationTokenSource _cancellation;
+
+        /// <summary>Initializes the explicit dependencies of this isolated test helper.</summary>
+        /// <param name="cancellation">The caller-owned source canceled at the native checkpoint.</param>
+        public AcquiredBinaryDefaultCancellationInterceptor(
+            CancellationTokenSource cancellation
+        )
+        {
+            _cancellation = cancellation;
+        }
 
         /// <summary>Gets the observed number of guarded bodies dispatched on this retained session.</summary>
         public int GuardedBodiesStarted { get; private set; }
@@ -247,7 +257,7 @@ public sealed class MySqlBinaryDefaultProofRecoveryIntegrationTests : MySqlInteg
             // WHY: Cancellation after dispatch alone is not proof of acquired
             // state. Observe the completed native result first; no timer or
             // CPU-dependent delay decides whether this test reaches its target.
-            WasCancelledBeforeProof = cancellation.IsCancellationRequested;
+            WasCancelledBeforeProof = _cancellation.IsCancellationRequested;
             var connection = command.Connection
                 ?? throw new InvalidOperationException("The binary-default proof lost its physical session.");
 
@@ -271,7 +281,7 @@ public sealed class MySqlBinaryDefaultProofRecoveryIntegrationTests : MySqlInteg
             }
 
             CancellationTriggered = true;
-            cancellation.Cancel();
+            _cancellation.Cancel();
 
             return result;
         }

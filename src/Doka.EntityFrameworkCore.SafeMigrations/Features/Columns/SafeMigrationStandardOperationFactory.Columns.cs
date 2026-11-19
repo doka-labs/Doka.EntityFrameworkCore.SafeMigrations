@@ -179,6 +179,7 @@ internal static partial class SafeMigrationStandardOperationFactory
 
         ApplyDefault(operation, definition.DefaultValue, renderExpression);
         ApplyProviderAnnotations(operation, definition.ProviderAnnotations);
+
         return operation;
     }
 

@@ -278,6 +278,10 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 "PRIMARY",
                 primaryKey.Columns,
                 "PRIMARY KEY"))
+
+            // WHY: Retain fluent materialization and its existing snapshot
+            // ownership rather than replacing this boundary with a spread.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         if (!expectedTableConstraints.PrimaryKeyMayBeAbsent)
@@ -308,6 +312,10 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 
         var modeledShapes = expectedConstraintShapes
             .Concat(expectedIndexShapes)
+
+            // WHY: Retain fluent materialization and its existing snapshot
+            // ownership rather than replacing this boundary with a spread.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var modeled = modeledShapes.Length == 0
@@ -378,6 +386,10 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             ? columns
                 .Where(static column => StringComparer.OrdinalIgnoreCase.Equals(column.StoreType?.Trim(), "json"))
                 .Select(MariaDbImplicitJsonCheckMatches)
+
+                // WHY: Retain fluent materialization and its existing snapshot
+                // ownership rather than replacing this boundary with a spread.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray()
             : [];
 
@@ -386,6 +398,10 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 checkConstraint,
                 isMariaDb,
                 "tc.CONSTRAINT_NAME = candidate_tc.CONSTRAINT_NAME"))
+
+            // WHY: Retain fluent materialization and its existing snapshot
+            // ownership rather than replacing this boundary with a spread.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var providerGeneratedFilter = implicitJsonChecks.Length == 0
@@ -419,6 +435,10 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             .Select(foreignKey => ForeignKeyMatches(
                 foreignKey,
                 "rc.CONSTRAINT_NAME = candidate_rc.CONSTRAINT_NAME"))
+
+            // WHY: Retain fluent materialization and its existing snapshot
+            // ownership rather than replacing this boundary with a spread.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var modeled = expectedMatches.Length == 0

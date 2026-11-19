@@ -121,8 +121,8 @@ public sealed class SqlServerIndexDropColumnTransitionIntegrationTests : SqlServ
                 ? "NULL"
                 : "2147483647")}); CREATE INDEX IX_upgrade_value ON dbo.index_drop_values(Value);{(control
                 == "remaining-index"
-                ? " CREATE INDEX IX_retained_value ON dbo.index_drop_values(Value);"
-                : string.Empty)}
+                    ? " CREATE INDEX IX_retained_value ON dbo.index_drop_values(Value);"
+                    : string.Empty)}
             """,
             cancellationToken: CancellationToken.None);
 

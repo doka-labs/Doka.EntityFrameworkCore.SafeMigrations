@@ -26,6 +26,10 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         var authored = expected
             .Keys
             .Select(static (owner, ordinal) => (Owner: owner, Ordinal: ordinal))
+
+            // WHY: Retain fluent materialization and its existing snapshot
+            // ownership rather than replacing this boundary with a spread.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var bindings = await ReadNativeInventoryOwnersAsync(

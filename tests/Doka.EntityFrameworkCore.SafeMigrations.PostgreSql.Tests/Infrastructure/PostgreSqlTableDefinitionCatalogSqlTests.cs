@@ -284,6 +284,9 @@ public sealed class PostgreSqlTableDefinitionCatalogSqlTests
             typeof(int),
             false,
             "integer"))
+
+        // WHY: Retain explicit fluent materialization and its independently owned result snapshot.
+        // ReSharper disable once UseCollectionExpression
         .ToArray();
 
     private static ExpectedUniqueConstraintDefinition[] UniqueConstraints(
@@ -294,6 +297,9 @@ public sealed class PostgreSqlTableDefinitionCatalogSqlTests
             "uq_shape_" + index.ToString(CultureInfo.InvariantCulture),
             "shape_table",
             ["column_" + index.ToString(CultureInfo.InvariantCulture)]))
+
+        // WHY: Retain explicit fluent materialization and its independently owned result snapshot.
+        // ReSharper disable once UseCollectionExpression
         .ToArray();
 
     private static string BuildStateExpression(
@@ -337,6 +343,9 @@ public sealed class PostgreSqlTableDefinitionCatalogSqlTests
                 SafeMigrationSql.Identifier("column_" + index.ToString(CultureInfo.InvariantCulture)),
                 SafeMigrationSqlBinaryOperator.GreaterThanOrEqual,
                 SafeMigrationSql.Literal(0))))
+
+        // WHY: Retain explicit fluent materialization and its independently owned result snapshot.
+        // ReSharper disable once UseCollectionExpression
         .ToArray();
 
     private static ExpectedForeignKeyDefinition[] ForeignKeys(
@@ -351,6 +360,9 @@ public sealed class PostgreSqlTableDefinitionCatalogSqlTests
             ["id"],
             onUpdate: ReferentialAction.NoAction,
             onDelete: ReferentialAction.NoAction))
+
+        // WHY: Retain explicit fluent materialization and its independently owned result snapshot.
+        // ReSharper disable once UseCollectionExpression
         .ToArray();
 
     private static int Occurrences(

@@ -1,6 +1,8 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-/// <summary>Exercises the ColumnsAtomicRequiredAddOwnerCase migration contracts in an independent class collection.</summary>
+/// <summary>
+/// Exercises the ColumnsAtomicRequiredAddOwnerCase migration contracts in an independent class collection.
+/// </summary>
 public sealed partial class MySqlColumnsAtomicRequiredAddOwnerCaseIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
     /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
@@ -184,7 +186,8 @@ public sealed partial class MySqlColumnsAtomicRequiredAddOwnerCaseIntegrationTes
             var staged = await ReadAtomicRequiredAddStateAsync(
                 connectionString,
                 operation,
-                cancellationToken: CancellationToken.None);
+                null,
+                CancellationToken.None);
 
             var ownerMode = await ScalarIntAsync(
                 connectionString,
@@ -221,7 +224,8 @@ public sealed partial class MySqlColumnsAtomicRequiredAddOwnerCaseIntegrationTes
             var final = await ReadAtomicRequiredAddStateAsync(
                 connectionString,
                 operation,
-                cancellationToken: CancellationToken.None);
+                null,
+                CancellationToken.None);
 
             var preserved = await ScalarStringAsync(
                 connectionString,
@@ -321,10 +325,7 @@ public sealed partial class MySqlColumnsAtomicRequiredAddOwnerCaseIntegrationTes
             var aliasFailure = await Record.ExceptionAsync(() =>
                 ExecuteOperationsAsync(context, [alias], CancellationToken.None));
 
-            var state = await ReadAtomicRequiredAddStateAsync(
-                connectionString,
-                original,
-                cancellationToken: CancellationToken.None);
+            var state = await ReadAtomicRequiredAddStateAsync(connectionString, original, null, CancellationToken.None);
 
             var ownerMode = await ScalarIntAsync(
                 connectionString,
@@ -503,6 +504,9 @@ public sealed partial class MySqlColumnsAtomicRequiredAddOwnerCaseIntegrationTes
                 benign,
                 SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
             .Append(requested)
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         await using var observer = new RequiredAddCatalogTransportObserver(connectionString);

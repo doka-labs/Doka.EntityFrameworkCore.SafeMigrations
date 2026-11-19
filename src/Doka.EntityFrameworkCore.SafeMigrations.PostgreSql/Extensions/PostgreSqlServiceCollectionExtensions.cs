@@ -3,6 +3,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql;
 /// <summary>
 /// Provides service-registration helpers for PostgreSQL safe migrations.
 /// </summary>
+[PublicAPI]
 public static class PostgreSqlServiceCollectionExtensions
 {
     /// <summary>
@@ -10,6 +11,10 @@ public static class PostgreSqlServiceCollectionExtensions
     /// </summary>
     /// <param name="services">The service collection to configure.</param>
     /// <returns>The same service collection so additional registrations can be chained.</returns>
+
+    // WHY: Extension blocks change API-baseline analyzer output in the qualified toolchain.
+    // Preserve the shipped signatures until that compatibility boundary is supported.
+    // ReSharper disable once ConvertToExtensionBlock
     public static IServiceCollection AddPostgreSqlSafeMigrations(
         this IServiceCollection services
     ) => services.AddPostgreSqlSafeMigrations(typeof(NpgsqlMigrationsSqlGenerator), canonicalContextType: null);
@@ -21,6 +26,10 @@ public static class PostgreSqlServiceCollectionExtensions
     /// <typeparam name="TBaselineGenerator">The generator used for ordinary PostgreSQL operations.</typeparam>
     /// <typeparam name="TCanonicalMigrationContext">The context that owns migration discovery and history.</typeparam>
     /// <returns>The same service collection so additional registrations can be chained.</returns>
+
+    // WHY: Extension blocks change API-baseline analyzer output in the qualified toolchain.
+    // Preserve the shipped signatures until that compatibility boundary is supported.
+    // ReSharper disable once ConvertToExtensionBlock
     public static IServiceCollection AddPostgreSqlSafeMigrations<TBaselineGenerator, TCanonicalMigrationContext>(
         this IServiceCollection services
     )

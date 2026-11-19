@@ -16,6 +16,8 @@ public sealed class MySqlLifecycleMissingSnapshotIntegrationTests : MySqlSafeMig
         MySqlEngineContainerFixture fixture
     ) : base(fixture) { }
 
+    /// <summary>Uses the initialized design-time model when no migration snapshot exists.</summary>
+    /// <param name="requireExpectedFingerprint">Whether canonical model-fingerprint equality is required.</param>
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -23,6 +25,7 @@ public sealed class MySqlLifecycleMissingSnapshotIntegrationTests : MySqlSafeMig
         bool requireExpectedFingerprint
     )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateSnapshotFreeContext(connectionString);
         var assembly = context.GetService<IMigrationsAssembly>();
@@ -36,42 +39,58 @@ public sealed class MySqlLifecycleMissingSnapshotIntegrationTests : MySqlSafeMig
                 ? fingerprint
                 : null);
 
-        Assert.Equal(
-            "Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationMigrationsAssembly",
-            assembly.GetType()
-                .FullName);
+        var assemblyType = assembly.GetType()
+            .FullName;
 
-        Assert.Null(assembly.ModelSnapshot);
-        Assert.Null(assembly.ModelSnapshot);
-        Assert.Empty(assembly.Migrations);
-        Assert.Single(model.GetEntityTypes());
+        var firstSnapshot = assembly.ModelSnapshot;
+        var secondSnapshot = assembly.ModelSnapshot;
+        var migrationCount = assembly.Migrations.Count;
+        var entityCount = model
+            .GetEntityTypes()
+            .Count();
 
         var builder = CreateSnapshotFreeOperations(context);
         var runner = context.GetService<ISafeMigrationRunner>();
-        var preflight = await runner.AnalyzeAsync(context, builder.Operations, options, CancellationToken.None);
-        var preflightAssessment = Assert.Single(preflight.Assessments);
 
+        // Act
+        var preflight = await runner.AnalyzeAsync(context, builder.Operations, options, CancellationToken.None);
+
+        var connectionAfterPreflight = context.Database.GetDbConnection()
+            .State;
+
+        var objectsAfterPreflight = await ScalarIntAsync(
+            connectionString,
+            SnapshotFreeCatalogCountSql,
+            cancellationToken: CancellationToken.None);
+
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        var postflight = await runner.VerifyAsync(context, builder.Operations, options, CancellationToken.None);
+        var snapshotAfterPostflight = assembly.ModelSnapshot;
+        var connectionAfterPostflight = context.Database.GetDbConnection()
+            .State;
+
+        var objectsAfterPostflight = await ScalarIntAsync(
+            connectionString,
+            SnapshotFreeCatalogCountSql,
+            cancellationToken: CancellationToken.None);
+
+        // Assert
+        var preflightAssessment = Assert.Single(preflight.Assessments);
+        var postflightAssessment = Assert.Single(postflight.Assessments);
+
+        Assert.Equal("Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationMigrationsAssembly", assemblyType);
+        Assert.Null(firstSnapshot);
+        Assert.Null(secondSnapshot);
+        Assert.Equal(0, migrationCount);
+        Assert.Equal(1, entityCount);
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
         Assert.Equal(SafeMigrationReportMode.Preflight, preflight.Mode);
         Assert.Equal(fingerprint, preflight.ModelFingerprint);
         Assert.Equal(SafeMigrationObservedState.Missing, preflightAssessment.ObservedState);
         Assert.Equal(SafeMigrationAction.Apply, preflightAssessment.Action);
         Assert.False(preflightAssessment.PostconditionSatisfied);
-        Assert.Equal(
-            ConnectionState.Closed,
-            context.Database.GetDbConnection()
-                .State);
-
-        Assert.Equal(
-            0,
-            await ScalarIntAsync(
-                connectionString,
-                SnapshotFreeCatalogCountSql,
-                cancellationToken: CancellationToken.None));
-
-        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var postflight = await runner.VerifyAsync(context, builder.Operations, options, CancellationToken.None);
-        var postflightAssessment = Assert.Single(postflight.Assessments);
+        Assert.Equal(ConnectionState.Closed, connectionAfterPreflight);
+        Assert.Equal(0, objectsAfterPreflight);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
         Assert.Equal(SafeMigrationReportMode.Postflight, postflight.Mode);
@@ -79,20 +98,13 @@ public sealed class MySqlLifecycleMissingSnapshotIntegrationTests : MySqlSafeMig
         Assert.Equal(SafeMigrationObservedState.Matching, postflightAssessment.ObservedState);
         Assert.Equal(SafeMigrationAction.NoOp, postflightAssessment.Action);
         Assert.True(postflightAssessment.PostconditionSatisfied);
-        Assert.Null(assembly.ModelSnapshot);
-        Assert.Equal(
-            ConnectionState.Closed,
-            context.Database.GetDbConnection()
-                .State);
-
-        Assert.Equal(
-            1,
-            await ScalarIntAsync(
-                connectionString,
-                SnapshotFreeCatalogCountSql,
-                cancellationToken: CancellationToken.None));
+        Assert.Null(snapshotAfterPostflight);
+        Assert.Equal(ConnectionState.Closed, connectionAfterPostflight);
+        Assert.Equal(1, objectsAfterPostflight);
     }
 
+    /// <summary>Rejects a mismatched model fingerprint without opening a database connection.</summary>
+    /// <param name="mode">The explicitly selected strict or legacy-convergence scaffolding mode.</param>
     [Theory]
     [InlineData(SafeMigrationReportMode.Preflight)]
     [InlineData(SafeMigrationReportMode.Postflight)]
@@ -100,6 +112,7 @@ public sealed class MySqlLifecycleMissingSnapshotIntegrationTests : MySqlSafeMig
         SafeMigrationReportMode mode
     )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateSnapshotFreeContext(connectionString);
         await using var differentModelContext = CreateContext(connectionString);
@@ -123,28 +136,33 @@ public sealed class MySqlLifecycleMissingSnapshotIntegrationTests : MySqlSafeMig
         connection.StateChange += (_,
             _) => connectionTransitions++;
 
-        Assert.Null(
-            context.GetService<IMigrationsAssembly>()
-                .ModelSnapshot);
+        var snapshotBeforeRun = context.GetService<IMigrationsAssembly>()
+            .ModelSnapshot;
 
-        Assert.NotEqual(expected, actual);
-        Assert.Equal(ConnectionState.Closed, connection.State);
+        var connectionBeforeRun = connection.State;
 
-        var exception = await Assert.ThrowsAsync<SafeMigrationModelMismatchException>(() =>
+        // Act
+        var failure = await Record.ExceptionAsync(() =>
             mode == SafeMigrationReportMode.Preflight
                 ? runner.AnalyzeAsync(context, builder.Operations, options, CancellationToken.None)
                 : runner.VerifyAsync(context, builder.Operations, options, CancellationToken.None));
 
+        var remainingObjects = await ScalarIntAsync(
+            connectionString,
+            SnapshotFreeCatalogCountSql,
+            cancellationToken: CancellationToken.None);
+
+        // Assert
+        var exception = Assert.IsType<SafeMigrationModelMismatchException>(failure);
+
+        Assert.Null(snapshotBeforeRun);
+        Assert.NotEqual(expected, actual);
+        Assert.Equal(ConnectionState.Closed, connectionBeforeRun);
         Assert.Equal(expected, exception.ExpectedFingerprint);
         Assert.Equal(actual, exception.ActualFingerprint);
         Assert.Equal(0, connectionTransitions);
         Assert.Equal(ConnectionState.Closed, connection.State);
-        Assert.Equal(
-            0,
-            await ScalarIntAsync(
-                connectionString,
-                SnapshotFreeCatalogCountSql,
-                cancellationToken: CancellationToken.None));
+        Assert.Equal(0, remainingObjects);
     }
 
     private SnapshotFreeContext CreateSnapshotFreeContext(
@@ -175,12 +193,16 @@ public sealed class MySqlLifecycleMissingSnapshotIntegrationTests : MySqlSafeMig
 
 public abstract partial class MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Provides a finalized design-time model without a migration snapshot.</summary>
     protected sealed class SnapshotFreeContext : DbContext
     {
+        /// <summary>Initializes the isolated model and explicit provider dependencies.</summary>
+        /// <param name="options">The isolated model and provider service options.</param>
         public SnapshotFreeContext(
             DbContextOptions<SnapshotFreeContext> options
         ) : base(options) { }
 
+        /// <inheritdoc />
         protected override void OnModelCreating(
             ModelBuilder modelBuilder
         )
@@ -197,6 +219,7 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
         }
     }
 
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class SnapshotFreeEntry
     {
         public int Id { get; set; }

@@ -1,15 +1,15 @@
 ---
 id: D-001
 status: implemented
-date: 2026-08-26
-decision-makers: [Dominic Kalkbrenner]
+date: 2026-11-19
+decision-makers: ["Dominic Kalkbrenner"]
 consulted: []
 informed: ["@doka-labs/core-maintainers"]
 scope: "Package dependencies and ownership of migration feature implementation"
 supersedes: []
 superseded-by: []
 amends: []
-amended-by: []
+amended-by: [D-013]
 madr-version: "4.0.0"
 doka-profile-version: "1.0"
 ---
@@ -182,6 +182,10 @@ the folder layout itself is not performance evidence.
 - 2026-09-30: Added the independent SQL Server package, test, benchmark, and
   package-consumer boundaries without adding an adapter dependency to Core or
   another provider.
+- 2026-11-19: Aligned last-update metadata, reciprocal amendments, option titles
+  and source/navigation format with the current documentation profile. Retained
+  the recorded status and historical approval evidence; this migration grants no
+  new architectural acceptance or publication authority.
 
 ### Implementation References
 

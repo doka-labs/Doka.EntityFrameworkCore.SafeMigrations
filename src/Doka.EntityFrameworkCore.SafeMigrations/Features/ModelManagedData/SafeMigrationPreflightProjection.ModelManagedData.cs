@@ -7,6 +7,9 @@ internal sealed partial class SafeMigrationPreflightProjection
     private const long RevokedModelManagedDataMutationVersion = -1;
 
     private readonly Dictionary<ModelManagedRowKey, ProjectedModelManagedRow> _modelManagedRows;
+
+    // WHY: The sentinel exists before the first operation; setter dispatch forwards each later ordinal explicitly.
+    // ReSharper disable once ReplaceWithFieldKeyword
     private int _currentOperationOrdinal = -1;
     private Dictionary<TableKey, int>? _modelManagedLocalOrigins;
 
@@ -32,16 +35,26 @@ internal sealed partial class SafeMigrationPreflightProjection
         SafeMigrationProviderAnalysis liveAnalysis
     )
     {
-        foreach (var column in intent.KeyColumns)
+        // WHY: This immutable definition snapshot is indexed; retain its authored order without interface enumeration.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var columnIndex = 0; columnIndex < intent.KeyColumns.Count; columnIndex++)
         {
+            var column = intent.KeyColumns[columnIndex];
+
             if (IsProjectedColumnMissing(intent.Table, intent.Schema, column))
             {
                 return TablePrerequisiteMissing();
             }
         }
 
-        foreach (var column in intent.Columns)
+        // WHY: This immutable definition snapshot is indexed; retain its authored order without interface enumeration.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var columnIndex1 = 0; columnIndex1 < intent.Columns.Count; columnIndex1++)
         {
+            var column = intent.Columns[columnIndex1];
+
             if (IsProjectedColumnMissing(intent.Table, intent.Schema, column))
             {
                 return TablePrerequisiteMissing();
@@ -59,15 +72,27 @@ internal sealed partial class SafeMigrationPreflightProjection
                     "projected_model_managed_dependency_unmodeled");
             }
 
-            foreach (var foreignKey in deletion.ForeignKeys)
+            // WHY: This immutable definition snapshot is indexed; retain its authored order without interface
+            // enumeration.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var foreignKeyIndex = 0; foreignKeyIndex < deletion.ForeignKeys.Count; foreignKeyIndex++)
             {
+                var foreignKey = deletion.ForeignKeys[foreignKeyIndex];
+
                 if (_projectedMissingTables.Contains(new TableKey(foreignKey.Table, foreignKey.Schema)))
                 {
                     return TablePrerequisiteMissing();
                 }
 
-                foreach (var column in foreignKey.Columns)
+                // WHY: This immutable definition snapshot is indexed; retain its authored order without interface
+                // enumeration.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
+                for (var columnIndex2 = 0; columnIndex2 < foreignKey.Columns.Count; columnIndex2++)
                 {
+                    var column = foreignKey.Columns[columnIndex2];
+
                     if (IsProjectedColumnMissing(foreignKey.Table, foreignKey.Schema, column))
                     {
                         return TablePrerequisiteMissing();
@@ -231,8 +256,14 @@ internal sealed partial class SafeMigrationPreflightProjection
 
         if (intent is DeleteModelManagedDataIntent deletion)
         {
-            foreach (var foreignKey in deletion.ForeignKeys)
+            // WHY: This immutable definition snapshot is indexed; retain its authored order without interface
+            // enumeration.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var foreignKeyIndex1 = 0; foreignKeyIndex1 < deletion.ForeignKeys.Count; foreignKeyIndex1++)
             {
+                var foreignKey = deletion.ForeignKeys[foreignKeyIndex1];
+
                 ordinal = Math.Max(
                     ordinal,
                     _modelManagedLocalOrigins.GetValueOrDefault(
@@ -279,8 +310,14 @@ internal sealed partial class SafeMigrationPreflightProjection
 
         if (intent is DeleteModelManagedDataIntent deletion)
         {
-            foreach (var foreignKey in deletion.ForeignKeys)
+            // WHY: This immutable definition snapshot is indexed; retain its authored order without interface
+            // enumeration.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var foreignKeyIndex2 = 0; foreignKeyIndex2 < deletion.ForeignKeys.Count; foreignKeyIndex2++)
             {
+                var foreignKey = deletion.ForeignKeys[foreignKeyIndex2];
+
                 if (!WasCreatedAfterLastGlobalDataMutation(foreignKey.Table, foreignKey.Schema))
                 {
                     return true;
@@ -318,8 +355,13 @@ internal sealed partial class SafeMigrationPreflightProjection
         // WHY: A confined child insert leaves the parent's contents unchanged
         // but can introduce a dependent row. Freshness covers both sides of the
         // delete contract, even when no global side-effect epoch was advanced.
-        foreach (var foreignKey in deletion.ForeignKeys)
+        // WHY: This immutable definition snapshot is indexed; retain its authored order without interface enumeration.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var foreignKeyIndex3 = 0; foreignKeyIndex3 < deletion.ForeignKeys.Count; foreignKeyIndex3++)
         {
+            var foreignKey = deletion.ForeignKeys[foreignKeyIndex3];
+
             if (HasUnanalyzedDataChanges(foreignKey.Table, foreignKey.Schema))
             {
                 return true;
@@ -366,6 +408,10 @@ internal sealed partial class SafeMigrationPreflightProjection
                 var ordinals = uniqueKey
                     .Columns
                     .Select(column => ColumnOrdinal(intent.Columns, column))
+
+                    // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based
+                    // materialization.
+                    // ReSharper disable once UseCollectionExpression
                     .ToArray();
 
                 if (ordinals.Any(ordinal => targets.GetUnsafeValue(row, ordinal) is null))
@@ -502,6 +548,7 @@ internal sealed partial class SafeMigrationPreflightProjection
         // computed values, checks and index expressions may call user functions.
         // Inspect the current definition so later artifacts revoke the proof.
         // Dictionary value iteration avoids copying the full table definition.
+        // ReSharper disable once ForeachCanBeConvertedToQueryUsingAnotherGetEnumerator
         foreach (var column in table.Columns.Values)
         {
             if (column.DefaultValue.Kind == SafeMigrationDefaultValueKind.Sql
@@ -576,6 +623,7 @@ internal sealed partial class SafeMigrationPreflightProjection
         // WHY: A structural change can discard exact rows without advancing the
         // data epoch. Losing those rows must not make a populated new table look
         // empty. Iterate discarded evidence, not all tables in a large stream.
+        // ReSharper disable once ForeachCanBePartlyConvertedToQueryUsingAnotherGetEnumerator
         foreach (var key in _modelManagedRows.Keys)
         {
             var table = new TableKey(key.Table, key.Schema);
@@ -608,6 +656,7 @@ internal sealed partial class SafeMigrationPreflightProjection
 
         // WHY: A pure rename preserves row values and completeness. Snapshot only
         // matching entries because dictionary enumeration cannot tolerate rekeys.
+        // ReSharper disable once ForeachCanBePartlyConvertedToQueryUsingAnotherGetEnumerator
         foreach (var row in _modelManagedRows)
         {
             if (IdentifierEquals(_objectIdentityNormalizer, row.Key.Table, source.Table)
@@ -737,16 +786,16 @@ internal sealed partial class SafeMigrationPreflightProjection
             return SafeMigrationObservedState.TransitionReady;
         }
 
-        if (states.All(static state => state == SafeMigrationObservedState.Matching))
-        {
-            return SafeMigrationObservedState.Matching;
-        }
-
-        return SafeMigrationObservedState.Missing;
+        return states.All(static state => state == SafeMigrationObservedState.Matching)
+            ? SafeMigrationObservedState.Matching
+            : SafeMigrationObservedState.Missing;
     }
 
     private static string ModelManagedStateCode(
         SafeMigrationObservedState state
+
+        // WHY: Unsupported belongs to provider capability rejection, not the row-state vocabulary emitted here.
+        // ReSharper disable once SwitchExpressionHandlesSomeKnownEnumValuesWithExceptionInDefault
     ) => state switch
     {
         SafeMigrationObservedState.Missing => "missing",
@@ -813,11 +862,18 @@ internal sealed partial class SafeMigrationPreflightProjection
         }
     }
 
-    private sealed class ModelManagedRowKeyComparer(
-        ISafeMigrationProviderObjectIdentityNormalizer? normalizer
-    ) : IEqualityComparer<ModelManagedRowKey>
+    private sealed class ModelManagedRowKeyComparer : IEqualityComparer<ModelManagedRowKey>
     {
-        private readonly TableKeyComparer _tableComparer = new(normalizer);
+        private readonly TableKeyComparer _tableComparer;
+
+        /// <summary>Initializes row-key identity with the provider's physical table identity rules.</summary>
+        /// <param name="normalizer">The provider identity rules, or ordinal identity when absent.</param>
+        public ModelManagedRowKeyComparer(
+            ISafeMigrationProviderObjectIdentityNormalizer? normalizer
+        )
+        {
+            _tableComparer = new TableKeyComparer(normalizer);
+        }
 
         public bool Equals(
             ModelManagedRowKey left,
@@ -834,15 +890,27 @@ internal sealed partial class SafeMigrationPreflightProjection
             StringComparer.Ordinal.GetHashCode(value.KeyFingerprint));
     }
 
-    private sealed class ProjectedModelManagedRow(
-        bool exists,
-        ISafeMigrationProviderObjectIdentityNormalizer? objectIdentityNormalizer
-    )
+    private sealed class ProjectedModelManagedRow
     {
-        public bool Exists { get; } = exists;
+        private readonly ISafeMigrationProviderObjectIdentityNormalizer? _objectIdentityNormalizer;
 
-        public Dictionary<string, object?> Values { get; } =
-            new(new IdentifierComparer(objectIdentityNormalizer, objectIdentityNormalizer?.ColumnIdentifierComparer));
+        /// <summary>Initializes row existence and member identity without cloning absent data.</summary>
+        /// <param name="exists">Whether the row is known to exist.</param>
+        /// <param name="objectIdentityNormalizer">The provider identity rules for value members.</param>
+        public ProjectedModelManagedRow(
+            bool exists,
+            ISafeMigrationProviderObjectIdentityNormalizer? objectIdentityNormalizer
+        )
+        {
+            _objectIdentityNormalizer = objectIdentityNormalizer;
+            Exists = exists;
+            Values = new Dictionary<string, object?>(
+                new IdentifierComparer(objectIdentityNormalizer, objectIdentityNormalizer?.ColumnIdentifierComparer));
+        }
+
+        public bool Exists { get; }
+
+        public Dictionary<string, object?> Values { get; }
 
         public static ProjectedModelManagedRow Absent(
             ISafeMigrationProviderObjectIdentityNormalizer? objectIdentityNormalizer
@@ -850,7 +918,7 @@ internal sealed partial class SafeMigrationPreflightProjection
 
         public ProjectedModelManagedRow Copy()
         {
-            var result = new ProjectedModelManagedRow(Exists, objectIdentityNormalizer);
+            var result = new ProjectedModelManagedRow(Exists, _objectIdentityNormalizer);
 
             foreach (var (column, value) in Values)
             {

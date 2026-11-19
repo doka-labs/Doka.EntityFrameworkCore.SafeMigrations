@@ -80,8 +80,14 @@ internal static class MySqlCapturedExpressionContract
 
         Span<char> compact = stackalloc char[storeType.Length];
         var length = 0;
-        foreach (var character in storeType)
+
+        // WHY: Read the stable UTF-16 source directly without changing character order or null behavior.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var characterIndex = 0; characterIndex < storeType.Length; characterIndex++)
         {
+            var character = storeType[characterIndex];
+
             if (!char.IsWhiteSpace(character))
             {
                 compact[length++] = char.ToUpperInvariant(character);

@@ -1,5 +1,3 @@
-using System.Text.RegularExpressions;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Verifies bounded lazy-guard diagnostics without evaluating unavailable row-proof expressions.</summary>
@@ -201,7 +199,7 @@ public sealed class MySqlLazyStateGuardDiagnosticsTests
     )
     {
         // Arrange
-        var status = MySqlSafeMigrationRuntimePlan.RequiredColumnAddStatusPlaceholder;
+        const string status = MySqlSafeMigrationRuntimePlan.RequiredColumnAddStatusPlaceholder;
         var plan = Plan() with
         {
             ClassificationCodeExpression = $"CASE WHEN {status} = 'unavailable' "

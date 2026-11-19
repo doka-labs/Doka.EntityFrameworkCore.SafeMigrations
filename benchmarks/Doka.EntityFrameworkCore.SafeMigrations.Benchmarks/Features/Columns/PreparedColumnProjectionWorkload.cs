@@ -20,6 +20,9 @@ internal sealed class PreparedColumnProjectionWorkload
                 new EnsureColumnIntent("items",
                     new ExpectedColumnDefinition($"value_{index}", typeof(int), true, "int")),
                 SafeMigrationPolicy.ThrowIfDifferent))
+
+            // WHY: Retain fluent materialization and the resulting snapshot ownership.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         _live = new SafeMigrationProviderAnalysis(

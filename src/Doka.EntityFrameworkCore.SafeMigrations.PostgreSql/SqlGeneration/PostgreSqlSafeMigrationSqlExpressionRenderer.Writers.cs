@@ -275,31 +275,33 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
 
             var text = "(" + _literal(source) + "::pg_catalog." + nativeType + ")::pg_catalog.text";
             FlushText();
-            if (type == "integer")
+            switch (type)
             {
-                _parts.Add(
-                    negate
-                        ? $"""
-                        (CASE WHEN pg_catalog.left({text}, 1) = '-'
-                        THEN pg_catalog.quote_literal({text}) || '::integer' ELSE {text} END)
-                        """
-                        : text);
-            }
-            else if (type == "numeric")
-            {
-                // WHY: ruleutils quotes a NUMERIC constant whose normalized
-                // spelling has no decimal point, preserving its native type.
-                // Let PostgreSQL normalize the exact token and scale rather
-                // than round-trip its potentially approximate CLR value.
-                _parts.Add(
-                    $"""
-                    (CASE WHEN pg_catalog.strpos({text}, '.') > 0 AND pg_catalog.left({text}, 1) <> '-'
-                    THEN {text} ELSE pg_catalog.quote_literal({text}) || '::numeric' END)
-                    """);
-            }
-            else
-            {
-                _parts.Add("(pg_catalog.quote_literal(" + text + ") || " + _literal("::" + type) + ")");
+                case "integer":
+                    _parts.Add(
+                        negate
+                            ? $"""
+                            (CASE WHEN pg_catalog.left({text}, 1) = '-'
+                            THEN pg_catalog.quote_literal({text}) || '::integer' ELSE {text} END)
+                            """
+                            : text);
+
+                    break;
+                case "numeric":
+                    // WHY: ruleutils quotes a NUMERIC constant whose normalized
+                    // spelling has no decimal point, preserving its native type.
+                    // Let PostgreSQL normalize the exact token and scale rather
+                    // than round-trip its potentially approximate CLR value.
+                    _parts.Add(
+                        $"""
+                        (CASE WHEN pg_catalog.strpos({text}, '.') > 0 AND pg_catalog.left({text}, 1) <> '-'
+                        THEN {text} ELSE pg_catalog.quote_literal({text}) || '::numeric' END)
+                        """);
+
+                    break;
+                default:
+                    _parts.Add("(pg_catalog.quote_literal(" + text + ") || " + _literal("::" + type) + ")");
+                    break;
             }
 
             return true;
@@ -709,22 +711,21 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
                 return false;
             }
 
-            if (result is SafeMigrationSqlLiteralExpression { BorrowedValue: string text, StoreType: null })
+            switch (result)
             {
-                FlushText();
-                _parts.Add(
-                    "("
-                    + _literal("'" + text.Replace("'", "''", StringComparison.Ordinal) + "'::")
-                    + " || pg_catalog.format_type(("
-                    + common
-                    + ")::pg_catalog.oid, NULL))");
+                case SafeMigrationSqlLiteralExpression { BorrowedValue: string text, StoreType: null }:
+                    FlushText();
+                    _parts.Add(
+                        "("
+                        + _literal("'" + text.Replace("'", "''", StringComparison.Ordinal) + "'::")
+                        + " || pg_catalog.format_type(("
+                        + common
+                        + ")::pg_catalog.oid, NULL))");
 
-                return true;
-            }
-
-            if (result is SafeMigrationSqlCaseExpression)
-            {
-                TrimTrailingSpace();
+                    return true;
+                case SafeMigrationSqlCaseExpression:
+                    TrimTrailingSpace();
+                    break;
             }
 
             var child = new CatalogExpressionTextWriter(
@@ -886,20 +887,17 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
                         {
                             frame.Types!.Add(result);
                             var next = frame.Index + 1;
-                            if (frame.Expression is SafeMigrationSqlCaseExpression conditional
-                                && next < conditional.WhenClauses.Count)
+                            switch (frame.Expression)
                             {
-                                pending.Push(frame with { Index = next });
-                                expression = conditional.WhenClauses[next].Result;
-                                goto NextExpression;
-                            }
-
-                            if (frame.Expression is SafeMigrationSqlFunctionExpression function
-                                && next < function.Arguments.Count)
-                            {
-                                pending.Push(frame with { Index = next });
-                                expression = function.Arguments[next];
-                                goto NextExpression;
+                                case SafeMigrationSqlCaseExpression conditional
+                                    when next < conditional.WhenClauses.Count:
+                                    pending.Push(frame with { Index = next });
+                                    expression = conditional.WhenClauses[next].Result;
+                                    goto NextExpression;
+                                case SafeMigrationSqlFunctionExpression function when next < function.Arguments.Count:
+                                    pending.Push(frame with { Index = next });
+                                    expression = function.Arguments[next];
+                                    goto NextExpression;
                             }
 
                             result = CommonResultType(frame.Types);
@@ -914,7 +912,7 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
                     }
 
                     return result;
-                    NextExpression: ;
+                NextExpression: ;
                 }
             }
             finally

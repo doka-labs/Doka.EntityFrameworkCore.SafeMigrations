@@ -117,7 +117,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                     parameters.Utf8PayloadBytes,
                     candidates[offset]);
             },
-            async (reader, offset, count, token) =>
+            async (reader, offset, count, callbackCancellationToken) =>
             {
                 if (reader.FieldCount != 3)
                 {
@@ -125,7 +125,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                 }
 
                 var row = 0;
-                while (await reader.ReadAsync(token))
+                while (await reader.ReadAsync(callbackCancellationToken))
                 {
                     if (row >= count
                         || reader.GetInt32(0) != candidates[offset + row])
@@ -152,6 +152,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                     throw InvalidMemberRenameTargetResult();
                 }
             },
+            transaction: null,
+            SafeMigrationCatalogQueryLimits.MaximumParameters,
             cancellationToken);
 
         // WHY: Cancellation or a malformed later result must not expose a

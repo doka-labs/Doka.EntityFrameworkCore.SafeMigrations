@@ -1,5 +1,3 @@
-using System.Runtime.InteropServices;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
 /// <summary>
@@ -193,6 +191,7 @@ public sealed class SafeMigrationSqlCapturedTokenTests
     {
         // Arrange
         const string sql = "VALUE + \"Value\" + \"\u00c6\" + '\u00c6ABC'";
+        var names = new HashSet<string>(StringComparer.Ordinal);
 
         // Act
         var parsed = SafeMigrationSqlExpressionParser.TryParseCapturedSource(
@@ -200,10 +199,10 @@ public sealed class SafeMigrationSqlCapturedTokenTests
             out var expression,
             foldUnquotedIdentifiers: true);
 
+        SafeMigrationSqlExpressionInspector.CollectIdentifiers(expression!, names);
+
         // Assert
         Assert.True(parsed);
-        var names = new HashSet<string>(StringComparer.Ordinal);
-        SafeMigrationSqlExpressionInspector.CollectIdentifiers(expression!, names);
         Assert.Equal(["Value", "value", "\u00c6"], names.Order(StringComparer.Ordinal));
         var outer = Assert.IsType<SafeMigrationSqlBinaryExpression>(expression);
         Assert.Equal("\u00c6ABC",

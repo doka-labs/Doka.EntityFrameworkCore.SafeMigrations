@@ -8,7 +8,9 @@ internal static class MariaDbGeneratedColumnNullability
     /// <summary>Collects ordinary required integer dependencies for a structurally non-null result.</summary>
     /// <param name="definition">The immutable generated-column definition.</param>
     /// <param name="sources">Distinct physical source columns that must independently satisfy the proof.</param>
-    /// <returns>Whether the result is non-null whenever every collected source is a required to be signed integer.</returns>
+    /// <returns>
+    /// Whether the result is non-null whenever every collected source is a required signed integer.
+    /// </returns>
     internal static bool TryGetRequiredIntegerSources(
         ExpectedColumnDefinition definition,
         out IReadOnlyList<string> sources
@@ -32,6 +34,10 @@ internal static class MariaDbGeneratedColumnNullability
 
         sources = collected.Count == 0
             ? Array.Empty<string>()
+
+            // WHY: Retain fluent materialization and its existing snapshot
+            // ownership rather than replacing this boundary with a spread.
+            // ReSharper disable once UseCollectionExpression
             : collected.ToArray();
 
         return true;
@@ -48,8 +54,13 @@ internal static class MariaDbGeneratedColumnNullability
             return false;
         }
 
-        foreach (var source in sources)
+        // WHY: Index this stable list while preserving its order and ownership.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var sourceIndex = 0; sourceIndex < sources.Count; sourceIndex++)
         {
+            var source = sources[sourceIndex];
+
             ExpectedColumnDefinition? resolved = null;
             var columnCount = table.Columns.Count;
 
@@ -202,8 +213,13 @@ internal static class MariaDbGeneratedColumnNullability
                         return false;
                     }
 
-                    foreach (var candidate in value.Values)
+                    // WHY: Index this stable list while preserving its order and ownership.
+                    // ReSharper disable once ForCanBeConvertedToForeach
+                    // ReSharper disable once LoopCanBeConvertedToQuery
+                    for (var candidateIndex = 0; candidateIndex < value.Values.Count; candidateIndex++)
                     {
+                        var candidate = value.Values[candidateIndex];
+
                         if (!CollectNonNullInteger(candidate, sources, depth + 1))
                         {
                             return false;
@@ -222,8 +238,13 @@ internal static class MariaDbGeneratedColumnNullability
                         return false;
                     }
 
-                    foreach (var clause in value.WhenClauses)
+                    // WHY: Index this stable list while preserving its order and ownership.
+                    // ReSharper disable once ForCanBeConvertedToForeach
+                    // ReSharper disable once LoopCanBeConvertedToQuery
+                    for (var clauseIndex = 0; clauseIndex < value.WhenClauses.Count; clauseIndex++)
                     {
+                        var clause = value.WhenClauses[clauseIndex];
+
                         if (!CollectNonNullInteger(clause.Result, sources, depth + 1))
                         {
                             return false;

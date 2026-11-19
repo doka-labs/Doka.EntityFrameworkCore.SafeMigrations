@@ -10,8 +10,14 @@ internal static class MySqlExpressionCanonicalizer
     {
         var displays = BuildCatalogDisplayCandidates(expression, includeMySqlEncodedDisplay: false);
         var candidates = new List<MySqlExpressionCatalogCandidate>(displays.Count * 2);
-        foreach (var display in displays)
+
+        // WHY: Index the retained display list without changing candidate order or ownership.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var displayIndex = 0; displayIndex < displays.Count; displayIndex++)
         {
+            var display = displays[displayIndex];
+
             candidates.Add(CreateComparisonCandidate(display));
             candidates.Add(
                 CreateComparisonCandidate(
@@ -57,13 +63,13 @@ internal static class MySqlExpressionCanonicalizer
 
             index = FindQuotedEnd(expression, index, quote);
             var token = expression[start..index];
-            var rendered = mySqlEncoded
-                ? quote == '`'
-                    ? RenderMySqlCatalogIdentifier(token)
-                    : RenderMySqlCatalogString(token, quote)
-                : mariaDbEscaped && quote != '`'
-                    ? RenderMariaDbCatalogString(token, quote)
-                    : token;
+            var rendered = mySqlEncoded switch
+            {
+                true when quote == '`' => RenderMySqlCatalogIdentifier(token),
+                true => RenderMySqlCatalogString(token, quote),
+                _ when mariaDbEscaped && quote != '`' => RenderMariaDbCatalogString(token, quote),
+                _ => token,
+            };
 
             var length = Encoding.UTF8.GetByteCount(rendered);
             if (quote != '`')
@@ -79,6 +85,10 @@ internal static class MySqlExpressionCanonicalizer
             builder.ToString(),
             literals is null
                 ? Array.Empty<MySqlExpressionCatalogLiteral>()
+
+                // WHY: Retain fluent materialization and its existing snapshot
+                // ownership rather than replacing this boundary with a spread.
+                // ReSharper disable once UseCollectionExpression
                 : literals.ToArray());
     }
 
@@ -109,6 +119,10 @@ internal static class MySqlExpressionCanonicalizer
 
         return candidates
             .Distinct(StringComparer.Ordinal)
+
+            // WHY: Retain fluent materialization and its existing snapshot
+            // ownership rather than replacing this boundary with a spread.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
     }
 
@@ -135,8 +149,14 @@ internal static class MySqlExpressionCanonicalizer
             var unwrapped = new StringBuilder();
             var builder = new StringBuilder("((");
             var term = new StringBuilder();
-            foreach (var token in tokens)
+
+            // WHY: Index this stable list while preserving its order and ownership.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var tokenIndex = 0; tokenIndex < tokens.Count; tokenIndex++)
             {
+                var token = tokens[tokenIndex];
+
                 if (!token.IsTopLevelBooleanOperator)
                 {
                     term.Append(token.Text);
@@ -202,7 +222,7 @@ internal static class MySqlExpressionCanonicalizer
         bool encodeForMySqlCatalog
     )
     {
-        var tokens = new List<CatalogToken>();
+        List<CatalogToken> tokens = [];
         var depth = 0;
         var caseDepth = 0;
 
@@ -226,6 +246,8 @@ internal static class MySqlExpressionCanonicalizer
                 continue;
             }
 
+            // WHY: Identifier and string quotes select different native serializers before exiting the scan iteration.
+            // ReSharper disable once ConvertIfStatementToSwitchStatement
             if (current == '`')
             {
                 var end = FindQuotedEnd(expression, index, current);
@@ -285,14 +307,14 @@ internal static class MySqlExpressionCanonicalizer
                 var word = expression[start..index]
                     .ToLowerInvariant();
 
-                if (word == "case")
+                switch (word)
                 {
-                    caseDepth++;
-                }
-                else if (word == "end"
-                    && caseDepth > 0)
-                {
-                    caseDepth--;
+                    case "case":
+                        caseDepth++;
+                        break;
+                    case "end" when caseDepth > 0:
+                        caseDepth--;
+                        break;
                 }
 
                 // WHY: AND/OR inside searched CASE conditions do not split
@@ -446,18 +468,20 @@ internal static class MySqlExpressionCanonicalizer
                 continue;
             }
 
-            if (current == '(')
+            switch (current)
             {
-                depth++;
-            }
-            else if (current == ')')
-            {
-                depth--;
-                if (depth == 0
-                    && index != expression.Length - 1)
-                {
-                    return false;
-                }
+                case '(':
+                    depth++;
+                    break;
+                case ')':
+                    depth--;
+                    if (depth == 0
+                        && index != expression.Length - 1)
+                    {
+                        return false;
+                    }
+
+                    break;
             }
 
             if (depth < 0)

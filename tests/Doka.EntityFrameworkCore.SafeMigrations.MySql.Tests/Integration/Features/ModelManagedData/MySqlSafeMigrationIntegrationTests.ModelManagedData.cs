@@ -9,6 +9,8 @@ public sealed class MySqlModelManagedDataIntegrationTests : MySqlSafeMigrationIn
         MySqlEngineContainerFixture fixture
     ) : base(fixture) { }
 
+    /// <summary>Projects a newly created table and its model-managed rows in the same initial deployment.</summary>
+    /// <param name="mode">The explicitly selected strict or legacy-convergence scaffolding mode.</param>
     [Theory]
     [InlineData(SafeMigrationScaffoldingMode.Strict)]
     [InlineData(SafeMigrationScaffoldingMode.LegacyConvergence)]
@@ -16,6 +18,7 @@ public sealed class MySqlModelManagedDataIntegrationTests : MySqlSafeMigrationIn
         SafeMigrationScaffoldingMode mode
     )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -52,6 +55,8 @@ public sealed class MySqlModelManagedDataIntegrationTests : MySqlSafeMigrationIn
             new object?[,] { { 1, "administrator" } });
 
         var runner = context.GetService<ISafeMigrationRunner>();
+
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
@@ -68,6 +73,7 @@ public sealed class MySqlModelManagedDataIntegrationTests : MySqlSafeMigrationIn
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
+        // Assert
         var tableAssessment = Assert.Single(
             preflight.Assessments,
             static assessment => assessment.OperationKind == SafeMigrationOperationKind.EnsureTable);
@@ -93,9 +99,13 @@ public sealed class MySqlModelManagedDataIntegrationTests : MySqlSafeMigrationIn
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>
+    /// Preserves data-blocked, prerequisite, engine, and dependency rejection boundaries for managed seed writes.
+    /// </summary>
     [Fact]
     public async Task ModelManagedDataBlocksUniquePrerequisiteEngineAndUnmodeledDependencyEdges()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -156,6 +166,7 @@ public sealed class MySqlModelManagedDataIntegrationTests : MySqlSafeMigrationIn
             ["int", "varchar(64)", "varchar(64)"],
             new object?[,] { { 1, "administrator", null } });
 
+        // Act
         var uniqueReport = await runner.AnalyzeAsync(
             context,
             uniqueCollision.Operations,
@@ -185,6 +196,7 @@ public sealed class MySqlModelManagedDataIntegrationTests : MySqlSafeMigrationIn
                 ExecuteOperationsAsync(context, unmodeledDependency.Operations, operationToken),
             cancellationToken: CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationObservedState.DataBlocked,
             Assert.Single(uniqueReport.Assessments)
                 .ObservedState);
@@ -218,9 +230,11 @@ public sealed class MySqlModelManagedDataIntegrationTests : MySqlSafeMigrationIn
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Preserves mixed source and target rows during a null-aware atomic managed-data update.</summary>
     [Fact]
     public async Task ModelManagedUpdateHandlesNullSourceAndMixedTargetRowsAtomically()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -244,6 +258,8 @@ public sealed class MySqlModelManagedDataIntegrationTests : MySqlSafeMigrationIn
             new object?[,] { { "Owner" }, { "Owner" } });
 
         var runner = context.GetService<ISafeMigrationRunner>();
+
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             update.Operations,
@@ -253,6 +269,7 @@ public sealed class MySqlModelManagedDataIntegrationTests : MySqlSafeMigrationIn
         await ExecuteOperationsAsync(context, update.Operations, CancellationToken.None);
         await ExecuteOperationsAsync(context, update.Operations, CancellationToken.None);
 
+        // Assert
         Assert.Equal(
             SafeMigrationObservedState.TransitionReady,
             Assert.Single(preflight.Assessments)
@@ -266,9 +283,13 @@ public sealed class MySqlModelManagedDataIntegrationTests : MySqlSafeMigrationIn
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>
+    /// Defers stale parent-dependency evidence after an ordered child deletion instead of inventing referential safety.
+    /// </summary>
     [Fact]
     public async Task OrderedChildDeleteDefersStaleParentDependencyEvidence()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -288,6 +309,8 @@ public sealed class MySqlModelManagedDataIntegrationTests : MySqlSafeMigrationIn
         await using var context = CreateContext(connectionString);
         var exact = ModelManagedDependencyDeletion(context.Database.ProviderName!, roleId: 1, userRoleId: 11);
         var runner = context.GetService<ISafeMigrationRunner>();
+
+        // Act
         var exactPreflight = await runner.AnalyzeAsync(
             context,
             exact.Operations,
@@ -303,6 +326,7 @@ public sealed class MySqlModelManagedDataIntegrationTests : MySqlSafeMigrationIn
             new SafeMigrationRunOptions("model-data-unmatched-dependency"),
             CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, exactPreflight.Status);
         Assert.Equal(SafeMigrationObservedState.TransitionReady, exactPreflight.Assessments[0].ObservedState);
         Assert.Equal(SafeMigrationAction.ValidateAtRuntime, exactPreflight.Assessments[1].Action);
@@ -500,9 +524,7 @@ public sealed class MySqlModelManagedDataIntegrationTests : MySqlSafeMigrationIn
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, driftPreflight.Status);
         Assert.Equal(SafeMigrationObservedState.Different, driftAssessment.ObservedState);
-        Assert.Collection(
-            driftAssessment.Differences,
-            difference => Assert.Equal("model_managed_row_content", difference.Facet));
+        Assert.Equal("model_managed_row_content", Assert.Single(driftAssessment.Differences).Facet);
 
         Assert.Equal(
             1,

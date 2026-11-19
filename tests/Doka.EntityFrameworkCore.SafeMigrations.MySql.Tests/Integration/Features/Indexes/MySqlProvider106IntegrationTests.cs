@@ -383,6 +383,9 @@ public sealed class MySqlProvider106IntegrationTests : MySqlSafeMigrationIntegra
                     operation,
                     MySqlSafeMigrationProviderOperationAdapter.Instance)
                 .Operation)
+
+        // WHY: Retain this explicit materialization/copy path and its collection lowering.
+        // ReSharper disable once UseCollectionExpression
         .ToArray();
 
     /// <summary>Declares a real native decimal fixture, not a mocked catalog or reduced byte limit.</summary>

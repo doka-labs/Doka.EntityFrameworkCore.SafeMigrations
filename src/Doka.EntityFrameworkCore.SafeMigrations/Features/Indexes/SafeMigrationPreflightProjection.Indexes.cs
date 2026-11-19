@@ -27,6 +27,8 @@ internal sealed partial class SafeMigrationPreflightProjection
                         : SafeMigrationObservedState.Different);
             }
 
+            // WHY: Resolve a live physical alias directly from the dictionary's current value enumeration.
+            // ReSharper disable once ForeachCanBeConvertedToQueryUsingAnotherGetEnumerator
             foreach (var candidate in table.Indexes.Values)
             {
                 if (ProjectedIndexSemantics(candidate, definition))
@@ -61,6 +63,8 @@ internal sealed partial class SafeMigrationPreflightProjection
                 return true;
             }
 
+            // WHY: Preserve the concrete dictionary enumerator while comparing native key names.
+            // ReSharper disable once ForeachCanBeConvertedToQueryUsingAnotherGetEnumerator
             foreach (var constraint in table.UniqueConstraints.Values)
             {
                 if (comparer.Equals(constraint.Name, name))
@@ -124,6 +128,8 @@ internal sealed partial class SafeMigrationPreflightProjection
 
             if (analysis.ObservedState == SafeMigrationObservedState.Missing)
             {
+                // WHY: A first matching physical index supplies this alias without another query adapter.
+                // ReSharper disable once ForeachCanBeConvertedToQueryUsingAnotherGetEnumerator
                 foreach (var index in table.Indexes.Values)
                 {
                     if (ProjectedIndexSemantics(index, intent.Definition))
@@ -529,8 +535,13 @@ internal sealed partial class SafeMigrationPreflightProjection
         // operation added a nullable, non-computed key without a non-null
         // default. Every old row then receives NULL, so existing rows cannot
         // collide while providers retain their ordinary NULL-distinct rules.
-        foreach (var key in intent.Definition.Keys)
+        // WHY: This immutable definition snapshot is indexed; retain its authored order without interface enumeration.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var keyIndex = 0; keyIndex < intent.Definition.Keys.Count; keyIndex++)
         {
+            var key = intent.Definition.Keys[keyIndex];
+
             if (key.Column is { } column
                 && prerequisites.Columns.TryGetValue(column, out var projected)
                 && projected is
@@ -623,12 +634,8 @@ internal sealed partial class SafeMigrationPreflightProjection
             return true;
         }
 
-        if (!_projectedChangedColumns.TryGetValue(table, out var changedColumns))
-        {
-            return false;
-        }
-
-        return definition.Keys.Any(key => key.Column is not null && changedColumns.Contains(key.Column));
+        return _projectedChangedColumns.TryGetValue(table, out var changedColumns)
+            && definition.Keys.Any(key => key.Column is not null && changedColumns.Contains(key.Column));
     }
 
     private bool HasProjectedIndexDefinition(
@@ -639,6 +646,8 @@ internal sealed partial class SafeMigrationPreflightProjection
 
         if (_tables.TryGetValue(tableKey, out var table))
         {
+            // WHY: Consult current index values directly, then the separately retained prerequisite shapes.
+            // ReSharper disable once ForeachCanBeConvertedToQueryUsingAnotherGetEnumerator
             foreach (var index in table.Indexes.Values)
             {
                 if (ProjectedIndexSemantics(index, definition))

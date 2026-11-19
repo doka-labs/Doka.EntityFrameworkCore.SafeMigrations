@@ -3,6 +3,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql;
 /// <summary>
 /// Provides standard PostgreSQL migration SQL that SafeMigrations wraps with its guarded execution contract.
 /// </summary>
+[PublicAPI]
 public interface IPostgreSqlSafeMigrationsBaselineGenerator
 {
     /// <summary>Generates commands for ordinary EF Core migration operations.</summary>

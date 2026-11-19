@@ -161,11 +161,12 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         static string Combine(
             string left,
             string right
-        ) => left == "FALSE"
-            ? right
-            : right == "FALSE"
-                ? left
-                : $"({left}) OR ({right})";
+        ) => left switch
+        {
+            "FALSE" => right,
+            _ when right == "FALSE" => left,
+            _ => $"({left}) OR ({right})",
+        };
     }
 
     /// <summary>Proves a MariaDB source name absent from every surviving native generated expression.</summary>
@@ -200,7 +201,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         // intentionally unproven, not interpreted as positive dependencies.
         // MySQL persists its expression before this binding is guaranteed;
         // its existing complete-certificate requirement is retained.
-        var absent = $"LOCATE({name}, {expression}) = 0 "
+        const string absent = $"LOCATE({name}, {expression}) = 0 "
             + $"AND LOCATE(REPLACE({name}, 0x60, 0x6060), {expression}) = 0 "
             + $"AND LOCATE(REPLACE({name}, 0x22, 0x2222), {expression}) = 0";
 

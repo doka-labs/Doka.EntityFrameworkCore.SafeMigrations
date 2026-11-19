@@ -1,15 +1,15 @@
 ---
 id: D-009
 status: implemented
-date: 2026-09-02
-decision-makers: [Dominic Kalkbrenner]
+date: 2026-11-19
+decision-makers: ["Dominic Kalkbrenner"]
 consulted: []
 informed: ["@doka-labs/core-maintainers"]
 scope: "Automatic source-frozen convergence for EF Core model-managed data"
 supersedes: []
 superseded-by: []
 amends: [D-004, D-005, D-008]
-amended-by: []
+amended-by: [D-010, D-013]
 madr-version: "4.0.0"
 doka-profile-version: "1.0"
 ---
@@ -212,14 +212,15 @@ adds row/cell limits and value non-disclosure.
 ### Decision History
 
 - 2026-09-02: Decision recorded with status proposed.
+- 2026-09-02: Status changed from proposed to accepted.
 - 2026-09-02: Dominic Kalkbrenner selected automatic source-frozen convergence
-  with fixed fail-closed semantics; status changed from proposed to accepted.
+  with fixed fail-closed semantics.
 - 2026-09-02: Implemented the Core, MySQL/MariaDB, and PostgreSQL vertical
   slices; automatic EF tooling integration; guarded execution; bounded
   projection; privacy controls; public API and documentation; positive,
-  negative, replay, concurrency, resource, and package qualification. Status
-  changed from accepted to implemented. Hosted release qualification and public
-  package readback remain publication gates.
+  negative, replay, concurrency, resource, and package qualification.
+- 2026-09-02: Status changed from accepted to implemented. Hosted release
+  qualification and public package readback remain publication gates.
 - 2026-09-05: Unified MySQL/MariaDB catalog-parameter and inline-literal mapping
   through EF's CLR/store-type mapping and provider converter contract.
 - 2026-09-05: Amended MySQL/MariaDB value comparison so native JSON follows
@@ -231,6 +232,10 @@ adds row/cell limits and value non-disclosure.
 - 2026-10-15: Qualify Doka 10.5's native MariaDB UUID through the existing
   CLR-aware mapping/converter path. Guid identities remain canonical in Core;
   UUID catalog parameters and runtime literals use Doka's text-bound mapping.
+- 2026-11-19: Aligned last-update metadata, reciprocal amendments, option titles
+  and source/navigation format with the current documentation profile. Retained
+  the recorded status and historical approval evidence; this migration grants no
+  new architectural acceptance or publication authority.
 
 ### Implementation References
 
@@ -246,8 +251,7 @@ adds row/cell limits and value non-disclosure.
 
 ### Sources
 
-- [Doka 10.5.0 UUID mapping](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/27a8d3cce3ce2bc64f6efd1e9034b1cd66eb1ff0/src/Doka.EntityFrameworkCore.MySql/Internal/Storage/TypeMappings/MySqlTypeMappingSource.cs)
-  (primary implementation evidence for the public mapping; retrieved 2026-10-15)
+- [Doka 10.5.0 UUID mapping](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/27a8d3cce3ce2bc64f6efd1e9034b1cd66eb1ff0/src/Doka.EntityFrameworkCore.MySql/Internal/Storage/TypeMappings/MySqlTypeMappingSource.cs) (primary source; retrieved 2026-10-15)
 - [EF Core model-managed data](https://learn.microsoft.com/en-us/ef/core/modeling/data-seeding) (primary source; retrieved 2026-09-02)
 - [EF Core applying migrations](https://learn.microsoft.com/en-us/ef/core/managing-schemas/migrations/applying) (primary source; retrieved 2026-09-02)
 - [EF Core 10.0.11 MigrationsScaffolder](https://github.com/dotnet/efcore/blob/v10.0.11/src/EFCore.Design/Migrations/Design/MigrationsScaffolder.cs) (primary source; retrieved 2026-09-02)

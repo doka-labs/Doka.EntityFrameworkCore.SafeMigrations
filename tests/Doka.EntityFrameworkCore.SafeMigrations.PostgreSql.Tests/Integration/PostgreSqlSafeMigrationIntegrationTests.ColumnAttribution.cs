@@ -1,28 +1,44 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
 /// <summary>Runs the ColumnAttribution PostgreSQL feature cases independently.</summary>
-[Collection(ProcessWideTestGroup.Name)]
 public sealed class PostgreSqlColumnAttributionIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
-    private static readonly JsonSerializerOptions s_attributionJsonOptions = new()
-    {
-        WriteIndented = true,
-    };
-
     /// <summary>Uses the assembly-owned container for this feature.</summary>
     /// <param name="fixture">The shared PostgreSQL container fixture.</param>
     public PostgreSqlColumnAttributionIntegrationTests(
         PostgreSqlContainerFixture fixture
     ) : base(fixture) { }
 
-    /// <summary>Records complete catalog and runtime samples for paired column fixtures without timing gates.</summary>
-    [Fact]
+    /// <summary>Preserves each native column fixture, rollback control and committed idempotent repair.</summary>
+    /// <param name="count">The exact number of required varchar columns in this isolated fixture.</param>
+    /// <param name="mixed">Whether visible, qualified and type-owned collations are mixed.</param>
+    /// <param name="drift">Whether comments initially differ from the canonical target.</param>
+    [Theory]
+    [InlineData(1, false, false)]
+    [InlineData(1, false, true)]
+    [InlineData(1, true, false)]
+    [InlineData(1, true, true)]
+    [InlineData(8, false, false)]
+    [InlineData(8, false, true)]
+    [InlineData(8, true, false)]
+    [InlineData(8, true, true)]
+    [InlineData(16, false, false)]
+    [InlineData(16, false, true)]
+    [InlineData(16, true, false)]
+    [InlineData(16, true, true)]
+    [InlineData(64, false, false)]
+    [InlineData(64, false, true)]
+    [InlineData(64, true, false)]
+    [InlineData(64, true, true)]
     [Trait("Category", "Attribution")]
-    public async Task ColumnAttribution_PairedPlainAndMixedCatalogRuntimeFixtures()
+    public async Task ColumnAttribution_PairedPlainAndMixedCatalogRuntimeFixtures(
+        int count,
+        bool mixed,
+        bool drift
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        var results = new List<object>();
         await using var context = CreateContext(connectionString);
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync(CancellationToken.None);
@@ -31,13 +47,34 @@ public sealed class PostgreSqlColumnAttributionIntegrationTests : PostgreSqlSafe
             context.GetService<ISqlGenerationHelper>());
 
         var generator = context.GetService<IMigrationsSqlGenerator>();
-        var observedStates = new List<(bool Drift, string State)>();
-        var convergedStates = new List<SafeMigrationObservedState>();
-        var preservedRows = new List<int>();
+        var table = $"attribution_{count}_{mixed}_{drift}";
+        var columns = AttributionColumns(count, mixed);
+        await PrepareAttributionFixtureAsync(
+            connectionString,
+            count,
+            mixed,
+            drift,
+            CancellationToken.None);
+
+        var tableOperation = new SafeMigrationOperation(
+            new EnsureTableIntent(
+                new ExpectedTableDefinition(table, columns),
+                SafeMigrationTableMode.StrictDefinition),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        var repairs = columns
+            .Select(MigrationOperation (column) => new SafeMigrationOperation(
+                new EnsureColumnIntent(table, column),
+                SafeMigrationPolicy.RepairIfSafe))
+            .ToArray();
+
+        var plan = catalog.Build(tableOperation);
+        var catalogSql = "SELECT (" + plan.RenderStateExpression() + "), (" + plan.Postcondition + ");";
+        var commands = generator.Generate(repairs, context.Model);
         var controlPath = Environment.GetEnvironmentVariable("SAFE_MIGRATIONS_POSTGRES_ATTRIBUTION_CONTROL");
         using var controlEvidence = string.IsNullOrWhiteSpace(controlPath)
             ? null
-            : JsonDocument.Parse(File.ReadAllText(Path.GetFullPath(controlPath)));
+            : JsonDocument.Parse(await File.ReadAllTextAsync(Path.GetFullPath(controlPath), CancellationToken.None));
 
         if (controlEvidence is not null
             && controlEvidence
@@ -49,234 +86,121 @@ public sealed class PostgreSqlColumnAttributionIntegrationTests : PostgreSqlSafe
             throw new InvalidOperationException("The PostgreSQL attribution control must use the same engine version.");
         }
 
+        var arms = AttributionArms(
+            controlEvidence,
+            count,
+            mixed,
+            drift,
+            catalogSql,
+            commands
+                .Select(command => command.CommandText)
+                .ToArray());
+
+        var observedStates = new List<string>();
+
         // Act
+        foreach (var arm in arms)
+        {
+            await using var classification = connection.CreateCommand();
+            classification.CommandText = arm.Catalog;
+            observedStates.Add(Convert.ToString(
+                    await classification.ExecuteScalarAsync(CancellationToken.None),
+                    CultureInfo.InvariantCulture)
+                ?? "<null>");
+
+            // WHY: Each control must see the same initial drift; native rollback owns the reset,
+            // not custom repeated timing or an artificial test deadline.
+            await using var transaction = await connection.BeginTransactionAsync(CancellationToken.None);
+            foreach (var sql in arm.Runtime)
+            {
+                await using var execution = connection.CreateCommand();
+                execution.Transaction = transaction;
+                execution.CommandText = sql;
+                await execution.ExecuteNonQueryAsync(CancellationToken.None);
+            }
+
+            await transaction.RollbackAsync(CancellationToken.None);
+        }
+
+        await ExecuteOperationsAsync(context, repairs, CancellationToken.None);
+        await ExecuteOperationsAsync(context, repairs, CancellationToken.None);
+        var replay = await context
+            .GetService<ISafeMigrationProviderAnalyzer>()
+            .AnalyzeAsync(
+                context,
+                repairs
+                    .Cast<SafeMigrationOperation>()
+                    .ToArray(),
+                CancellationToken.None);
+
+        var preservedRows = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM "
+            + PostgreSqlIdentifier(table)
+            + " WHERE "
+            + string.Join(
+                " AND ",
+                columns.Select(column => PostgreSqlIdentifier(column.Name) + " = 'preserved'"))
+            + ";",
+            cancellationToken: CancellationToken.None);
+
+        // Assert
+        Assert.Equal(controlEvidence is null
+                ? 1
+                : 3,
+            observedStates.Count);
+
+        Assert.All(observedStates,
+            state => Assert.Equal(drift
+                    ? "different"
+                    : "matching",
+                state));
+
+        Assert.Equal(count, replay.Count);
+        Assert.All(replay, result => Assert.Equal(SafeMigrationObservedState.Matching, result.ObservedState));
+        Assert.Equal(1, preservedRows);
+    }
+
+    /// <summary>Recreates the original preceding catalog independently for every explicit theory row.</summary>
+    /// <param name="connectionString">The current theory row's isolated database.</param>
+    /// <param name="targetCount">The exact current target width.</param>
+    /// <param name="targetMixed">Whether the current fixture mixes collation ownership.</param>
+    /// <param name="targetDrift">Whether the current fixture retains its initial comment difference.</param>
+    /// <param name="cancellationToken">Cancels forward fixture creation.</param>
+    private static async Task PrepareAttributionFixtureAsync(
+        string connectionString,
+        int targetCount,
+        bool targetMixed,
+        bool targetDrift,
+        CancellationToken cancellationToken
+    )
+    {
         foreach (var count in new[] { 1, 8, 16, 64 })
         {
             foreach (var mixed in new[] { false, true })
             {
                 foreach (var drift in new[] { false, true })
                 {
-                    var table = $"attribution_{count}_{mixed}_{drift}";
-                    var columns = AttributionColumns(count, mixed);
+                    var current = count == targetCount && mixed == targetMixed && drift == targetDrift;
+
+                    // WHY: Earlier loop fixtures had already committed canonical comments. Preserve that
+                    // catalog context without making an independent theory row depend on earlier execution.
                     await ExecuteSqlAsync(
                         connectionString,
-                        AttributionSetupSql(table, columns, drift),
-                        cancellationToken: CancellationToken.None);
+                        AttributionSetupSql($"attribution_{count}_{mixed}_{drift}",
+                            AttributionColumns(count, mixed),
+                            current && targetDrift),
+                        cancellationToken);
 
-                    var tableOperation = new SafeMigrationOperation(
-                        new EnsureTableIntent(
-                            new ExpectedTableDefinition(table, columns),
-                            SafeMigrationTableMode.StrictDefinition),
-                        SafeMigrationPolicy.ThrowIfDifferent);
-
-                    var repairs = columns
-                        .Select(column => (MigrationOperation)new SafeMigrationOperation(
-                            new EnsureColumnIntent(table, column),
-                            SafeMigrationPolicy.RepairIfSafe))
-                        .ToArray();
-
-                    var plan = catalog.Build(tableOperation);
-                    var catalogSql = "SELECT (" + plan.RenderStateExpression() + "), (" + plan.Postcondition + ");";
-                    var commands = generator.Generate(repairs, context.Model);
-                    var arms = AttributionArms(
-                        controlEvidence,
-                        count,
-                        mixed,
-                        drift,
-                        catalogSql,
-                        commands
-                            .Select(command => command.CommandText)
-                            .ToArray());
-
-                    var catalogSamples = new List<object>();
-                    var runtimeSamples = new List<object>();
-
-                    for (var sample = -1; sample < 5; sample++)
+                    if (current)
                     {
-                        foreach (var arm in arms)
-                        {
-                            await using var classification = connection.CreateCommand();
-                            classification.CommandText = arm.Catalog;
-                            var allocated = GC.GetTotalAllocatedBytes(precise: true);
-                            var started = Stopwatch.GetTimestamp();
-                            var state = Convert.ToString(
-                                    await classification.ExecuteScalarAsync(CancellationToken.None),
-                                    CultureInfo.InvariantCulture)
-                                ?? "<null>";
-
-                            var elapsed = Stopwatch.GetElapsedTime(started)
-                                .TotalMilliseconds;
-
-                            var bytes = GC.GetTotalAllocatedBytes(precise: true) - allocated;
-                            if (sample >= 0)
-                            {
-                                catalogSamples.Add(
-                                    new
-                                    {
-                                        Arm = arm.Name,
-                                        ElapsedMilliseconds = elapsed,
-                                        ProcessAllocatedBytes = bytes,
-                                        RoundTrips = 1,
-                                        State = state,
-                                    });
-
-                                observedStates.Add((drift, state));
-                            }
-
-                            // WHY: Rollback restores identical drift for every sample. Its two transport
-                            // calls are setup/teardown, measured separately from the generated commands.
-                            await using var transaction =
-                                await connection.BeginTransactionAsync(CancellationToken.None);
-
-                            allocated = GC.GetTotalAllocatedBytes(precise: true);
-                            started = Stopwatch.GetTimestamp();
-                            foreach (var sql in arm.Runtime)
-                            {
-                                await using var execution = connection.CreateCommand();
-                                execution.Transaction = transaction;
-                                execution.CommandText = sql;
-                                try
-                                {
-                                    await execution.ExecuteNonQueryAsync(CancellationToken.None);
-                                }
-                                catch (PostgresException exception)
-                                {
-                                    var failedOutput = Environment.GetEnvironmentVariable(
-                                        "SAFE_MIGRATIONS_POSTGRES_ATTRIBUTION_OUTPUT");
-
-                                    if (!string.IsNullOrWhiteSpace(failedOutput))
-                                    {
-                                        var failedPath = Path.ChangeExtension(
-                                            Path.GetFullPath(failedOutput),
-                                            "failure.sql");
-
-                                        Directory.CreateDirectory(Path.GetDirectoryName(failedPath)!);
-                                        File.WriteAllText(
-                                            failedPath,
-                                            "-- Fixture: "
-                                            + table
-                                            + "\n"
-                                            + AttributionSetupSql(table, columns, drift)
-                                            + "\n"
-                                            + sql);
-                                    }
-
-                                    throw new InvalidOperationException(
-                                        $"PostgreSQL fixture {table}, sample {sample}, arm {arm.Name} failed.",
-                                        exception);
-                                }
-                            }
-
-                            elapsed = Stopwatch.GetElapsedTime(started)
-                                .TotalMilliseconds;
-
-                            bytes = GC.GetTotalAllocatedBytes(precise: true) - allocated;
-                            await transaction.RollbackAsync(CancellationToken.None);
-                            if (sample >= 0)
-                            {
-                                runtimeSamples.Add(
-                                    new
-                                    {
-                                        Arm = arm.Name,
-                                        ElapsedMilliseconds = elapsed,
-                                        ProcessAllocatedBytes = bytes,
-                                        GeneratedCommandRoundTrips = arm.Runtime.Count,
-                                        TransactionSetupTeardownRoundTrips = 2,
-                                    });
-                            }
-                        }
+                        return;
                     }
-
-                    await using var explain = connection.CreateCommand();
-                    explain.CommandText = "EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) " + catalogSql;
-                    var explanation = Convert.ToString(
-                            await explain.ExecuteScalarAsync(CancellationToken.None),
-                            CultureInfo.InvariantCulture)
-                        ?? "<null>";
-
-                    results.Add(
-                        new
-                        {
-                            Columns = count,
-                            MixedCollations = mixed,
-                            Drift = drift,
-                            CatalogSql = catalogSql,
-                            CatalogUtf8Bytes = Encoding.UTF8.GetByteCount(catalogSql),
-                            RuntimeSql = commands
-                                .Select(command => command.CommandText)
-                                .ToArray(),
-                            RuntimeUtf8Bytes = commands.Sum(command => Encoding.UTF8.GetByteCount(command.CommandText)),
-                            CatalogSamples = catalogSamples,
-                            RuntimeSamples = runtimeSamples,
-                            ExplainJson = explanation,
-                        });
-
-                    await ExecuteOperationsAsync(context, repairs, CancellationToken.None);
-                    await ExecuteOperationsAsync(context, repairs, CancellationToken.None);
-                    var replay = await context
-                        .GetService<ISafeMigrationProviderAnalyzer>()
-                        .AnalyzeAsync(
-                            context,
-                            repairs
-                                .Cast<SafeMigrationOperation>()
-                                .ToArray(),
-                            CancellationToken.None);
-
-                    convergedStates.AddRange(replay.Select(result => result.ObservedState));
-                    preservedRows.Add(
-                        await ScalarIntAsync(
-                            connectionString,
-                            "SELECT COUNT(*) FROM "
-                            + PostgreSqlIdentifier(table)
-                            + " WHERE "
-                            + string.Join(
-                                " AND ",
-                                columns.Select(column => PostgreSqlIdentifier(column.Name) + " = 'preserved'"))
-                            + ";",
-                            cancellationToken: CancellationToken.None));
                 }
             }
         }
 
-        var output = Environment.GetEnvironmentVariable("SAFE_MIGRATIONS_POSTGRES_ATTRIBUTION_OUTPUT");
-        if (!string.IsNullOrWhiteSpace(output))
-        {
-            var fullPath = Path.GetFullPath(output);
-            Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
-            File.WriteAllText(
-                fullPath,
-                JsonSerializer.Serialize(
-                    new
-                    {
-                        ServerVersion = Fixture.ServerVersion.ToString(),
-                        AllocationScope =
-                            "Process-wide precise totals around asynchronous execution; no timing assertions.",
-                        ControlEvidence = controlPath,
-                        Results = results,
-                    },
-                    s_attributionJsonOptions));
-        }
-
-        // Assert
-        Assert.Equal(16, results.Count);
-        Assert.Equal(
-            80
-            * (controlEvidence is null
-                ? 1
-                : 3),
-            observedStates.Count);
-
-        Assert.All(
-            observedStates,
-            result => Assert.Equal(
-                result.Drift
-                    ? "different"
-                    : "matching",
-                result.State));
-
-        Assert.All(convergedStates, state => Assert.Equal(SafeMigrationObservedState.Matching, state));
-        Assert.Equal(356, convergedStates.Count);
-        Assert.All(preservedRows, count => Assert.Equal(1, count));
+        throw new InvalidOperationException("The PostgreSQL attribution case is not declared by its fixture matrix.");
     }
 
     /// <summary>Brackets the current SQL with an immutable control on the same relation and connection.</summary>
@@ -363,6 +287,9 @@ public sealed class PostgreSqlColumnAttributionIntegrationTests : PostgreSqlSafe
                         : "pg_catalog"),
             defaultValue: SafeMigrationDefaultValue.Literal("canonical"),
             comment: "canonical"))
+
+        // WHY: Retain explicit fluent materialization and its independently owned result snapshot.
+        // ReSharper disable once UseCollectionExpression
         .ToArray();
 
     /// <summary>Creates one populated fixture with only a repairable comment difference in drift mode.</summary>

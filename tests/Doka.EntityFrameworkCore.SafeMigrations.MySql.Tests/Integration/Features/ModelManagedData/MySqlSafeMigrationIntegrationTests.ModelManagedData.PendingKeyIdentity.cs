@@ -188,6 +188,7 @@ public sealed class ModelManagedPendingKeyDbContext : DbContext
 
 /// <summary>Explicitly captures the unchanged empty model after the two typed-data migrations.</summary>
 [DbContext(typeof(ModelManagedPendingKeyDbContext))]
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public sealed class ModelManagedPendingKeyModelSnapshot : ModelSnapshot
 {
     /// <inheritdoc />
@@ -199,6 +200,7 @@ public sealed class ModelManagedPendingKeyModelSnapshot : ModelSnapshot
 /// <summary>Introduces the original row using the physical Id/Code key order.</summary>
 [DbContext(typeof(ModelManagedPendingKeyDbContext))]
 [Migration("20261013000001_ModelManagedKeyEnsure")]
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public sealed class ModelManagedPendingKeyEnsureMigration : Migration
 {
     /// <inheritdoc />
@@ -226,6 +228,7 @@ public sealed class ModelManagedPendingKeyEnsureMigration : Migration
 /// <summary>Transitions the same row using Code/Id order with correspondingly reordered typed key values.</summary>
 [DbContext(typeof(ModelManagedPendingKeyDbContext))]
 [Migration("20261013000002_ModelManagedKeyUpdate")]
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public sealed class ModelManagedPendingKeyUpdateMigration : Migration
 {
     /// <inheritdoc />

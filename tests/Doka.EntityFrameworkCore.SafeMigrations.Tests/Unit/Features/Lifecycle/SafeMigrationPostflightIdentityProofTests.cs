@@ -50,8 +50,19 @@ public sealed class SafeMigrationPostflightIdentityProofTests
     }
 
     /// <summary>Supplies a scoped proof view distinct from the final-catalog normalizer itself.</summary>
-    private sealed class IdentityProofFactory(int? unprovenOrdinal) : ISafeMigrationProviderObjectIdentityNormalizer
+    private sealed class IdentityProofFactory : ISafeMigrationProviderObjectIdentityNormalizer
     {
+        private readonly int? _unprovenOrdinal;
+
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="unprovenOrdinal">The supplied unproven ordinal for this fixture.</param>
+        public IdentityProofFactory(
+            int? unprovenOrdinal
+        )
+        {
+            _unprovenOrdinal = unprovenOrdinal;
+        }
+
         /// <summary>Gets how often the complete stream was captured.</summary>
         public int FactoryCalls { get; private set; }
 
@@ -86,13 +97,24 @@ public sealed class SafeMigrationPostflightIdentityProofTests
 
             // WHY: The outer final-catalog normalizer has no historical rejection.
             // Only consuming this returned snapshot can enforce the scoped proof.
-            return new IdentityProofSnapshot(unprovenOrdinal);
+            return new IdentityProofSnapshot(_unprovenOrdinal);
         }
     }
 
     /// <summary>Certifies all stable identities except one explicit complete-stream boundary.</summary>
-    private sealed class IdentityProofSnapshot(int? unprovenOrdinal) : ISafeMigrationProviderObjectIdentityNormalizer
+    private sealed class IdentityProofSnapshot : ISafeMigrationProviderObjectIdentityNormalizer
     {
+        private readonly int? _unprovenOrdinal;
+
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="unprovenOrdinal">The supplied unproven ordinal for this fixture.</param>
+        public IdentityProofSnapshot(
+            int? unprovenOrdinal
+        )
+        {
+            _unprovenOrdinal = unprovenOrdinal;
+        }
+
         /// <inheritdoc />
         public StringComparer IdentifierComparer => StringComparer.Ordinal;
 
@@ -115,6 +137,6 @@ public sealed class SafeMigrationPostflightIdentityProofTests
         public bool IsPostflightIdentityProven(
             SafeMigrationIntent intent,
             int ordinal
-        ) => ordinal != unprovenOrdinal;
+        ) => ordinal != _unprovenOrdinal;
     }
 }

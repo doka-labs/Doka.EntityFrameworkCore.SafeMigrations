@@ -1,15 +1,15 @@
 ---
 id: D-006
 status: implemented
-date: 2026-08-26
-decision-makers: [Dominic Kalkbrenner]
+date: 2026-11-19
+decision-makers: ["Dominic Kalkbrenner"]
 consulted: []
 informed: ["@doka-labs/core-maintainers"]
 scope: "Candidate qualification, signed release identity, and protected publication"
 supersedes: []
 superseded-by: []
 amends: []
-amended-by: [D-018]
+amended-by: [D-013, D-018]
 madr-version: "4.0.0"
 doka-profile-version: "1.0"
 ---
@@ -47,8 +47,9 @@ without a repository-owned release orchestration framework.
 
 ## Decision Outcome
 
-Chosen option: "Manual untagged qualification with a protected publication
-wait" using platform-native publication primitives.
+Chosen option: "Manual untagged qualification with a protected publication wait",
+because qualification must finish before the protected publisher consumes the
+exact reviewed bytes through platform-native publication primitives.
 
 The operator dispatches `release-candidate.yml` from an explicitly authorized
 release line with a version. [D-018](D-018-release-lines-and-monotonic-publication.md)
@@ -101,35 +102,32 @@ not expand the twelve provenance subjects or thirteen public Release assets.
 
 ### Repository dependency lock scope
 
-Central Package Management owns dependency floors and compatible ranges for the
-entire repository. Only the five publishable package projects commit
-`packages.lock.json`. Their lockfiles preserve the exact compile-time package
-graph and NuGet content hashes used to produce and qualify release artifacts;
-they do not control the graph selected by a consuming application.
+Central Package Management owns the reviewed dependency declarations. All 24
+repository projects commit their default source-mode `packages.lock.json`, not
+only the five shipping projects. The locks retain resolved identities and content
+hashes for tests, samples, benchmarks and engineering consumers as well as the
+shipping libraries. A library's repository lockfile does not lock its consumers.
 
-Test, benchmark, sample, and engineering projects intentionally resolve the
-central declarations without committed lockfiles. This differs from NuGet's
-recommendation to commit lockfiles for executable projects at the start of a
-dependency chain. It also means those projects do not retain lockfile
-`contentHash` validation or expose every transitive resolution change as a pull
-request diff.
+The root defines CI identity before evaluating locked mode. Every platform-neutral
+CI source-mode restore uses the committed lock for its actual project. RID-specific
+publishes, explicit compatibility-matrix graphs and isolated package-consumer
+profiles retain their separately qualified restore behavior; they must not rewrite
+or pretend to validate the default source-mode locks. Local dependency edits update
+all affected locks for review. Grouped dependency updates must leave all 24 graphs
+consistent; the historical smaller lock scope below is no longer the current rule.
 
-The limitation is accepted because maintaining one lockfile for each of the 20
-projects caused grouped Dependabot updates to regenerate only a subset and made
-otherwise coherent dependency pull requests fail locked restore. This upstream
-behavior is tracked by dependabot-core issue 13950 for Central Package
-Management, project references, and locked mode. The remaining controls are one
-cleared NuGet source, central non-floating declarations, lowest-applicable-
-version resolution, warnings as errors, automatic dependency snapshots,
-Dependency Review, full provider and engineering execution, package content
-verification, and an SPDX SBOM. These controls test the resolved graph; they do
-not recreate the omitted lockfile guarantees.
+Transitive pinning remains enabled only for nonshipping projects. Shipping provider
+projects publish explicit owner-specific minimum references: MySqlConnector 2.6.2
+belongs only to MySQL/MariaDB; SqlClient 6.1.8 and PKCS 9.0.22 belong only to SQL
+Server. Disabling shipping transitive promotion must not remove these existing
+consumer floors. Core and unrelated providers must not acquire those dependencies.
+Actual nuspec, lock, isolated-consumer and SBOM checks qualify the resulting graph.
 
-A workflow that runs `dotnet restore --force-evaluate` and commits regenerated
-lockfiles back to Dependabot branches was considered and rejected. It would
-give dependency-validation automation repository write access and make CI
-mutate bot-authored pull requests. The smaller lock scope keeps validation
-read-only while the upstream regeneration defect remains open.
+The four adapters consume Core internals and therefore publish an exact dependency
+on their matching SafeMigrations Core package version, including candidate versions.
+This private-ABI constraint does not pin external EF or provider dependencies to
+one patch. Package consumers must restore matching own-package identities and reject
+conflicting Core selections rather than silently mixing private contracts.
 
 ### Consequences
 
@@ -145,8 +143,8 @@ read-only while the upstream regeneration defect remains open.
   inside the immutable Release instead of depending only on GitHub API state.
 - Good, because the engineering surface is smaller and has fewer contracts
   that can disagree with GitHub or NuGet.
-- Good, because grouped dependency updates cannot leave a hidden subset of
-  engineering lockfiles stale.
+- Good, because all default repository graphs retain reviewed identities and
+  content hashes; grouped updates cannot silently omit engineering resolutions.
 - Bad, because five NuGet package IDs cannot be published atomically.
 - Bad, because symbol indexing is asynchronous and remains a NuGet-hosted
   validation state after upload.
@@ -154,18 +152,19 @@ read-only while the upstream regeneration defect remains open.
   the first NuGet write remains an idempotent same-job reconciliation.
 - Bad, because hosted environment, ruleset, immutable-release, and NuGet policy
   settings cannot be proven by local tests.
-- Bad, because non-package projects lose lockfile content-hash verification and
-  pull-request visibility for purely transitive resolution changes.
+- Bad, because grouped updates now require regenerating and reviewing every
+  affected repository lock; exact private-ABI versions reject mixed own-package sets.
 
 ### Confirmation
 
 Require local shell syntax checks, portable-provenance and GitHub Release
 reconciliation positive/negative cases, version-validator positive/negative
-cases, locked restore of the five package projects, resolved restore of all
-execution projects, format, Release build, all test suites, coverage thresholds,
-complete BenchmarkDotNet execution/export smoke, deterministic package qualification, package-only
-consumers, SBOM validation, and every supported live provider/tooling cell.
-Locked restore covers every platform-neutral CI restore of the package
+cases, locked restore of all 24 default source-mode projects, format, Release
+build, all test suites, coverage thresholds, deterministic benchmark workload
+contracts, explicitly requested BenchmarkDotNet execution/export, deterministic
+package qualification, package-only consumers, SBOM validation, and every
+supported live provider/tooling cell.
+Locked restore covers every platform-neutral CI restore of all 24 source-mode
 projects. EF Migration Bundles publish for the runner RID, which the
 platform-neutral lockfiles cannot record, so those RID-specific restores run
 unlocked inside isolated repository copies.
@@ -178,7 +177,7 @@ for that hosted evidence.
 
 ## Pros and Cons of the Options
 
-### Manual untagged qualification with protected publication wait
+### Manual untagged qualification with a protected publication wait
 
 - Good, because the operator reviews completed evidence before creating the
   immutable identity.
@@ -189,12 +188,12 @@ for that hosted evidence.
 - Good, because a tag is a conventional workflow trigger.
 - Bad, because every test failure consumes a release identity.
 
-### Separate build and publication with a rebuild
+### Separate build and publication workflows with a rebuild
 
 - Good, because deployment responsibilities are visibly separate.
 - Bad, because published bytes are no longer the qualified bytes.
 
-### Repository-owned transaction and reconciliation engine
+### A repository-owned publication transaction and reconciliation engine
 
 - Good, because it can model every observed partial state explicitly.
 - Bad, because it duplicates platform contracts, requires extensive fixture
@@ -224,7 +223,8 @@ owns independent consumer readback.
 
 ### Decision History
 
-- 2026-08-26: Decision implemented for the first complete release candidate.
+- 2026-08-26: Decision recorded with status implemented.
+- 2026-08-26: Existing implementation supports the first complete release candidate.
 - 2026-08-26: Implementation simplified to platform-native publication while
   preserving untagged qualification, exact-byte publication, and protected
   approval.
@@ -373,6 +373,14 @@ owns independent consumer readback.
   earlier local/native results do not complete the final hosted matrix, x64
   SQL Server, coverage or public-readback gates. No publication, extra release
   line, .NET 11 support or timing threshold is authorized by preparation.
+- 2026-11-19: Aligned last-update metadata, reciprocal amendments, option titles
+  and source/navigation format with the current documentation profile. Retained
+  the recorded status and historical approval evidence; this migration grants no
+  new architectural acceptance or publication authority. Restored all 24 default
+  project locks, explicit shipping security floors and matching-Core private ABI;
+  benchmark execution now requires explicit opt-in, including Dry.
+  The original record starts at implemented; earlier proposed/accepted transition
+  evidence is not recorded and is not reconstructed by this profile migration.
 
 ### Implementation References
 
@@ -403,4 +411,7 @@ owns independent consumer readback.
 - [NuGet Trusted Publishing](https://learn.microsoft.com/en-us/nuget/nuget-org/trusted-publishing) (primary source; retrieved 2026-08-26)
 - [`dotnet nuget push`](https://learn.microsoft.com/en-us/dotnet/core/tools/dotnet-nuget-push) (primary source; retrieved 2026-08-26)
 - [NuGet PackageReference lockfile guidance](https://learn.microsoft.com/en-us/nuget/consume-packages/package-references-in-project-files#locking-dependencies) (primary source; retrieved 2026-09-21)
-- [dependabot-core issue 13950](https://github.com/dependabot/dependabot-core/issues/13950) (primary upstream issue; retrieved 2026-09-21)
+- [dependabot-core issue 13950](https://github.com/dependabot/dependabot-core/issues/13950) (primary source; retrieved 2026-09-21)
+- [NuGet transitive pinning and pack promotion](https://learn.microsoft.com/en-us/nuget/consume-packages/central-package-management#transitive-pinning) (primary source; retrieved 2026-11-19)
+- [NuGet lock ownership and locked restore](https://learn.microsoft.com/en-us/nuget/consume-packages/package-references-in-project-files#locking-dependencies) (primary source; retrieved 2026-11-19)
+- [.NET dependency-range trade-offs](https://learn.microsoft.com/en-us/dotnet/standard/library-guidance/dependencies) (primary source; retrieved 2026-11-19)

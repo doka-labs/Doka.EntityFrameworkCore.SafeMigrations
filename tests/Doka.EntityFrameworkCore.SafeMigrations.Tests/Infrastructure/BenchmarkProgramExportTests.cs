@@ -82,7 +82,7 @@ public sealed class BenchmarkProgramExportTests
         var exception = Record.Exception(() => BenchmarkProgram.ValidateExport(evidence.ReportPath, 1));
 
         // Assert
-        Assert.IsAssignableFrom<JsonException>(exception);
+        Assert.IsType<JsonException>(exception, exactMatch: false);
     }
 
     /// <summary>Rejects missing native fields rather than accepting unrelated JSON content.</summary>

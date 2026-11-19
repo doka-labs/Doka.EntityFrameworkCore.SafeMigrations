@@ -4,6 +4,8 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql;
 /// Generates guarded PostgreSQL SQL for the exact SafeMigrations envelope and
 /// delegates every standard EF Core operation to Npgsql unchanged.
 /// </summary>
+[PublicAPI]
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSqlGenerator
 {
     private readonly IPostgreSqlSafeMigrationsBaselineGenerator _baselineGenerator;
@@ -42,7 +44,7 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
     {
         ArgumentNullException.ThrowIfNull(operations);
 
-        var commands = new List<MigrationCommand>();
+        List<MigrationCommand> commands = [];
         var identityContract = PostgreSqlSafeMigrationGenerationIdentityContract.Create(operations);
 
         // WHY: Preserve authored operation ordinals in guard generation and diagnostics.
@@ -123,21 +125,23 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
             return [];
         }
 
-        if (operation.Intent is EnsureIndexIntent index
-            && RequiresCustomIndexSql(index.Definition))
+        switch (operation.Intent)
         {
-            var sqlOperation = new SqlOperation { Sql = BuildCustomCreateIndexSql(index.Definition) };
-            return _baselineGenerator.Generate([sqlOperation], model, options);
-        }
+            case EnsureIndexIntent index when RequiresCustomIndexSql(index.Definition):
+                {
+                    var sqlOperation = new SqlOperation { Sql = BuildCustomCreateIndexSql(index.Definition) };
 
-        if (operation.Intent is ModelManagedDataIntent modelManagedData)
-        {
-            var sqlOperation = new SqlOperation
-            {
-                Sql = _catalogSqlBuilder.BuildModelManagedDataMutationSql(modelManagedData),
-            };
+                    return _baselineGenerator.Generate([sqlOperation], model, options);
+                }
+            case ModelManagedDataIntent modelManagedData:
+                {
+                    var sqlOperation = new SqlOperation
+                    {
+                        Sql = _catalogSqlBuilder.BuildModelManagedDataMutationSql(modelManagedData),
+                    };
 
-            return _baselineGenerator.Generate([sqlOperation], model, options);
+                    return _baselineGenerator.Generate([sqlOperation], model, options);
+                }
         }
 
         var standardOperation = SafeMigrationStandardOperationFactory.Create(
@@ -147,7 +151,7 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
                 ? collation.Name
                 : null);
 
-        var operations = new List<MigrationOperation> { standardOperation };
+        List<MigrationOperation> operations = [standardOperation];
         NormalizeOwnedIntervalDefaults(standardOperation);
         foreach (var (table, schema, definition) in QualifiedColumnCollations(operation.Intent))
         {
@@ -209,23 +213,27 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         // WHY: Npgsql's multi-field negative duration literal can give the time
         // field the opposite sign. These operations are fresh owned copies;
         // native EF operations and caller-owned migration objects remain untouched.
-        if (operation is ColumnOperation column)
+        switch (operation)
         {
-            NormalizeColumn(column);
-            if (operation is AlterColumnOperation alter)
-            {
-                NormalizeColumn(alter.OldColumn);
-            }
+            case ColumnOperation column:
+                NormalizeColumn(column);
+                if (operation is AlterColumnOperation alter)
+                {
+                    NormalizeColumn(alter.OldColumn);
+                }
 
-            return;
-        }
+                return;
+            case CreateTableOperation table:
+                // WHY: This pass only reads the stable ordered collection by ordinal.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
+                for (var memberIndex = 0; memberIndex < table.Columns.Count; memberIndex++)
+                {
+                    var member = table.Columns[memberIndex];
+                    NormalizeColumn(member);
+                }
 
-        if (operation is CreateTableOperation table)
-        {
-            foreach (var member in table.Columns)
-            {
-                NormalizeColumn(member);
-            }
+                break;
         }
 
         return;

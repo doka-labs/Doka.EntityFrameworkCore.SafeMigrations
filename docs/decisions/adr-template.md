@@ -2,7 +2,7 @@
 id: D-NNN
 status: proposed
 date: YYYY-MM-DD
-decision-makers: [Dominic Kalkbrenner]
+decision-makers: ["Dominic Kalkbrenner"]
 consulted: []
 informed: ["@doka-labs/core-maintainers"]
 scope: "Bounded decision scope"
@@ -77,6 +77,10 @@ amendment or supersession relationships.
 ### Decision History
 
 - YYYY-MM-DD: Decision recorded with status proposed.
+
+Append actual dated updates and evidenced status transitions. Keep the first
+recording date, use exact `Status changed from <old> to <new>.` events, and set
+metadata `date` to the final event date. Do not infer acceptance from code or tests.
 
 ### Implementation References
 

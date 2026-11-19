@@ -40,7 +40,7 @@ public sealed class SqlServerProjectedSeedProofTests
     )
     {
         // Arrange
-        using var context = new SafeMigrationDbContext(ConnectionString);
+        await using var context = new SafeMigrationDbContext(ConnectionString);
         var analyzer = new SqlServerSafeMigrationProviderAnalyzer(
             context.GetService<IRelationalTypeMappingSource>(),
             context.GetService<ISqlGenerationHelper>());
@@ -90,7 +90,7 @@ public sealed class SqlServerProjectedSeedProofTests
     )
     {
         // Arrange
-        using var context = new SafeMigrationDbContext(ConnectionString);
+        await using var context = new SafeMigrationDbContext(ConnectionString);
         var analyzer = new SqlServerSafeMigrationProviderAnalyzer(
             context.GetService<IRelationalTypeMappingSource>(),
             context.GetService<ISqlGenerationHelper>());
@@ -139,7 +139,7 @@ public sealed class SqlServerProjectedSeedProofTests
         var transition = Analysis(SafeMigrationObservedState.TransitionReady, "transition_ready");
         var apply = new SafeMigrationDecision(SafeMigrationAction.Apply, "apply");
         var source = new Source(table, newlyCreated: true);
-        var keyAnalyzer = (ISafeMigrationProjectedKeyAnalyzer)analyzer;
+        ISafeMigrationProjectedKeyAnalyzer keyAnalyzer = analyzer;
 
         // Act
         var contractFailure = Record.Exception(() => SafeMigrationModelManagedDataContractValidator.Validate(
@@ -327,12 +327,22 @@ public sealed class SqlServerProjectedSeedProofTests
         string code
     ) => new(state, SafeMigrationRepairCapability.None, false, code);
 
-    private sealed class Source(
-        ExpectedTableDefinition table,
-        bool newlyCreated
-    )
+    private sealed class Source
         : ISafeMigrationProjectedColumnSource, ISafeMigrationProjectedTableSource
     {
+        private readonly bool _newlyCreated;
+        private readonly ExpectedTableDefinition _table;
+
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        public Source(
+            ExpectedTableDefinition table,
+            bool newlyCreated
+        )
+        {
+            _table = table;
+            _newlyCreated = newlyCreated;
+        }
+
         public bool TryGetProjectedColumn(
             string name,
             string? schema,
@@ -340,7 +350,7 @@ public sealed class SqlServerProjectedSeedProofTests
             [NotNullWhen(true)] out ExpectedColumnDefinition? definition
         )
         {
-            definition = table.Columns.FirstOrDefault(value => StringComparer.Ordinal.Equals(value.Name, column));
+            definition = _table.Columns.FirstOrDefault(value => StringComparer.Ordinal.Equals(value.Name, column));
 
             return definition is not null;
         }
@@ -351,7 +361,7 @@ public sealed class SqlServerProjectedSeedProofTests
             out SafeMigrationProjectedTableState state
         )
         {
-            state = new SafeMigrationProjectedTableState(newlyCreated, true, false, false);
+            state = new SafeMigrationProjectedTableState(_newlyCreated, true, false, false);
 
             return true;
         }

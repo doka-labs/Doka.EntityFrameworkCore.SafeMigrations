@@ -1,5 +1,8 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
+/// <summary>
+/// Verifies authoring helpers capture one complete immutable intent and reject incomplete contracts before publication.
+/// </summary>
 public sealed partial class SafeMigrationBuilderExtensionsTests
 {
     private static ExpectedColumnDefinition Column(

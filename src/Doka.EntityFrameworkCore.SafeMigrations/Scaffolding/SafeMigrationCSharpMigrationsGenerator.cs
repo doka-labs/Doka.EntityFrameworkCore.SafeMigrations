@@ -71,18 +71,10 @@ internal sealed class SafeMigrationCSharpMigrationsGenerator : IMigrationsCodeGe
                 guardedDownOperations,
                 guardedUpOperations);
 
-            if (_configuration.Mode != SafeMigrationScaffoldingMode.LegacyConvergence)
-            {
-                effectiveDownOperations = pairedDownOperations;
-            }
-            else
-            {
-                // A convergence baseline may adopt objects that existed before
-                // the migration. Replacing Down with a deterministic rejection
-                // prevents a rollback from deleting data or schema the migration
-                // did not create.
-                effectiveDownOperations = [new SafeMigrationLegacyRollbackOperation()];
-            }
+            // WHY: A convergence baseline can adopt pre-existing objects; its rollback must never delete them.
+            effectiveDownOperations = _configuration.Mode != SafeMigrationScaffoldingMode.LegacyConvergence
+                ? pairedDownOperations
+                : [new SafeMigrationLegacyRollbackOperation()];
         }
 
         var source = _providerGenerator.GenerateMigration(
@@ -184,7 +176,7 @@ internal sealed class SafeMigrationCSharpMigrationsGenerator : IMigrationsCodeGe
         ArgumentNullException.ThrowIfNull(source);
 
         var newline = SafeMigrationGeneratedSource.GetConsistentNewLine(source);
-        var directive = $"using {SafeMigrationsNamespace};";
+        const string directive = $"using {SafeMigrationsNamespace};";
         var directiveIndex = FindExactLineStart(source, directive, newline, startIndex: 0);
         if (directiveIndex >= 0)
         {

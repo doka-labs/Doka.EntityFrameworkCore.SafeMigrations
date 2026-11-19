@@ -2,9 +2,11 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
 public sealed partial class SafeMigrationModelManagedDataTests
 {
+    /// <summary>Metadata, input values and returned binary snapshots cannot mutate the captured contract.</summary>
     [Fact]
     public void DefinitionsSnapshotEveryMutableValueAndMetadataInput()
     {
+        // Arrange
         var bytes = new byte[] { 1, 2, 3 };
         var keyColumns = new[] { "id" };
         var keyTypes = new[] { "int" };
@@ -14,6 +16,7 @@ public sealed partial class SafeMigrationModelManagedDataTests
         var uniqueKeys = new[] { new ExpectedModelManagedDataUniqueKeyDefinition(uniqueColumns) };
         var values = new object?[,] { { 1, bytes } };
 
+        // Act
         var intent = new EnsureModelManagedDataIntent(
             "roles",
             keyColumns,
@@ -35,6 +38,7 @@ public sealed partial class SafeMigrationModelManagedDataTests
         var returnedBytes = Assert.IsType<byte[]>(intent.Values.GetValue(0, 1));
         returnedBytes[2] = 9;
 
+        // Assert
         Assert.Equal(["id"], intent.KeyColumns);
         Assert.Equal(["int"], intent.KeyColumnTypes);
         Assert.Equal(["id", "payload"], intent.Columns);
@@ -46,9 +50,11 @@ public sealed partial class SafeMigrationModelManagedDataTests
         Assert.Equal(new byte[] { 1, 2, 3 }, intent.Values.GetValue(0, 1));
     }
 
+    /// <summary>Supported scalar domains preserve canonical fingerprints and their original typed values.</summary>
     [Fact]
-    public void CanonicalValueContractSupportsProviderValuesAndRejectsUnknownObjects()
+    public void CanonicalValueContractSupportsProviderValues()
     {
+        // Arrange
         var guid = Guid.Parse("e720f9aa-4743-4c10-a40d-48265f281c0d");
         var values = new object?[,]
         {
@@ -112,14 +118,23 @@ public sealed partial class SafeMigrationModelManagedDataTests
             schema: null,
             uniqueKeys: null);
 
+        // Act
         var fingerprint = SafeMigrationContractFingerprint.Create([Operation(intent)]);
 
+        // Assert
         Assert.Equal(64, fingerprint.Length);
         Assert.Equal(guid, intent.Values.GetValue(0, 16));
         Assert.Equal(2, (int)Assert.IsType<ModelManagedDataTestValue>(intent.Values.GetValue(0, 22)));
+    }
 
+    /// <summary>An unsupported value reports only its type, never its confidential payload.</summary>
+    [Fact]
+    public void CanonicalValueContractRejectsUnknownObjectsWithoutTheirPayload()
+    {
+        // Arrange
         var unsupported = new object?[,] { { 1, new Uri("https://example.test/secret-value") } };
 
+        // Act
         var exception = Assert.Throws<ArgumentException>(() => new EnsureModelManagedDataIntent(
             "value_contract",
             ["id"],
@@ -130,13 +145,16 @@ public sealed partial class SafeMigrationModelManagedDataTests
             schema: null,
             uniqueKeys: null));
 
+        // Assert
         Assert.Contains(typeof(Uri).FullName!, exception.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("secret-value", exception.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>Every contract dimension yields a distinct opaque fingerprint without leaking managed values.</summary>
     [Fact]
     public void FingerprintBindsEveryModelManagedContractDimensionWithoutExposingValues()
     {
+        // Arrange
         var operations = new[]
         {
             EnsureOperation(
@@ -205,10 +223,12 @@ public sealed partial class SafeMigrationModelManagedDataTests
                 reverseRows: true),
         };
 
+        // Act
         var fingerprints = operations
             .Select(operation => SafeMigrationContractFingerprint.Create([operation]))
             .ToArray();
 
+        // Assert
         Assert.Equal(fingerprints.Length,
             fingerprints
                 .Distinct(StringComparer.Ordinal)
@@ -223,43 +243,65 @@ public sealed partial class SafeMigrationModelManagedDataTests
             });
     }
 
-    [Fact]
-    public void InvalidShapesFailClosedWithoutIncludingManagedValues()
+    /// <summary>Each malformed metadata or row shape is rejected without including managed payloads.</summary>
+    /// <param name="boundary">The independently malformed shape.</param>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void InvalidShapesFailClosedWithoutIncludingManagedValues(
+        int boundary
+    )
     {
-        var secret = "private-role-value";
+        // Arrange
+        const string secret = "private-role-value";
+        Func<SafeMigrationIntent> construct = boundary switch
+        {
+            0 => static () => new EnsureModelManagedDataIntent("roles",
+                [],
+                [],
+                ["id"],
+                ["int"],
+                new object?[,] { { 1 } },
+                schema: null,
+                uniqueKeys: null),
+            1 => static () => new EnsureModelManagedDataIntent("roles",
+                ["id"],
+                ["bigint"],
+                ["id", "name"],
+                ["int", "varchar(64)"],
+                new object?[,] { { 1, secret } },
+                schema: null,
+                uniqueKeys: null),
+            2 => static () => new UpdateModelManagedDataIntent("roles",
+                ["id"],
+                ["int"],
+                new object?[,] { { 1 }, { 2 } },
+                ["name"],
+                ["varchar(64)"],
+                new object?[,] { { secret } },
+                new object?[,] { { "target" }, { "target-2" } },
+                schema: null,
+                uniqueKeys: null),
+            _ => throw new ArgumentOutOfRangeException(nameof(boundary)),
+        };
 
-        Assert.Throws<ArgumentException>(() => new EnsureModelManagedDataIntent(
-            "roles",
-            [],
-            [],
-            ["id"],
-            ["int"],
-            new object?[,] { { 1 } },
-            schema: null,
-            uniqueKeys: null));
+        // Act
+        var exception = Record.Exception(() => { _ = construct(); });
 
-        Assert.Throws<ArgumentException>(() => new EnsureModelManagedDataIntent(
-            "roles",
-            ["id"],
-            ["bigint"],
-            ["id", "name"],
-            ["int", "varchar(64)"],
-            new object?[,] { { 1, secret } },
-            schema: null,
-            uniqueKeys: null));
+        // Assert
+        Assert.DoesNotContain(secret,
+            Assert.IsType<ArgumentException>(exception)
+                .Message,
+            StringComparison.Ordinal);
+    }
 
-        Assert.Throws<ArgumentException>(() => new UpdateModelManagedDataIntent(
-            "roles",
-            ["id"],
-            ["int"],
-            new object?[,] { { 1 }, { 2 } },
-            ["name"],
-            ["varchar(64)"],
-            new object?[,] { { secret } },
-            new object?[,] { { "target" }, { "target-2" } },
-            schema: null,
-            uniqueKeys: null));
-
+    /// <summary>Repeating one typed managed key in an authored stream fails without exposing its value.</summary>
+    [Fact]
+    public void DuplicateManagedShapesFailClosedWithoutIncludingManagedValues()
+    {
+        // Arrange
+        const string secret = "private-role-value";
         var duplicate = Operation(
             new EnsureModelManagedDataIntent(
                 "roles",
@@ -271,15 +313,19 @@ public sealed partial class SafeMigrationModelManagedDataTests
                 schema: null,
                 uniqueKeys: null));
 
+        // Act
         var duplicateException = Assert.Throws<InvalidOperationException>(() =>
             SafeMigrationModelManagedDataContractValidator.Validate([duplicate, duplicate]));
 
+        // Assert
         Assert.DoesNotContain(secret, duplicateException.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>The row bound partitions a large seed batch without dropping its final row.</summary>
     [Fact]
-    public void PairerPartitionsAtRowAndCellBoundsAndRejectsAnOversizedRow()
+    public void PairerPartitionsAtRowBound()
     {
+        // Arrange
         const int rowCount = 257;
         var values = new object?[rowCount, 2];
         var inverseKeys = new object?[rowCount, 1];
@@ -290,16 +336,24 @@ public sealed partial class SafeMigrationModelManagedDataTests
             inverseKeys[row, 0] = row;
         }
 
+        // Act
         var rowBoundResult = SafeMigrationModelManagedDataPairer.Pair(
             [Insert("roles", ["id", "name"], ["int", "varchar(64)"], values)],
             [Delete("roles", ["id"], ["int"], inverseKeys)]);
 
+        // Assert
         Assert.Equal(
             [128, 128, 1],
             rowBoundResult
                 .Cast<EnsureModelManagedDataScaffoldingOperation>()
                 .Select(operation => operation.Intent.RowCount));
+    }
 
+    /// <summary>The cell bound partitions wide rows without exceeding the bounded operation payload.</summary>
+    [Fact]
+    public void PairerPartitionsAtCellBound()
+    {
+        // Arrange
         const int cellBoundRows = 200;
         const int managedColumnCount = 40;
         var cellColumns = Enumerable
@@ -324,16 +378,24 @@ public sealed partial class SafeMigrationModelManagedDataTests
             }
         }
 
+        // Act
         var cellBoundResult = SafeMigrationModelManagedDataPairer.Pair(
             [Insert("cell_bound", cellColumns, cellTypes, cellValues)],
             [Delete("cell_bound", ["c0"], ["int"], cellKeys)]);
 
+        // Assert
         Assert.Equal(
             [99, 99, 2],
             cellBoundResult
                 .Cast<EnsureModelManagedDataScaffoldingOperation>()
                 .Select(operation => operation.Intent.RowCount));
+    }
 
+    /// <summary>A single row that cannot fit the cell budget is rejected instead of partially scaffolded.</summary>
+    [Fact]
+    public void PairerRejectsAnOversizedRow()
+    {
+        // Arrange
         var oversizedColumnCount = SafeMigrationModelManagedDataLimits.MaximumCellsPerOperation;
         var oversizedColumns = Enumerable
             .Range(0, oversizedColumnCount)
@@ -347,14 +409,20 @@ public sealed partial class SafeMigrationModelManagedDataTests
         var oversizedValues = new object?[1, oversizedColumnCount];
         oversizedValues[0, 0] = 0;
 
-        Assert.Throws<InvalidOperationException>(() => SafeMigrationModelManagedDataPairer.Pair(
+        // Act
+        var exception = Record.Exception(() => SafeMigrationModelManagedDataPairer.Pair(
             [Insert("oversized", oversizedColumns, oversizedTypes, oversizedValues)],
             [Delete("oversized", ["c0"], ["int"], new object?[,] { { 0 } })]));
+
+        // Assert
+        Assert.IsType<InvalidOperationException>(exception);
     }
 
+    /// <summary>Frozen seed carriers retain EF's inherited table, type, key and target-value contracts.</summary>
     [Fact]
     public void ScaffoldingCarriersPopulateTheInheritedEfOperationContract()
     {
+        // Arrange
         var ensureIntent = new EnsureModelManagedDataIntent(
             "roles",
             ["id"],
@@ -388,10 +456,12 @@ public sealed partial class SafeMigrationModelManagedDataTests
             "identity",
             foreignKeys: null);
 
+        // Act
         var ensure = new EnsureModelManagedDataScaffoldingOperation(ensureIntent);
         var update = new UpdateModelManagedDataScaffoldingOperation(updateIntent);
         var delete = new DeleteModelManagedDataScaffoldingOperation(deleteIntent);
 
+        // Assert
         Assert.Equal("roles", ensure.Table);
         Assert.Equal(["int", "varchar(64)"], ensure.ColumnTypes!);
         Assert.Equal("owner", update.Values[0, 0]);

@@ -9,9 +9,11 @@ public sealed class MySqlMixedPendingStreamIntegrationTests : MySqlSafeMigration
         MySqlEngineContainerFixture fixture
     ) : base(fixture) { }
 
+    /// <summary>Keeps strict index operations correctly classified after earlier legacy data-preparation SQL.</summary>
     [Fact]
     public async Task PendingPreflight_DoesNotMisclassifyStrictOperationsAfterLegacyDataPreparationSql()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -26,6 +28,7 @@ public sealed class MySqlMixedPendingStreamIntegrationTests : MySqlSafeMigration
         await using var context = new MixedPendingStreamDbContext(connectionString, Fixture.ServerVersion);
         var runner = context.GetService<ISafeMigrationRunner>();
 
+        // Act
         var preflight = await runner.AnalyzePendingMigrationsAsync(
             context,
             new SafeMigrationRunOptions("mixed-pending-stream"),
@@ -66,6 +69,7 @@ public sealed class MySqlMixedPendingStreamIntegrationTests : MySqlSafeMigration
             "SELECT COUNT(*) FROM `__MixedPendingStreamMigrationsHistory`;",
             cancellationToken: CancellationToken.None);
 
+        // Assert
         Assert.Equal(2, distinctCodes);
         Assert.Equal(1, indexCount);
         Assert.Equal(1, markerCount);
@@ -78,9 +82,11 @@ public sealed class MySqlMixedPendingStreamIntegrationTests : MySqlSafeMigration
         preflight.ThrowIfBlocked();
     }
 
+    /// <summary>Identifies the opaque SQL migration responsible for a later runtime-validation requirement.</summary>
     [Fact]
     public async Task PendingPreflight_IdentifiesTheSqlMigrationBehindLaterUncertainty()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -95,6 +101,7 @@ public sealed class MySqlMixedPendingStreamIntegrationTests : MySqlSafeMigration
         await using var context = new MixedPendingStreamDbContext(connectionString, Fixture.ServerVersion);
         var runner = context.GetService<ISafeMigrationRunner>();
 
+        // Act
         var preflight = await runner.AnalyzePendingMigrationsAsync(
             context,
             new SafeMigrationRunOptions("mixed-pending-stream-diagnostics"),
@@ -116,6 +123,7 @@ public sealed class MySqlMixedPendingStreamIntegrationTests : MySqlSafeMigration
 
         var origin = uncertainAssessment.GetProperty("deferredOrigin");
 
+        // Assert
         Assert.Equal("runtime_validation_required",
             uncertainAssessment
                 .GetProperty("code")
@@ -138,9 +146,13 @@ public sealed class MySqlMixedPendingStreamIntegrationTests : MySqlSafeMigration
             StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Analyzes a strict migration normally after its preceding data-preparation migration is already applied.
+    /// </summary>
     [Fact]
     public async Task PendingPreflight_AnalyzesStrictMigrationAfterDataPreparationWasApplied()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -159,6 +171,7 @@ public sealed class MySqlMixedPendingStreamIntegrationTests : MySqlSafeMigration
 
         var runner = context.GetService<ISafeMigrationRunner>();
 
+        // Act
         var preflight = await runner.AnalyzePendingMigrationsAsync(
             context,
             new SafeMigrationRunOptions("mixed-strict-pending-only"),
@@ -181,6 +194,7 @@ public sealed class MySqlMixedPendingStreamIntegrationTests : MySqlSafeMigration
             """,
             cancellationToken: CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
         Assert.Equal(2, preflight.Assessments.Count);
         Assert.All(
@@ -191,6 +205,12 @@ public sealed class MySqlMixedPendingStreamIntegrationTests : MySqlSafeMigration
         Assert.Equal(1, indexCount);
     }
 
+    /// <summary>
+    /// Retains the later unique-index runtime guard after opaque SQL invalidates static data evidence.
+    /// </summary>
+    /// <param name="sql">The independently authored SQL expression used by this case.</param>
+    /// <param name="expectedFailureCode">The exact rejection category expected before target mutation.</param>
+    /// <param name="expectedIndexCount">The exact native index cardinality expected after the lifecycle.</param>
     [Theory]
     [InlineData("ALTER TABLE `mixed_records` DROP COLUMN `code`;", "doka_sm_prerequisite_missing", 0)]
     [InlineData("UPDATE `mixed_records` SET `code` = 'duplicate';", "doka_sm_data_blocked", 0)]
@@ -201,6 +221,7 @@ public sealed class MySqlMixedPendingStreamIntegrationTests : MySqlSafeMigration
         int expectedIndexCount
     )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -223,6 +244,7 @@ public sealed class MySqlMixedPendingStreamIntegrationTests : MySqlSafeMigration
 
         var runner = context.GetService<ISafeMigrationRunner>();
 
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
@@ -244,6 +266,7 @@ public sealed class MySqlMixedPendingStreamIntegrationTests : MySqlSafeMigration
             """,
             cancellationToken: CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, preflight.Status);
         Assert.Equal(SafeMigrationAction.ValidateAtRuntime, preflight.Assessments[1].Action);
         Assert.Null(preflight.Assessments[1].DeferredOrigin?.MigrationId);
@@ -257,9 +280,11 @@ public sealed class MySqlMixedPendingStreamIntegrationTests : MySqlSafeMigration
         Assert.Equal(expectedIndexCount, indexCount);
     }
 
+    /// <summary>Does not defer or erase a blocker proved before an opaque SQL boundary.</summary>
     [Fact]
     public async Task OpaqueSql_DoesNotReclassifyAnEarlierProvenBlocker()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -272,21 +297,29 @@ public sealed class MySqlMixedPendingStreamIntegrationTests : MySqlSafeMigration
         _ = builder.Sql("ALTER TABLE `mixed_records` ADD COLUMN `code` varchar(20) NOT NULL;");
         var runner = context.GetService<ISafeMigrationRunner>();
 
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
             new SafeMigrationRunOptions("opaque-sql-earlier-blocker"),
             CancellationToken.None);
 
+        var failure = Record.Exception(preflight.ThrowIfBlocked);
+
+        // Assert
+        Assert.IsType<SafeMigrationPreflightException>(failure);
         Assert.Equal(SafeMigrationReportStatus.Blocked, preflight.Status);
         Assert.Equal(SafeMigrationAction.RejectPrerequisiteMissing, preflight.Assessments[0].Action);
         Assert.Null(preflight.Assessments[0].DeferredOrigin);
-        Assert.Throws<SafeMigrationPreflightException>(preflight.ThrowIfBlocked);
     }
 
+    /// <summary>
+    /// Rejects an invariant database-qualifier mismatch even after opaque SQL invalidates row evidence.
+    /// </summary>
     [Fact]
     public async Task OpaqueSql_DoesNotDeferAnInvariantDatabaseQualifierMismatch()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = new MixedPendingStreamDbContext(connectionString, Fixture.ServerVersion);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -298,21 +331,27 @@ public sealed class MySqlMixedPendingStreamIntegrationTests : MySqlSafeMigration
 
         var runner = context.GetService<ISafeMigrationRunner>();
 
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
             new SafeMigrationRunOptions("opaque-sql-foreign-database"),
             CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, preflight.Status);
         Assert.Equal(SafeMigrationAction.RejectUnsupported, preflight.Assessments[1].Action);
         Assert.Equal("database_qualifier_mismatch", preflight.Assessments[1].AnalysisCode);
         Assert.Null(preflight.Assessments[1].DeferredOrigin);
     }
 
+    /// <summary>
+    /// Keeps unsupported schema removal rejected rather than disguising it as deferred runtime validation.
+    /// </summary>
     [Fact]
     public async Task OpaqueSql_DoesNotDeferUnsupportedSchemaDrop()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var database = new MySqlConnectionStringBuilder(connectionString).Database;
         await using var context = new MixedPendingStreamDbContext(connectionString, Fixture.ServerVersion);
@@ -325,23 +364,29 @@ public sealed class MySqlMixedPendingStreamIntegrationTests : MySqlSafeMigration
         builder.DropSchemaIfExists(database);
         var runner = context.GetService<ISafeMigrationRunner>();
 
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
             new SafeMigrationRunOptions("opaque-sql-unsupported-schema-drop"),
             CancellationToken.None);
 
+        var failure = Record.Exception(preflight.ThrowIfBlocked);
+
+        // Assert
+        Assert.IsType<SafeMigrationPreflightException>(failure);
         Assert.Equal(SafeMigrationReportStatus.Blocked, preflight.Status);
         Assert.Equal(SafeMigrationAction.ValidateAtRuntime, preflight.Assessments[1].Action);
         Assert.Equal(SafeMigrationAction.RejectUnsupported, preflight.Assessments[2].Action);
         Assert.Equal("schema_operations", preflight.Assessments[2].AnalysisCode);
         Assert.Null(preflight.Assessments[2].DeferredOrigin);
-        Assert.Throws<SafeMigrationPreflightException>(preflight.ThrowIfBlocked);
     }
 
+    /// <summary>Rejects unsupported operation metadata regardless of an earlier opaque SQL boundary.</summary>
     [Fact]
     public async Task OpaqueSql_DoesNotDeferUnsupportedOperationAnnotation()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = new MixedPendingStreamDbContext(connectionString, Fixture.ServerVersion);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -352,12 +397,14 @@ public sealed class MySqlMixedPendingStreamIntegrationTests : MySqlSafeMigration
 
         var runner = context.GetService<ISafeMigrationRunner>();
 
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
             new SafeMigrationRunOptions("opaque-sql-unsupported-annotation"),
             CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, preflight.Status);
         Assert.Equal(SafeMigrationAction.RejectUnsupported, preflight.Assessments[1].Action);
         Assert.Equal("operation_annotation", preflight.Assessments[1].AnalysisCode);
@@ -402,6 +449,7 @@ public sealed class MixedPendingStreamDbContext : DbContext
 /// <summary>Represents the source-frozen legacy convergence baseline.</summary>
 [DbContext(typeof(MixedPendingStreamDbContext))]
 [Migration("20260925000001_MixedLegacyInit")]
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public sealed class MixedLegacyInitMigration : Migration
 {
     /// <inheritdoc />
@@ -427,6 +475,7 @@ public sealed class MixedLegacyInitMigration : Migration
 /// <summary>Prepares legacy data for the later strict unique index.</summary>
 [DbContext(typeof(MixedPendingStreamDbContext))]
 [Migration("20260925000002_MixedDataPreparation")]
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public sealed class MixedDataPreparationMigration : Migration
 {
     /// <inheritdoc />
@@ -445,6 +494,7 @@ public sealed class MixedDataPreparationMigration : Migration
 /// <summary>Represents a later strict migration in the same pending stream.</summary>
 [DbContext(typeof(MixedPendingStreamDbContext))]
 [Migration("20260925000003_MixedStrictObjects")]
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public sealed class MixedStrictObjectsMigration : Migration
 {
     /// <inheritdoc />

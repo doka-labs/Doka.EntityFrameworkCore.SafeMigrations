@@ -3,7 +3,9 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 /// <summary>Exercises catalog-proof lifetime through the real analyzer and its analysis scope.</summary>
 public sealed class SqlServerCatalogPreambleLifecycleTests
 {
-    /// <summary>Server permission evidence uses the documented null securable and class, not an invalid SERVER class.</summary>
+    /// <summary>
+    /// Server permission evidence uses the documented null securable and class, not an invalid SERVER class.
+    /// </summary>
     [Fact]
     public async Task EnvironmentProbe_UsesSupportedServerPermissionArguments()
     {
@@ -27,7 +29,9 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
             StringComparison.Ordinal);
     }
 
-    /// <summary>Successful analysis and inventory still recheck the current environment inside their active scope.</summary>
+    /// <summary>
+    /// Successful analysis and inventory still recheck the current environment inside their active scope.
+    /// </summary>
     /// <param name="borrowed">Whether the caller supplies the transaction.</param>
     [Theory]
     [InlineData(false)]
@@ -414,6 +418,8 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
         await analyzer.AnalyzeAsync(context, AnalysisOperations(), cancellationToken: CancellationToken.None);
 
         // Act
+        // WHY: This branch deliberately tests the synchronous entry point independently of the async control.
+        // ReSharper disable once MethodHasAsyncOverload
         analyzer.Dispose();
         await scope.DisposeAsync();
         connection.MetadataVisible = false;
@@ -577,6 +583,8 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
         }
         else
         {
+            // WHY: This branch deliberately tests the synchronous entry point independently of the async control.
+            // ReSharper disable once MethodHasAsyncOverload
             analyzer.Dispose();
         }
 
@@ -650,6 +658,8 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
         return builder
             .Operations
             .Cast<SafeMigrationOperation>()
+            // WHY: Fluent terminal materialization preserves the existing snapshot and enumeration contract.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
     }
 
@@ -661,6 +671,8 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
             SafeMigrationTableMode.StrictDefinition,
             SafeMigrationPolicy.ThrowIfDifferent);
 
+        // WHY: Fluent terminal materialization preserves the existing snapshot and enumeration contract.
+        // ReSharper disable once UseCollectionExpression
         return builder.Operations.ToArray();
     }
 
@@ -718,15 +730,25 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
         }
     }
 
-    private sealed class PreambleTransaction(PreambleConnection connection) : DbTransaction
+    private sealed class PreambleTransaction : DbTransaction
     {
+        private readonly PreambleConnection _connection;
+
         private bool _disposed;
+
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        public PreambleTransaction(
+            PreambleConnection connection
+        )
+        {
+            _connection = connection;
+        }
 
         public override IsolationLevel IsolationLevel => IsolationLevel.ReadCommitted;
 
         protected override DbConnection? DbConnection => _disposed
             ? null
-            : connection;
+            : _connection;
 
         public override void Commit() { }
         public override void Rollback() { }
@@ -740,19 +762,32 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
         }
     }
 
-    private sealed class PreambleCommand(PreambleConnection connection) : DbCommand
+    private sealed class PreambleCommand : DbCommand
     {
-        private readonly SqlCommand _parameterHost = new();
+        private readonly PreambleConnection _connection;
+
+        private readonly SqlCommand _parameterHost;
         private DataTable? _result;
 
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        public PreambleCommand(
+            PreambleConnection connection
+        )
+        {
+            _connection = connection;
+            _parameterHost = new SqlCommand();
+            CommandText = string.Empty;
+            DbConnection = connection;
+        }
+
         [AllowNull]
-        public override string CommandText { get; set; } = string.Empty;
+        public override string CommandText { get; set; }
 
         public override int CommandTimeout { get; set; }
         public override CommandType CommandType { get; set; }
         public override bool DesignTimeVisible { get; set; }
         public override UpdateRowSource UpdatedRowSource { get; set; }
-        protected override DbConnection? DbConnection { get; set; } = connection;
+        protected override DbConnection? DbConnection { get; set; }
         protected override DbTransaction? DbTransaction { get; set; }
         protected override DbParameterCollection DbParameterCollection => _parameterHost.Parameters;
         public override void Cancel() => throw new NotSupportedException();
@@ -764,14 +799,14 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
         {
             if (CommandText.Contains("sp_releaseapplock", StringComparison.Ordinal))
             {
-                connection.ScopeReleases++;
+                _connection.ScopeReleases++;
             }
 
             if (CommandText.Contains("SELECT @doka_identity_safe", StringComparison.Ordinal))
             {
-                connection.IdentifierReads++;
+                _connection.IdentifierReads++;
 
-                return connection.IdentifierSafe
+                return _connection.IdentifierSafe
                     ? 1
                     : 0;
             }
@@ -788,8 +823,8 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
             _result = new DataTable { Locale = CultureInfo.InvariantCulture };
             if (CommandText.StartsWith("SELECT SCHEMA_NAME()", StringComparison.Ordinal))
             {
-                connection.EnvironmentReads++;
-                connection.EnvironmentCommand = CommandText;
+                _connection.EnvironmentReads++;
+                _connection.EnvironmentCommand = CommandText;
                 _result.Columns.Add("schema", typeof(string));
                 _result.Columns.Add("collation", typeof(string));
                 _result.Columns.Add("metadata_visible", typeof(int));
@@ -800,19 +835,19 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
                 _result.Columns.Add("expression_dependencies_readable", typeof(int));
                 _result.Columns.Add("enabled_dml_triggers", typeof(int));
                 _result.Rows.Add(
-                    connection.DefaultSchema,
-                    connection.Collation,
-                    connection.MetadataVisible
+                    _connection.DefaultSchema,
+                    _connection.Collation,
+                    _connection.MetadataVisible
                         ? 1
                         : 0,
-                    connection.DefaultSchema == "dbo"
+                    _connection.DefaultSchema == "dbo"
                         ? 1
                         : 0,
-                    (object?)connection.PrincipalId ?? DBNull.Value,
-                    (object?)connection.LoginSid ?? DBNull.Value,
+                    (object?)_connection.PrincipalId ?? DBNull.Value,
+                    (object?)_connection.LoginSid ?? DBNull.Value,
                     0,
                     1,
-                    connection.HasEnabledDmlTriggers
+                    _connection.HasEnabledDmlTriggers
                         ? 1
                         : 0);
             }
@@ -825,8 +860,8 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
             else if (CommandText.StartsWith("SELECT 0, (", StringComparison.Ordinal)
                 || CommandText.StartsWith("EXEC sys.sp_executesql", StringComparison.Ordinal))
             {
-                connection.ClassificationReads++;
-                if (connection.ClassificationFailure is { } failure)
+                _connection.ClassificationReads++;
+                if (_connection.ClassificationFailure is { } failure)
                 {
                     throw failure;
                 }

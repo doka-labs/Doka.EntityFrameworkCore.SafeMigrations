@@ -2,7 +2,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite;
 
 internal static partial class SqliteSafeMigrationCatalog
 {
-    private const string MainTablesPredicate = "t.type = 'table' AND t.name NOT LIKE 'sqlite\\_%' ESCAPE '\\' ";
+    private const string MainTablesPredicate = @"t.type = 'table' AND t.name NOT LIKE 'sqlite\_%' ESCAPE '\' ";
 
     private static (string Version, bool ForeignKeysEnabled, bool LegacyAlterTableEnabled) ReadSettings(
         DbConnection connection,
@@ -25,12 +25,10 @@ internal static partial class SqliteSafeMigrationCatalog
         }
 
         var result = (reader.GetString(0), reader.GetInt32(1) != 0, reader.GetInt32(2) != 0);
-        if (reader.Read())
-        {
-            throw InvalidMetadata();
-        }
 
-        return result;
+        return reader.Read()
+            ? throw InvalidMetadata()
+            : result;
     }
 
     private static ReadOnlyCollection<SqliteSchemaObjectSnapshot> ReadSchemaObjects(
@@ -51,7 +49,7 @@ internal static partial class SqliteSafeMigrationCatalog
             """);
 
         using var reader = command.ExecuteReader();
-        var result = new List<SqliteSchemaObjectSnapshot>();
+        List<SqliteSchemaObjectSnapshot> result = [];
         while (reader.Read())
         {
             var type = reader.GetString(0);
@@ -257,13 +255,16 @@ internal static partial class SqliteSafeMigrationCatalog
 
         PublishIndex(currentTable, currentIndex);
         ValidateOwners(tables, seen);
+
+        // WHY: Retain the dictionary value enumerator and immediate metadata failure without a LINQ adapter.
+        // ReSharper disable once LoopCanBeConvertedToQuery
         foreach (var table in tables.Values)
         {
             // WHY: WITHOUT ROWID primary keys have no sqlite_schema index row;
             // their physical primary-key index still must be present.
             if (!table.ExpectedIndexNames.IsSubsetOf(table.IndexNames)
                 || (HasTableOption(table.Sql, "WITHOUT ROWID")
-                    && !table.Indexes.Any(static index => index.Origin == "pk")))
+                    && table.Indexes.All(static index => index.Origin != "pk")))
             {
                 throw InvalidMetadata();
             }
@@ -294,8 +295,7 @@ internal static partial class SqliteSafeMigrationCatalog
                 index.Origin,
                 index.Partial,
                 index.Keys.AsReadOnly(),
-                ReadIndexFilter(index.ParsedSql),
-                index.Sql));
+                ReadIndexFilter(index.ParsedSql)));
     }
 
     private static void ReadForeignKeys(
@@ -374,6 +374,9 @@ internal static partial class SqliteSafeMigrationCatalog
 
         PublishForeignKey(currentTable, currentForeignKey);
         ValidateOwners(tables, seen);
+
+        // WHY: Retain the dictionary value enumerator and immediate metadata failure without a LINQ adapter.
+        // ReSharper disable once LoopCanBeConvertedToQuery
         foreach (var table in tables.Values)
         {
             if (table.MatchedForeignKeys.Count != table.DeclaredForeignKeys.Count)
@@ -394,7 +397,12 @@ internal static partial class SqliteSafeMigrationCatalog
             return;
         }
 
+        // WHY: Preserve explicit fluent materialization for the ordered snapshot.
+        // ReSharper disable once UseCollectionExpression
         var columns = foreignKey.Columns.ToArray();
+
+        // WHY: Preserve explicit fluent materialization for the ordered snapshot.
+        // ReSharper disable once UseCollectionExpression
         var principalColumns = foreignKey.PrincipalColumns.ToArray();
         var onUpdate = ParseReferentialAction(foreignKey.OnUpdate);
         var onDelete = ParseReferentialAction(foreignKey.OnDelete);

@@ -1,7 +1,14 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
+/// <summary>
+/// Pins intermediate and terminal constraint inventories across renames, physical dependencies and explicit removals.
+/// </summary>
 public sealed class SafeMigrationExpectedTableConstraintsTests
 {
+    /// <summary>
+    /// Retains both historical allowed shapes and exact terminal constraints without treating replaced lifetimes as
+    /// continuous.
+    /// </summary>
     [Fact]
     public void OperationProjectionTracksIntermediateAndTerminalConstraintStates()
     {
@@ -48,10 +55,11 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
 
         // Act
         var projected = SafeMigrationExpectedTableConstraints.FromOperations(builder.Operations);
+
+        // Assert
         var constraints = Assert.Single(projected)
             .Value;
 
-        // Assert
         Assert.Equal("pk_records", constraints.PrimaryKey?.Name);
         Assert.Equal("uq_records_code",
             Assert.Single(constraints.UniqueConstraints)
@@ -86,6 +94,10 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
             constraints.AllowedForeignKeys.Select(static value => value.Name));
     }
 
+    /// <summary>
+    /// Keeps continuously declared table constraints required while allowing later standalone additions to be
+    /// absent initially.
+    /// </summary>
     [Fact]
     public void StableConstraintsRemainRequiredWhileStandaloneAddsRemainOptionalAtTableAnalysis()
     {
@@ -121,10 +133,11 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
 
         // Act
         var projected = SafeMigrationExpectedTableConstraints.FromOperations(builder.Operations);
+
+        // Assert
         var constraints = Assert.Single(projected)
             .Value;
 
-        // Assert
         Assert.False(constraints.PrimaryKeyMayBeAbsent);
         Assert.Equal("pk_records",
             Assert.Single(constraints.AllowedPrimaryKeys)
@@ -144,6 +157,10 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
                 .Name);
     }
 
+    /// <summary>
+    /// Retains an equal recreated shape as allowed but not continuously required across its explicit physical
+    /// removal.
+    /// </summary>
     [Fact]
     public void DropAndReaddOfSameDefinitionPreservesAllowedShapeWithoutTreatingItAsContinuous()
     {
@@ -200,10 +217,11 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
 
         // Act
         var projected = SafeMigrationExpectedTableConstraints.FromOperations(builder.Operations);
+
+        // Assert
         var constraints = Assert.Single(projected)
             .Value;
 
-        // Assert
         Assert.True(constraints.PrimaryKeyMayBeAbsent);
         Assert.Equal(primaryKey.Name,
             Assert.Single(constraints.AllowedPrimaryKeys)
@@ -225,6 +243,9 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
                 .Name);
     }
 
+    /// <summary>
+    /// Removes terminal constraint obligations when the entire accepted table lifetime is dropped.
+    /// </summary>
     [Fact]
     public void DroppedTableHasNoTerminalConstraintContract()
     {
@@ -247,6 +268,9 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
         Assert.Empty(projected);
     }
 
+    /// <summary>
+    /// Rebinds both local key names and incoming FK endpoints through the same parent/member rename sequence.
+    /// </summary>
     [Fact]
     public void RenamesUpdateOwnedAndReferencingConstraintIdentities()
     {
@@ -306,6 +330,9 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
         Assert.Equal(["parent_key"], childForeignKey.PrincipalColumns);
     }
 
+    /// <summary>
+    /// Rejects a member rename through an opaque owned CHECK and requests explicit constraint reconstruction.
+    /// </summary>
     [Fact]
     public void ColumnRenameWithOwnedCheckConstraintFailsClosed()
     {
@@ -363,10 +390,12 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
         builder.RenameColumnIfExists("value", "records", "score");
 
         // Act
-        var constraints = Assert.Single(SafeMigrationExpectedTableConstraints.FromOperations(builder.Operations))
-            .Value;
+        var projected = SafeMigrationExpectedTableConstraints.FromOperations(builder.Operations);
 
         // Assert
+        var constraints = Assert.Single(projected)
+            .Value;
+
         var check = Assert.Single(constraints.CheckConstraints);
         Assert.Equal(expected, check.CapturedSql);
         Assert.True(SafeMigrationSqlExpressionInspector.ReferencesIdentifier(check.Expression!, "score"));
@@ -395,10 +424,12 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
         builder.RenameColumnIfExists("value", "records", "score");
 
         // Act
-        var constraints = Assert.Single(SafeMigrationExpectedTableConstraints.FromOperations(builder.Operations))
-            .Value;
+        var projected = SafeMigrationExpectedTableConstraints.FromOperations(builder.Operations);
 
         // Assert
+        var constraints = Assert.Single(projected)
+            .Value;
+
         var check = Assert.Single(constraints.CheckConstraints);
         var binary = Assert.IsType<SafeMigrationSqlBinaryExpression>(check.Expression);
         var cast = Assert.IsType<SafeMigrationSqlCastExpression>(binary.Left);
@@ -431,13 +462,14 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
         builder.RenameTableIfExists("records", "renamed_records");
 
         // Act
-        var constraints = Assert.Single(
-                SafeMigrationExpectedTableConstraints.FromOperations(
-                    builder.Operations,
-                    static schema => schema ?? "native"))
-            .Value;
+        var projected = SafeMigrationExpectedTableConstraints.FromOperations(
+            builder.Operations,
+            static schema => schema ?? "native");
 
         // Assert
+        var constraints = Assert.Single(projected)
+            .Value;
+
         var check = Assert.Single(constraints.CheckConstraints);
         Assert.Same(source, check.CapturedSql);
         Assert.Equal("native", check.Schema);
@@ -466,10 +498,12 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
         builder.RenameColumnIfExists("other", "records", "renamed");
 
         // Act
-        var constraints = Assert.Single(SafeMigrationExpectedTableConstraints.FromOperations(builder.Operations))
-            .Value;
+        var projected = SafeMigrationExpectedTableConstraints.FromOperations(builder.Operations);
 
         // Assert
+        var constraints = Assert.Single(projected)
+            .Value;
+
         var check = Assert.Single(constraints.CheckConstraints);
         Assert.Same(source, check.CapturedSql);
         Assert.Single(constraints.AllowedCheckConstraints);
@@ -510,16 +544,17 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
         builder.RenameColumnIfExists("value", "records", target);
 
         // Act
-        var constraints = Assert.Single(
-                SafeMigrationExpectedTableConstraints.FromOperations(
-                    builder.Operations,
-                    static schema => schema,
-                    StringComparer.Ordinal,
-                    delimiter,
-                    fold))
-            .Value;
+        var projected = SafeMigrationExpectedTableConstraints.FromOperations(
+            builder.Operations,
+            static schema => schema,
+            StringComparer.Ordinal,
+            delimiter,
+            fold);
 
         // Assert
+        var constraints = Assert.Single(projected)
+            .Value;
+
         var check = Assert.Single(constraints.CheckConstraints);
         Assert.Equal(expected, check.CapturedSql);
         Assert.True(SafeMigrationSqlExpressionInspector.ReferencesIdentifier(check.Expression!, target));
@@ -573,17 +608,18 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
         builder.RenameColumnIfExists("value", "records", "score");
 
         // Act
-        var constraints = Assert.Single(
-                SafeMigrationExpectedTableConstraints.FromOperations(
-                    builder.Operations,
-                    static schema => schema,
-                    StringComparer.Ordinal,
-                    '[',
-                    false,
-                    StringComparer.OrdinalIgnoreCase))
-            .Value;
+        var projected = SafeMigrationExpectedTableConstraints.FromOperations(
+            builder.Operations,
+            static schema => schema,
+            StringComparer.Ordinal,
+            '[',
+            false,
+            StringComparer.OrdinalIgnoreCase);
 
         // Assert
+        var constraints = Assert.Single(projected)
+            .Value;
+
         Assert.Equal(
             "[score] + 2147483648 > 0 AND 'VALUE' <> ''",
             Assert.Single(constraints.CheckConstraints)
@@ -654,17 +690,18 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
             : StringComparer.OrdinalIgnoreCase;
 
         // Act
-        var constraints = Assert.Single(
-                SafeMigrationExpectedTableConstraints.FromOperations(
-                    builder.Operations,
-                    static schema => schema,
-                    StringComparer.OrdinalIgnoreCase,
-                    '[',
-                    false,
-                    columnComparer))
-            .Value;
+        var projected = SafeMigrationExpectedTableConstraints.FromOperations(
+            builder.Operations,
+            static schema => schema,
+            StringComparer.OrdinalIgnoreCase,
+            '[',
+            false,
+            columnComparer);
 
         // Assert
+        var constraints = Assert.Single(projected)
+            .Value;
+
         var expected = caseSensitive
             ? source
             : "ABS([score]) + CAST([score] AS bigint) > 0 AND 'L' <> ''";
@@ -697,22 +734,27 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
         builder.DropColumnIfExists("L", "records");
 
         // Act
-        var constraints = Assert.Single(
-                SafeMigrationExpectedTableConstraints.FromOperations(
-                    builder.Operations,
-                    static schema => schema,
-                    StringComparer.OrdinalIgnoreCase,
-                    '[',
-                    false,
-                    StringComparer.Ordinal))
-            .Value;
+        var projected = SafeMigrationExpectedTableConstraints.FromOperations(
+            builder.Operations,
+            static schema => schema,
+            StringComparer.OrdinalIgnoreCase,
+            '[',
+            false,
+            StringComparer.Ordinal);
 
         // Assert
+        var constraints = Assert.Single(projected)
+            .Value;
+
         Assert.Equal("[l] >= 0",
             Assert.Single(constraints.CheckConstraints)
                 .CapturedSql);
     }
 
+    /// <summary>
+    /// Rejects removal of a primary-key member while retaining the exact key identity in the required recovery
+    /// guidance.
+    /// </summary>
     [Fact]
     public void ColumnDropWithPrimaryKeyDependencyFailsClosed()
     {
@@ -735,6 +777,9 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
         Assert.Contains("Drop the constraint explicitly", invalidOperation.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Rejects removal of a member still required by an owned unique constraint.
+    /// </summary>
     [Fact]
     public void ColumnDropWithUniqueConstraintDependencyFailsClosed()
     {
@@ -759,6 +804,9 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
         Assert.Contains("unique constraint 'uq_records_code'", invalidOperation.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Rejects removal of a member referenced by the typed owned CHECK predicate.
+    /// </summary>
     [Fact]
     public void ColumnDropWithStructuredCheckConstraintDependencyFailsClosed()
     {
@@ -788,6 +836,9 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
         Assert.Contains("check constraint 'ck_records_score'", invalidOperation.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Rejects speculative removal when an opaque CHECK cannot establish member independence.
+    /// </summary>
     [Fact]
     public void ColumnDropWithOpaqueCheckConstraintFailsClosedWhenDependencyIsUnknown()
     {
@@ -815,6 +866,9 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
         Assert.Contains("check constraint 'ck_records_id'", invalidOperation.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Rejects removal of the local member needed by an owned foreign-key endpoint.
+    /// </summary>
     [Fact]
     public void ColumnDropWithLocalForeignKeyDependencyFailsClosed()
     {
@@ -844,6 +898,9 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
         Assert.Contains("foreign key 'fk_records_parent'", invalidOperation.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Rejects removal of a principal member still referenced by another projected table's FK.
+    /// </summary>
     [Fact]
     public void ColumnDropWithReferencingForeignKeyDependencyFailsClosed()
     {
@@ -883,6 +940,10 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
             StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Allows member removal after explicit PK, unique and CHECK removals and retains their empty terminal
+    /// inventories.
+    /// </summary>
     [Fact]
     public void ColumnDropAfterExplicitDependencyDropsProjectsTerminalContract()
     {
@@ -924,6 +985,9 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
         Assert.Empty(constraints.ForeignKeys);
     }
 
+    /// <summary>
+    /// Allows both endpoint members to disappear only after the cross-table FK is explicitly removed.
+    /// </summary>
     [Fact]
     public void ColumnDropsAfterExplicitForeignKeyDropProjectBothTables()
     {
@@ -961,6 +1025,9 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
         Assert.Empty(projected[(null, "children")].ForeignKeys);
     }
 
+    /// <summary>
+    /// Retains independent PK and typed CHECK contracts while removing another member from the same owner.
+    /// </summary>
     [Fact]
     public void ColumnDropPreservesUnrelatedStructuredConstraints()
     {
@@ -998,6 +1065,9 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
                 .Name);
     }
 
+    /// <summary>
+    /// Does not erase the declared primary key when a DROP addresses a different physical name.
+    /// </summary>
     [Fact]
     public void DropWithDifferentPrimaryKeyNamePreservesTheTerminalContract()
     {

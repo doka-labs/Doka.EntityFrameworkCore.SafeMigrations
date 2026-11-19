@@ -12,6 +12,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer;
 /// Failed session recovery requires a new context for supported migration and catalog
 /// execution. This boundary does not intercept arbitrary EF queries or standalone SQL scripts.
 /// </remarks>
+[PublicAPI]
 public sealed partial class SqlServerSafeMigrationsSqlGenerator : IMigrationsSqlGenerator
 {
     private const string GuardScopePrefix = "EXEC sys.sp_executesql N'";
@@ -156,7 +157,7 @@ public sealed partial class SqlServerSafeMigrationsSqlGenerator : IMigrationsSql
 
             if (operation is not SafeMigrationOperation safeOperation)
             {
-                var ordinary = new List<MigrationOperation>();
+                List<MigrationOperation> ordinary = [];
                 do
                 {
                     ordinary.Add(operations[ordinal]);
@@ -182,12 +183,13 @@ public sealed partial class SqlServerSafeMigrationsSqlGenerator : IMigrationsSql
 
             var baseline = RenderBaseline(safeOperation, plan, model, options, ordinal);
             var repairBaseline = RenderRepairBaseline(safeOperation, plan, model, options);
-            var effectiveRepairBaseline = repairBaseline.Count > 0
-                ? repairBaseline
-                : safeOperation is { Policy: SafeMigrationPolicy.RepairIfSafe, Intent: AlterColumnIntent }
-                && plan.RepairCapability == SafeMigrationRepairCapability.Safe
-                    ? baseline
-                    : [];
+            var effectiveRepairBaseline = repairBaseline.Count switch
+            {
+                > 0 => repairBaseline,
+                _ when safeOperation is { Policy: SafeMigrationPolicy.RepairIfSafe, Intent: AlterColumnIntent }
+                    && plan.RepairCapability == SafeMigrationRepairCapability.Safe => baseline,
+                _ => [],
+            };
 
             if (!plan.IsStaticallyUnsupported
                 && baseline.Count == 0
@@ -312,7 +314,7 @@ public sealed partial class SqlServerSafeMigrationsSqlGenerator : IMigrationsSql
         // avoids the filtering iterator and temporary growth buffers needed by
         // OfType/ToArray while retaining the original objects and their order.
         var safeOperations = safeOperationCount == 0
-            ? Array.Empty<SafeMigrationOperation>()
+            ? []
             : new SafeMigrationOperation[safeOperationCount];
 
         var offset = 0;
@@ -335,12 +337,9 @@ public sealed partial class SqlServerSafeMigrationsSqlGenerator : IMigrationsSql
             safeOperations[offset++] = safeOperation;
         }
 
-        if (offset != safeOperationCount)
-        {
-            throw new InvalidOperationException("The safe operation preflight count no longer matches the stream.");
-        }
-
-        return safeOperations;
+        return offset == safeOperationCount
+            ? safeOperations
+            : throw new InvalidOperationException("The safe operation preflight count no longer matches the stream.");
     }
 
     private static void ValidateGuardCommands(

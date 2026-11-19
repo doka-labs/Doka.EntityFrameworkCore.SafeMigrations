@@ -136,6 +136,8 @@ internal sealed class SqliteRetirementMigrationContext : DbContext
 /// <summary>Creates retained application schema before the independent feature upgrade.</summary>
 [DbContext(typeof(SqliteRetirementMigrationContext))]
 [Migration(MigrationIdentifier)]
+// WHY: EF migration discovery constructs this fixture from its attributed migration identity.
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public sealed class SqliteRetirementBaselineMigration : Migration
 {
     /// <summary>Gets the baseline identity used to verify exact reverse history.</summary>
@@ -171,6 +173,8 @@ public sealed class SqliteRetirementBaselineMigration : Migration
 /// <summary>Creates and retires the real cycle through safe migration operations and ordinary EF history.</summary>
 [DbContext(typeof(SqliteRetirementMigrationContext))]
 [Migration(MigrationIdentifier)]
+// WHY: EF migration discovery constructs this fixture from its attributed migration identity.
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public sealed class SqliteRetirementCycleMigration : Migration
 {
     /// <summary>Gets the upgrade identity used for reapplication and replay.</summary>

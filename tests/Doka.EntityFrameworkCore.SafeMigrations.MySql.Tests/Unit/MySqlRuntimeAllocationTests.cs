@@ -1,12 +1,19 @@
-using System.Security.Cryptography;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Protects exact runtime generation on both MySQL and MariaDB without database latency.</summary>
-/// <param name="output">The diagnostic SQL fingerprint output.</param>
-public sealed class MySqlRuntimeAllocationTests(ITestOutputHelper output)
+public sealed class MySqlRuntimeAllocationTests
 {
     private const string CanonicalCorrelation = "00000000000000000000000000000000";
+    private readonly ITestOutputHelper _output;
+
+    /// <summary>Initializes the explicit dependencies of this isolated test helper.</summary>
+    /// <param name="output">The diagnostic SQL fingerprint output.</param>
+    public MySqlRuntimeAllocationTests(
+        ITestOutputHelper output
+    )
+    {
+        _output = output;
+    }
 
     /// <summary>Runtime column generation preserves every command and its exact SQL.</summary>
     /// <param name="isMariaDb">Whether generation uses the qualified MariaDB catalog contract.</param>
@@ -29,6 +36,9 @@ public sealed class MySqlRuntimeAllocationTests(ITestOutputHelper output)
                     "items",
                     new ExpectedColumnDefinition($"value_{index}", typeof(int), true, "int")),
                 SafeMigrationPolicy.ThrowIfDifferent))
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         // Act
@@ -70,11 +80,11 @@ public sealed class MySqlRuntimeAllocationTests(ITestOutputHelper output)
             Assert.DoesNotContain(exactNullDefaultComparison, legacySql, StringComparison.Ordinal);
         }
 
-        output.WriteLine(
+        _output.WriteLine(
             $"{(isMariaDb ? "MariaDB" : "MySQL")} generation SQL SHA256 {hash}.");
 
-        output.WriteLine($"Legacy-facet reference SQL SHA256 {legacyHash}.");
-        output.WriteLine(
+        _output.WriteLine($"Legacy-facet reference SQL SHA256 {legacyHash}.");
+        _output.WriteLine(
             $"Runtime SQL: {commands.Count} commands, "
             + $"{commands.Sum(static command => command.CommandText.Length)} characters, "
             + $"{commands.Sum(static command => Encoding.UTF8.GetByteCount(command.CommandText))} UTF8 bytes.");

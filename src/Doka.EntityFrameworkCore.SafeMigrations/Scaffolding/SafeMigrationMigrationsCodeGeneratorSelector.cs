@@ -10,6 +10,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// the complete provider-generator set is available only after the service
 /// provider has been built.
 /// </remarks>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 internal sealed class SafeMigrationMigrationsCodeGeneratorSelector : IMigrationsCodeGeneratorSelector
 {
     private readonly SafeMigrationScaffoldingConfiguration _configuration;
@@ -31,6 +32,9 @@ internal sealed class SafeMigrationMigrationsCodeGeneratorSelector : IMigrations
         ArgumentNullException.ThrowIfNull(configuration);
 
         _configuration = configuration;
+
+        // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+        // ReSharper disable once UseCollectionExpression
         _providerGenerators = providerGenerators.ToArray();
         _decoratedGenerators = new IMigrationsCodeGenerator[_providerGenerators.Length];
 

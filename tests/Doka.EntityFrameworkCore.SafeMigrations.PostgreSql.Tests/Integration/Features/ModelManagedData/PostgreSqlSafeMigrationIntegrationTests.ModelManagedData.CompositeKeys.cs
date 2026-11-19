@@ -9,9 +9,11 @@ public sealed class PostgreSqlModelManagedDataCompositeKeysIntegrationTests : Po
         PostgreSqlContainerFixture fixture
     ) : base(fixture) { }
 
+    /// <summary>Composite Model Managed Keys Converge And Replay In Operation Order.</summary>
     [Fact]
     public async Task CompositeModelManagedKeysConvergeAndReplayInOperationOrder()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -32,6 +34,7 @@ public sealed class PostgreSqlModelManagedDataCompositeKeysIntegrationTests : Po
 
         var runner = context.GetService<ISafeMigrationRunner>();
 
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
@@ -47,6 +50,9 @@ public sealed class PostgreSqlModelManagedDataCompositeKeysIntegrationTests : Po
             new SafeMigrationRunOptions("model-data-composite-keys-replay"),
             CancellationToken.None);
 
+        // Assert
+        Assert.Equal(3, preflight.Assessments.Count);
+        Assert.Equal(3, replay.Assessments.Count);
         Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, preflight.Status);
         Assert.Equal(SafeMigrationObservedState.Missing, preflight.Assessments[0].ObservedState);
         Assert.Equal(SafeMigrationAction.Apply, preflight.Assessments[0].Action);

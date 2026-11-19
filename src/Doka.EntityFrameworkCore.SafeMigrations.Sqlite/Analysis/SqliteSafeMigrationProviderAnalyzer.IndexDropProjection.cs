@@ -19,8 +19,12 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
             return false;
         }
 
-        foreach (var index in table.Indexes)
+        // WHY: Traverse the stable ordered source by ordinal without materializing another collection.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var physicalIndex = 0; physicalIndex < table.Indexes.Count; physicalIndex++)
         {
+            var index = table.Indexes[physicalIndex];
             if (s_identifierComparer.Equals(index.Name, intent.Name))
             {
                 return index.Origin == "c";

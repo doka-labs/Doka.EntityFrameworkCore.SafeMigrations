@@ -5,6 +5,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// Formatting is explicit and performs no I/O. Native guard categories are not evidence of a
 /// particular row defect; detailed causes are used only when the classifier established them.
 /// </remarks>
+[PublicAPI]
 public static partial class SafeMigrationDiagnosticMessages
 {
     private const int MaximumMessageLength = 2048;
@@ -328,6 +329,9 @@ public static partial class SafeMigrationDiagnosticMessages
 
         var knownGuard = NormalizeGuardCode(guardCode);
         var explanation = GetRuntimeExplanation(context, knownGuard, diagnosticReasonCode);
+
+        // WHY: Capture the caller's prefix before appending; inlining this read would change the clamp boundary.
+        // ReSharper disable once InlineTemporaryVariable
         var start = destination.Length;
         AppendRuntimeCore(destination, context.Policy, context.Identity, knownGuard, operationOrdinal, explanation);
         if (diagnosticReasonCode is { } code
@@ -358,6 +362,9 @@ public static partial class SafeMigrationDiagnosticMessages
 
         var escapedLength = 0;
         var requiresEscaping = false;
+
+        // WHY: Scan string characters directly and stop at the display bound without a LINQ iterator.
+        // ReSharper disable once ForeachCanBePartlyConvertedToQueryUsingAnotherGetEnumerator
         foreach (var character in value)
         {
             var width = GetDisplayWidth(character);
@@ -385,6 +392,9 @@ public static partial class SafeMigrationDiagnosticMessages
                 : 0);
 
         var builder = new StringBuilder(Math.Min(maximumLength, 256));
+
+        // WHY: Stop before an escape crosses the writable prefix; direct string enumeration retains the bound.
+        // ReSharper disable once ForeachCanBePartlyConvertedToQueryUsingAnotherGetEnumerator
         foreach (var character in value)
         {
             if (builder.Length + GetDisplayWidth(character) > writableLength)
@@ -594,11 +604,11 @@ public static partial class SafeMigrationDiagnosticMessages
     {
         switch (character)
         {
-            case '\\': builder.Append("\\\\"); break;
+            case '\\': builder.Append(@"\\"); break;
             case >= ' ' and <= '~': builder.Append(character); break;
             default:
                 const string digits = "0123456789ABCDEF";
-                builder.Append("\\u");
+                builder.Append(@"\u");
                 builder.Append(digits[(character >> 12) & 15]);
                 builder.Append(digits[(character >> 8) & 15]);
                 builder.Append(digits[(character >> 4) & 15]);
@@ -704,6 +714,8 @@ public static partial class SafeMigrationDiagnosticMessages
             return false;
         }
 
+        // WHY: Machine-code validation uses the string's direct character enumerator and first-invalid exit.
+        // ReSharper disable once ForeachCanBeConvertedToQueryUsingAnotherGetEnumerator
         foreach (var character in value)
         {
             if (character is not (>= 'a' and <= 'z') and not (>= '0' and <= '9') and not '_')

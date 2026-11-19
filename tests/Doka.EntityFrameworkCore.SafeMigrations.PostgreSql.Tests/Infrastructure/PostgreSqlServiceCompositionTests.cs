@@ -1,14 +1,19 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
+/// <summary>Verifies PostgreSQL Service Composition contracts in independently owned test state.</summary>
 public sealed class PostgreSqlServiceCompositionTests
 {
     private const string CanonicalConfigurationTypeName =
         "Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationCanonicalContextConfiguration";
 
+    /// <summary>Scaffolding Configuration Defaults To Strict And Accepts Legacy Convergence.</summary>
     [Fact]
     public void ScaffoldingConfigurationDefaultsToStrictAndAcceptsLegacyConvergence()
     {
+        // Arrange
         var strict = new DbContextOptionsBuilder();
+
+        // Act
         strict.UsePostgreSqlSafeMigrations();
 
         var legacy = new DbContextOptionsBuilder();
@@ -18,6 +23,7 @@ public sealed class PostgreSqlServiceCompositionTests
         var strictInfo = strict.Options.FindExtension<PostgreSqlSafeMigrationsOptionsExtension>()!.Info;
         var legacyInfo = legacy.Options.FindExtension<PostgreSqlSafeMigrationsOptionsExtension>()!.Info;
 
+        // Assert
         Assert.Equal(
             SafeMigrationScaffoldingMode.Strict,
             strict.Options.FindExtension<PostgreSqlSafeMigrationsOptionsExtension>()!.ScaffoldingMode);
@@ -34,10 +40,14 @@ public sealed class PostgreSqlServiceCompositionTests
         Assert.True(strictInfo.ShouldUseSameServiceProvider(legacyInfo));
     }
 
+    /// <summary>Excluded Table Data Ownership Is Persisted And Separates Service Providers.</summary>
     [Fact]
     public void ExcludedTableDataOwnership_IsPersistedAndSeparatesServiceProviders()
     {
+        // Arrange
         var defaults = new DbContextOptionsBuilder();
+
+        // Act
         defaults.UsePostgreSqlSafeMigrations();
 
         var ownership = new DbContextOptionsBuilder();
@@ -47,6 +57,7 @@ public sealed class PostgreSqlServiceCompositionTests
         var defaultExtension = defaults.Options.FindExtension<PostgreSqlSafeMigrationsOptionsExtension>()!;
         var ownershipExtension = ownership.Options.FindExtension<PostgreSqlSafeMigrationsOptionsExtension>()!;
 
+        // Assert
         Assert.False(defaultExtension.ExcludeModelManagedDataForExcludedTablesEnabled);
         Assert.True(ownershipExtension.ExcludeModelManagedDataForExcludedTablesEnabled);
         Assert.False(defaultExtension.Info.ShouldUseSameServiceProvider(ownershipExtension.Info));
@@ -55,88 +66,132 @@ public sealed class PostgreSqlServiceCompositionTests
             ownershipExtension.Info.GetServiceProviderHashCode());
     }
 
+    /// <summary>Repair Policy Without Legacy Mode Is Rejected Before Options Mutation.</summary>
     [Fact]
     public void RepairPolicyWithoutLegacyModeIsRejectedBeforeOptionsMutation()
     {
+        // Arrange
         var options = new DbContextOptionsBuilder();
 
-        var exception = Assert.Throws<InvalidOperationException>(() =>
+        // Act
+        var failure = Record.Exception(() =>
             options.UsePostgreSqlSafeMigrations(configuration =>
                 configuration.UseLegacyConvergencePolicy(SafeMigrationPolicy.RepairIfSafe)));
 
+        // Assert
+        var exception = Assert.IsType<InvalidOperationException>(failure);
         Assert.Contains("requires LegacyConvergence", exception.Message, StringComparison.Ordinal);
         Assert.Null(options.Options.FindExtension<PostgreSqlSafeMigrationsOptionsExtension>());
     }
 
+    /// <summary>Null Scaffolding Configuration Is Rejected Before Options Mutation.</summary>
     [Fact]
     public void NullScaffoldingConfigurationIsRejectedBeforeOptionsMutation()
     {
+        // Arrange
         var options = new DbContextOptionsBuilder();
 
-        Assert.Throws<ArgumentNullException>(() =>
+        // Act
+        var failure = Record.Exception(() =>
             options.UsePostgreSqlSafeMigrations(configure: null!));
 
+        // Assert
+        Assert.IsType<ArgumentNullException>(failure);
         Assert.Null(options.Options.FindExtension<PostgreSqlSafeMigrationsOptionsExtension>());
     }
 
-    [Fact]
-    public void ConfiguredOverloadFamiliesPersistLegacyModeAndComposition()
+    /// <summary>Configured Overload Families Persist Legacy Mode And Composition.</summary>
+    /// <param name="family">The independently discovered canonical/custom/typed overload family.</param>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    public void ConfiguredOverloadFamiliesPersistLegacyModeAndComposition(
+        int family
+    )
     {
-        var canonical = new DbContextOptionsBuilder();
-        canonical.UsePostgreSqlSafeMigrations<SafeMigrationDbContext>(ConfigureLegacy);
-
-        var custom = new DbContextOptionsBuilder();
-        custom.UsePostgreSqlSafeMigrations<RecordingNpgsqlMigrationsSqlGenerator, SafeMigrationDbContext>(
-            ConfigureLegacy);
-
+        // Arrange
+        var untyped = new DbContextOptionsBuilder();
         var typed = new DbContextOptionsBuilder<SafeMigrationDbContext>();
-        typed.UsePostgreSqlSafeMigrations(ConfigureLegacy);
 
-        var typedCustom = new DbContextOptionsBuilder<SafeMigrationDbContext>();
-        typedCustom.UsePostgreSqlSafeMigrations<SafeMigrationDbContext, RecordingNpgsqlMigrationsSqlGenerator,
-            SafeMigrationDbContext>(ConfigureLegacy);
+        // Act
+        switch (family)
+        {
+            case 0:
+                untyped.UsePostgreSqlSafeMigrations<SafeMigrationDbContext>(ConfigureLegacy);
+                break;
+            case 1:
+                untyped.UsePostgreSqlSafeMigrations<RecordingNpgsqlMigrationsSqlGenerator, SafeMigrationDbContext>(
+                    ConfigureLegacy);
 
-        var canonicalExtension = canonical.Options.FindExtension<PostgreSqlSafeMigrationsOptionsExtension>()!;
-        var customExtension = custom.Options.FindExtension<PostgreSqlSafeMigrationsOptionsExtension>()!;
-        var typedExtension = typed.Options.FindExtension<PostgreSqlSafeMigrationsOptionsExtension>()!;
-        var typedCustomExtension = typedCustom.Options.FindExtension<PostgreSqlSafeMigrationsOptionsExtension>()!;
+                break;
+            case 2:
+                typed.UsePostgreSqlSafeMigrations(ConfigureLegacy);
+                break;
+            case 3:
+                typed.UsePostgreSqlSafeMigrations<SafeMigrationDbContext, RecordingNpgsqlMigrationsSqlGenerator,
+                    SafeMigrationDbContext>(ConfigureLegacy);
 
-        Assert.Equal(SafeMigrationScaffoldingMode.LegacyConvergence, canonicalExtension.ScaffoldingMode);
-        Assert.Equal(SafeMigrationPolicy.RepairIfSafe, canonicalExtension.LegacyConvergencePolicy);
-        Assert.Equal(typeof(SafeMigrationDbContext), canonicalExtension.CanonicalContextType);
-        Assert.Equal(typeof(RecordingNpgsqlMigrationsSqlGenerator), customExtension.BaselineGeneratorType);
-        Assert.Equal(SafeMigrationScaffoldingMode.LegacyConvergence, customExtension.ScaffoldingMode);
-        Assert.Equal(SafeMigrationScaffoldingMode.LegacyConvergence, typedExtension.ScaffoldingMode);
-        Assert.Equal(typeof(RecordingNpgsqlMigrationsSqlGenerator), typedCustomExtension.BaselineGeneratorType);
-        Assert.Equal(typeof(SafeMigrationDbContext), typedCustomExtension.CanonicalContextType);
-        Assert.Equal(SafeMigrationScaffoldingMode.LegacyConvergence, typedCustomExtension.ScaffoldingMode);
-        Assert.Equal(SafeMigrationPolicy.RepairIfSafe, typedCustomExtension.LegacyConvergencePolicy);
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(family));
+        }
+
+        var extension = (family < 2
+                ? untyped.Options
+                : typed.Options)
+            .FindExtension<PostgreSqlSafeMigrationsOptionsExtension>();
+
+        // Assert
+        Assert.NotNull(extension);
+        Assert.Equal(SafeMigrationScaffoldingMode.LegacyConvergence, extension.ScaffoldingMode);
+        Assert.Equal(SafeMigrationPolicy.RepairIfSafe, extension.LegacyConvergencePolicy);
+        Assert.Equal(family == 2
+                ? null
+                : typeof(SafeMigrationDbContext),
+            extension.CanonicalContextType);
+
+        if (family is 1 or 3)
+        {
+            Assert.Equal(typeof(RecordingNpgsqlMigrationsSqlGenerator), extension.BaselineGeneratorType);
+        }
     }
 
+    /// <summary>Registration Without Npgsql Fails With Provider Specific Message.</summary>
     [Fact]
     public void RegistrationWithoutNpgsqlFailsWithProviderSpecificMessage()
     {
+        // Arrange
         var options = new DbContextOptionsBuilder();
         options.UsePostgreSqlSafeMigrations();
 
-        var exception = Assert.Throws<InvalidOperationException>(() =>
+        // Act
+        var failure = Record.Exception(() =>
         {
             using var context = new DbContext(options.Options);
         });
 
+        // Assert
+        var exception = Assert.IsType<InvalidOperationException>(failure);
         Assert.Contains("require the Npgsql EF Core provider", exception.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>Registration Order And Repeated Calls Remain Idempotent.</summary>
     [Fact]
     public void RegistrationOrderAndRepeatedCallsRemainIdempotent()
     {
+        // Arrange
         var before = new DbContextOptionsBuilder<SafeMigrationDbContext>();
+
+        // Act
         ((DbContextOptionsBuilder)before).UsePostgreSqlSafeMigrations();
         before.UseNpgsql("Host=localhost;Database=composition;Username=test;Password=test");
         ((DbContextOptionsBuilder)before).UsePostgreSqlSafeMigrations();
 
         using var context = new SafeMigrationDbContext(before.Options);
 
+        // Assert
         Assert.IsType<PostgreSqlSafeMigrationsSqlGenerator>(context.GetService<IMigrationsSqlGenerator>());
         Assert.Equal(
             "Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationMigrationsAssembly",
@@ -146,6 +201,7 @@ public sealed class PostgreSqlServiceCompositionTests
                 .FullName);
     }
 
+    /// <summary>Runtime Sql Generator Consumes Leading Design Time Services Guard.</summary>
     [Fact]
     public void RuntimeSqlGenerator_ConsumesLeadingDesignTimeServicesGuard()
     {
@@ -166,6 +222,7 @@ public sealed class PostgreSqlServiceCompositionTests
         Assert.Empty(commands);
     }
 
+    /// <summary>Runtime Sql Generator Rejects Misplaced Design Time Services Guard.</summary>
     [Fact]
     public void RuntimeSqlGenerator_RejectsMisplacedDesignTimeServicesGuard()
     {
@@ -195,6 +252,7 @@ public sealed class PostgreSqlServiceCompositionTests
         Assert.Contains("must be the first migration operation", invalidOperation.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>Runtime Sql Generator Passes Ef History Bootstrap Sql To The Provider Without A Model.</summary>
     [Fact]
     public void RuntimeSqlGenerator_PassesEfHistoryBootstrapSqlToTheProviderWithoutAModel()
     {
@@ -216,6 +274,7 @@ public sealed class PostgreSqlServiceCompositionTests
         Assert.Equal(historySql.Trim(), command.CommandText.Trim());
     }
 
+    /// <summary>Directly Constructed Generator With Built In Baseline Recognizes Exact History Bootstrap.</summary>
     [Fact]
     public void DirectlyConstructedGenerator_WithBuiltInBaselineRecognizesExactHistoryBootstrap()
     {
@@ -239,6 +298,7 @@ public sealed class PostgreSqlServiceCompositionTests
         Assert.Equal(historySql.Trim(), command.CommandText.Trim());
     }
 
+    /// <summary>Runtime Sql Generator Passes Arbitrary Model Less Sql To The Provider.</summary>
     [Fact]
     public void RuntimeSqlGenerator_PassesArbitraryModelLessSqlToTheProvider()
     {
@@ -257,6 +317,7 @@ public sealed class PostgreSqlServiceCompositionTests
         Assert.Equal("SELECT 1;", command.CommandText.Trim());
     }
 
+    /// <summary>Runtime Sql Generator Rejects Known Index Before Column Drop Without Ensure Table.</summary>
     [Fact]
     public void RuntimeSqlGenerator_RejectsKnownIndexBeforeColumnDropWithoutEnsureTable()
     {
@@ -276,6 +337,7 @@ public sealed class PostgreSqlServiceCompositionTests
         Assert.Contains("Drop the index explicitly", invalidOperation.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>Runtime Sql Generator Accepts Explicit Index Drop Before Column Drop Without Ensure Table.</summary>
     [Fact]
     public void RuntimeSqlGenerator_AcceptsExplicitIndexDropBeforeColumnDropWithoutEnsureTable()
     {
@@ -295,6 +357,7 @@ public sealed class PostgreSqlServiceCompositionTests
         Assert.Equal(3, commands.Count);
     }
 
+    /// <summary>Custom Baseline Generator Renders Raw Sql Before A Safe Operation.</summary>
     [Fact]
     public void CustomBaselineGeneratorRendersRawSqlBeforeASafeOperation()
     {
@@ -329,9 +392,11 @@ public sealed class PostgreSqlServiceCompositionTests
         Assert.NotEmpty(RecordingNpgsqlMigrationsSqlGenerator.ObservedOperationTypes);
     }
 
+    /// <summary>Repairable Ensure Column Guards Distinct Provider Apply And Repair Operations.</summary>
     [Fact]
     public void RepairableEnsureColumn_GuardsDistinctProviderApplyAndRepairOperations()
     {
+        // Arrange
         var options = new DbContextOptionsBuilder<SafeMigrationDbContext>();
         options.UseNpgsql("Host=localhost;Database=composition;Username=test;Password=test");
         options
@@ -354,7 +419,11 @@ public sealed class PostgreSqlServiceCompositionTests
 
         RecordingNpgsqlMigrationsSqlGenerator.Clear();
 
-        var command = Assert.Single(generator.Generate(migrationBuilder.Operations, context.Model));
+        // Act
+        var commands = generator.Generate(migrationBuilder.Operations, context.Model);
+
+        // Assert
+        var command = Assert.Single(commands);
 
         Assert.Contains(
             RecordingNpgsqlMigrationsSqlGenerator.ObservedOperationTypes,
@@ -369,9 +438,11 @@ public sealed class PostgreSqlServiceCompositionTests
         Assert.Contains("-- custom baseline: AlterColumnOperation", command.CommandText, StringComparison.Ordinal);
     }
 
+    /// <summary>Repairable Varchar Ensure Column Reuses One Classifier Across Locked Evaluation.</summary>
     [Fact]
     public void RepairableVarcharEnsureColumn_ReusesOneClassifierAcrossLockedEvaluation()
     {
+        // Arrange
         var options = new DbContextOptionsBuilder<SafeMigrationDbContext>();
         options.UseNpgsql("Host=localhost;Database=composition;Username=test;Password=test");
         ((DbContextOptionsBuilder)options).UsePostgreSqlSafeMigrations();
@@ -388,10 +459,14 @@ public sealed class PostgreSqlServiceCompositionTests
                 maxLength: 40),
             SafeMigrationPolicy.RepairIfSafe);
 
-        var command = Assert.Single(
+        // Act
+        var commands =
             context
                 .GetService<IMigrationsSqlGenerator>()
-                .Generate(migrationBuilder.Operations, context.Model));
+                .Generate(migrationBuilder.Operations, context.Model);
+
+        // Assert
+        var command = Assert.Single(commands);
 
         const string loop = "FOR doka_evaluation_pass IN 1..2 LOOP";
         const string classifier = "doka_transition_eligible := COALESCE((";
@@ -420,9 +495,11 @@ public sealed class PostgreSqlServiceCompositionTests
         Assert.DoesNotContain("__DOKA_SM_", command.CommandText, StringComparison.Ordinal);
     }
 
+    /// <summary>Ensure Column Without Data Proof Does Not Emit Evaluation Loop Or Table Lock.</summary>
     [Fact]
     public void EnsureColumnWithoutDataProof_DoesNotEmitEvaluationLoopOrTableLock()
     {
+        // Arrange
         var options = new DbContextOptionsBuilder<SafeMigrationDbContext>();
         options.UseNpgsql("Host=localhost;Database=composition;Username=test;Password=test");
         ((DbContextOptionsBuilder)options).UsePostgreSqlSafeMigrations();
@@ -438,53 +515,71 @@ public sealed class PostgreSqlServiceCompositionTests
                 storeType: "integer"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
-        var command = Assert.Single(
+        // Act
+        var commands =
             context
                 .GetService<IMigrationsSqlGenerator>()
-                .Generate(migrationBuilder.Operations, context.Model));
+                .Generate(migrationBuilder.Operations, context.Model);
+
+        // Assert
+        var command = Assert.Single(commands);
 
         Assert.DoesNotContain("FOR doka_evaluation_pass", command.CommandText, StringComparison.Ordinal);
         Assert.DoesNotContain("ACCESS EXCLUSIVE", command.CommandText, StringComparison.Ordinal);
         Assert.DoesNotContain("__DOKA_SM_", command.CommandText, StringComparison.Ordinal);
     }
 
+    /// <summary>Incompatible Canonical Context Fails Before Migration Discovery.</summary>
     [Fact]
     public void IncompatibleCanonicalContextFailsBeforeMigrationDiscovery()
     {
+        // Arrange
         var options = new DbContextOptionsBuilder<SafeMigrationDbContext>();
         options.UseNpgsql("Host=localhost;Database=composition;Username=test;Password=test");
         options.UsePostgreSqlSafeMigrations<UnrelatedContext>();
 
         using var context = new SafeMigrationDbContext(options.Options);
 
-        var exception = Assert.Throws<InvalidOperationException>(() => context.GetService<IMigrationsAssembly>());
+        // Act
+        var failure = Record.Exception(() => context.GetService<IMigrationsAssembly>());
 
+        // Assert
+        var exception = Assert.IsType<InvalidOperationException>(failure);
         Assert.Contains("is not assignable from runtime context", exception.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>Repeated Equivalent Direct Registration Is Idempotent.</summary>
     [Fact]
     public void RepeatedEquivalentDirectRegistrationIsIdempotent()
     {
+        // Arrange
         var services = new ServiceCollection();
 
+        // Act
         services.AddPostgreSqlSafeMigrations<RecordingNpgsqlMigrationsSqlGenerator, SafeMigrationDbContext>();
         services.AddPostgreSqlSafeMigrations<RecordingNpgsqlMigrationsSqlGenerator, SafeMigrationDbContext>();
 
+        // Assert
         Assert.Single(CanonicalConfigurations(services));
         Assert.Single(services, static descriptor => descriptor.ServiceType == typeof(IMigrationsAssembly));
         Assert.Single(services, static descriptor => descriptor.ServiceType == typeof(IMigrationsSqlGenerator));
     }
 
+    /// <summary>Conflicting Direct Registration Fails Before Changing The Service Collection.</summary>
     [Fact]
     public void ConflictingDirectRegistrationFailsBeforeChangingTheServiceCollection()
     {
+        // Arrange
         var services = new ServiceCollection();
         services.AddPostgreSqlSafeMigrations();
         var originalDescriptors = services.ToArray();
 
-        var exception = Assert.Throws<InvalidOperationException>(() =>
+        // Act
+        var failure = Record.Exception(() =>
             services.AddPostgreSqlSafeMigrations<RecordingNpgsqlMigrationsSqlGenerator, SafeMigrationDbContext>());
 
+        // Assert
+        var exception = Assert.IsType<InvalidOperationException>(failure);
         Assert.Contains("different provider", exception.Message, StringComparison.Ordinal);
         Assert.Equal(originalDescriptors, services);
         Assert.Single(CanonicalConfigurations(services));

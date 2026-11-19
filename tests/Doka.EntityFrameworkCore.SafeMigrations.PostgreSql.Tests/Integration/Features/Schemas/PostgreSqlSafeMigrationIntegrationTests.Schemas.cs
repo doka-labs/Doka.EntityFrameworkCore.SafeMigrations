@@ -9,39 +9,43 @@ public sealed class PostgreSqlSchemasIntegrationTests : PostgreSqlSafeMigrationI
         PostgreSqlContainerFixture fixture
     ) : base(fixture) { }
 
+    /// <summary>Schema Operations Are Idempotent.</summary>
     [Fact]
     public async Task SchemaOperations_AreIdempotent()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var create = new MigrationBuilder(context.Database.ProviderName!);
         create.EnsureSchemaExists("module");
-        await ExecuteOperationsAsync(context, create.Operations, CancellationToken.None);
-        await ExecuteOperationsAsync(context, create.Operations, CancellationToken.None);
-
-        Assert.Equal(
-            1,
-            await ScalarIntAsync(
-                connectionString,
-                "SELECT COUNT(*) FROM pg_catalog.pg_namespace WHERE nspname = 'module';",
-                cancellationToken: CancellationToken.None));
-
         var drop = new MigrationBuilder(context.Database.ProviderName!);
         drop.DropSchemaIfExists("module");
-        await ExecuteOperationsAsync(context, drop.Operations, CancellationToken.None);
-        await ExecuteOperationsAsync(context, drop.Operations, CancellationToken.None);
 
-        Assert.Equal(
-            0,
-            await ScalarIntAsync(
-                connectionString,
-                "SELECT COUNT(*) FROM pg_catalog.pg_namespace WHERE nspname = 'module';",
-                cancellationToken: CancellationToken.None));
+        // Act
+        await ExecuteOperationsAsync(context, create.Operations, CancellationToken.None);
+        await ExecuteOperationsAsync(context, create.Operations, CancellationToken.None);
+        var countAfterCreate = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM pg_catalog.pg_namespace WHERE nspname = 'module';",
+            cancellationToken: CancellationToken.None);
+
+        await ExecuteOperationsAsync(context, drop.Operations, CancellationToken.None);
+        await ExecuteOperationsAsync(context, drop.Operations, CancellationToken.None);
+        var countAfterDrop = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM pg_catalog.pg_namespace WHERE nspname = 'module';",
+            cancellationToken: CancellationToken.None);
+
+        // Assert
+        Assert.Equal(1, countAfterCreate);
+        Assert.Equal(0, countAfterDrop);
     }
 
+    /// <summary>Cross Schema Convergence Is Qualified Idempotent And Catalog Exact.</summary>
     [Fact]
     public async Task CrossSchemaConvergence_IsQualifiedIdempotentAndCatalogExact()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -125,6 +129,7 @@ public sealed class PostgreSqlSchemasIntegrationTests : PostgreSqlSafeMigrationI
                     childSchema),
             ]);
 
+        // Act
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
@@ -136,42 +141,45 @@ public sealed class PostgreSqlSchemasIntegrationTests : PostgreSqlSafeMigrationI
                 new SafeMigrationRunOptions("cross-schema-convergence"),
                 CancellationToken.None);
 
+        var qualifiedForeignKeys = await ScalarIntAsync(
+            connectionString,
+            """
+            SELECT COUNT(*) FROM pg_catalog.pg_constraint co
+            JOIN pg_catalog.pg_class child ON child.oid = co.conrelid
+            JOIN pg_catalog.pg_namespace child_ns ON child_ns.oid = child.relnamespace
+            JOIN pg_catalog.pg_class parent ON parent.oid = co.confrelid
+            JOIN pg_catalog.pg_namespace parent_ns ON parent_ns.oid = parent.relnamespace
+            WHERE co.conname = 'fk_qualified_child_parent'
+            AND child_ns.nspname = 'tenant_core'
+            AND parent_ns.nspname = 'tenant_reference';
+            """,
+            cancellationToken: CancellationToken.None);
+
+        var unchangedPublicTables = await ScalarIntAsync(
+            connectionString,
+            """
+            SELECT COUNT(*) FROM information_schema.tables
+            WHERE table_schema = 'public'
+            AND table_name IN ('qualified_parent', 'qualified_child');
+            """,
+            cancellationToken: CancellationToken.None);
+
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
+        Assert.Equal(builder.Operations.Count, report.Assessments.Count);
         Assert.All(
             report.Assessments,
             assessment => Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState));
 
-        Assert.Equal(
-            1,
-            await ScalarIntAsync(
-                connectionString,
-                """
-                SELECT COUNT(*) FROM pg_catalog.pg_constraint co
-                JOIN pg_catalog.pg_class child ON child.oid = co.conrelid
-                JOIN pg_catalog.pg_namespace child_ns ON child_ns.oid = child.relnamespace
-                JOIN pg_catalog.pg_class parent ON parent.oid = co.confrelid
-                JOIN pg_catalog.pg_namespace parent_ns ON parent_ns.oid = parent.relnamespace
-                WHERE co.conname = 'fk_qualified_child_parent'
-                AND child_ns.nspname = 'tenant_core'
-                AND parent_ns.nspname = 'tenant_reference';
-                """,
-                cancellationToken: CancellationToken.None));
-
-        Assert.Equal(
-            2,
-            await ScalarIntAsync(
-                connectionString,
-                """
-                SELECT COUNT(*) FROM information_schema.tables
-                WHERE table_schema = 'public'
-                AND table_name IN ('qualified_parent', 'qualified_child');
-                """,
-                cancellationToken: CancellationToken.None));
+        Assert.Equal(1, qualifiedForeignKeys);
+        Assert.Equal(2, unchangedPublicTables);
     }
 
+    /// <summary>Non Default Schema Rename And Drop Matrix Is Idempotent And Isolated.</summary>
     [Fact]
     public async Task NonDefaultSchemaRenameAndDropMatrix_IsIdempotentAndIsolated()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -217,26 +225,27 @@ public sealed class PostgreSqlSchemasIntegrationTests : PostgreSqlSafeMigrationI
         builder.DropSchemaIfExists("lifecycle_module");
         builder.DropSchemaIfExists("lifecycle_archive");
 
+        // Act
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
-        Assert.Equal(
-            0,
-            await ScalarIntAsync(
-                connectionString,
-                "SELECT COUNT(*) FROM pg_catalog.pg_namespace "
-                + "WHERE nspname IN ('lifecycle_module', 'lifecycle_archive');",
-                cancellationToken: CancellationToken.None));
+        var remainingLifecycleSchemas = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM pg_catalog.pg_namespace "
+            + "WHERE nspname IN ('lifecycle_module', 'lifecycle_archive');",
+            cancellationToken: CancellationToken.None);
 
-        Assert.Equal(
-            3,
-            await ScalarIntAsync(
-                connectionString,
-                """
-                SELECT COUNT(*) FROM information_schema.tables
-                WHERE table_schema = 'public'
-                AND table_name IN ('lifecycle_target', 'renamed_source', 'moved_table');
-                """,
-                cancellationToken: CancellationToken.None));
+        var unchangedPublicTables = await ScalarIntAsync(
+            connectionString,
+            """
+            SELECT COUNT(*) FROM information_schema.tables
+            WHERE table_schema = 'public'
+            AND table_name IN ('lifecycle_target', 'renamed_source', 'moved_table');
+            """,
+            cancellationToken: CancellationToken.None);
+
+        // Assert
+        Assert.Equal(0, remainingLifecycleSchemas);
+        Assert.Equal(3, unchangedPublicTables);
     }
 }

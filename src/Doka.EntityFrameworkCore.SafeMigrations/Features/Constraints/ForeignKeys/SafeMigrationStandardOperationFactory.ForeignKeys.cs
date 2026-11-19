@@ -22,9 +22,15 @@ internal static partial class SafeMigrationStandardOperationFactory
         Name = definition.Name,
         Table = definition.Table,
         Schema = definition.Schema,
+
+        // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+        // ReSharper disable once UseCollectionExpression
         Columns = definition.Columns.ToArray(),
         PrincipalTable = definition.PrincipalTable,
         PrincipalSchema = definition.PrincipalSchema,
+
+        // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+        // ReSharper disable once UseCollectionExpression
         PrincipalColumns = definition.PrincipalColumns.ToArray(),
         OnUpdate = definition.OnUpdate,
         OnDelete = definition.OnDelete,

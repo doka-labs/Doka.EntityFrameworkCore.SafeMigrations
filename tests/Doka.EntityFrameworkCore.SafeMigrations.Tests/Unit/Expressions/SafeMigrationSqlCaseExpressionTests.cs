@@ -7,33 +7,43 @@ public sealed class SafeMigrationSqlCaseExpressionTests
     [Fact]
     public void ConvertDialectProvenanceSurvivesRenameAndContractHashing()
     {
+        // Arrange
         Assert.True(SafeMigrationSqlExpressionParser.TryParse("CONVERT(signed, value)", out var converted));
         var portable = SafeMigrationSql.Cast(SafeMigrationSql.Identifier("value"), "signed");
         using var portableWriter = new CanonicalHashWriter();
         using var convertedWriter = new CanonicalHashWriter();
 
+        // Act
         var renamed = SafeMigrationSqlExpressionInspector.RenameIdentifier(converted, "value", "renamed");
         SafeMigrationSqlExpressionContract.Write(portableWriter, portable);
         SafeMigrationSqlExpressionContract.Write(convertedWriter, converted);
+        var equivalent = SafeMigrationSqlExpressionContract.Equivalent(portable, converted);
+        var portableHash = portableWriter.GetHash();
+        var convertedHash = convertedWriter.GetHash();
 
+        // Assert
         Assert.True(Assert.IsType<SafeMigrationSqlCastExpression>(renamed)
             .UsesSqlServerConvert);
 
-        Assert.False(SafeMigrationSqlExpressionContract.Equivalent(portable, converted));
-        Assert.NotEqual(portableWriter.GetHash(), convertedWriter.GetHash());
+        Assert.False(equivalent);
+        Assert.NotEqual(portableHash, convertedHash);
     }
 
     /// <summary>The expression snapshots caller-owned storage without changing branch order.</summary>
     [Fact]
     public void ConstructionSnapshotsOrderedClauses()
     {
+        // Arrange
         var first = new SafeMigrationSqlCaseWhenClause(SafeMigrationSql.Literal(true), SafeMigrationSql.Literal(1));
         var second = new SafeMigrationSqlCaseWhenClause(SafeMigrationSql.Literal(false), SafeMigrationSql.Literal(2));
         var clauses = new[] { first, second };
 
-        var expression = Assert.IsType<SafeMigrationSqlCaseExpression>(SafeMigrationSql.Case(clauses));
+        // Act
+        var result = SafeMigrationSql.Case(clauses);
         clauses[0] = second;
 
+        // Assert
+        var expression = Assert.IsType<SafeMigrationSqlCaseExpression>(result);
         Assert.Same(first, expression.WhenClauses[0]);
         Assert.Same(second, expression.WhenClauses[1]);
         Assert.Null(expression.ElseResult);
@@ -46,7 +56,7 @@ public sealed class SafeMigrationSqlCaseExpressionTests
         // Arrange
         var clause = new SafeMigrationSqlCaseWhenClause(SafeMigrationSql.Literal(true), SafeMigrationSql.Literal(1));
         var expression = new SafeMigrationSqlCaseExpression([clause]);
-        var clauses = Assert.IsAssignableFrom<IList<SafeMigrationSqlCaseWhenClause>>(expression.WhenClauses);
+        var clauses = Assert.IsType<IList<SafeMigrationSqlCaseWhenClause>>(expression.WhenClauses, exactMatch: false);
 
         // Act
         var exception = Record.Exception(() => clauses[0] = clause);
@@ -88,7 +98,7 @@ public sealed class SafeMigrationSqlCaseExpressionTests
         // Assert
         Assert.IsType(exceptionType, exception);
         Assert.Equal(parameter,
-            Assert.IsAssignableFrom<ArgumentException>(exception)
+            Assert.IsType<ArgumentException>(exception, exactMatch: false)
                 .ParamName);
     }
 
@@ -96,19 +106,24 @@ public sealed class SafeMigrationSqlCaseExpressionTests
     [Fact]
     public void IdentifierInspectionAndRenameVisitAllBranches()
     {
+        // Arrange
         Assert.True(
             SafeMigrationSqlExpressionParser.TryParse(
                 "CONVERT(bit, CASE WHEN source > other THEN source WHEN other > 0 THEN 'source' ELSE fallback END)",
                 out var expression));
 
+        var identifiers = new HashSet<string>(StringComparer.Ordinal);
+
+        // Act
         var renamed = SafeMigrationSqlExpressionInspector.RenameColumnIdentifier(
             expression,
             "source",
             "target",
             StringComparer.Ordinal);
 
-        var identifiers = new HashSet<string>(StringComparer.Ordinal);
         SafeMigrationSqlExpressionInspector.CollectIdentifiers(renamed, identifiers);
+
+        // Assert
         var cast = Assert.IsType<SafeMigrationSqlCastExpression>(renamed);
         var conditional = Assert.IsType<SafeMigrationSqlCaseExpression>(cast.Operand);
         Assert.Equal("bit", cast.StoreType);
@@ -129,6 +144,7 @@ public sealed class SafeMigrationSqlCaseExpressionTests
         string changedSql
     )
     {
+        // Arrange
         Assert.True(
             SafeMigrationSqlExpressionParser.TryParse(
                 "CASE WHEN a = 0 THEN 1 WHEN a = 1 THEN 2 ELSE 3 END",
@@ -138,30 +154,37 @@ public sealed class SafeMigrationSqlCaseExpressionTests
         using var baselineWriter = new CanonicalHashWriter();
         using var changedWriter = new CanonicalHashWriter();
 
+        // Act
         var equivalent = SafeMigrationSqlExpressionContract.Equivalent(baseline, changed);
         SafeMigrationSqlExpressionContract.Write(baselineWriter, baseline);
         SafeMigrationSqlExpressionContract.Write(changedWriter, changed);
+        var baselineHash = baselineWriter.GetHash();
+        var changedHash = changedWriter.GetHash();
 
+        // Assert
         Assert.False(equivalent);
-        Assert.NotEqual(baselineWriter.GetHash(), changedWriter.GetHash());
+        Assert.NotEqual(baselineHash, changedHash);
     }
 
     /// <summary>Identical CASE definitions share structural equality and semantic hash identity.</summary>
     [Fact]
     public void EquivalentCaseHasConsistentSemanticHash()
     {
+        // Arrange
         const string sql = "CASE WHEN a IS NULL THEN 1 ELSE 0 END";
         Assert.True(SafeMigrationSqlExpressionParser.TryParse(sql, out var first));
         Assert.True(SafeMigrationSqlExpressionParser.TryParse(sql, out var second));
         var left = ExpectedCheckConstraintDefinition.FromExpression("ck_a", "items", first);
         var right = ExpectedCheckConstraintDefinition.FromExpression("ck_b", "items", second);
 
+        // Act
         var equivalent = SafeMigrationSemanticDefinitionComparers.CheckConstraint.Equals(left, right);
+        var leftHash = SafeMigrationSemanticDefinitionComparers.CheckConstraint.GetHashCode(left);
+        var rightHash = SafeMigrationSemanticDefinitionComparers.CheckConstraint.GetHashCode(right);
 
+        // Assert
         Assert.True(equivalent);
-        Assert.Equal(
-            SafeMigrationSemanticDefinitionComparers.CheckConstraint.GetHashCode(left),
-            SafeMigrationSemanticDefinitionComparers.CheckConstraint.GetHashCode(right));
+        Assert.Equal(leftHash, rightHash);
     }
 
     /// <summary>Parsing alone never proves that a CASE default is a safe non-null backfill.</summary>
@@ -174,11 +197,14 @@ public sealed class SafeMigrationSqlCaseExpressionTests
         string sql
     )
     {
+        // Arrange
         Assert.True(SafeMigrationSqlExpressionParser.TryParse(sql, out var expression));
         var candidate = SafeMigrationDefaultValue.Sql(expression);
 
+        // Act
         var proven = SafeMigrationColumnRepairHelper.HasProvablyNonNullDefault(candidate);
 
+        // Assert
         Assert.False(proven);
     }
 
@@ -199,8 +225,12 @@ public sealed class SafeMigrationSqlCaseExpressionTests
         string sql
     )
     {
+        // Arrange: The theory supplies one independently rejected SQL form.
+
+        // Act
         var parsed = SafeMigrationSqlExpressionParser.TryParse(sql, out var expression, out var failureCode);
 
+        // Assert
         Assert.False(parsed);
         Assert.Null(expression);
         Assert.NotEmpty(failureCode);
@@ -210,6 +240,7 @@ public sealed class SafeMigrationSqlCaseExpressionTests
     [Fact]
     public void ParserRejectsExcessiveCaseNesting()
     {
+        // Arrange
         var sql = string.Concat(
                 Enumerable.Repeat(
                     "CASE WHEN TRUE THEN ",
@@ -217,8 +248,10 @@ public sealed class SafeMigrationSqlCaseExpressionTests
             + "1"
             + string.Concat(Enumerable.Repeat(" END", SafeMigrationSqlExpressionParser.MaximumDepth + 1));
 
+        // Act
         var parsed = SafeMigrationSqlExpressionParser.TryParse(sql, out var expression, out var failureCode);
 
+        // Assert
         Assert.False(parsed);
         Assert.Null(expression);
         Assert.Equal("expression_too_deep", failureCode);

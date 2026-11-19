@@ -549,6 +549,9 @@ public sealed class MySqlColumnsRequiredDefaultsIntegrationTests : MySqlSafeMigr
         var operations = Enumerable
             .Repeat(operation, SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
             .Cast<MigrationOperation>()
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         // Act

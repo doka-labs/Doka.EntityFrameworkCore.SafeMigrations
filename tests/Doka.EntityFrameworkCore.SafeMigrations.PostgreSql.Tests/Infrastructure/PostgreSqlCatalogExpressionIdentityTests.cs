@@ -20,18 +20,21 @@ public sealed class PostgreSqlCatalogExpressionIdentityTests
     {
         // Arrange
         var sql = "SELECT 0, COALESCE((TRUE),\nFALSE), COALESCE(("
-            + (matchingMarker ? "narrowing_column.CHARACTER_MAXIMUM_LENGTH" : "unrelated_column.maximum_length")
+            + (matchingMarker
+                ? "narrowing_column.CHARACTER_MAXIMUM_LENGTH"
+                : "unrelated_column.maximum_length")
             + ">5), FALSE) ORDER BY 1;";
 
-        var inner = new CatalogStatementTestConnection(native, (_, _) =>
-        {
-            var result = new DataTable();
-            result.Columns.Add("ordinal", typeof(int));
-            result.Columns.Add("eligible", typeof(bool));
-            result.Columns.Add("narrowing", typeof(bool));
+        var inner = new CatalogStatementTestConnection(native,
+            (_, _) =>
+            {
+                var result = new DataTable();
+                result.Columns.Add("ordinal", typeof(int));
+                result.Columns.Add("eligible", typeof(bool));
+                result.Columns.Add("narrowing", typeof(bool));
 
-            return result;
-        });
+                return result;
+            });
 
         await using var connection = new CatalogClassificationCountingConnection(inner, nativeBatch: native);
 
@@ -52,8 +55,16 @@ public sealed class PostgreSqlCatalogExpressionIdentityTests
         }
 
         // Assert
-        Assert.Equal(!native && matchingMarker ? 1 : 0, connection.NarrowingEligibilityStatementCount);
-        Assert.Equal(native ? 1 : 0, connection.NativeBatchExecutionCount);
+        Assert.Equal(!native && matchingMarker
+                ? 1
+                : 0,
+            connection.NarrowingEligibilityStatementCount);
+
+        Assert.Equal(native
+                ? 1
+                : 0,
+            connection.NativeBatchExecutionCount);
+
         Assert.Equal(0, connection.NativeNarrowingStatementCount);
         Assert.Equal(0, connection.NarrowingDataStatementCount);
         Assert.Equal(0, connection.StateEvaluationGuardStatementCount);
@@ -92,20 +103,26 @@ public sealed class PostgreSqlCatalogExpressionIdentityTests
             "mixed" => "SELECT 0,\nCOALESCE((TRUE), FALSE), COALESCE(("
                 + "narrowing_column.CHARACTER_MAXIMUM_LENGTH > 5), FALSE) ORDER BY 1;",
             _ => "SELECT 0,\nCOALESCE((TRUE),\nFALSE), COALESCE(("
-                + (purpose == "no-marker" ? "other_column.length" : "narrowing_column.CHARACTER_MAXIMUM_LENGTH")
-                + ">5), FALSE)" + (purpose == "no-trailer" ? ";" : " ORDER BY 1;"),
+                + (purpose == "no-marker"
+                    ? "other_column.length"
+                    : "narrowing_column.CHARACTER_MAXIMUM_LENGTH")
+                + ">5), FALSE)"
+                + (purpose == "no-trailer"
+                    ? ";"
+                    : " ORDER BY 1;"),
         };
 
-        await using var inner = new CatalogStatementTestConnection(false, (_, _) =>
-        {
-            var result = new DataTable();
-            for (var index = 0; index < fieldCount; index++)
+        await using var inner = new CatalogStatementTestConnection(false,
+            (_, _) =>
             {
-                result.Columns.Add("field" + index, typeof(string));
-            }
+                var result = new DataTable();
+                for (var index = 0; index < fieldCount; index++)
+                {
+                    result.Columns.Add("field" + index, typeof(string));
+                }
 
-            return result;
-        });
+                return result;
+            });
 
         await using var connection = new CatalogClassificationCountingConnection(inner);
         await using var command = connection.CreateCommand();

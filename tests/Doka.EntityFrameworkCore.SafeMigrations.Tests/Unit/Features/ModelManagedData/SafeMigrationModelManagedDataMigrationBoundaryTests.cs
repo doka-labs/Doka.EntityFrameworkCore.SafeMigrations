@@ -1,5 +1,3 @@
-using System.Collections;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
 /// <summary>Preserves one-migration repetition safety while accepting internally certified later migrations.</summary>

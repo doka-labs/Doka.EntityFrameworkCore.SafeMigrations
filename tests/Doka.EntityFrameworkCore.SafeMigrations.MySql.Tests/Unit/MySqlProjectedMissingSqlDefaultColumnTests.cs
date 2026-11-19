@@ -463,12 +463,24 @@ public sealed class MySqlProjectedMissingSqlDefaultColumnTests
             .UseMySqlSafeMigrations()
             .Options);
 
-    private sealed class MissingAddAnalyzer(
-        IRelationalTypeMappingSource mappings,
-        bool strict
-    )
+    private sealed class MissingAddAnalyzer
         : ISafeMigrationProjectedColumnAnalyzer
     {
+        private readonly IRelationalTypeMappingSource _mappings;
+        private readonly bool _strict;
+
+        /// <summary>Initializes the explicit dependencies of this isolated test helper.</summary>
+        /// <param name="mappings">The provider type mappings used to validate projected definitions.</param>
+        /// <param name="strict">Whether the native session establishes strict SQL-mode evidence.</param>
+        public MissingAddAnalyzer(
+            IRelationalTypeMappingSource mappings,
+            bool strict
+        )
+        {
+            _mappings = mappings;
+            _strict = strict;
+        }
+
         internal int MissingCalls { get; private set; }
 
         internal SafeMigrationProjectedMissingColumnContext LastContext { get; private set; }
@@ -485,9 +497,9 @@ public sealed class MySqlProjectedMissingSqlDefaultColumnTests
 
             return MySqlProjectedColumnTransition.HasSafeRequiredSqlDefaultAddEnvironment(
                 intent.Definition,
-                mappings,
+                _mappings,
                 isInnoDb: true,
-                strict,
+                _strict,
                 explicitTimestampDefaults: true)
                 ? projectedAnalysis
                 : new SafeMigrationProviderAnalysis(

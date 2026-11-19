@@ -52,13 +52,14 @@ public sealed class PostgreSqlDatabaseOwnershipTests
         }
 
         // Act
-        var failure = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        var observed = await Record.ExceptionAsync(() =>
             fixture.ReleaseDatabaseAsync(foreign.ConnectionString, CancellationToken.None));
 
         var droppedBeforeFinalCleanup = dropped.ToArray();
         await fixture.DisposeAsync();
 
         // Assert
+        var failure = Assert.IsType<InvalidOperationException>(observed);
         Assert.Contains("not owned", failure.Message, StringComparison.Ordinal);
         Assert.Empty(droppedBeforeFinalCleanup);
         Assert.Equal([DatabaseName(owned)], dropped);
@@ -84,18 +85,21 @@ public sealed class PostgreSqlDatabaseOwnershipTests
         var owned = await fixture.CreateDatabaseAsync(CancellationToken.None);
 
         // Act
-        var failure = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        var observed = await Record.ExceptionAsync(() =>
             fixture.ReleaseDatabaseAsync(owned, CancellationToken.None));
 
         await fixture.DisposeAsync();
 
         // Assert
+        var failure = Assert.IsType<InvalidOperationException>(observed);
         Assert.Equal("drop sentinel", failure.Message);
         Assert.Equal([DatabaseName(owned), DatabaseName(owned)], attempts);
     }
 
     /// <summary>A failed CREATE acknowledgement retains its provisional name for idempotent final cleanup.</summary>
-    /// <param name="physicalCreateSucceeded">Whether the server created the database before acknowledgement failed.</param>
+    /// <param name="physicalCreateSucceeded">
+    /// Whether the server created the database before acknowledgement failed.
+    /// </param>
     /// <param name="canceled">Whether the acknowledgement failure is cancellation.</param>
     [Theory]
     [InlineData(false, false)]
@@ -130,6 +134,7 @@ public sealed class PostgreSqlDatabaseOwnershipTests
             {
                 dropped.Add(database);
                 physicalDatabases.Remove(database);
+
                 return Task.CompletedTask;
             },
             ConnectionString);
@@ -179,19 +184,22 @@ public sealed class PostgreSqlDatabaseOwnershipTests
             });
 
         // Act
-        var failure = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        var observed = await Record.ExceptionAsync(() =>
             fixture.CreateDatabaseAsync(CancellationToken.None));
 
         await fixture.DisposeAsync();
 
         // Assert
+        var failure = Assert.IsType<InvalidOperationException>(observed);
         Assert.Same(sentinel, failure);
         Assert.Equal(1, preparations);
         Assert.Equal(0, creations);
         Assert.Equal(0, drops);
     }
 
-    /// <summary>Cancellation before the lifecycle gate neither registers a lease nor calls creation delegates.</summary>
+    /// <summary>
+    /// Cancellation before the lifecycle gate neither registers a lease nor calls creation delegates.
+    /// </summary>
     [Fact]
     public async Task CreateDatabase_PreCanceledGateDoesNotRegisterOwnership()
     {
@@ -258,15 +266,16 @@ public sealed class PostgreSqlDatabaseOwnershipTests
         var second = await fixture.CreateDatabaseAsync(CancellationToken.None);
 
         // Act
-        var failure = await Assert.ThrowsAsync<InvalidOperationException>(fixture.DisposeAsync);
+        var observed = await Record.ExceptionAsync(fixture.DisposeAsync);
+        await fixture.DisposeAsync();
+
+        // Assert
+        var failure = Assert.IsType<InvalidOperationException>(observed);
         var retainedFailures = Assert
             .IsType<AggregateException>(failure.InnerException)
             .Flatten()
             .InnerExceptions;
 
-        await fixture.DisposeAsync();
-
-        // Assert
         Assert.Equal([DatabaseName(first), DatabaseName(second), "container"], stages);
         Assert.Equal(2, retainedFailures.Count);
         Assert.Contains(databaseFailure, retainedFailures);
@@ -321,11 +330,12 @@ public sealed class PostgreSqlDatabaseOwnershipTests
         var second = await owner.CreateAsync(cancellationToken: CancellationToken.None);
 
         // Act
-        var failure = await Assert.ThrowsAsync<AggregateException>(owner.DisposeAsync);
+        var observed = await Record.ExceptionAsync(owner.DisposeAsync);
         var attemptsBeforeFinalCleanup = attempts.ToArray();
         await fixture.DisposeAsync();
 
         // Assert
+        var failure = Assert.IsType<AggregateException>(observed);
         Assert.Equal("test cleanup sentinel",
             Assert.Single(failure.InnerExceptions)
                 .Message);
@@ -357,15 +367,50 @@ public sealed class PostgreSqlDatabaseOwnershipTests
             },
             ConnectionString);
 
-        var first = fixture.CreateDatabaseAsync(CancellationToken.None);
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(30));
         using var cancellation = new CancellationTokenSource();
-        var canceled = fixture.CreateDatabaseAsync(cancellation.Token);
+        var canceledObservation = Task.FromResult<Exception?>(null);
+        Exception? primaryFailure = null;
+        Exception? failure;
 
         // Act
-        await cancellation.CancelAsync();
-        var failure = await Record.ExceptionAsync(() => canceled.WaitAsync(TimeSpan.FromSeconds(30)));
-        release.TrySetResult(true);
+        var first = fixture.CreateDatabaseAsync(CancellationToken.None);
+        try
+        {
+            await Task.WhenAny(entered.Task, first);
+            if (!entered.Task.IsCompleted)
+            {
+                await first;
+
+                throw new InvalidOperationException(
+                    "The database owner completed without entering its create callback.");
+            }
+
+            await entered.Task;
+            var canceled = fixture.CreateDatabaseAsync(cancellation.Token);
+            canceledObservation = Record.ExceptionAsync(() => canceled);
+            await cancellation.CancelAsync();
+            failure = await canceledObservation;
+        }
+        catch (Exception exception)
+        {
+            primaryFailure = exception;
+
+            throw;
+        }
+        finally
+        {
+            await OwnedTestOperationCleanup.CompleteAsync(
+                primaryFailure,
+                Task.WhenAll(first, canceledObservation),
+                () =>
+                {
+                    release.TrySetResult(true);
+
+                    return Task.CompletedTask;
+                },
+                cancellation);
+        }
+
         var owned = await first;
         await fixture.DisposeAsync();
 
@@ -394,12 +439,13 @@ public sealed class PostgreSqlDatabaseOwnershipTests
         await owner.DisposeAsync();
 
         // Act
-        var failure = await Assert.ThrowsAsync<InvalidOperationException>(() => owner.CreateAsync(
+        var observed = await Record.ExceptionAsync(() => owner.CreateAsync(
             CancellationToken.None));
 
         await fixture.DisposeAsync();
 
         // Assert
+        var failure = Assert.IsType<InvalidOperationException>(observed);
         Assert.Contains("completed test", failure.Message, StringComparison.Ordinal);
         Assert.Equal(0, creations);
     }
@@ -429,10 +475,13 @@ public sealed class PostgreSqlDatabaseOwnershipTests
     ) => new NpgsqlConnectionStringBuilder(connectionString).Database
         ?? throw new InvalidOperationException("The fake fixture did not assign a database.");
 
-    private sealed class DatabaseOwner(
-        PostgreSqlContainerFixture fixture
-    ) : PostgreSqlIntegrationTestBase(fixture)
+    private sealed class DatabaseOwner : PostgreSqlIntegrationTestBase
     {
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        public DatabaseOwner(
+            PostgreSqlContainerFixture fixture
+        ) : base(fixture) { }
+
         /// <summary>Creates an isolated database owned by this test-local lifetime.</summary>
         /// <param name="cancellationToken">Cancels the owned operation before and during asynchronous work.</param>
         /// <returns>The asynchronous fixture operation or observation.</returns>

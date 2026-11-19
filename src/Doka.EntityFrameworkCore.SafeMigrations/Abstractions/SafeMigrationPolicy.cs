@@ -4,6 +4,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// Defines how an existing object whose definition differs from the expected
 /// definition is handled.
 /// </summary>
+[PublicAPI]
 public enum SafeMigrationPolicy
 {
     /// <summary>

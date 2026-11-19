@@ -1,5 +1,3 @@
-using System.Collections.Concurrent;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
 /// <summary>Exercises assembly-owned fixture lifetime without starting a real container.</summary>
@@ -11,7 +9,7 @@ public sealed class SharedContainerFixtureLifecycleTests
     {
         // Arrange
         using var cancellation = new CancellationTokenSource();
-        cancellation.Cancel();
+        await cancellation.CancelAsync();
         var constructions = 0;
         var lifecycle = new SharedContainerFixtureLifecycle<ProbeFixture>(() =>
         {
@@ -25,7 +23,7 @@ public sealed class SharedContainerFixtureLifecycleTests
         await lifecycle.DisposeAsync();
 
         // Assert
-        var canceled = Assert.IsAssignableFrom<OperationCanceledException>(failure);
+        var canceled = Assert.IsType<OperationCanceledException>(failure, exactMatch: false);
         Assert.Equal(cancellation.Token, canceled.CancellationToken);
         Assert.Equal(0, constructions);
         Assert.Null(lifecycle.Fixture);
@@ -44,14 +42,15 @@ public sealed class SharedContainerFixtureLifecycleTests
 
         // Act
         var initialization = lifecycle.InitializeAsync(true, cancellation.Token);
+
+        // WHY: Keep cancellation and cleanup initiation synchronous while the startup release remains held.
+        // ReSharper disable once MethodHasAsyncOverload
         cancellation.Cancel();
         var cleanup = lifecycle.DisposeAsync();
         var cleanupFinishedEarly = cleanup.IsCompleted;
         var disposedBeforeStartup = fixture.DisposeCount;
         releaseStartup.SetResult();
-        await Task
-            .WhenAll(initialization, cleanup)
-            .WaitAsync(TimeSpan.FromSeconds(10));
+        await Task.WhenAll(initialization, cleanup);
 
         // Assert
         Assert.False(cleanupFinishedEarly);
@@ -110,15 +109,24 @@ public sealed class SharedContainerFixtureLifecycleTests
             {
                 await releaseCallers.Task;
 
-                var initialization = lifecycle.InitializeAsync(
-                    required: true,
-                    cancellationToken: CancellationToken.None);
+                Task initialization;
 
-                initializations.Add(initialization);
-
-                if (Interlocked.Increment(ref entered) == 8)
+                try
                 {
-                    allCallersEntered.SetResult();
+                    initialization = lifecycle.InitializeAsync(
+                        required: true,
+                        cancellationToken: CancellationToken.None);
+
+                    initializations.Add(initialization);
+                }
+                finally
+                {
+                    // WHY: A synchronous subject failure must still release the readiness observer.
+                    // The owning WhenAll below retains that failure after startup is unblocked.
+                    if (Interlocked.Increment(ref entered) == 8)
+                    {
+                        allCallersEntered.TrySetResult();
+                    }
                 }
 
                 await initialization;
@@ -129,16 +137,14 @@ public sealed class SharedContainerFixtureLifecycleTests
 
         try
         {
-            await allCallersEntered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await allCallersEntered.Task;
         }
         finally
         {
             releaseStartup.TrySetResult();
         }
 
-        await Task
-            .WhenAll(callers)
-            .WaitAsync(TimeSpan.FromSeconds(10));
+        await Task.WhenAll(callers);
 
         await lifecycle.DisposeAsync();
 
@@ -173,13 +179,19 @@ public sealed class SharedContainerFixtureLifecycleTests
             {
                 await releaseCallers.Task;
 
-                var disposal = lifecycle.DisposeAsync();
+                Task disposal;
 
-                disposals.Add(disposal);
-
-                if (Interlocked.Increment(ref entered) == 8)
+                try
                 {
-                    allCallersEntered.SetResult();
+                    disposal = lifecycle.DisposeAsync();
+                    disposals.Add(disposal);
+                }
+                finally
+                {
+                    if (Interlocked.Increment(ref entered) == 8)
+                    {
+                        allCallersEntered.TrySetResult();
+                    }
                 }
 
                 await disposal;
@@ -190,16 +202,14 @@ public sealed class SharedContainerFixtureLifecycleTests
 
         try
         {
-            await allCallersEntered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await allCallersEntered.Task;
         }
         finally
         {
             releaseCleanup.TrySetResult();
         }
 
-        await Task
-            .WhenAll(callers)
-            .WaitAsync(TimeSpan.FromSeconds(10));
+        await Task.WhenAll(callers);
 
         // Assert
         Assert.Equal(8, disposals.Count);
@@ -302,9 +312,7 @@ public sealed class SharedContainerFixtureLifecycleTests
 
         startupCompleted.SetResult();
 
-        await Task
-            .WhenAll(initialization, disposal)
-            .WaitAsync(TimeSpan.FromSeconds(10));
+        await Task.WhenAll(initialization, disposal);
 
         // Assert
         Assert.False(cleanupFinishedBeforeStartup);
@@ -331,7 +339,7 @@ public sealed class SharedContainerFixtureLifecycleTests
 
         var observedFailure = await Record.ExceptionAsync(() => initialization);
 
-        await disposal.WaitAsync(TimeSpan.FromSeconds(10));
+        await disposal;
 
         // Assert
         Assert.Same(startupFailure, observedFailure);
@@ -359,16 +367,22 @@ public sealed class SharedContainerFixtureLifecycleTests
     }
 
     /// <summary>A fake asynchronous fixture with independently controlled startup and cleanup.</summary>
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed class ProbeFixture : IAsyncLifetime
     {
+        /// <summary>Gets the framework startup callback, which completes immediately unless configured.</summary>
         public Func<Task> Initialize { get; init; } = () => Task.CompletedTask;
 
+        /// <summary>Gets the framework cleanup callback, which completes immediately unless configured.</summary>
         public Func<Task> Cleanup { get; init; } = () => Task.CompletedTask;
 
+        /// <summary>Gets the number of startup attempts, including callbacks that fail.</summary>
         public int InitializeCount { get; private set; }
 
+        /// <summary>Gets the number of cleanup attempts, including callbacks that fail.</summary>
         public int DisposeCount { get; private set; }
 
+        /// <inheritdoc />
         public Task InitializeAsync()
         {
             InitializeCount++;
@@ -376,6 +390,7 @@ public sealed class SharedContainerFixtureLifecycleTests
             return Initialize();
         }
 
+        /// <inheritdoc />
         public Task DisposeAsync()
         {
             DisposeCount++;

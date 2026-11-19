@@ -243,8 +243,13 @@ internal sealed class SqliteSafeMigrationBatchCommand : MigrationCommand
         _executionState.Invalidate();
         var postSnapshot = _executionState.GetSnapshot(connection);
         var postconditions = new List<SafeMigrationProviderAnalysis>(_operations.Count);
-        foreach (var candidate in _operations)
+
+        // WHY: Traverse the stable ordered source by ordinal without materializing another collection.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var candidateIndex = 0; candidateIndex < _operations.Count; candidateIndex++)
         {
+            var candidate = _operations[candidateIndex];
             if (candidate is SafeMigrationOperation safeOperation)
             {
                 postconditions.Add(
@@ -330,6 +335,8 @@ internal sealed class SqliteSafeMigrationBatchCommand : MigrationCommand
         // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < operations.Count; ordinal++)
         {
+            // WHY: Creator registration and conditional FK-window flushing are two distinct guarded actions.
+            // ReSharper disable once ConvertIfStatementToSwitchStatement
             if (operations[ordinal] is CreateTableOperation create)
             {
                 // WHY: EF's folding selects the first preceding exact table
@@ -466,8 +473,13 @@ internal sealed class SqliteSafeMigrationBatchCommand : MigrationCommand
         }
 
         var affected = 0;
-        foreach (var command in commands)
+
+        // WHY: Traverse the stable ordered source by ordinal without materializing another collection.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var commandIndex = 0; commandIndex < commands.Count; commandIndex++)
         {
+            var command = commands[commandIndex];
             if (!IsForeignKeyPragma(command))
             {
                 affected += command.ExecuteNonQuery(connection, parameterValues);
@@ -493,8 +505,15 @@ internal sealed class SqliteSafeMigrationBatchCommand : MigrationCommand
             .Select(static table => table!)
             .ToHashSet(SqliteIdentifierComparer.Instance);
 
-        foreach (var operation in _operations)
+        // WHY: Traverse the stable ordered source by ordinal without materializing another collection.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var operationIndex = 0; operationIndex < _operations.Count; operationIndex++)
         {
+            var operation = _operations[operationIndex];
+
+            // WHY: Keep ordered rename/drop mutations and their lazy guards as statements, not discarded values.
+            // ReSharper disable once ConvertSwitchStatementToSwitchExpression
             switch (operation)
             {
                 case SafeMigrationOperation { Intent: RenameTableIntent value }
@@ -514,6 +533,9 @@ internal sealed class SqliteSafeMigrationBatchCommand : MigrationCommand
         }
 
         var result = new HashSet<string>(SqliteIdentifierComparer.Instance);
+
+        // WHY: Preserve the concrete set enumerator while copying only surviving rebuild owners.
+        // ReSharper disable once ForeachCanBePartlyConvertedToQueryUsingAnotherGetEnumerator
         foreach (var table in rebuilt)
         {
             if (snapshot.Tables.ContainsKey(table))

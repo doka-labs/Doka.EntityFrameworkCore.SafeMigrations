@@ -54,6 +54,9 @@ public sealed class MySqlTablesCatalogSnapshotSafetyIntegrationTests : MySqlSafe
         var operations = builder
             .Operations
             .Cast<SafeMigrationOperation>()
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         // Act
@@ -228,14 +231,11 @@ public sealed class MySqlTablesCatalogSnapshotSafetyIntegrationTests : MySqlSafe
         Assert.All(result.States, state => Assert.Equal(SafeMigrationObservedState.Matching, state));
         Assert.Equal(600, result.States.Length);
         Assert.Equal(0, result.SnapshotClassifiers);
-        if (Fixture.IsMariaDb)
-        {
-            Assert.Equal(1, result.SnapshotCreates);
-        }
-        else
-        {
-            Assert.Equal(0, result.SnapshotCreates);
-        }
+        Assert.Equal(
+            Fixture.IsMariaDb
+                ? 1
+                : 0,
+            result.SnapshotCreates);
     }
 
     /// <summary>Read-only transaction ownership survives the snapshot attempt and live fallback.</summary>
@@ -263,6 +263,9 @@ public sealed class MySqlTablesCatalogSnapshotSafetyIntegrationTests : MySqlSafe
         var operations = builder
             .Operations
             .Cast<SafeMigrationOperation>()
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         try
@@ -325,6 +328,9 @@ public sealed class MySqlTablesCatalogSnapshotSafetyIntegrationTests : MySqlSafe
         var operations = builder
             .Operations
             .Cast<SafeMigrationOperation>()
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         try
@@ -345,7 +351,7 @@ public sealed class MySqlTablesCatalogSnapshotSafetyIntegrationTests : MySqlSafe
         {
             // WHY: The dedicated test database owns this pool; release its idle session
             // before the fixture tears down databases and the server container.
-            MySqlConnection.ClearPool(physicalConnection);
+            await MySqlConnection.ClearPoolAsync(physicalConnection, CancellationToken.None);
         }
     }
 

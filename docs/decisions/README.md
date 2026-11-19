@@ -5,21 +5,12 @@ MADR 4.0.0, with `Dominic Kalkbrenner` as the named decision maker. The
 [template](adr-template.md) preserves Doka's metadata, headings, trade-offs,
 confirmation, relationships, history, and source-provenance format.
 
-The initial corpus was recorded on 2026-08-26. D-001 through D-006 describe
-existing implementation retrospectively; they do not invent earlier approval
-dates. Dominic Kalkbrenner has confirmed their recorded rationale and existing
-implementation. D-007 records the maintainer's explicit choice of documentation
-format and tooling boundary. D-008 records the implemented automatic
-scaffolding contract selected on 2026-08-27. D-009 records the implemented
-source-frozen model-managed-data contract selected on 2026-09-02. The dated
-transitions are retained in each record's Decision History. D-010 and D-011
-record the implemented ownership and lossless-repair contracts selected on
-2026-09-05. D-012 records the implemented report-view contract selected on
-2026-09-10. D-013 records the implemented SQLite provider contract selected on
-2026-09-18. D-014 records the MariaDB catalog-snapshot decision selected on
-2026-10-05; its implementation confirmation is recorded on 2026-10-06.
+Each record's front matter is the sole authority for its current status and
+relationships. Its Decision History owns recording, approval and update dates;
+implementation alone does not establish acceptance. This manual index provides
+navigation without duplicating that metadata.
 
-| Record | Bounded decision |
+| Record | Decision |
 | --- | --- |
 | [D-001](D-001-package-and-slice-boundaries.md) | Provider-neutral Core, independent adapters, and hybrid vertical slices |
 | [D-002](D-002-explicit-convergence-contract.md) | Granular convergence from heterogeneous databases to one canonical Core model |

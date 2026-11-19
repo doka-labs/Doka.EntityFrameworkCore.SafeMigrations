@@ -1,5 +1,3 @@
-using Microsoft.EntityFrameworkCore.Diagnostics;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
 /// <summary>
@@ -96,10 +94,13 @@ internal sealed class SqlServerIdentityInsertPauseInterceptor
             var replacement = scope.ProtectedCarrier
                 ? SqlServerGuardedSqlTestContract.DecodeScope(
                     SqlServerSafeMigrationsSqlGenerator.ProtectCommandSql(
-                        rewritten, MigrationsSqlGenerationOptions.Idempotent))
+                        rewritten,
+                        MigrationsSqlGenerationOptions.Idempotent))
                 : "'" + rewritten.Replace("'", "''", StringComparison.Ordinal) + "'";
 
-            scopes[scope.Parent].Edits.Add((scope.Start, scope.Length, replacement));
+            scopes[scope.Parent]
+                .Edits
+                .Add((scope.Start, scope.Length, replacement));
         }
 
         return ApplyEdits(scopes[0]);
@@ -133,7 +134,8 @@ internal sealed class SqlServerIdentityInsertPauseInterceptor
         {
             if (reader.IsComment)
             {
-                if (pendingAcquisition >= 0 && reader.Token.SequenceEqual(
+                if (pendingAcquisition >= 0
+                    && reader.Token.SequenceEqual(
                         SqlServerSafeMigrationIdentityInsertScope.AcquiredMarkerComment))
                 {
                     scope.Edits.Add((reader.Position, 0, pause));
@@ -172,14 +174,21 @@ internal sealed class SqlServerIdentityInsertPauseInterceptor
                 var execution = reader;
 
                 if (execution.TryReadSequence("sys.sp_executesql N")
-                    && execution.ReadSignificant() && execution.Token[0] == '\'')
+                    && execution.ReadSignificant()
+                    && execution.Token[0] == '\'')
                 {
-                    var inner = execution.Token[1..^1].ToString().Replace("''", "'", StringComparison.Ordinal);
+                    var inner = execution
+                        .Token[1..^1]
+                        .ToString()
+                        .Replace("''", "'", StringComparison.Ordinal);
 
                     if (inner.Contains("IDENTITY_INSERT", StringComparison.OrdinalIgnoreCase))
                     {
-                        scopes.Add(new PauseScope(inner, index, execution.TokenStart,
-                            execution.Position - execution.TokenStart, false));
+                        scopes.Add(new PauseScope(inner,
+                            index,
+                            execution.TokenStart,
+                            execution.Position - execution.TokenStart,
+                            false));
                     }
 
                     reader = execution;
@@ -221,33 +230,6 @@ internal sealed class SqlServerIdentityInsertPauseInterceptor
         result.Append(scope.Sql.AsSpan(copied));
 
         return result.ToString();
-    }
-
-    /// <summary>Owns one immutable execution scope and its exact parent replacement range.</summary>
-    /// <param name="sql">The native scope at one quoting level.</param>
-    /// <param name="parent">The parent worklist index, or minus one for the root.</param>
-    /// <param name="start">The replaced range start in the parent.</param>
-    /// <param name="length">The replaced range length in the parent.</param>
-    /// <param name="protectedCarrier">Whether the parent uses the closed MAX/NCHAR transport.</param>
-    private sealed class PauseScope(string sql, int parent, int start, int length, bool protectedCarrier)
-    {
-        /// <summary>Gets the unchanged SQL at this execution level.</summary>
-        public string Sql { get; } = sql;
-
-        /// <summary>Gets the owning worklist entry, or minus one for the root.</summary>
-        public int Parent { get; } = parent;
-
-        /// <summary>Gets the exact parent replacement start.</summary>
-        public int Start { get; } = start;
-
-        /// <summary>Gets the exact parent replacement length.</summary>
-        public int Length { get; } = length;
-
-        /// <summary>Gets whether the parent must reconstruct a MAX/NCHAR payload.</summary>
-        public bool ProtectedCarrier { get; } = protectedCarrier;
-
-        /// <summary>Gets only the proven non-overlapping replacements at this execution level.</summary>
-        public List<(int Start, int Length, string Replacement)> Edits { get; } = [];
     }
 
     /// <summary>
@@ -330,5 +312,49 @@ internal sealed class SqlServerIdentityInsertPauseInterceptor
         }
 
         return availability == 1;
+    }
+
+    /// <summary>Owns one immutable execution scope and its exact parent replacement range.</summary>
+    private sealed class PauseScope
+    {
+        /// <summary>Retains the original scope and replacement coordinates before its edits are discovered.</summary>
+        /// <param name="sql">The native scope at one quoting level.</param>
+        /// <param name="parent">The parent worklist index, or minus one for the root.</param>
+        /// <param name="start">The replaced range start in the parent.</param>
+        /// <param name="length">The replaced range length in the parent.</param>
+        /// <param name="protectedCarrier">Whether the parent uses the closed MAX/NCHAR transport.</param>
+        public PauseScope(
+            string sql,
+            int parent,
+            int start,
+            int length,
+            bool protectedCarrier
+        )
+        {
+            Sql = sql;
+            Parent = parent;
+            Start = start;
+            Length = length;
+            ProtectedCarrier = protectedCarrier;
+            Edits = [];
+        }
+
+        /// <summary>Gets the unchanged SQL at this execution level.</summary>
+        public string Sql { get; }
+
+        /// <summary>Gets the owning worklist entry, or minus one for the root.</summary>
+        public int Parent { get; }
+
+        /// <summary>Gets the exact parent replacement start.</summary>
+        public int Start { get; }
+
+        /// <summary>Gets the exact parent replacement length.</summary>
+        public int Length { get; }
+
+        /// <summary>Gets whether the parent must reconstruct a MAX/NCHAR payload.</summary>
+        public bool ProtectedCarrier { get; }
+
+        /// <summary>Gets only the proven non-overlapping replacements at this execution level.</summary>
+        public List<(int Start, int Length, string Replacement)> Edits { get; }
     }
 }

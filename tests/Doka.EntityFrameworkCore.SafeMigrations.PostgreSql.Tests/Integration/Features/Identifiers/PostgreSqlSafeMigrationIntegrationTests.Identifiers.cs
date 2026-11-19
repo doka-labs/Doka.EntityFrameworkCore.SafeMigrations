@@ -9,9 +9,11 @@ public sealed class PostgreSqlIdentifiersIntegrationTests : PostgreSqlSafeMigrat
         PostgreSqlContainerFixture fixture
     ) : base(fixture) { }
 
+    /// <summary>Server Quoted Expression Identifiers Converge Across Every Structured Facet.</summary>
     [Fact]
     public async Task ServerQuotedExpressionIdentifiers_ConvergeAcrossEveryStructuredFacet()
     {
+        // Arrange
         const string table = "expression_identifiers";
         var sum = SqlBinary(
             SqlBinary(SqlColumn("user"), SafeMigrationSqlBinaryOperator.Add, SqlColumn("a$b")),
@@ -61,6 +63,10 @@ public sealed class PostgreSqlIdentifiersIntegrationTests : PostgreSqlSafeMigrat
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.ConvergeTable(definition);
 
+        // Act
+        // WHY: Retain the exact failing operation ordinal in the native identifier diagnostic.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < builder.Operations.Count; ordinal++)
         {
             try
@@ -104,10 +110,6 @@ public sealed class PostgreSqlIdentifiersIntegrationTests : PostgreSqlSafeMigrat
             """,
             cancellationToken: CancellationToken.None);
 
-        Assert.True(
-            indexReport.Status == SafeMigrationReportStatus.Ready,
-            $"Index catalog form did not converge: {indexCatalog}");
-
         await ExecuteOperationsAsync(context, indexBuilder.Operations, CancellationToken.None);
         await ExecuteOperationsAsync(context, indexBuilder.Operations, CancellationToken.None);
         var operations = builder
@@ -123,15 +125,25 @@ public sealed class PostgreSqlIdentifiersIntegrationTests : PostgreSqlSafeMigrat
                 new SafeMigrationRunOptions("server-quoted-identifiers"),
                 CancellationToken.None);
 
+        // Assert
+        Assert.True(
+            indexReport.Status == SafeMigrationReportStatus.Ready,
+            $"Index catalog form did not converge: {indexCatalog}");
+
+        _ = Assert.Single(indexReport.Assessments);
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
+        Assert.NotEmpty(operations);
+        Assert.Equal(operations.Length, report.Assessments.Count);
         Assert.All(
             report.Assessments,
             assessment => Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState));
     }
 
+    /// <summary>Maximum Quoted Mixed Case Unicode Identifiers Converge Across Owned Objects.</summary>
     [Fact]
     public async Task MaximumQuotedMixedCaseUnicodeIdentifiers_ConvergeAcrossOwnedObjects()
     {
+        // Arrange
         var table = PostgreSqlMaximumIdentifier("Ta\"b\\le'_\u00fc_");
         var id = PostgreSqlMaximumIdentifier("I\"D\\'_\u00fc_");
         var code = PostgreSqlMaximumIdentifier("Co\"de\\'_\u00fc_");
@@ -172,6 +184,10 @@ public sealed class PostgreSqlIdentifiersIntegrationTests : PostgreSqlSafeMigrat
             definition,
             [new ExpectedIndexDefinition(index, table, [new ExpectedIndexKeyDefinition(column: parent)])]);
 
+        // Act
+        // WHY: Retain the exact failing operation ordinal in the native identifier diagnostic.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < builder.Operations.Count; ordinal++)
         {
             try
@@ -201,17 +217,24 @@ public sealed class PostgreSqlIdentifiersIntegrationTests : PostgreSqlSafeMigrat
                 new SafeMigrationRunOptions("identifier-instance"),
                 CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
+        Assert.NotEmpty(builder.Operations);
+        Assert.Equal(builder.Operations.Count, report.Assessments.Count);
         Assert.All(
             report.Assessments,
             assessment => Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState));
     }
 
+    /// <summary>Completes an ASCII-prefixed identifier to PostgreSQL's UTF-8 byte limit.</summary>
+    /// <param name="prefix">The descriptive identifier prefix.</param>
+    /// <returns>The identifier padded to exactly 63 UTF-8 bytes.</returns>
     private static string PostgreSqlMaximumIdentifier(
         string prefix
     )
     {
         var remainingBytes = 63 - Encoding.UTF8.GetByteCount(prefix);
+
         return prefix + new string('x', remainingBytes);
     }
 }

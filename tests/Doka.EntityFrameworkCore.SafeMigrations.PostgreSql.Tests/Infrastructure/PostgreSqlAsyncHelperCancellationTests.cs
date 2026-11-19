@@ -16,7 +16,7 @@ public sealed class PostgreSqlAsyncHelperCancellationTests
     {
         // Arrange
         using var cancellation = new CancellationTokenSource();
-        cancellation.Cancel();
+        await cancellation.CancelAsync();
 
         // Act
         var exception = await Record.ExceptionAsync(() => InvokeSqlHelperAsync(
@@ -66,7 +66,7 @@ public sealed class PostgreSqlAsyncHelperCancellationTests
     {
         // Arrange
         using var cancellation = new CancellationTokenSource();
-        cancellation.Cancel();
+        await cancellation.CancelAsync();
         var starts = 0;
         var fixture = new GeneratedInitialMigrationFixture((_, _) =>
         {
@@ -112,7 +112,7 @@ public sealed class PostgreSqlAsyncHelperCancellationTests
         bool ownerStillRunning;
         try
         {
-            cancellation.Cancel();
+            await cancellation.CancelAsync();
             observerFinishedBeforeOwner = canceledObserver.IsCompleted;
             ownerStillRunning = !completion.Task.IsCompleted;
         }
@@ -211,10 +211,13 @@ public sealed class PostgreSqlAsyncHelperCancellationTests
     }
 
     /// <summary>Exposes only protected SQL helpers; no instance or native container is created.</summary>
-    private abstract class HelperAccess(
-        PostgreSqlContainerFixture fixture
-    ) : PostgreSqlIntegrationTestBase(fixture)
+    private abstract class HelperAccess : PostgreSqlIntegrationTestBase
     {
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        protected HelperAccess(
+            PostgreSqlContainerFixture fixture
+        ) : base(fixture) { }
+
         /// <summary>Forwards cancellation to real SQL execution.</summary>
         /// <param name="connectionString">The isolated connection configuration.</param>
         /// <param name="cancellationToken">The caller's cancellation scope.</param>

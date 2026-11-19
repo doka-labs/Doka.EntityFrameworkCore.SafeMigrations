@@ -1,5 +1,3 @@
-using System.Data;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql;
 
 internal sealed partial class MySqlSafeMigrationProviderAnalyzer
@@ -20,16 +18,25 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             await connection.OpenAsync(cancellationToken);
         }
 
+        Exception? inventoryFailure = null;
+
         try
         {
             var commandTimeout = context.Database.GetCommandTimeout();
             _currentDatabase = await ReadCurrentDatabaseAsync(connection, commandTimeout, cancellationToken);
 
             var expected = new Dictionary<string, SafeMigrationExpectedTableInventory>(StringComparer.Ordinal);
-            foreach (var table in SafeMigrationExpectedCatalog.Create(
+            var inventory = SafeMigrationExpectedCatalog.Create(
                 operations,
-                schema => MySqlTableIdentity.NormalizeDatabase(schema, _currentDatabase)))
+                schema => MySqlTableIdentity.NormalizeDatabase(schema, _currentDatabase));
+
+            // WHY: Retain one immutable catalog snapshot and preserve its established owner order.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var tableIndex = 0; tableIndex < inventory.Count; tableIndex++)
             {
+                var table = inventory[tableIndex];
+
                 if (table.Schema is not null
                     && !StringComparer.Ordinal.Equals(table.Schema, _currentDatabase))
                 {
@@ -74,11 +81,17 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
 
             return await RemoveSemanticAliasesAsync(context, operations, findings, cancellationToken);
         }
+        catch (Exception exception)
+        {
+            inventoryFailure = exception;
+
+            throw;
+        }
         finally
         {
             if (openedHere)
             {
-                await connection.CloseAsync();
+                await SafeMigrationAnalysisCleanup.CloseAsync(connection, inventoryFailure);
             }
         }
     }
@@ -100,11 +113,15 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         CancellationToken cancellationToken
     )
     {
-        var findings = new List<SafeMigrationUnexpectedObject>();
-        var seen = new HashSet<(SafeMigrationDatabaseObjectKind Kind, string Table, string Name)>();
+        List<SafeMigrationUnexpectedObject> findings = [];
+        HashSet<(SafeMigrationDatabaseObjectKind Kind, string Table, string Name)> seen = [];
         var tables = expected
             .Keys
             .Order(StringComparer.Ordinal)
+
+            // WHY: Retain fluent materialization and its existing snapshot
+            // ownership rather than replacing this boundary with a spread.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         await SafeMigrationCatalogProbeBatch.ReadAsync(
@@ -135,7 +152,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
 
                 return new SafeMigrationCatalogProbeStatement(1, parameters.Utf8PayloadBytes, slot);
             },
-            (reader, slot, _, token) => ReadUnexpectedAsync(
+            (reader, slot, _, callbackCancellationToken) => ReadUnexpectedAsync(
                 reader,
                 expected,
                 findings,
@@ -146,7 +163,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                         .Skip((slot - 1) * SafeMigrationCatalogQueryLimits.MaximumInventoryValues)
                         .Take(SafeMigrationCatalogQueryLimits.MaximumInventoryValues)
                         .ToHashSet(StringComparer.Ordinal),
-                token),
+                callbackCancellationToken),
+            transaction: null,
+            SafeMigrationCatalogQueryLimits.MaximumParameters,
             cancellationToken);
 
         return findings;
@@ -168,7 +187,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         // maintaining a weaker second definition of semantic equivalence in
         // the inventory path. Candidates are consumed in bounded windows so a
         // large legacy catalog cannot materialize a cross-product in memory.
-        var semanticAliases = new HashSet<int>();
+        HashSet<int> semanticAliases = [];
         foreach (var candidates in SafeMigrationSemanticCandidateFactory
             .Create(operations, findings, projectUniqueIndexesAsUniqueConstraints: true)
             .Chunk(SafeMigrationCatalogQueryLimits.MaximumOperationsPerPlanCapture))
@@ -177,6 +196,10 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                 context,
                 candidates
                     .Select(static candidate => candidate.Operation)
+
+                    // WHY: Retain fluent materialization and its existing snapshot
+                    // ownership rather than replacing this boundary with a spread.
+                    // ReSharper disable once UseCollectionExpression
                     .ToArray(),
                 cancellationToken);
 
@@ -199,6 +222,10 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
 
         return findings
             .Where((_, index) => !semanticAliases.Contains(index))
+
+            // WHY: Retain fluent materialization and its existing snapshot
+            // ownership rather than replacing this boundary with a spread.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
     }
 

@@ -1,3 +1,6 @@
+// WHY: Core and provider benchmark assemblies link this source but select different construction and report workloads.
+// ReSharper disable UnusedMember.Global
+
 namespace Doka.EntityFrameworkCore.SafeMigrations.Benchmarks;
 
 internal static class ColumnBenchmarkWorkload

@@ -121,14 +121,14 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     {
         var expectedColumns = string.Join(",", definition.Columns);
         var expectedPrincipalColumns = string.Join(",", definition.PrincipalColumns);
-        var actualColumns = """
+        const string actualColumns = """
             array_to_string(ARRAY(SELECT a.attname
             FROM unnest(co.conkey) WITH ORDINALITY AS key(attnum, ord)
             JOIN pg_catalog.pg_attribute a
             ON a.attrelid = co.conrelid AND a.attnum = key.attnum ORDER BY key.ord), ',')
             """;
 
-        var actualPrincipalColumns = """
+        const string actualPrincipalColumns = """
             array_to_string(ARRAY(SELECT a.attname
             FROM unnest(co.confkey) WITH ORDINALITY AS key(attnum, ord)
             JOIN pg_catalog.pg_attribute a
@@ -140,8 +140,8 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             expectedPrincipalColumns,
             actualPrincipalColumns);
 
-        var records = new[]
-        {
+        string[] records =
+        [
             DiagnosticRecord(
                 $"""
                 ARRAY(SELECT a.attname FROM unnest(co.conkey) WITH ORDINALITY AS key(attnum, ord)
@@ -170,7 +170,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 "foreign_key_update_behavior",
                 Literal(ReferentialDiagnosticCode(definition.OnUpdate)),
                 ReferentialDiagnosticSql("co.confupdtype")),
-        };
+        ];
 
         return $"""
             (SELECT NULLIF(concat_ws(chr(30), {string.Join(", ", records)}), '')
@@ -242,6 +242,10 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 CAST({Literal(ReferentialCode(value.OnUpdate))} AS pg_catalog."char"),
                 CAST({Literal(ReferentialCode(value.OnDelete))} AS pg_catalog."char"))
                 """)
+
+            // WHY: Keep explicit fluent materialization and its existing
+            // ownership/evaluation boundary instead of an implicit spread.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var facets = ForeignKeyFacets(

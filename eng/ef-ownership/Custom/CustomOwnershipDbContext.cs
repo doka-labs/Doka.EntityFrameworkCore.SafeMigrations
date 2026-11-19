@@ -1,5 +1,3 @@
-using System;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.EfOwnership;
 
 /// <summary>
@@ -43,10 +41,21 @@ public sealed class CustomOwnershipProfile
     public CoreOwnershipRole CoreRole { get; set; } = null!;
 }
 
-internal sealed class CustomProfileConfiguration(
-    bool targetState
-) : IEntityTypeConfiguration<CustomOwnershipProfile>
+/// <summary>Maps instance-owned profiles without altering the inherited migration lineage.</summary>
+internal sealed class CustomProfileConfiguration : IEntityTypeConfiguration<CustomOwnershipProfile>
 {
+    private readonly bool _targetState;
+
+    /// <summary>Captures the requested immutable seed-state selection.</summary>
+    /// <param name="targetState">Whether to use the target rather than source rows.</param>
+    public CustomProfileConfiguration(
+        bool targetState
+    )
+    {
+        _targetState = targetState;
+    }
+
+    /// <inheritdoc />
     public void Configure(
         EntityTypeBuilder<CustomOwnershipProfile> builder
     )
@@ -66,7 +75,7 @@ internal sealed class CustomProfileConfiguration(
             .IsRequired();
 
         builder.HasData(
-            targetState
+            _targetState
                 ? TargetRows()
                 : SourceRows());
     }

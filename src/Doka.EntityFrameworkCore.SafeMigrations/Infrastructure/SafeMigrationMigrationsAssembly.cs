@@ -1,14 +1,27 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations;
 
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 internal sealed class SafeMigrationMigrationsAssembly : IMigrationsAssembly
 {
     private readonly TypeInfo[] _definedTypes;
     private readonly IMigrationsIdGenerator _idGenerator;
+
     private readonly Type _migrationContextType;
+
+    // WHY: Keep the invocation-owned lazy cache visibly separate from its public non-null discovery result.
+    // ReSharper disable once ReplaceWithFieldKeyword
     private IReadOnlyDictionary<string, TypeInfo>? _migrations;
+
+    // WHY: Snapshot construction and the initialized-null sentinel are a paired discovery state machine.
+    // ReSharper disable once ReplaceWithFieldKeyword
     private ModelSnapshot? _modelSnapshot;
     private bool _modelSnapshotInitialized;
 
+    /// <summary>Initializes migration discovery for the configured canonical context boundary.</summary>
+    /// <param name="currentContext">The active EF context.</param>
+    /// <param name="options">The configured EF migration assembly options.</param>
+    /// <param name="idGenerator">The provider's migration identifier contract.</param>
+    /// <param name="canonicalContext">The explicitly configured migration ownership boundary.</param>
     public SafeMigrationMigrationsAssembly(
         ICurrentDbContext currentContext,
         IDbContextOptions options,
@@ -43,6 +56,7 @@ internal sealed class SafeMigrationMigrationsAssembly : IMigrationsAssembly
         }
     }
 
+    /// <inheritdoc />
     public IReadOnlyDictionary<string, TypeInfo> Migrations => _migrations ??= _definedTypes
         .Where(type => !type.IsAbstract && typeof(Migration).IsAssignableFrom(type))
         .Select(type => new
@@ -56,6 +70,7 @@ internal sealed class SafeMigrationMigrationsAssembly : IMigrationsAssembly
         .OrderBy(candidate => candidate.Migration!.Id, StringComparer.Ordinal)
         .ToDictionary(candidate => candidate.Migration!.Id, candidate => candidate.Type, StringComparer.Ordinal);
 
+    /// <inheritdoc />
     public ModelSnapshot? ModelSnapshot
     {
         get
@@ -70,6 +85,10 @@ internal sealed class SafeMigrationMigrationsAssembly : IMigrationsAssembly
                 .Where(type => type.GetCustomAttribute<DbContextAttribute>()
                         ?.ContextType
                     == _migrationContextType)
+
+                // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based
+                // materialization.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray();
 
             if (snapshots.Length > 1)
@@ -95,8 +114,10 @@ internal sealed class SafeMigrationMigrationsAssembly : IMigrationsAssembly
         }
     }
 
+    /// <inheritdoc />
     public Assembly Assembly { get; }
 
+    /// <inheritdoc />
     public string? FindMigrationId(
         string nameOrId
     )
@@ -109,6 +130,7 @@ internal sealed class SafeMigrationMigrationsAssembly : IMigrationsAssembly
                 : StringComparer.OrdinalIgnoreCase.Equals(_idGenerator.GetName(id), nameOrId));
     }
 
+    /// <inheritdoc />
     public Migration CreateMigration(
         TypeInfo migrationClass,
         string activeProvider
@@ -138,6 +160,8 @@ internal sealed class SafeMigrationMigrationsAssembly : IMigrationsAssembly
     {
         try
         {
+            // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+            // ReSharper disable once UseCollectionExpression
             return assembly.DefinedTypes.ToArray();
         }
         catch (ReflectionTypeLoadException exception)

@@ -45,6 +45,9 @@ public sealed class MySqlCatalogProbesIntegrationTests : MySqlSafeMigrationInteg
         var operations = builder
             .Operations
             .Cast<SafeMigrationOperation>()
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         // Act
@@ -103,6 +106,9 @@ public sealed class MySqlCatalogProbesIntegrationTests : MySqlSafeMigrationInteg
         var operations = builder
             .Operations
             .Cast<SafeMigrationOperation>()
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         // Act
@@ -172,6 +178,9 @@ public sealed class MySqlCatalogProbesIntegrationTests : MySqlSafeMigrationInteg
         var operations = builder
             .Operations
             .Cast<SafeMigrationOperation>()
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         // Act

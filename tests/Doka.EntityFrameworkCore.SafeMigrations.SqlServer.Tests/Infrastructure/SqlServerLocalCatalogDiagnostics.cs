@@ -126,9 +126,11 @@ internal static partial class SqlServerLocalCatalogDiagnostics
                     var elapsed = Stopwatch.GetElapsedTime(statementStarted)
                         .TotalMilliseconds;
 
+                    var statementLength = statements[index].Length;
+
                     timings.Add(
                         FormattableString.Invariant(
-                            $"attempt={attempt}; statement={index}; elapsed-ms={elapsed:F3}; chars={statements[index].Length}"));
+                            $"attempt={attempt}; statement={index}; elapsed-ms={elapsed:F3}; chars={statementLength}"));
 
                     await File.WriteAllLinesAsync(
                         Path.Combine(output, $"{shape}-statistics-{attempt}-{index}.log"),
@@ -141,11 +143,16 @@ internal static partial class SqlServerLocalCatalogDiagnostics
                         cancellationToken: cancellationToken);
                 }
 
+                var attemptElapsed = Stopwatch.GetElapsedTime(started)
+                    .TotalMilliseconds;
+
                 timings.Add(
                     FormattableString.Invariant(
-                        $"attempt={attempt}; elapsed-ms={Stopwatch.GetElapsedTime(started).TotalMilliseconds:F3}; rows={rows.Count}"));
+                        $"attempt={attempt}; elapsed-ms={attemptElapsed:F3}; rows={rows.Count}"));
 
                 rows.Sort(StringComparer.Ordinal);
+                // WHY: Fluent terminal materialization preserves the existing snapshot and enumeration contract.
+                // ReSharper disable once UseCollectionExpression
                 expectedRows ??= rows.ToArray();
                 if (!expectedRows.SequenceEqual(rows, StringComparer.Ordinal))
                 {
@@ -165,7 +172,10 @@ internal static partial class SqlServerLocalCatalogDiagnostics
 
             // WHY: SqlBatch scopes are provider-owned. A sequential replay alone cannot prove that
             // repeated statement-local variable names and ordinal bindings also survive native dispatch.
-            await using var batch = new SqlBatch(connection) { Timeout = 180 };
+            await using var batch = new SqlBatch(connection)
+            {
+                Timeout = 180,
+            };
             for (var index = 0; index < statements.Count; index++)
             {
                 var command = new SqlBatchCommand(statements[index]);
@@ -186,9 +196,12 @@ internal static partial class SqlServerLocalCatalogDiagnostics
                 throw new InvalidOperationException("Native local classifier dispatch changed its evidence.");
             }
 
+            var nativeElapsed = Stopwatch.GetElapsedTime(nativeStarted)
+                .TotalMilliseconds;
+
             timings.Add(
                 FormattableString.Invariant(
-                    $"native; elapsed-ms={Stopwatch.GetElapsedTime(nativeStarted).TotalMilliseconds:F3}; rows={nativeRows.Count}"));
+                    $"native; elapsed-ms={nativeElapsed:F3}; rows={nativeRows.Count}"));
 
             await File.WriteAllLinesAsync(
                 Path.Combine(output, shape + "-timing.log"),

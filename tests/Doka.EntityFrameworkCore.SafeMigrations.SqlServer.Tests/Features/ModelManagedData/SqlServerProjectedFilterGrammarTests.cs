@@ -6,7 +6,25 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 public sealed class SqlServerProjectedFilterGrammarTests
 {
     /// <summary>Gets supported simple comparisons and unsupported general-expression counterexamples.</summary>
-    public static IEnumerable<object[]> FilterCases()
+    public static TheoryData<string, bool> FilterCases() => new()
+    {
+        { "not-null", true },
+        { "equal", true },
+        { "and", true },
+        { "in", true },
+        { "or", false },
+        { "column-equality", false },
+        { "null-equality", false },
+        { "not-in", false },
+        { "null-in", false },
+    };
+
+    /// <summary>Creates one predicate without asking test discovery to serialize its expression graph.</summary>
+    /// <param name="source">The closed, serializable predicate-case identity.</param>
+    /// <returns>The unchanged predicate shape used by native grammar validation.</returns>
+    private static SafeMigrationSqlExpression Filter(
+        string source
+    )
     {
         var column = SafeMigrationSql.Identifier("Code");
         var other = SafeMigrationSql.Identifier("Other");
@@ -15,58 +33,47 @@ public sealed class SqlServerProjectedFilterGrammarTests
             SafeMigrationSqlBinaryOperator.Equal,
             SafeMigrationSql.Literal(1));
 
-        yield return [SafeMigrationSql.IsNotNull(column), true];
-        yield return [equal, true];
-        yield return
-        [
-            new SafeMigrationSqlBinaryExpression(
+        return source switch
+        {
+            "not-null" => SafeMigrationSql.IsNotNull(column),
+            "equal" => equal,
+            "and" => new SafeMigrationSqlBinaryExpression(
                 equal,
                 SafeMigrationSqlBinaryOperator.And,
                 SafeMigrationSql.IsNotNull(other)),
-            true,
-        ];
-
-        yield return
-        [
-            new SafeMigrationSqlInExpression(
+            "in" => new SafeMigrationSqlInExpression(
                 column,
                 [SafeMigrationSql.Literal(1), SafeMigrationSql.Literal(2)]),
-            true,
-        ];
-
-        yield return
-        [
-            new SafeMigrationSqlBinaryExpression(
+            "or" => new SafeMigrationSqlBinaryExpression(
                 equal,
                 SafeMigrationSqlBinaryOperator.Or,
                 SafeMigrationSql.IsNotNull(other)),
-            false,
-        ];
-
-        yield return [new SafeMigrationSqlBinaryExpression(column, SafeMigrationSqlBinaryOperator.Equal, other), false];
-        yield return
-        [
-            new SafeMigrationSqlBinaryExpression(
+            "column-equality" => new SafeMigrationSqlBinaryExpression(
+                column,
+                SafeMigrationSqlBinaryOperator.Equal,
+                other),
+            "null-equality" => new SafeMigrationSqlBinaryExpression(
                 column,
                 SafeMigrationSqlBinaryOperator.Equal,
                 SafeMigrationSql.Literal(null)),
-            false,
-        ];
-
-        yield return [new SafeMigrationSqlInExpression(column, [SafeMigrationSql.Literal(1)], negated: true), false];
-        yield return [new SafeMigrationSqlInExpression(column, [SafeMigrationSql.Literal(null)]), false];
+            "not-in" => new SafeMigrationSqlInExpression(column, [SafeMigrationSql.Literal(1)], negated: true),
+            "null-in" => new SafeMigrationSqlInExpression(column, [SafeMigrationSql.Literal(null)]),
+            _ => throw new ArgumentOutOfRangeException(nameof(source)),
+        };
     }
 
     /// <summary>A general SELECT predicate is not automatically valid filtered-index DDL.</summary>
+    /// <param name="source">The discoverable identity of the unchanged predicate graph.</param>
+    /// <param name="expected">Whether native filtered-index grammar supports the expression.</param>
     [Theory]
     [MemberData(nameof(FilterCases))]
     public void FilterGrammar_UsesOnlyDocumentedCreateIndexPredicateForms(
-        SafeMigrationSqlExpression filter,
+        string source,
         bool expected
     )
     {
         // Arrange
-        var predicate = filter;
+        var predicate = Filter(source);
 
         // Act
         var supported = SqlServerSafeMigrationCatalogSqlBuilder.IsSupportedIndexFilter(predicate);

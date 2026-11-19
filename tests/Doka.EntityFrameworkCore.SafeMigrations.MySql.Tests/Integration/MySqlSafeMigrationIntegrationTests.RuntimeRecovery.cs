@@ -2,6 +2,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 public abstract partial class MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Checks every operation-local runtime variable cleared by guarded cleanup.</summary>
     protected const string RuntimeGuardVariablesClearedSql = """
         SELECT @doka_sm_state IS NULL
         AND @doka_sm_action IS NULL AND @doka_sm_repair_ok IS NULL
@@ -36,6 +37,7 @@ public sealed partial class MySqlRuntimeRecoveryIntegrationTests : MySqlSafeMigr
         string failureMode
     )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -56,10 +58,7 @@ public sealed partial class MySqlRuntimeRecoveryIntegrationTests : MySqlSafeMigr
             : "SELECT `Id` FROM `runtime_setup_lock` WHERE `Id` = 1 FOR UPDATE;";
 
         observer.InjectFirstCompactedPrepareGroup(
-            "SET @runtime_prepared_setup_acquired = 1; " + probe + " SET @runtime_setup_after_error = 1;",
-            failureMode == "cancellation"
-                ? () => cancellation.CancelAfter(TimeSpan.FromMilliseconds(500))
-                : null);
+            "SET @runtime_prepared_setup_acquired = 1; " + probe + " SET @runtime_setup_after_error = 1;");
 
         var options = new DbContextOptionsBuilder<MySqlRuntimeCompactedSetupProbeDbContext>()
             .UseMySql(
@@ -80,11 +79,22 @@ public sealed partial class MySqlRuntimeRecoveryIntegrationTests : MySqlSafeMigr
 
         await context.Database.OpenConnectionAsync(CancellationToken.None);
 
-        var result = await FailAndRecoverRuntimeAsync(context, observer, cancellation.Token);
+        // Act
+        var operation = FailAndRecoverRuntimeAsync(context, observer, cancellation.Token);
+        var result = failureMode == "cancellation"
+            ? await MySqlNativeCancellationCheckpoint.CancelWhenDispatchedAsync(
+                connectionString,
+                ((MySqlConnection)context.Database.GetDbConnection()).ServerThread,
+                "runtime_setup_lock",
+                cancellation,
+                operation,
+                CancellationToken.None)
+            : await operation;
 
+        // Assert
         if (failureMode == "cancellation")
         {
-            Assert.IsAssignableFrom<OperationCanceledException>(result.Exception);
+            Assert.IsType<OperationCanceledException>(result.Exception, exactMatch: false);
         }
         else
         {
@@ -132,6 +142,7 @@ public sealed partial class MySqlRuntimeRecoveryIntegrationTests : MySqlSafeMigr
         bool failSetup
     )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -150,8 +161,10 @@ public sealed partial class MySqlRuntimeRecoveryIntegrationTests : MySqlSafeMigr
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExists<string>("Note", "runtime_sync_rows", type: "varchar(20)", nullable: true);
 
+        // Act
         var result = ExecuteRuntimeSynchronousRecovery(context, observer, builder.Operations);
 
+        // Assert
         if (failSetup)
         {
             Assert.Equal(1146,
@@ -267,6 +280,7 @@ public sealed partial class MySqlRuntimeRecoveryIntegrationTests : MySqlSafeMigr
     [Fact]
     public async Task RuntimeCleanupFailure_StillClearsGuardResourcesAndEvictsSession()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var pooledConnectionString = new MySqlConnectionStringBuilder(connectionString)
         {
@@ -288,6 +302,7 @@ public sealed partial class MySqlRuntimeRecoveryIntegrationTests : MySqlSafeMigr
             "runtime_cleanup_rows",
             table => new { Id = table.Column<int>(type: "int", nullable: false) });
 
+        // Act
         var result = await FailRuntimeCleanupAndReconnectAsync(
             context,
             builder.Operations,
@@ -295,6 +310,8 @@ public sealed partial class MySqlRuntimeRecoveryIntegrationTests : MySqlSafeMigr
             cancellationToken: CancellationToken.None);
 
         // WHY: Doka's internal cleanup wrapper disables unsafe DDL retries and retains the native cleanup failure.
+
+        // Assert
         var cleanupException = Assert.IsType<InvalidOperationException>(result.Exception, exactMatch: false);
 
         Assert.Equal(

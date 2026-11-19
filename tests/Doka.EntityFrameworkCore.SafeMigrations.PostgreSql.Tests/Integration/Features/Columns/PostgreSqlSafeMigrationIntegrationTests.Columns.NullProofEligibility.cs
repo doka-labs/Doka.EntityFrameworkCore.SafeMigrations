@@ -682,7 +682,7 @@ public sealed class PostgreSqlColumnsNullProofEligibilityIntegrationTests : Post
                 "proof_eligibility_rows",
                 pending,
                 cancellationToken),
-            cancellationToken => transaction.CommitAsync(cancellationToken),
+            transaction.CommitAsync,
             () => transaction.RollbackAsync(CancellationToken.None),
             cancellation,
             cancellation.Token);

@@ -242,7 +242,7 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
     {
         const string prefix = "CONVERT(0x";
         const string suffix = " USING utf8mb4)";
-        var payloads = new List<string>();
+        List<string> payloads = [];
         var offset = 0;
         while ((offset = sql.IndexOf(prefix, offset, StringComparison.Ordinal)) >= 0)
         {

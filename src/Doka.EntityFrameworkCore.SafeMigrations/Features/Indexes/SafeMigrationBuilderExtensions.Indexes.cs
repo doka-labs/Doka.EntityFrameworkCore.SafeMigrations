@@ -7,6 +7,10 @@ public static partial class SafeMigrationBuilderExtensions
     /// <param name="definition">The complete expected database-object definition.</param>
     /// <param name="policy">The conflict policy for the operation.</param>
     /// <returns>A builder for annotations on the created SafeMigrations operation.</returns>
+
+    // WHY: C# 14 extension blocks fail RS0016 in the current public API analyzer;
+    // retain the published static-call and XML member identities.
+    // ReSharper disable once ConvertToExtensionBlock
     public static OperationBuilder<SafeMigrationOperation> EnsureIndex(
         this MigrationBuilder migrationBuilder,
         ExpectedIndexDefinition definition,
@@ -25,6 +29,10 @@ public static partial class SafeMigrationBuilderExtensions
     /// <param name="nullOrders">The ordered null placements, or null for provider defaults.</param>
     /// <param name="policy">The conflict policy for the operation.</param>
     /// <returns>A builder for annotations on the created SafeMigrations operation.</returns>
+
+    // WHY: C# 14 extension blocks fail RS0016 in the current public API analyzer;
+    // retain the published static-call and XML member identities.
+    // ReSharper disable once ConvertToExtensionBlock
     public static OperationBuilder<SafeMigrationOperation> CreateIndexIfNotExists(
         this MigrationBuilder migrationBuilder,
         string name,
@@ -40,7 +48,12 @@ public static partial class SafeMigrationBuilderExtensions
     {
         ArgumentNullException.ThrowIfNull(columns);
 
+        // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+        // ReSharper disable once UseCollectionExpression
         var columnSnapshot = columns.ToArray();
+
+        // WHY: Retain conditional materialization so absent metadata stays null instead of becoming an empty snapshot.
+        // ReSharper disable once UseCollectionExpression
         var sortOrderSnapshot = sortOrders?.ToArray();
         if (sortOrderSnapshot is not null
             && sortOrderSnapshot.Length != columnSnapshot.Length)
@@ -48,6 +61,8 @@ public static partial class SafeMigrationBuilderExtensions
             throw new ArgumentException("Sort orders must have the same length as columns.", nameof(sortOrders));
         }
 
+        // WHY: Retain conditional materialization so absent metadata stays null instead of becoming an empty snapshot.
+        // ReSharper disable once UseCollectionExpression
         var nullOrderSnapshot = nullOrders?.ToArray();
         if (nullOrderSnapshot is not null
             && nullOrderSnapshot.Length != columnSnapshot.Length)
@@ -83,6 +98,10 @@ public static partial class SafeMigrationBuilderExtensions
     /// <exception cref="InvalidOperationException">
     /// EF Core does not append exactly one index operation for the supplied definition.
     /// </exception>
+
+    // WHY: C# 14 extension blocks fail RS0016 in the current public API analyzer;
+    // retain the published static-call and XML member identities.
+    // ReSharper disable once ConvertToExtensionBlock
     public static OperationBuilder<SafeMigrationOperation> CreateIndexIfNotExistsFromModel(
         this MigrationBuilder migrationBuilder,
         string name,
@@ -116,6 +135,10 @@ public static partial class SafeMigrationBuilderExtensions
     /// <param name="descending">The key direction, or null for the provider default.</param>
     /// <param name="filter">The index predicate, or null for an unfiltered index.</param>
     /// <returns>A builder for annotations on the created SafeMigrations operation.</returns>
+
+    // WHY: C# 14 extension blocks fail RS0016 in the current public API analyzer;
+    // retain the published static-call and XML member identities.
+    // ReSharper disable once ConvertToExtensionBlock
     public static OperationBuilder<SafeMigrationOperation> CreateIndexWithIncludesIfNotExistsFromModel(
         this MigrationBuilder migrationBuilder,
         string name,
@@ -168,6 +191,10 @@ public static partial class SafeMigrationBuilderExtensions
     /// <exception cref="InvalidOperationException">
     /// EF Core does not append exactly one index operation for the supplied definition.
     /// </exception>
+
+    // WHY: C# 14 extension blocks fail RS0016 in the current public API analyzer;
+    // retain the published static-call and XML member identities.
+    // ReSharper disable once ConvertToExtensionBlock
     public static OperationBuilder<SafeMigrationOperation> CreateIndexWithPrefixesIfNotExistsFromModel(
         this MigrationBuilder migrationBuilder,
         string name,
@@ -213,6 +240,10 @@ public static partial class SafeMigrationBuilderExtensions
     /// <exception cref="InvalidOperationException">
     /// EF Core does not append exactly one index operation for the supplied definition.
     /// </exception>
+
+    // WHY: C# 14 extension blocks fail RS0016 in the current public API analyzer;
+    // retain the published static-call and XML member identities.
+    // ReSharper disable once ConvertToExtensionBlock
     public static OperationBuilder<SafeMigrationOperation> CreateCompositeIndexIfNotExistsFromModel(
         this MigrationBuilder migrationBuilder,
         string name,
@@ -246,6 +277,10 @@ public static partial class SafeMigrationBuilderExtensions
     /// <param name="descending">The ordered key directions, or null for provider defaults.</param>
     /// <param name="filter">The index predicate, or null for an unfiltered index.</param>
     /// <returns>A builder for annotations on the created SafeMigrations operation.</returns>
+
+    // WHY: C# 14 extension blocks fail RS0016 in the current public API analyzer;
+    // retain the published static-call and XML member identities.
+    // ReSharper disable once ConvertToExtensionBlock
     public static OperationBuilder<SafeMigrationOperation> CreateCompositeIndexWithIncludesIfNotExistsFromModel(
         this MigrationBuilder migrationBuilder,
         string name,
@@ -300,6 +335,10 @@ public static partial class SafeMigrationBuilderExtensions
     /// <exception cref="InvalidOperationException">
     /// EF Core does not append exactly one index operation for the supplied definition.
     /// </exception>
+
+    // WHY: C# 14 extension blocks fail RS0016 in the current public API analyzer;
+    // retain the published static-call and XML member identities.
+    // ReSharper disable once ConvertToExtensionBlock
     public static OperationBuilder<SafeMigrationOperation> CreateCompositeIndexWithPrefixesIfNotExistsFromModel(
         this MigrationBuilder migrationBuilder,
         string name,
@@ -400,6 +439,10 @@ public static partial class SafeMigrationBuilderExtensions
     /// <param name="table">The table name.</param>
     /// <param name="schema">The schema name, or null for the provider default.</param>
     /// <returns>A builder for annotations on the created SafeMigrations operation.</returns>
+
+    // WHY: C# 14 extension blocks fail RS0016 in the current public API analyzer;
+    // retain the published static-call and XML member identities.
+    // ReSharper disable once ConvertToExtensionBlock
     public static OperationBuilder<SafeMigrationOperation> DropIndexIfExists(
         this MigrationBuilder migrationBuilder,
         string name,
@@ -414,6 +457,10 @@ public static partial class SafeMigrationBuilderExtensions
     /// <param name="newName">The target database object name.</param>
     /// <param name="schema">The schema name, or null for the provider default.</param>
     /// <returns>A builder for annotations on the created SafeMigrations operation.</returns>
+
+    // WHY: C# 14 extension blocks fail RS0016 in the current public API analyzer;
+    // retain the published static-call and XML member identities.
+    // ReSharper disable once ConvertToExtensionBlock
     public static OperationBuilder<SafeMigrationOperation> RenameIndexIfExists(
         this MigrationBuilder migrationBuilder,
         string name,

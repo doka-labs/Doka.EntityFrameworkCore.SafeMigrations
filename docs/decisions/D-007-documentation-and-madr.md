@@ -1,8 +1,8 @@
 ---
 id: D-007
 status: implemented
-date: 2026-08-26
-decision-makers: [Dominic Kalkbrenner]
+date: 2026-11-19
+decision-makers: ["Dominic Kalkbrenner"]
 consulted: []
 informed: ["@doka-labs/core-maintainers"]
 scope: "Shared MADR document quality and the boundary to external authoring tools"
@@ -61,9 +61,11 @@ All records use Doka's 13 ordered flat metadata fields, its six-state
 vocabulary, `D-NNN --` titles, and the complete heading hierarchy. The
 `madr-version` and `doka-profile-version` keys preserve the shared identity.
 The template names Dominic Kalkbrenner. Consultation lists record actual
-participants; informed lists name the maintainer-designated audience kept up
-to date on progress. These entries do not prove notification delivery or
-decision approval.
+participants; `informed` is exactly `["@doka-labs/core-maintainers"]`.
+These entries do not prove notification delivery or decision approval. Metadata
+`date` identifies the latest recorded update and equals the final history date;
+the first history entry retains the original recording date. Profile migration
+adds its actual date without reconstructing missing historical approvals.
 
 Each record must define a bounded question and concrete decision drivers,
 evaluate credible alternatives symmetrically, explain the chosen contract and
@@ -181,6 +183,10 @@ reduce the depth of the rationale.
 - 2026-08-26: Maintainer designated @doka-labs/core-maintainers as the informed audience.
 - 2026-08-26: Status changed from accepted to implemented. Dominic Kalkbrenner confirmed implementation; the adopted profile, ADR corpus, and documentation ownership are in place and reviewed.
 - 2026-08-28: OpenSSF Best Practices reported Passing; status wording was aligned without changing this documentation-format decision.
+- 2026-11-19: Aligned last-update metadata, reciprocal amendments, option titles
+  and source/navigation format with the current documentation profile. Retained
+  the recorded status and historical approval evidence; this migration grants no
+  new architectural acceptance or publication authority.
 
 ### Implementation References
 

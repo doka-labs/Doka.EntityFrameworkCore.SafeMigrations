@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Benchmarks;
 
 /// <summary>Reports runtime generation and exact column-certificate reuse on both native engine variants.</summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public class MySqlAllocationBenchmarks : IDisposable
 {
     private const int ProofReuseCount = 100;
@@ -51,6 +52,9 @@ public class MySqlAllocationBenchmarks : IDisposable
                         true,
                         "int")),
                 SafeMigrationPolicy.ThrowIfDifferent))
+
+            // WHY: Retain fluent materialization and the resulting snapshot ownership.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var analyzer = _context.GetService<ISafeMigrationProviderAnalyzer>();

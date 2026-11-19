@@ -42,7 +42,7 @@ internal sealed class MySqlGeneratedColumnDependencyContractCatalog
     )
     {
         ArgumentNullException.ThrowIfNull(operations);
-        if (!operations.Any(static operation => operation is SafeMigrationOperation
+        if (operations.All(static operation => operation is not SafeMigrationOperation
             {
                 Intent: RenameColumnIntent or DropColumnIntent,
             }))
@@ -60,8 +60,15 @@ internal sealed class MySqlGeneratedColumnDependencyContractCatalog
         Dictionary<ExpectedTableDefinition, Owner>? modelOwners = null;
         var repeatedOperation = false;
 
-        foreach (var candidate in operations)
+        // WHY: Index this stable list while preserving its order and ownership.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var candidateIndex = 0; candidateIndex < operations.Count; candidateIndex++)
         {
+            var candidate = operations[candidateIndex];
+
+            // WHY: Candidate capture and later invalidation are independent ordered passes through this same operation.
+            // ReSharper disable once ConvertIfStatementToSwitchStatement
             if (candidate is SafeMigrationOperation { Intent: RenameColumnIntent or DropColumnIntent } keyed)
             {
                 // WHY: The same object can occur under different prefixes or
@@ -188,6 +195,9 @@ internal sealed class MySqlGeneratedColumnDependencyContractCatalog
         if (modelContracts is null or { Count: 0 })
         {
             var hasAuthoredCandidate = false;
+
+            // WHY: Keep the concrete dictionary-value walk and its first-candidate early exit.
+            // ReSharper disable once ForeachCanBeConvertedToQueryUsingAnotherGetEnumerator
             foreach (var contract in contracts.Values)
             {
                 if (contract is not null)
@@ -230,8 +240,14 @@ internal sealed class MySqlGeneratedColumnDependencyContractCatalog
 
             var ownerKey = Key(table, schema);
             ExpectedTableDefinition? selected = null;
-            foreach (var candidate in candidates)
+
+            // WHY: Index this stable list while preserving its order and ownership.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var candidateIndex = 0; candidateIndex < candidates.Count; candidateIndex++)
             {
+                var candidate = candidates[candidateIndex];
+
                 if (!owners.Comparer.Equals(ownerKey, Key(candidate.Table, candidate.Schema)))
                 {
                     continue;
@@ -372,8 +388,14 @@ internal sealed class MySqlGeneratedColumnDependencyContractCatalog
         )
         {
             Columns = new Dictionary<string, ExpectedColumnDefinition>(columns.Count, StringComparer.OrdinalIgnoreCase);
-            foreach (var column in columns)
+
+            // WHY: Index this stable list while preserving its order and ownership.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var columnIndex = 0; columnIndex < columns.Count; columnIndex++)
             {
+                var column = columns[columnIndex];
+
                 if (!Columns.TryAdd(column.Name, column))
                 {
                     // Ambiguous native member identity cannot become an
@@ -394,6 +416,9 @@ internal sealed class MySqlGeneratedColumnDependencyContractCatalog
             var generatedCount = 0;
             var parsed = !IsAmbiguous;
             var referencesSource = false;
+
+            // WHY: One concrete walk accumulates count, parse validity and dependency evidence together.
+            // ReSharper disable once ForeachCanBePartlyConvertedToQueryUsingAnotherGetEnumerator
             foreach (var column in Columns.Values)
             {
                 if (!IncludesGeneratedMember(column, source, excludeSource))
@@ -432,6 +457,9 @@ internal sealed class MySqlGeneratedColumnDependencyContractCatalog
                 : new ExpectedColumnDefinition[generatedCount];
 
             var ordinal = 0;
+
+            // WHY: Fill the exactly sized snapshot in the same concrete dictionary order as the first walk.
+            // ReSharper disable once ForeachCanBePartlyConvertedToQueryUsingAnotherGetEnumerator
             foreach (var column in Columns.Values)
             {
                 if (IncludesGeneratedMember(column, source, excludeSource))

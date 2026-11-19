@@ -1,3 +1,10 @@
+// WHY: Linked provider tests and attribution executables consume different counters, injected faults and submissions.
+// ReSharper disable MemberCanBePrivate.Global
+// ReSharper disable UnusedMember.Global
+// ReSharper disable UnusedAutoPropertyAccessor.Global
+// ReSharper disable NotAccessedPositionalProperty.Global
+// ReSharper disable AutoPropertyCanBeMadeGetOnly.Global
+
 namespace Doka.EntityFrameworkCore.SafeMigrations.Testing;
 
 /// <summary>Executes provider catalog readers against explicit statement-local test results.</summary>
@@ -69,6 +76,8 @@ internal sealed class CatalogStatementTestConnection : DbConnection
     public override string ServerVersion => "1";
 
     /// <inheritdoc />
+    // WHY: Keep the getter-only framework override; Open and Close own state changes through the explicit field.
+    // ReSharper disable once ConvertToAutoPropertyWithPrivateSetter
     public override ConnectionState State => _state;
 
     /// <inheritdoc />
@@ -134,10 +143,10 @@ internal sealed class CatalogStatementTestConnection : DbConnection
 
     private TestReader Read(
         IReadOnlyList<Submission> submissions,
-        CancellationToken token
+        CancellationToken cancellationToken
     )
     {
-        token.ThrowIfCancellationRequested();
+        cancellationToken.ThrowIfCancellationRequested();
 
         var results = new DataSet();
         var ordered = ReverseResults
@@ -171,16 +180,27 @@ internal sealed class CatalogStatementTestConnection : DbConnection
         bool Native
     );
 
-    private sealed class TestTransaction(
-        CatalogStatementTestConnection connection,
-        IsolationLevel isolationLevel
-    ) : DbTransaction
+    private sealed class TestTransaction : DbTransaction
     {
-        /// <inheritdoc />
-        public override IsolationLevel IsolationLevel => isolationLevel;
+        private readonly CatalogStatementTestConnection _connection;
+
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="connection">The supplied connection for this fixture.</param>
+        /// <param name="isolationLevel">The supplied isolation level for this fixture.</param>
+        public TestTransaction(
+            CatalogStatementTestConnection connection,
+            IsolationLevel isolationLevel
+        )
+        {
+            _connection = connection;
+            IsolationLevel = isolationLevel;
+        }
 
         /// <inheritdoc />
-        protected override DbConnection DbConnection => connection;
+        public override IsolationLevel IsolationLevel { get; }
+
+        /// <inheritdoc />
+        protected override DbConnection DbConnection => _connection;
 
         /// <inheritdoc />
         public override void Commit() => throw new NotSupportedException();
@@ -193,25 +213,37 @@ internal sealed class CatalogStatementTestConnection : DbConnection
             bool disposing
         )
         {
-            if (disposing && connection.CaptureObservations)
+            if (disposing && _connection.CaptureObservations)
             {
-                connection.TransactionsDisposed++;
+                _connection.TransactionsDisposed++;
             }
 
             base.Dispose(disposing);
         }
     }
 
-    private sealed class TestCommand(
-        CatalogStatementTestConnection connection
-    ) : DbCommand
+    private sealed class TestCommand : DbCommand
     {
-        private readonly TestParameters _parameters = new();
+        private readonly CatalogStatementTestConnection _connection;
+
+        private readonly TestParameters _parameters;
         private bool _disposed;
+
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="connection">The supplied connection for this fixture.</param>
+        public TestCommand(
+            CatalogStatementTestConnection connection
+        )
+        {
+            _connection = connection;
+            _parameters = new TestParameters();
+            CommandText = string.Empty;
+            DbConnection = connection;
+        }
 
         /// <inheritdoc />
         [AllowNull]
-        public override string CommandText { get; set; } = string.Empty;
+        public override string CommandText { get; set; }
 
         /// <inheritdoc />
         public override int CommandTimeout { get; set; }
@@ -226,7 +258,7 @@ internal sealed class CatalogStatementTestConnection : DbConnection
         public override UpdateRowSource UpdatedRowSource { get; set; }
 
         /// <inheritdoc />
-        protected override DbConnection? DbConnection { get; set; } = connection;
+        protected override DbConnection? DbConnection { get; set; }
 
         /// <inheritdoc />
         protected override DbTransaction? DbTransaction { get; set; }
@@ -246,7 +278,7 @@ internal sealed class CatalogStatementTestConnection : DbConnection
         /// <inheritdoc />
         public override int ExecuteNonQuery()
         {
-            connection.Record(CommandText, _parameters, CommandTimeout, DbTransaction, false);
+            _connection.Record(CommandText, _parameters, CommandTimeout, DbTransaction, false);
 
             return 0;
         }
@@ -254,16 +286,16 @@ internal sealed class CatalogStatementTestConnection : DbConnection
         /// <inheritdoc />
         public override object? ExecuteScalar()
         {
-            connection.Record(CommandText, _parameters, CommandTimeout, DbTransaction, false);
+            _connection.Record(CommandText, _parameters, CommandTimeout, DbTransaction, false);
 
-            return connection.Scalar(CommandText);
+            return _connection.Scalar(CommandText);
         }
 
         /// <inheritdoc />
         protected override DbDataReader ExecuteDbDataReader(
             CommandBehavior behavior
-        ) => connection.Read(
-            [connection.Record(CommandText, _parameters, CommandTimeout, DbTransaction, false)],
+        ) => _connection.Read(
+            [_connection.Record(CommandText, _parameters, CommandTimeout, DbTransaction, false)],
             CancellationToken.None);
 
         /// <inheritdoc />
@@ -275,8 +307,8 @@ internal sealed class CatalogStatementTestConnection : DbConnection
             cancellationToken.ThrowIfCancellationRequested();
 
             return Task.FromResult<DbDataReader>(
-                connection.Read(
-                    [connection.Record(CommandText, _parameters, CommandTimeout, DbTransaction, false)],
+                _connection.Read(
+                    [_connection.Record(CommandText, _parameters, CommandTimeout, DbTransaction, false)],
                     cancellationToken));
         }
 
@@ -288,9 +320,9 @@ internal sealed class CatalogStatementTestConnection : DbConnection
             if (disposing && !_disposed)
             {
                 _disposed = true;
-                if (connection.CaptureObservations)
+                if (_connection.CaptureObservations)
                 {
-                    connection.CommandsDisposed++;
+                    _connection.CommandsDisposed++;
                 }
             }
 
@@ -298,18 +330,28 @@ internal sealed class CatalogStatementTestConnection : DbConnection
         }
     }
 
-    private sealed class TestBatch(
-        CatalogStatementTestConnection connection
-    ) : DbBatch
+    private sealed class TestBatch : DbBatch
     {
-        private readonly TestBatchCommands _commands = new();
+        private readonly TestBatchCommands _commands;
+        private readonly CatalogStatementTestConnection _connection;
         private bool _disposed;
+
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="connection">The supplied connection for this fixture.</param>
+        public TestBatch(
+            CatalogStatementTestConnection connection
+        )
+        {
+            _connection = connection;
+            _commands = new TestBatchCommands();
+            DbConnection = connection;
+        }
 
         /// <inheritdoc />
         public override int Timeout { get; set; }
 
         /// <inheritdoc />
-        protected override DbConnection? DbConnection { get; set; } = connection;
+        protected override DbConnection? DbConnection { get; set; }
 
         /// <inheritdoc />
         protected override DbTransaction? DbTransaction { get; set; }
@@ -340,6 +382,8 @@ internal sealed class CatalogStatementTestConnection : DbConnection
         ) => throw new NotSupportedException();
 
         /// <inheritdoc />
+        // WHY: Match DbBatch's nullable result contract even though this deliberately unsupported path always throws.
+        // ReSharper disable once ReturnTypeCanBeNotNullable
         public override object? ExecuteScalar() => throw new NotSupportedException();
 
         /// <inheritdoc />
@@ -359,25 +403,27 @@ internal sealed class CatalogStatementTestConnection : DbConnection
         ) => Task.FromResult<DbDataReader>(Read(cancellationToken));
 
         private TestReader Read(
-            CancellationToken token
+            CancellationToken cancellationToken
         )
         {
-            token.ThrowIfCancellationRequested();
-            if (connection.CaptureObservations)
+            cancellationToken.ThrowIfCancellationRequested();
+            if (_connection.CaptureObservations)
             {
-                connection.BatchCounts.Add(_commands.Count);
+                _connection.BatchCounts.Add(_commands.Count);
             }
 
-            return connection.Read(
+            // WHY: Snapshot the submitted native statements before the reader owns their result set.
+            // ReSharper disable once UseCollectionExpression
+            return _connection.Read(
                 _commands
-                    .Select(command => connection.Record(
+                    .Select(command => _connection.Record(
                         command.CommandText,
                         command.Parameters,
                         Timeout,
                         DbTransaction,
                         true))
                     .ToArray(),
-                token);
+                cancellationToken);
         }
 
         /// <inheritdoc />
@@ -386,9 +432,9 @@ internal sealed class CatalogStatementTestConnection : DbConnection
             if (!_disposed)
             {
                 _disposed = true;
-                if (connection.CaptureObservations)
+                if (_connection.CaptureObservations)
                 {
-                    connection.BatchesDisposed++;
+                    _connection.BatchesDisposed++;
                 }
             }
 
@@ -623,48 +669,63 @@ internal sealed class CatalogStatementTestConnection : DbConnection
         ) => _items[IndexOf(parameterName)] = value;
     }
 
-    private sealed class TestReader(
-        CatalogStatementTestConnection connection,
-        DataSet results,
-        DataTableReader inner
-    ) : DbDataReader
+    private sealed class TestReader : DbDataReader
     {
+        private readonly CatalogStatementTestConnection _connection;
+        private readonly DataTableReader _inner;
+        private readonly DataSet _results;
+
         private bool _disposed;
+
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="connection">The supplied connection for this fixture.</param>
+        /// <param name="results">The supplied results for this fixture.</param>
+        /// <param name="inner">The supplied inner for this fixture.</param>
+        public TestReader(
+            CatalogStatementTestConnection connection,
+            DataSet results,
+            DataTableReader inner
+        )
+        {
+            _connection = connection;
+            _results = results;
+            _inner = inner;
+        }
 
         /// <inheritdoc />
         public override object this[
             int ordinal
-        ] => inner[ordinal];
+        ] => _inner[ordinal];
 
         /// <inheritdoc />
         public override object this[
             string name
-        ] => inner[name];
+        ] => _inner[name];
 
         /// <inheritdoc />
-        public override int Depth => inner.Depth;
+        public override int Depth => _inner.Depth;
 
         /// <inheritdoc />
-        public override int FieldCount => inner.FieldCount;
+        public override int FieldCount => _inner.FieldCount;
 
         /// <inheritdoc />
-        public override bool HasRows => inner.HasRows;
+        public override bool HasRows => _inner.HasRows;
 
         /// <inheritdoc />
-        public override bool IsClosed => inner.IsClosed;
+        public override bool IsClosed => _inner.IsClosed;
 
         /// <inheritdoc />
-        public override int RecordsAffected => inner.RecordsAffected;
+        public override int RecordsAffected => _inner.RecordsAffected;
 
         /// <inheritdoc />
         public override bool GetBoolean(
             int ordinal
-        ) => inner.GetBoolean(ordinal);
+        ) => _inner.GetBoolean(ordinal);
 
         /// <inheritdoc />
         public override byte GetByte(
             int ordinal
-        ) => inner.GetByte(ordinal);
+        ) => _inner.GetByte(ordinal);
 
         /// <inheritdoc />
         public override long GetBytes(
@@ -673,12 +734,12 @@ internal sealed class CatalogStatementTestConnection : DbConnection
             byte[]? buffer,
             int bufferOffset,
             int length
-        ) => inner.GetBytes(ordinal, dataOffset, buffer, bufferOffset, length);
+        ) => _inner.GetBytes(ordinal, dataOffset, buffer, bufferOffset, length);
 
         /// <inheritdoc />
         public override char GetChar(
             int ordinal
-        ) => inner.GetChar(ordinal);
+        ) => _inner.GetChar(ordinal);
 
         /// <inheritdoc />
         public override long GetChars(
@@ -687,106 +748,106 @@ internal sealed class CatalogStatementTestConnection : DbConnection
             char[]? buffer,
             int bufferOffset,
             int length
-        ) => inner.GetChars(ordinal, dataOffset, buffer, bufferOffset, length);
+        ) => _inner.GetChars(ordinal, dataOffset, buffer, bufferOffset, length);
 
         /// <inheritdoc />
         public override string GetDataTypeName(
             int ordinal
-        ) => inner.GetDataTypeName(ordinal);
+        ) => _inner.GetDataTypeName(ordinal);
 
         /// <inheritdoc />
         public override DateTime GetDateTime(
             int ordinal
-        ) => inner.GetDateTime(ordinal);
+        ) => _inner.GetDateTime(ordinal);
 
         /// <inheritdoc />
         public override decimal GetDecimal(
             int ordinal
-        ) => inner.GetDecimal(ordinal);
+        ) => _inner.GetDecimal(ordinal);
 
         /// <inheritdoc />
         public override double GetDouble(
             int ordinal
-        ) => inner.GetDouble(ordinal);
+        ) => _inner.GetDouble(ordinal);
 
         /// <inheritdoc />
         public override Type GetFieldType(
             int ordinal
-        ) => inner.GetFieldType(ordinal);
+        ) => _inner.GetFieldType(ordinal);
 
         /// <inheritdoc />
         public override float GetFloat(
             int ordinal
-        ) => inner.GetFloat(ordinal);
+        ) => _inner.GetFloat(ordinal);
 
         /// <inheritdoc />
         public override Guid GetGuid(
             int ordinal
-        ) => inner.GetGuid(ordinal);
+        ) => _inner.GetGuid(ordinal);
 
         /// <inheritdoc />
         public override short GetInt16(
             int ordinal
-        ) => inner.GetInt16(ordinal);
+        ) => _inner.GetInt16(ordinal);
 
         /// <inheritdoc />
         public override int GetInt32(
             int ordinal
-        ) => inner.GetInt32(ordinal);
+        ) => _inner.GetInt32(ordinal);
 
         /// <inheritdoc />
         public override long GetInt64(
             int ordinal
-        ) => inner.GetInt64(ordinal);
+        ) => _inner.GetInt64(ordinal);
 
         /// <inheritdoc />
         public override string GetName(
             int ordinal
-        ) => inner.GetName(ordinal);
+        ) => _inner.GetName(ordinal);
 
         /// <inheritdoc />
         public override int GetOrdinal(
             string name
-        ) => inner.GetOrdinal(name);
+        ) => _inner.GetOrdinal(name);
 
         /// <inheritdoc />
         public override string GetString(
             int ordinal
-        ) => inner.GetString(ordinal);
+        ) => _inner.GetString(ordinal);
 
         /// <inheritdoc />
         public override object GetValue(
             int ordinal
-        ) => inner.GetValue(ordinal);
+        ) => _inner.GetValue(ordinal);
 
         /// <inheritdoc />
         public override int GetValues(
             object[] values
-        ) => inner.GetValues(values);
+        ) => _inner.GetValues(values);
 
         /// <inheritdoc />
         public override bool IsDBNull(
             int ordinal
-        ) => inner.IsDBNull(ordinal);
+        ) => _inner.IsDBNull(ordinal);
 
         /// <inheritdoc />
-        public override IEnumerator GetEnumerator() => inner.GetEnumerator();
+        public override IEnumerator GetEnumerator() => _inner.GetEnumerator();
 
         /// <inheritdoc />
-        public override bool Read() => inner.Read();
+        public override bool Read() => _inner.Read();
 
         /// <inheritdoc />
-        public override bool NextResult() => inner.NextResult();
+        public override bool NextResult() => _inner.NextResult();
 
         /// <inheritdoc />
         public override Task<bool> ReadAsync(
             CancellationToken cancellationToken
         )
         {
-            connection.BeforeRead?.Invoke();
+            _connection.BeforeRead?.Invoke();
             cancellationToken.ThrowIfCancellationRequested();
 
-            return inner.ReadAsync(cancellationToken);
+            return _inner.ReadAsync(cancellationToken);
         }
 
         /// <inheritdoc />
@@ -796,11 +857,11 @@ internal sealed class CatalogStatementTestConnection : DbConnection
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            return inner.NextResultAsync(cancellationToken);
+            return _inner.NextResultAsync(cancellationToken);
         }
 
         /// <inheritdoc />
-        public override void Close() => inner.Close();
+        public override void Close() => _inner.Close();
 
         /// <inheritdoc />
         protected override void Dispose(
@@ -810,11 +871,11 @@ internal sealed class CatalogStatementTestConnection : DbConnection
             if (disposing && !_disposed)
             {
                 _disposed = true;
-                inner.Dispose();
-                results.Dispose();
-                if (connection.CaptureObservations)
+                _inner.Dispose();
+                _results.Dispose();
+                if (_connection.CaptureObservations)
                 {
-                    connection.ReadersDisposed++;
+                    _connection.ReadersDisposed++;
                 }
             }
 

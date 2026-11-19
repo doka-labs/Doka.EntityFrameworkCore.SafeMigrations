@@ -169,19 +169,22 @@ bounds through sequential commands. Whole-run allocations also depend on
 input/model size, assessments,
 and returned catalog inventory; bounded requests do not imply constant memory
 or an operation-count-only bound. Server-provider matrix tests retain
-same-runner live p95 evidence for clean and 1,000-table noisy catalogs, plus
+deterministic scope contracts for clean and 1,000-table noisy catalogs, plus
 qualification with 100,000 ordered mixed operations spanning every observed
 state and planned action. SQLite separately budgets whole-catalog analysis at
 200 tables and at 1,000 indexed, foreign-key-bearing tables. Model-managed-data benchmarks measure
 intent/fingerprint and provider generation/analyzer allocations at 384 row
 transitions. Live gates execute and replay 50,000 mixed row transitions using
 the production row/cell batching limits and persist command/allocation evidence.
+Statistical native catalog and runtime measurements live in explicitly selected
+provider BenchmarkDotNet modes.
 
 The five isolated benchmark executables use BenchmarkDotNet 0.15.8 rather than
 a shared handwritten timer or budget evaluator. Shared configuration and
 execution/export validation are compile-linked, not a cross-provider runtime
-dependency. CI's all-case `Dry` job verifies execution and native full JSON
-evidence only; numeric performance is not a gate. Process-wide managed
+dependency. Explicitly requested Dry runs verify execution and native full JSON;
+ordinary build/test/cleanup and default CI do not start measurement. Numeric
+performance is not a gate. Process-wide managed
 allocation diagnostics do not establish constant, peak or native memory bounds.
 
 ## Verification
@@ -196,7 +199,8 @@ The vertical-slice architecture remains conformant only while:
    status maintained according to the release process;
 5. locked Release build and format checks pass;
 6. unit, provider live, EF tooling and package-consumer gates remain green,
-   and complete BenchmarkDotNet execution/export and live performance evidence is retained;
+   with complete BenchmarkDotNet execution/export evidence whenever measurement
+   is explicitly requested;
 7. project references, namespace ownership, focused tests, and code review keep
    feature behavior out of aggregate dispatchers and shared fixtures.
 

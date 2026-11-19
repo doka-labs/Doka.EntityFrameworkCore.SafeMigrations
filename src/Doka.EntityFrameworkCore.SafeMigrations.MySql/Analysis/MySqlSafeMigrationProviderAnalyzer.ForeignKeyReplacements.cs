@@ -238,7 +238,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
                 (_acceptedForeignKeyRemovalOwners ??=
                         new HashSet<(string? Schema, string Table)>(PhysicalOwnerComparer))
                     .Add(
-                        (removedKey.Item1, removedKey.Item2));
+                        (removedKey.Item1, removedKey.Table));
 
                 _acceptedForeignKeyCreations?.Remove(removedKey);
                 break;
@@ -414,35 +414,37 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         for (var index = 0; index < operations.Count; index++)
         {
             var operation = operations[index];
-            if (operation.Intent is DropForeignKeyIntent drop)
+            switch (operation.Intent)
             {
-                var schema = NormalizeProofSchema(drop.Schema);
+                case DropForeignKeyIntent drop:
+                    var schema = NormalizeProofSchema(drop.Schema);
 
-                (removals ??= new HashSet<(string? Schema, string Table, string Name)>(PhysicalMemberComparer)).Add(
-                    (schema, drop.Table, drop.Name));
+                    (removals ??= new HashSet<(string? Schema, string Table, string Name)>(PhysicalMemberComparer)).Add(
+                        (schema, drop.Table, drop.Name));
 
-                (removalOwners ??= new HashSet<(string? Schema, string Table)>(PhysicalOwnerComparer)).Add(
-                    (schema, drop.Table));
-            }
-            else if (operation.Intent is EnsureForeignKeyIntent
+                    (removalOwners ??= new HashSet<(string? Schema, string Table)>(PhysicalOwnerComparer)).Add(
+                        (schema, drop.Table));
+
+                    break;
+                case EnsureForeignKeyIntent
                 {
                     Definition.Columns.Count: <= MySqlProjectedIndexPhysicalShape.MaximumKeyParts,
-                } ensure
-                && TryGetForeignKeyReplacementSource(
+                } ensure when TryGetForeignKeyReplacementSource(
                     ensure.Definition,
                     analyses[index],
                     removals,
                     removalOwners,
-                    out var sourceExists))
-            {
-                // WHY: A caller may reuse an immutable operation instance in a
-                // stream. Its source certificate is identical, not a second key.
-                if ((candidateIdentities ??= new HashSet<SafeMigrationOperation>(ReferenceEqualityComparer.Instance))
-                    .Add(
-                        operation))
-                {
-                    (candidates ??= []).Add((operation, sourceExists));
-                }
+                    out var sourceExists):
+                    // WHY: A caller may reuse an immutable operation instance in a
+                    // stream. Its source certificate is identical, not a second key.
+                    if ((candidateIdentities ??=
+                            new HashSet<SafeMigrationOperation>(ReferenceEqualityComparer.Instance))
+                        .Add(operation))
+                    {
+                        (candidates ??= []).Add((operation, sourceExists));
+                    }
+
+                    break;
             }
         }
 
@@ -473,9 +475,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
 
                 return new SafeMigrationCatalogProbeStatement(1, 0, ordinal);
             },
-            async (reader, ordinal, _, token) =>
+            async (reader, ordinal, _, callbackCancellationToken) =>
             {
-                if (!await reader.ReadAsync(token))
+                if (!await reader.ReadAsync(callbackCancellationToken))
                 {
                     throw new InvalidOperationException("MySQL omitted an owned FK replacement certificate.");
                 }
@@ -501,23 +503,28 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
 
                         (matchingObjectNames ??= []).Add(reader.GetString(2));
                     }
-                } while (await reader.ReadAsync(token));
+                } while (await reader.ReadAsync(callbackCancellationToken));
 
                 if (eligible)
                 {
-                    var candidate = candidates[ordinal];
-                    var operation = candidate.Operation;
+                    var (operation, sourceExists) = candidates[ordinal];
                     captured.Add(
                         operation,
                         new ForeignKeyReplacementProof(
                             nullableMask,
                             RowsSafe: false,
+
+                            // WHY: Retain fluent materialization and its existing snapshot
+                            // ownership rather than replacing this boundary with a spread.
+                            // ReSharper disable once UseCollectionExpression
                             matchingObjectNames?.ToArray(),
-                            candidate.SourceExists));
+                            sourceExists));
 
                     (rowCandidates ??= []).Add(operation);
                 }
             },
+            transaction: null,
+            SafeMigrationCatalogQueryLimits.MaximumParameters,
             cancellationToken);
 
         if (rowCandidates is not null)
@@ -534,15 +541,15 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
 
                     return new SafeMigrationCatalogProbeStatement(1, 0, ordinal);
                 },
-                async (reader, ordinal, _, token) =>
+                async (reader, ordinal, _, callbackCancellationToken) =>
                 {
-                    if (!await reader.ReadAsync(token))
+                    if (!await reader.ReadAsync(callbackCancellationToken))
                     {
                         throw new InvalidOperationException("MySQL omitted a qualified FK replacement row proof.");
                     }
 
                     var rowsSafe = Convert.ToBoolean(reader.GetValue(0), CultureInfo.InvariantCulture);
-                    if (await reader.ReadAsync(token))
+                    if (await reader.ReadAsync(callbackCancellationToken))
                     {
                         throw new InvalidOperationException(
                             "MySQL returned multiple qualified FK replacement row proofs.");
@@ -551,6 +558,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
                     var operation = rowCandidates[ordinal];
                     captured[operation] = captured[operation] with { RowsSafe = rowsSafe };
                 },
+                transaction: null,
+                SafeMigrationCatalogQueryLimits.MaximumParameters,
                 cancellationToken);
         }
 
@@ -680,9 +689,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < definition.Columns.Count; index++)
         {
-            if (_invalidatedForeignKeyColumns?.Contains((local.Item1, local.Item2, definition.Columns[index])) == true
+            if (_invalidatedForeignKeyColumns?.Contains((local.Item1, local.Table, definition.Columns[index])) == true
                 || _invalidatedForeignKeyColumns?.Contains(
-                    (principal.Item1, principal.Item2, definition.PrincipalColumns[index]))
+                    (principal.Item1, principal.PrincipalTable, definition.PrincipalColumns[index]))
                 == true)
             {
                 return false;
@@ -731,9 +740,20 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
     ) => MySqlTableIdentity.NormalizeDatabase(schema, _currentDatabase);
 
     /// <summary>Shares native owner equality across sparse source and accepted physical-removal inventories.</summary>
-    private sealed class PhysicalForeignKeyOwnerComparer(StringComparer tableComparer)
+    private sealed class PhysicalForeignKeyOwnerComparer
         : IEqualityComparer<(string? Schema, string Table)>
     {
+        private readonly StringComparer _tableComparer;
+
+        /// <summary>Retains native table equality independently of exact schema qualifiers.</summary>
+        /// <param name="tableComparer">The independently qualified table-name policy.</param>
+        private PhysicalForeignKeyOwnerComparer(
+            StringComparer tableComparer
+        )
+        {
+            _tableComparer = tableComparer;
+        }
+
         /// <summary>Gets case-sensitive mode-zero physical owner equality.</summary>
         internal static PhysicalForeignKeyOwnerComparer Instance { get; } = new(StringComparer.Ordinal);
 
@@ -745,7 +765,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         public bool Equals(
             (string? Schema, string Table) x,
             (string? Schema, string Table) y
-        ) => StringComparer.Ordinal.Equals(x.Schema, y.Schema) && tableComparer.Equals(x.Table, y.Table);
+        ) => StringComparer.Ordinal.Equals(x.Schema, y.Schema) && _tableComparer.Equals(x.Table, y.Table);
 
         /// <inheritdoc />
         public int GetHashCode(
@@ -754,7 +774,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
             value.Schema is null
                 ? 0
                 : StringComparer.Ordinal.GetHashCode(value.Schema),
-            tableComparer.GetHashCode(value.Table));
+            _tableComparer.GetHashCode(value.Table));
     }
 
     /// <summary>
@@ -774,9 +794,20 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
     );
 
     /// <summary>Preserves owner identity while matching physical column and FK names without case.</summary>
-    private sealed class PhysicalForeignKeyMemberComparer(StringComparer tableComparer)
+    private sealed class PhysicalForeignKeyMemberComparer
         : IEqualityComparer<(string? Schema, string Table, string Name)>
     {
+        private readonly StringComparer _tableComparer;
+
+        /// <summary>Retains table equality without changing case-insensitive column and FK identities.</summary>
+        /// <param name="tableComparer">The independently qualified table-name policy.</param>
+        private PhysicalForeignKeyMemberComparer(
+            StringComparer tableComparer
+        )
+        {
+            _tableComparer = tableComparer;
+        }
+
         // WHY: Column and FK names are case-insensitive on MySQL/MariaDB,
         // independently of the server's table-name policy. Folding the owners
         // would merge distinct physical tables on case-sensitive servers.
@@ -792,7 +823,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
             (string? Schema, string Table, string Name) x,
             (string? Schema, string Table, string Name) y
         ) => StringComparer.Ordinal.Equals(x.Schema, y.Schema)
-            && tableComparer.Equals(x.Table, y.Table)
+            && _tableComparer.Equals(x.Table, y.Table)
             && StringComparer.OrdinalIgnoreCase.Equals(x.Name, y.Name);
 
         /// <inheritdoc />
@@ -802,7 +833,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
             value.Schema is null
                 ? 0
                 : StringComparer.Ordinal.GetHashCode(value.Schema),
-            tableComparer.GetHashCode(value.Table),
+            _tableComparer.GetHashCode(value.Table),
             StringComparer.OrdinalIgnoreCase.GetHashCode(value.Name));
     }
 }

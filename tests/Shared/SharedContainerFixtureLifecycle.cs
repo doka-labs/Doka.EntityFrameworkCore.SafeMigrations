@@ -7,7 +7,7 @@ internal sealed class SharedContainerFixtureLifecycle<TFixture>
 {
     private readonly Func<TFixture> _createFixture;
     private readonly List<Exception> _failures = [];
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
     private Task? _disposal;
     private TFixture? _fixture;
     private Task? _initialization;

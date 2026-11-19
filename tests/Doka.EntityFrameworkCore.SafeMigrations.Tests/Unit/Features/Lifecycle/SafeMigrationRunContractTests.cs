@@ -1,5 +1,8 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
+/// <summary>
+/// Verifies report schemas, stable wire codes and immutable run-option contracts across known and unknown diagnostics.
+/// </summary>
 public sealed partial class SafeMigrationRunContractTests
 {
     private static readonly HashSet<string> s_supportedSchemaKeywords = new(StringComparer.Ordinal)
@@ -99,6 +102,18 @@ public sealed partial class SafeMigrationRunContractTests
         Assert.Equal(expectedFingerprint, options.ExpectedModelFingerprint);
     }
 
+    /// <summary>
+    /// Rejects malformed prefixes, provider identities and noncanonical SHA-256 digests before a run can start.
+    /// </summary>
+    /// <param name="prefix">
+    /// The independently malformed model-fingerprint prefix or provider identity.
+    /// </param>
+    /// <param name="digestLength">
+    /// The supplied digest character count.
+    /// </param>
+    /// <param name="digestCharacter">
+    /// The supplied digest character, including rejected uppercase or nonhexadecimal values.
+    /// </param>
     [Theory]
     [InlineData("", 0, 'a')]
     [InlineData(" ", 0, 'a')]
@@ -120,15 +135,26 @@ public sealed partial class SafeMigrationRunContractTests
         char digestCharacter
     )
     {
+        // Arrange
         var fingerprint = prefix + new string(digestCharacter, digestLength);
 
-        var exception = Assert.Throws<ArgumentException>(() => new SafeMigrationRunOptions(
+        // Act
+        var exception = Record.Exception(() => new SafeMigrationRunOptions(
             "instance",
             expectedModelFingerprint: fingerprint));
 
-        Assert.Equal("expectedModelFingerprint", exception.ParamName);
+        // Assert
+        var failure = Assert.IsType<ArgumentException>(exception);
+
+        Assert.Equal("expectedModelFingerprint", failure.ParamName);
     }
 
+    /// <summary>
+    /// Retains an explicitly absent fingerprint or the complete accepted canonical model-fingerprint contract.
+    /// </summary>
+    /// <param name="requireExpectedFingerprint">
+    /// Whether the run includes a canonical expected fingerprint instead of omitting it.
+    /// </param>
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -136,18 +162,25 @@ public sealed partial class SafeMigrationRunContractTests
         bool requireExpectedFingerprint
     )
     {
+        // Arrange
         var fingerprint = requireExpectedFingerprint
             ? ModelFingerprint()
             : null;
 
+        // Act
         var options = new SafeMigrationRunOptions("instance", expectedModelFingerprint: fingerprint);
 
+        // Assert
         Assert.Equal(fingerprint, options.ExpectedModelFingerprint);
     }
 
+    /// <summary>
+    /// Snapshots caller-owned assessment data and preserves the source instant while normalizing the report to UTC.
+    /// </summary>
     [Fact]
     public void Report_IsVersionedImmutableAndNormalizesTimestampToUtc()
     {
+        // Arrange
         var assessments = new List<SafeMigrationAssessment>
         {
             new(
@@ -172,6 +205,7 @@ public sealed partial class SafeMigrationRunContractTests
             0,
             TimeSpan.FromHours(2));
 
+        // Act
         var report = new SafeMigrationRunReport(
             SafeMigrationReportMode.Preflight,
             SafeMigrationReportStatus.Ready,
@@ -193,6 +227,7 @@ public sealed partial class SafeMigrationRunContractTests
 
         assessments.Clear();
 
+        // Assert
         Assert.Equal(SafeMigrationRunReport.CurrentSchemaVersion, report.SchemaVersion);
         Assert.Equal(TimeSpan.Zero, report.GeneratedAtUtc.Offset);
         Assert.Equal(localTimestamp.UtcDateTime, report.GeneratedAtUtc.UtcDateTime);
@@ -263,9 +298,13 @@ public sealed partial class SafeMigrationRunContractTests
         Assert.Equal(Encoding.UTF8.GetString(bytes), Encoding.UTF8.GetString(stream.ToArray()));
     }
 
+    /// <summary>
+    /// Validates the emitted blocking-view object surfaces and enum values against the packaged closed JSON schema.
+    /// </summary>
     [Fact]
     public void ReportViewJson_MatchesThePackagedClosedSchema()
     {
+        // Arrange
         var assessment = new SafeMigrationAssessment(
             7,
             typeof(SafeMigrationOperation).FullName!,
@@ -285,16 +324,19 @@ public sealed partial class SafeMigrationRunContractTests
             status: SafeMigrationReportStatus.Blocked,
             assessments: [assessment]);
 
+        using var schema = LoadReportViewSchema();
+
+        // Act
         using var document = JsonDocument.Parse(
             SafeMigrationReportJson.SerializeToUtf8Bytes(
                 report,
                 SafeMigrationReportSelection.BlockingOnly));
 
-        using var schema = LoadReportViewSchema();
         var root = document.RootElement;
         var schemaRoot = schema.RootElement;
         var definitions = schemaRoot.GetProperty("$defs");
 
+        // Assert
         AssertSchemaEnum(
             schemaRoot
                 .GetProperty("properties")
@@ -456,9 +498,14 @@ public sealed partial class SafeMigrationRunContractTests
     [Fact]
     public void EnvironmentAcceptsSqlServerEngineFamily()
     {
-        var environment = new SafeMigrationProviderEnvironment("efcore_sqlserver", "sqlserver", "16.0");
+        // Arrange
+        const string engineFamily = "sqlserver";
 
-        Assert.Equal("sqlserver", environment.EngineFamily);
+        // Act
+        var environment = new SafeMigrationProviderEnvironment("efcore_sqlserver", engineFamily, "16.0");
+
+        // Assert
+        Assert.Equal(engineFamily, environment.EngineFamily);
     }
 
     /// <summary>Rejects an engine family that is absent from the packaged schema.</summary>
@@ -678,7 +725,12 @@ public sealed partial class SafeMigrationRunContractTests
             .Select(static property => property.Name)
             .Order(StringComparer.Ordinal);
 
+        // WHY: The immutable JsonElement property inventory is repeatable; both comparisons use its sorted names.
+        // ReSharper disable once PossibleMultipleEnumeration
         Assert.Equal(properties, required);
+
+        // WHY: Reuse the same immutable schema inventory without introducing a warning-only array snapshot.
+        // ReSharper disable once PossibleMultipleEnumeration
         Assert.Equal(properties, serialized);
     }
 

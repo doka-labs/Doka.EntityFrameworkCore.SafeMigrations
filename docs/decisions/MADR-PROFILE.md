@@ -41,7 +41,7 @@ Every ADR MUST begin with these flat YAML keys in this exact order:
 id: D-NNN
 status: proposed
 date: YYYY-MM-DD
-decision-makers: [Dominic Kalkbrenner]
+decision-makers: ["Dominic Kalkbrenner"]
 consulted: []
 informed: ["@doka-labs/core-maintainers"]
 scope: "Bounded decision scope"
@@ -64,14 +64,18 @@ an original-record-metadata migration block. Historical changes belong under
 Decision History; implementation detail belongs under More Information or
 Implementation References.
 
-`decision-makers` identifies the accountable decision authority; its presence
-does not mean that a proposal has been approved. `consulted` names actual
-consultation participants. `informed` names the maintainer-designated audience
-kept up to date through one-way communication. For SafeMigrations, use the
-core-maintainers team declared in [CODEOWNERS](../../.github/CODEOWNERS).
-An entry does not prove notification delivery, consultation, or approval.
-Do not invent participants; empty lists are valid when no consultation or
-informed audience has been designated.
+`decision-makers` identifies the actual named decision authority; its presence
+does not mean that a proposal has been approved. It MUST be nonempty.
+`consulted` names actual consultation participants and MAY be empty.
+`informed` MUST be exactly `["@doka-labs/core-maintainers"]`, the audience
+declared in [CODEOWNERS](../../.github/CODEOWNERS). An entry does not prove
+notification delivery, consultation, or approval. Do not invent participants.
+
+`date` MUST be a valid `YYYY-MM-DD` calendar date identifying the most recent
+recorded update, matching the final Decision History entry. The first history
+entry preserves the original recording date. A later profile migration appends
+its actual event date; it does not backdate the migration or replace the
+original recording or acceptance facts.
 
 Allowed statuses are:
 
@@ -83,15 +87,21 @@ Allowed statuses are:
 - `deprecated`: historically relevant but no longer recommended.
 - `superseded`: replaced by another ADR and paired with `superseded-by`.
 
-The normal status path is `proposed -> accepted -> implemented`; a proposal
-MAY instead become `rejected`. An accepted or implemented decision MAY become
-deprecated or superseded. Metadata represents the current state; Decision
-History records the transitions.
+Only these transitions are permitted:
+
+- `proposed -> accepted` or `proposed -> rejected`;
+- `accepted -> implemented`, `accepted -> deprecated`, or `accepted -> superseded`;
+- `implemented -> deprecated` or `implemented -> superseded`.
+
+Metadata represents the current state; Decision History records the transitions.
 
 An existing implementation is not proof that its retrospective explanation
 has been accepted. Do not backdate records or infer approval from passing
-tests. The initial SafeMigrations recording date is 2026-08-26; later profile
-migration does not rewrite the original decision date.
+tests. A historical record that lacks earlier acceptance-transition evidence
+MUST identify that limitation rather than inventing events to complete a chain.
+Its retained historical status is not evidence of a new approval. Newly authored
+records start at proposed and require explicit acceptance before implementation
+confirmation can promote them.
 
 ## Section Contract
 
@@ -130,8 +140,8 @@ It MUST NOT silently authorize new dependencies or external operations.
 
 ## Symmetric Trade-offs
 
-Every considered option MUST have a same-named H3 section under Pros and Cons
-of the Options. Each option MUST contain at least one `Good, because ...` and
+Every considered option MUST have exactly one same-named H3 section under Pros
+and Cons of the Options, in the same order. Each option MUST contain at least one `Good, because ...` and
 one `Bad, because ...` bullet. Consequences MUST also contain both.
 
 Alternatives must be credible choices for the stated problem. Explain why a
@@ -175,7 +185,7 @@ their history together for a real relationship change.
 External URLs MUST appear only under Sources. Every external entry MUST use:
 
 ```text
-- Source title (`PRIMARY_SOURCE_URL`; primary source; retrieved YYYY-MM-DD)
+- [Source title](PRIMARY_SOURCE_URL) (primary source; retrieved YYYY-MM-DD)
 ```
 
 Use vendor documentation, official specifications, source repositories, or
@@ -199,13 +209,19 @@ runbook and link them rather than creating a second independent procedure.
 History entries MUST use:
 
 ```text
-- YYYY-MM-DD: Description of the decision or status change.
+- YYYY-MM-DD: Decision recorded with status proposed.
+- YYYY-MM-DD: Status changed from proposed to accepted.
+- YYYY-MM-DD: Status changed from accepted to implemented.
+- YYYY-MM-DD: Description of another evidenced update.
 ```
 
-The first entry MUST be `Decision recorded with status <status>.`. A status
-change MUST be `Status changed from <old> to <new>.`, followed by the reason
-and review evidence where available. The history must agree with current
-metadata and the allowed transitions.
+The first entry MUST use `Decision recorded with status <status>.`, retaining
+the actual initial state of a historical record. Status changes MUST use
+`Status changed from <old> to <new>.`; reasons and review evidence may follow
+as separate dated events. All dates MUST be valid and chronologically
+nondecreasing. The final event date MUST equal metadata `date`, and the recorded
+chain MUST end at the retained metadata status. Missing earlier evidence is
+identified explicitly, never manufactured.
 
 Record substantive corrections and profile migrations without erasing the
 earlier history. A retrospective record must say that implementation predates
@@ -237,6 +253,7 @@ contract with the tooling distinction above.
 - [Doka MADR Enterprise Profile 1.0](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/cb4b83b66d280dd360daf892323d7c7bd370b03b/docs/decisions/MADR-PROFILE.md) (primary source; retrieved 2026-08-26)
 - [Doka ADR template](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/cb4b83b66d280dd360daf892323d7c7bd370b03b/docs/decisions/adr-template.md) (primary source; retrieved 2026-08-26)
 - [MADR 4.0.0 full template](https://github.com/adr/madr/blob/4.0.0/template/adr-template.md) (primary source; retrieved 2026-08-26)
+- [MADR 4.0.0 last-update date and decision outcome](https://raw.githubusercontent.com/adr/madr/4.0.0/template/adr-template.md) (primary source; retrieved 2026-11-19)
 - [MADR 4.0.0 license](https://github.com/adr/madr/blob/4.0.0/LICENSE) (primary source; retrieved 2026-08-26)
 
 Upstream MADR offers MIT or CC0-1.0; this adaptation uses the CC0-1.0

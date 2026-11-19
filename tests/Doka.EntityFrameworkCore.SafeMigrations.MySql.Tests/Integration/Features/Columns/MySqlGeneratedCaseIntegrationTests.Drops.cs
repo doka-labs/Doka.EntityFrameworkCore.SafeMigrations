@@ -268,6 +268,9 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         var operations = builder
             .Operations
             .Cast<SafeMigrationOperation>()
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         // Act
@@ -617,6 +620,9 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         operations,
         Enumerable
             .Repeat<IModel?>(model, operations.Count)
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray(),
         cancellationToken);
 
@@ -646,8 +652,14 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     }
 
     /// <summary>Provides a bounded target model whose generated contract is never itself native evidence.</summary>
-    private sealed class GeneratedDropModelContext(DbContextOptions options) : DbContext(options)
+    private sealed class GeneratedDropModelContext : DbContext
     {
+        /// <summary>Initializes the explicit dependencies of this isolated test helper.</summary>
+        /// <param name="options">The isolated model and provider options.</param>
+        public GeneratedDropModelContext(
+            DbContextOptions options
+        ) : base(options) { }
+
         /// <inheritdoc />
         protected override void OnModelCreating(
             ModelBuilder modelBuilder

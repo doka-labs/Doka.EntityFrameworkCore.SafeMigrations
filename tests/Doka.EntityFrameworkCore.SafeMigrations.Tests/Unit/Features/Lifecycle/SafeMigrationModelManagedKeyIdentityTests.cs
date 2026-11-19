@@ -454,8 +454,19 @@ public sealed partial class SafeMigrationModelManagedKeyIdentityTests
     }
 
     /// <summary>Separates ordinal owner identity from explicitly opted-in ordinal-ignore-case columns.</summary>
-    private sealed class ColumnKeyNormalizer(bool insensitive) : ISafeMigrationProviderObjectIdentityNormalizer
+    private sealed class ColumnKeyNormalizer : ISafeMigrationProviderObjectIdentityNormalizer
     {
+        private readonly bool _insensitive;
+
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="insensitive">The supplied insensitive for this fixture.</param>
+        public ColumnKeyNormalizer(
+            bool insensitive
+        )
+        {
+            _insensitive = insensitive;
+        }
+
         /// <summary>Gets the number of typed-column canonicalization calls.</summary>
         public int ColumnNormalizationCalls { get; private set; }
 
@@ -463,7 +474,7 @@ public sealed partial class SafeMigrationModelManagedKeyIdentityTests
         public StringComparer IdentifierComparer => StringComparer.Ordinal;
 
         /// <inheritdoc />
-        public StringComparer ColumnIdentifierComparer => insensitive
+        public StringComparer ColumnIdentifierComparer => _insensitive
             ? StringComparer.OrdinalIgnoreCase
             : StringComparer.Ordinal;
 
@@ -479,7 +490,7 @@ public sealed partial class SafeMigrationModelManagedKeyIdentityTests
         {
             ColumnNormalizationCalls++;
 
-            return insensitive
+            return _insensitive
                 ? SafeMigrationModelManagedKeyIdentity.NormalizeOrdinalIgnoreCase(identifier)
                 : identifier;
         }

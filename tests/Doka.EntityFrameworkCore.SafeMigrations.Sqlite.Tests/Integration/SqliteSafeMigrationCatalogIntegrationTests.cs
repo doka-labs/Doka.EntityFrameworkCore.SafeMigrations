@@ -1,5 +1,8 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 
+/// <summary>
+/// Provides isolated SQLite coverage for safe migration catalog integration.
+/// </summary>
 public abstract partial class SqliteSafeMigrationCatalogIntegrationTests
 {
     /// <summary>Counts real version queries, executed once at the start of every catalog capture.</summary>

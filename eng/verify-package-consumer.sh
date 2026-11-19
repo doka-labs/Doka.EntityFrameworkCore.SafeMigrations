@@ -170,6 +170,7 @@ mkdir -p "$work_dir/.config" "$work_dir/eng/package-consumer"
 cp "$script_dir/../.config/dotnet-tools.json" "$work_dir/.config/dotnet-tools.json"
 cp "$script_dir/../.editorconfig" "$work_dir/.editorconfig"
 cp "$script_dir/../Directory.Build.props" "$work_dir/Directory.Build.props"
+cp "$script_dir/../NuGet.config" "$work_dir/NuGet.config"
 cp "$script_dir/../global.json" "$work_dir/global.json"
 cp "$script_dir/Directory.Build.props" "$work_dir/eng/Directory.Build.props"
 cp "$script_dir/package-consumer/Directory.Build.props" \

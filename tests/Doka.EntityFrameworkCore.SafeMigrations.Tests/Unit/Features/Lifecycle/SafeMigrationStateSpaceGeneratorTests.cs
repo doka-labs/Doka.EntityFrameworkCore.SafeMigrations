@@ -1,17 +1,26 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
+/// <summary>
+/// Pins deterministic pairwise scenario coverage and rejection of invalid dimension identities before generation.
+/// </summary>
 public sealed class SafeMigrationStateSpaceGeneratorTests
 {
     private const int FixedSeed = 0x5AFE2026;
 
+    /// <summary>
+    /// Produces reproducible unique scenarios and covers every independent pair of declared dimension values.
+    /// </summary>
     [Fact]
     public void FixedSeed_IsReproducibleAndCoversEveryDimensionPair()
     {
+        // Arrange
         var dimensions = CreateDimensions();
 
+        // Act
         var first = SafeMigrationStateSpaceGenerator.GeneratePairwise(dimensions, FixedSeed);
         var second = SafeMigrationStateSpaceGenerator.GeneratePairwise(dimensions, FixedSeed);
 
+        // Assert
         Assert.NotEmpty(first);
         Assert.Equal(Serialize(first), Serialize(second));
         Assert.Equal(
@@ -39,20 +48,30 @@ public sealed class SafeMigrationStateSpaceGeneratorTests
         }
     }
 
-    [Fact]
-    public void InvalidDimensionContracts_FailBeforeGeneration()
+    /// <summary>Rejects each invalid dimension contract before generating a scenario.</summary>
+    /// <param name="duplicate">Whether two dimensions reuse a name instead of supplying too few dimensions.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void InvalidDimensionContracts_FailBeforeGeneration(
+        bool duplicate
+    )
     {
-        Assert.Throws<ArgumentException>(() =>
-            SafeMigrationStateSpaceGenerator.GeneratePairwise(
-                [new SafeMigrationStateDimension("only", ["one"])],
-                FixedSeed));
-
-        Assert.Throws<ArgumentException>(() => SafeMigrationStateSpaceGenerator.GeneratePairwise(
+        // Arrange
+        SafeMigrationStateDimension[] dimensions = duplicate
+            ?
             [
                 new SafeMigrationStateDimension("duplicate", ["one"]),
                 new SafeMigrationStateDimension("duplicate", ["two"]),
-            ],
-            FixedSeed));
+            ]
+            : [new SafeMigrationStateDimension("only", ["one"])];
+
+        // Act
+        var exception = Record.Exception(() =>
+            SafeMigrationStateSpaceGenerator.GeneratePairwise(dimensions, FixedSeed));
+
+        // Assert
+        Assert.IsType<ArgumentException>(exception);
     }
 
     private static IReadOnlyList<SafeMigrationStateDimension> CreateDimensions() =>

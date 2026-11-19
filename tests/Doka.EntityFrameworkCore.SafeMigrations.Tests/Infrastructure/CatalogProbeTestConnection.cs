@@ -1,8 +1,3 @@
-using System.Collections;
-using System.Data;
-using System.Data.Common;
-using System.Diagnostics.CodeAnalysis;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
 /// <summary>Supplies deterministic independent-probe result sets without provider dependencies.</summary>
@@ -50,6 +45,21 @@ internal sealed class CatalogProbeTestConnection : DbConnection
 
     /// <summary>Gets or sets one synthetic response corruption.</summary>
     public string? Fault { get; init; }
+
+    /// <summary>Gets the controlled completion of each sequential command's actual disposal.</summary>
+    public List<Task> CommandDisposeCompletions { get; } = [];
+
+    /// <summary>Gets or initializes the native batch's actual disposal operation.</summary>
+    public Task BatchDisposeCompletion { get; init; } = Task.CompletedTask;
+
+    /// <summary>Gets or initializes the reader's actual disposal operation.</summary>
+    public Task ReaderDisposeCompletion { get; init; } = Task.CompletedTask;
+
+    /// <summary>Gets or initializes the signal published when actual reader disposal begins.</summary>
+    public TaskCompletionSource? ReaderDisposeStarted { get; init; }
+
+    /// <summary>Gets or initializes the signal published when a sequential command's disposal begins.</summary>
+    public TaskCompletionSource? CommandDisposeStarted { get; init; }
 
     /// <inheritdoc />
     [AllowNull]
@@ -166,18 +176,29 @@ internal sealed class CatalogProbeTestConnection : DbConnection
         return results;
     }
 
-    private sealed class ProbeTransaction(
-        CatalogProbeTestConnection connection,
-        IsolationLevel isolationLevel
-    ) : DbTransaction
+    private sealed class ProbeTransaction : DbTransaction
     {
+        private readonly CatalogProbeTestConnection _connection;
+        private readonly IsolationLevel _isolationLevel;
         private bool _disposed;
 
-        /// <inheritdoc />
-        public override IsolationLevel IsolationLevel => isolationLevel;
+        /// <summary>Initializes the transaction probe with its owner and authored isolation level.</summary>
+        /// <param name="connection">The owning probe connection.</param>
+        /// <param name="isolationLevel">The authored transaction isolation level.</param>
+        public ProbeTransaction(
+            CatalogProbeTestConnection connection,
+            IsolationLevel isolationLevel
+        )
+        {
+            _connection = connection;
+            _isolationLevel = isolationLevel;
+        }
 
         /// <inheritdoc />
-        protected override DbConnection DbConnection => connection;
+        public override IsolationLevel IsolationLevel => _isolationLevel;
+
+        /// <inheritdoc />
+        protected override DbConnection DbConnection => _connection;
 
         /// <inheritdoc />
         public override void Commit() { }
@@ -193,22 +214,35 @@ internal sealed class CatalogProbeTestConnection : DbConnection
             if (disposing && !_disposed)
             {
                 _disposed = true;
-                connection.TransactionDisposals++;
+                _connection.TransactionDisposals++;
             }
 
             base.Dispose(disposing);
         }
     }
 
-    private sealed class ProbeCommand(CatalogProbeTestConnection connection) : DbCommand
+    private sealed class ProbeCommand : DbCommand
     {
-        private readonly ProbeParameters _parameters = new();
+        private readonly CatalogProbeTestConnection _connection;
+        private readonly ProbeParameters _parameters;
         private bool _disposed;
         private DataSet? _results;
 
+        /// <summary>Initializes the command probe while retaining its borrowed connection identity.</summary>
+        /// <param name="connection">The owning probe connection.</param>
+        public ProbeCommand(
+            CatalogProbeTestConnection connection
+        )
+        {
+            _connection = connection;
+            _parameters = new ProbeParameters();
+            CommandText = string.Empty;
+            DbConnection = connection;
+        }
+
         /// <inheritdoc />
         [AllowNull]
-        public override string CommandText { get; set; } = string.Empty;
+        public override string CommandText { get; set; }
 
         /// <inheritdoc />
         public override int CommandTimeout { get; set; }
@@ -223,7 +257,7 @@ internal sealed class CatalogProbeTestConnection : DbConnection
         public override UpdateRowSource UpdatedRowSource { get; set; }
 
         /// <inheritdoc />
-        protected override DbConnection? DbConnection { get; set; } = connection;
+        protected override DbConnection? DbConnection { get; set; }
 
         /// <inheritdoc />
         protected override DbTransaction? DbTransaction { get; set; }
@@ -258,12 +292,17 @@ internal sealed class CatalogProbeTestConnection : DbConnection
         ) => Task.FromResult<DbDataReader>(Read(cancellationToken));
 
         private ProbeReader Read(
-            CancellationToken token
+            CancellationToken cancellationToken
         )
         {
-            _results = connection.Execute([CommandText], CommandTimeout, DbTransaction, native: false, token);
+            _results = _connection.Execute(
+                [CommandText],
+                CommandTimeout,
+                DbTransaction,
+                native: false,
+                cancellationToken);
 
-            return new ProbeReader(connection, _results.CreateDataReader());
+            return new ProbeReader(_connection, _results.CreateDataReader());
         }
 
         /// <inheritdoc />
@@ -275,24 +314,61 @@ internal sealed class CatalogProbeTestConnection : DbConnection
             {
                 _disposed = true;
                 _results?.Dispose();
-                connection.Disposals++;
+                _connection.Disposals++;
             }
 
             base.Dispose(disposing);
         }
+
+        /// <inheritdoc />
+        public override async ValueTask DisposeAsync()
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _connection.CommandDisposeStarted?.TrySetResult();
+            var completion = _connection.Disposals < _connection.CommandDisposeCompletions.Count
+                ? _connection.CommandDisposeCompletions[_connection.Disposals]
+                : Task.CompletedTask;
+
+            try
+            {
+                await completion;
+            }
+            finally
+            {
+                // WHY: The fake releases its real DataSet even when its controlled
+                // native-disposal result fails, keeping the test's resources owned.
+                await base.DisposeAsync();
+            }
+        }
     }
 
-    private sealed class ProbeBatch(CatalogProbeTestConnection connection) : DbBatch
+    private sealed class ProbeBatch : DbBatch
     {
-        private readonly ProbeBatchCommands _commands = new();
+        private readonly ProbeBatchCommands _commands;
+        private readonly CatalogProbeTestConnection _connection;
         private bool _disposed;
         private DataSet? _results;
+
+        /// <summary>Initializes the batch probe while retaining its borrowed connection identity.</summary>
+        /// <param name="connection">The owning probe connection.</param>
+        public ProbeBatch(
+            CatalogProbeTestConnection connection
+        )
+        {
+            _connection = connection;
+            _commands = new ProbeBatchCommands();
+            DbConnection = connection;
+        }
 
         /// <inheritdoc />
         public override int Timeout { get; set; }
 
         /// <inheritdoc />
-        protected override DbConnection? DbConnection { get; set; } = connection;
+        protected override DbConnection? DbConnection { get; set; }
 
         /// <inheritdoc />
         protected override DbTransaction? DbTransaction { get; set; }
@@ -342,19 +418,19 @@ internal sealed class CatalogProbeTestConnection : DbConnection
         ) => Task.FromResult<DbDataReader>(Read(cancellationToken));
 
         private ProbeReader Read(
-            CancellationToken token
+            CancellationToken cancellationToken
         )
         {
-            _results = connection.Execute(
+            _results = _connection.Execute(
                 _commands
                     .Select(command => command.CommandText)
                     .ToArray(),
                 Timeout,
                 DbTransaction,
                 native: true,
-                token);
+                cancellationToken);
 
-            return new ProbeReader(connection, _results.CreateDataReader());
+            return new ProbeReader(_connection, _results.CreateDataReader());
         }
 
         /// <inheritdoc />
@@ -364,54 +440,78 @@ internal sealed class CatalogProbeTestConnection : DbConnection
             {
                 _disposed = true;
                 _results?.Dispose();
-                connection.Disposals++;
+                _connection.Disposals++;
             }
 
             base.Dispose();
         }
+
+        /// <inheritdoc />
+        public override async ValueTask DisposeAsync()
+        {
+            try
+            {
+                await _connection.BatchDisposeCompletion;
+            }
+            finally
+            {
+                await base.DisposeAsync();
+            }
+        }
     }
 
-    private sealed class ProbeReader(
-        CatalogProbeTestConnection connection,
-        DataTableReader inner
-    ) : DbDataReader
+    private sealed class ProbeReader : DbDataReader
     {
+        private readonly CatalogProbeTestConnection _connection;
+        private readonly DataTableReader _inner;
         private bool _disposed;
+
+        /// <summary>Initializes the reader probe with its actual reader and controlled owner callbacks.</summary>
+        /// <param name="connection">The owning probe connection.</param>
+        /// <param name="inner">The actual table reader retained through controlled disposal.</param>
+        public ProbeReader(
+            CatalogProbeTestConnection connection,
+            DataTableReader inner
+        )
+        {
+            _connection = connection;
+            _inner = inner;
+        }
 
         /// <inheritdoc />
         public override object this[
             int ordinal
-        ] => inner[ordinal];
+        ] => _inner[ordinal];
 
         /// <inheritdoc />
         public override object this[
             string name
-        ] => inner[name];
+        ] => _inner[name];
 
         /// <inheritdoc />
-        public override int Depth => inner.Depth;
+        public override int Depth => _inner.Depth;
 
         /// <inheritdoc />
-        public override int FieldCount => inner.FieldCount;
+        public override int FieldCount => _inner.FieldCount;
 
         /// <inheritdoc />
-        public override bool HasRows => inner.HasRows;
+        public override bool HasRows => _inner.HasRows;
 
         /// <inheritdoc />
-        public override bool IsClosed => inner.IsClosed;
+        public override bool IsClosed => _inner.IsClosed;
 
         /// <inheritdoc />
-        public override int RecordsAffected => inner.RecordsAffected;
+        public override int RecordsAffected => _inner.RecordsAffected;
 
         /// <inheritdoc />
         public override bool GetBoolean(
             int ordinal
-        ) => inner.GetBoolean(ordinal);
+        ) => _inner.GetBoolean(ordinal);
 
         /// <inheritdoc />
         public override byte GetByte(
             int ordinal
-        ) => inner.GetByte(ordinal);
+        ) => _inner.GetByte(ordinal);
 
         /// <inheritdoc />
         public override long GetBytes(
@@ -420,12 +520,12 @@ internal sealed class CatalogProbeTestConnection : DbConnection
             byte[]? buffer,
             int bufferOffset,
             int length
-        ) => inner.GetBytes(ordinal, dataOffset, buffer, bufferOffset, length);
+        ) => _inner.GetBytes(ordinal, dataOffset, buffer, bufferOffset, length);
 
         /// <inheritdoc />
         public override char GetChar(
             int ordinal
-        ) => inner.GetChar(ordinal);
+        ) => _inner.GetChar(ordinal);
 
         /// <inheritdoc />
         public override long GetChars(
@@ -434,96 +534,96 @@ internal sealed class CatalogProbeTestConnection : DbConnection
             char[]? buffer,
             int bufferOffset,
             int length
-        ) => inner.GetChars(ordinal, dataOffset, buffer, bufferOffset, length);
+        ) => _inner.GetChars(ordinal, dataOffset, buffer, bufferOffset, length);
 
         /// <inheritdoc />
         public override string GetDataTypeName(
             int ordinal
-        ) => inner.GetDataTypeName(ordinal);
+        ) => _inner.GetDataTypeName(ordinal);
 
         /// <inheritdoc />
         public override DateTime GetDateTime(
             int ordinal
-        ) => inner.GetDateTime(ordinal);
+        ) => _inner.GetDateTime(ordinal);
 
         /// <inheritdoc />
         public override decimal GetDecimal(
             int ordinal
-        ) => inner.GetDecimal(ordinal);
+        ) => _inner.GetDecimal(ordinal);
 
         /// <inheritdoc />
         public override double GetDouble(
             int ordinal
-        ) => inner.GetDouble(ordinal);
+        ) => _inner.GetDouble(ordinal);
 
         /// <inheritdoc />
         public override Type GetFieldType(
             int ordinal
-        ) => inner.GetFieldType(ordinal);
+        ) => _inner.GetFieldType(ordinal);
 
         /// <inheritdoc />
         public override float GetFloat(
             int ordinal
-        ) => inner.GetFloat(ordinal);
+        ) => _inner.GetFloat(ordinal);
 
         /// <inheritdoc />
         public override Guid GetGuid(
             int ordinal
-        ) => inner.GetGuid(ordinal);
+        ) => _inner.GetGuid(ordinal);
 
         /// <inheritdoc />
         public override short GetInt16(
             int ordinal
-        ) => inner.GetInt16(ordinal);
+        ) => _inner.GetInt16(ordinal);
 
         /// <inheritdoc />
         public override int GetInt32(
             int ordinal
-        ) => inner.GetInt32(ordinal);
+        ) => _inner.GetInt32(ordinal);
 
         /// <inheritdoc />
         public override long GetInt64(
             int ordinal
-        ) => inner.GetInt64(ordinal);
+        ) => _inner.GetInt64(ordinal);
 
         /// <inheritdoc />
         public override string GetName(
             int ordinal
-        ) => inner.GetName(ordinal);
+        ) => _inner.GetName(ordinal);
 
         /// <inheritdoc />
         public override int GetOrdinal(
             string name
-        ) => inner.GetOrdinal(name);
+        ) => _inner.GetOrdinal(name);
 
         /// <inheritdoc />
         public override string GetString(
             int ordinal
-        ) => inner.GetString(ordinal);
+        ) => _inner.GetString(ordinal);
 
         /// <inheritdoc />
         public override object GetValue(
             int ordinal
-        ) => inner.GetValue(ordinal);
+        ) => _inner.GetValue(ordinal);
 
         /// <inheritdoc />
         public override int GetValues(
             object[] values
-        ) => inner.GetValues(values);
+        ) => _inner.GetValues(values);
 
         /// <inheritdoc />
         public override bool IsDBNull(
             int ordinal
-        ) => inner.IsDBNull(ordinal);
+        ) => _inner.IsDBNull(ordinal);
 
         /// <inheritdoc />
-        public override IEnumerator GetEnumerator() => inner.GetEnumerator();
+        public override IEnumerator GetEnumerator() => _inner.GetEnumerator();
 
         /// <inheritdoc />
-        public override bool Read() => inner.Read();
+        public override bool Read() => _inner.Read();
 
         /// <inheritdoc />
-        public override bool NextResult() => inner.NextResult();
+        public override bool NextResult() => _inner.NextResult();
 
         /// <inheritdoc />
         public override Task<bool> ReadAsync(
@@ -532,7 +632,7 @@ internal sealed class CatalogProbeTestConnection : DbConnection
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            return inner.ReadAsync(cancellationToken);
+            return _inner.ReadAsync(cancellationToken);
         }
 
         /// <inheritdoc />
@@ -542,11 +642,11 @@ internal sealed class CatalogProbeTestConnection : DbConnection
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            return inner.NextResultAsync(cancellationToken);
+            return _inner.NextResultAsync(cancellationToken);
         }
 
         /// <inheritdoc />
-        public override void Close() => inner.Close();
+        public override void Close() => _inner.Close();
 
         /// <inheritdoc />
         protected override void Dispose(
@@ -556,11 +656,26 @@ internal sealed class CatalogProbeTestConnection : DbConnection
             if (disposing && !_disposed)
             {
                 _disposed = true;
-                inner.Dispose();
-                connection.ReaderDisposals++;
+                _inner.Dispose();
+                _connection.ReaderDisposals++;
             }
 
             base.Dispose(disposing);
+        }
+
+        /// <inheritdoc />
+        public override async ValueTask DisposeAsync()
+        {
+            _connection.ReaderDisposeStarted?.TrySetResult();
+
+            try
+            {
+                await _connection.ReaderDisposeCompletion;
+            }
+            finally
+            {
+                await base.DisposeAsync();
+            }
         }
     }
 

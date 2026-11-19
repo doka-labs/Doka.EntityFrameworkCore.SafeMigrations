@@ -4,6 +4,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// Describes whether the provider has proven a lossless repair for the
 /// classified difference.
 /// </summary>
+[PublicAPI]
 public enum SafeMigrationRepairCapability
 {
     /// <summary>No lossless repair is available.</summary>

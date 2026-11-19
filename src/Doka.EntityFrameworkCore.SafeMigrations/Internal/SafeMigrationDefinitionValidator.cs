@@ -5,15 +5,9 @@ internal static class SafeMigrationDefinitionValidator
     public static string Required(
         string value,
         string parameterName
-    )
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            throw new ArgumentException("The value must not be empty or whitespace.", parameterName);
-        }
-
-        return value;
-    }
+    ) => string.IsNullOrWhiteSpace(value)
+        ? throw new ArgumentException("The value must not be empty or whitespace.", parameterName)
+        : value;
 
     public static string? Optional(
         string? value,
@@ -37,6 +31,8 @@ internal static class SafeMigrationDefinitionValidator
     {
         ArgumentNullException.ThrowIfNull(values);
 
+        // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+        // ReSharper disable once UseCollectionExpression
         var snapshot = values.ToArray();
         if (!allowEmpty
             && snapshot.Length == 0)
@@ -69,6 +65,8 @@ internal static class SafeMigrationDefinitionValidator
     {
         ArgumentNullException.ThrowIfNull(values);
 
+        // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+        // ReSharper disable once UseCollectionExpression
         var snapshot = values.ToArray();
         if (!allowEmpty
             && snapshot.Length == 0)
@@ -76,6 +74,8 @@ internal static class SafeMigrationDefinitionValidator
             throw new ArgumentException("At least one definition is required.", parameterName);
         }
 
+        // WHY: Public definition constructors must reject malformed runtime collections, not trust annotations.
+        // ReSharper disable once ConditionIsAlwaysTrueOrFalseAccordingToNullableAPIContract
         if (snapshot.Any(static value => value is null))
         {
             throw new ArgumentException("Definitions must not contain null values.", parameterName);

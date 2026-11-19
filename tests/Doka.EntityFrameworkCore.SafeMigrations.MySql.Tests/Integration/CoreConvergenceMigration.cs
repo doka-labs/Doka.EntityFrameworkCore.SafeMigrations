@@ -1,11 +1,15 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
+/// <summary>Defines the isolated forward-only core convergence and migration-history fixture.</summary>
 [DbContext(typeof(SafeMigrationDbContext))]
 [Migration(MigrationIdentifier)]
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public sealed class CoreConvergenceMigration : Migration
 {
+    /// <summary>Identifies the exact forward-only convergence migration in native history assertions.</summary>
     public const string MigrationIdentifier = "20260817000100_CoreConvergence";
 
+    /// <inheritdoc />
     protected override void Up(
         MigrationBuilder migrationBuilder
     )
@@ -37,6 +41,7 @@ public sealed class CoreConvergenceMigration : Migration
             policy: SafeMigrationPolicy.RepairIfSafe);
     }
 
+    /// <inheritdoc />
     protected override void Down(
         MigrationBuilder migrationBuilder
     ) => throw new NotSupportedException("The convergence baseline is forward-only and has no destructive Down path.");

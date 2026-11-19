@@ -11,6 +11,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql;
 /// mutates a caller-owned connection or data source. Every connection path
 /// must also satisfy Doka's matched-row and Binary16 wire-transport invariants.
 /// </remarks>
+[PublicAPI]
 public static class MySqlSafeMigrationOptionsBuilderExtensions
 {
     /// <summary>
@@ -23,6 +24,9 @@ public static class MySqlSafeMigrationOptionsBuilderExtensions
     /// <exception cref="InvalidOperationException">
     /// A configured caller-owned connection does not satisfy Doka's required connection contract.
     /// </exception>
+
+    // WHY: Preserve shipped API/XML identities; extension-block qualification currently fails RS0016.
+    // ReSharper disable once ConvertToExtensionBlock
     public static DbContextOptionsBuilder UseMySqlSafeMigrations(
         this DbContextOptionsBuilder optionsBuilder
     )
@@ -46,6 +50,9 @@ public static class MySqlSafeMigrationOptionsBuilderExtensions
     /// <exception cref="InvalidOperationException">
     /// A configured caller-owned connection does not satisfy Doka's required connection contract.
     /// </exception>
+
+    // WHY: Preserve shipped API/XML identities; extension-block qualification currently fails RS0016.
+    // ReSharper disable once ConvertToExtensionBlock
     public static DbContextOptionsBuilder UseMySqlSafeMigrations(
         this DbContextOptionsBuilder optionsBuilder,
         Action<SafeMigrationOptionsBuilder> configure
@@ -68,6 +75,9 @@ public static class MySqlSafeMigrationOptionsBuilderExtensions
     /// <exception cref="InvalidOperationException">
     /// A configured caller-owned connection does not satisfy Doka's required connection contract.
     /// </exception>
+
+    // WHY: Preserve shipped API/XML identities; extension-block qualification currently fails RS0016.
+    // ReSharper disable once ConvertToExtensionBlock
     public static DbContextOptionsBuilder UseMySqlSafeMigrations<TCanonicalMigrationContext>(
         this DbContextOptionsBuilder optionsBuilder
     )
@@ -96,6 +106,9 @@ public static class MySqlSafeMigrationOptionsBuilderExtensions
     /// <exception cref="InvalidOperationException">
     /// A configured caller-owned connection does not satisfy Doka's required connection contract.
     /// </exception>
+
+    // WHY: Preserve shipped API/XML identities; extension-block qualification currently fails RS0016.
+    // ReSharper disable once ConvertToExtensionBlock
     public static DbContextOptionsBuilder UseMySqlSafeMigrations<TCanonicalMigrationContext>(
         this DbContextOptionsBuilder optionsBuilder,
         Action<SafeMigrationOptionsBuilder> configure
@@ -120,6 +133,9 @@ public static class MySqlSafeMigrationOptionsBuilderExtensions
     /// <exception cref="InvalidOperationException">
     /// A configured caller-owned connection does not satisfy Doka's required connection contract.
     /// </exception>
+
+    // WHY: Preserve shipped API/XML identities; extension-block qualification currently fails RS0016.
+    // ReSharper disable once ConvertToExtensionBlock
     public static DbContextOptionsBuilder<TContext> UseMySqlSafeMigrations<TContext>(
         this DbContextOptionsBuilder<TContext> optionsBuilder
     )
@@ -143,6 +159,9 @@ public static class MySqlSafeMigrationOptionsBuilderExtensions
     /// <exception cref="InvalidOperationException">
     /// A configured caller-owned connection does not satisfy Doka's required connection contract.
     /// </exception>
+
+    // WHY: Preserve shipped API/XML identities; extension-block qualification currently fails RS0016.
+    // ReSharper disable once ConvertToExtensionBlock
     public static DbContextOptionsBuilder<TContext> UseMySqlSafeMigrations<TContext>(
         this DbContextOptionsBuilder<TContext> optionsBuilder,
         Action<SafeMigrationOptionsBuilder> configure
@@ -165,6 +184,9 @@ public static class MySqlSafeMigrationOptionsBuilderExtensions
     /// <exception cref="InvalidOperationException">
     /// A configured caller-owned connection does not satisfy Doka's required connection contract.
     /// </exception>
+
+    // WHY: Preserve shipped API/XML identities; extension-block qualification currently fails RS0016.
+    // ReSharper disable once ConvertToExtensionBlock
     public static DbContextOptionsBuilder<TContext> UseMySqlSafeMigrations<TContext, TCanonicalMigrationContext>(
         this DbContextOptionsBuilder<TContext> optionsBuilder
     )
@@ -195,6 +217,9 @@ public static class MySqlSafeMigrationOptionsBuilderExtensions
     /// <exception cref="InvalidOperationException">
     /// A configured caller-owned connection does not satisfy Doka's required connection contract.
     /// </exception>
+
+    // WHY: Preserve shipped API/XML identities; extension-block qualification currently fails RS0016.
+    // ReSharper disable once ConvertToExtensionBlock
     public static DbContextOptionsBuilder<TContext> UseMySqlSafeMigrations<TContext, TCanonicalMigrationContext>(
         this DbContextOptionsBuilder<TContext> optionsBuilder,
         Action<SafeMigrationOptionsBuilder> configure

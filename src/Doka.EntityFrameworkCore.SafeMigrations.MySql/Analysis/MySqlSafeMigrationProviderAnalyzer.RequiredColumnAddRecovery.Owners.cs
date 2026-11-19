@@ -123,10 +123,10 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                     parameters.Utf8PayloadBytes,
                     authored[offset].Ordinal);
             },
-            async (reader, offset, count, token) =>
+            async (reader, offset, count, callbackCancellationToken) =>
             {
                 var row = 0;
-                while (await reader.ReadAsync(token))
+                while (await reader.ReadAsync(callbackCancellationToken))
                 {
                     if (row >= count
                         || reader.GetInt32(0) != offset + row)
@@ -158,6 +158,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                         "The MySQL recovery owner query returned an invalid row count.");
                 }
             },
+            transaction: null,
+            SafeMigrationCatalogQueryLimits.MaximumParameters,
             cancellationToken);
 
         // WHY: The server folds table names under modes 1/2, not .NET's Unicode
@@ -212,8 +214,14 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         ArgumentNullException.ThrowIfNull(findings);
 
         Dictionary<string, HashSet<string>>? checks = null;
-        foreach (var finding in findings)
+
+        // WHY: Index this stable list while preserving its order and ownership.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var findingIndex = 0; findingIndex < findings.Count; findingIndex++)
         {
+            var finding = findings[findingIndex];
+
             if (finding.ObjectKind != SafeMigrationDatabaseObjectKind.CheckConstraint
                 || finding.Table is null
                 || !MySqlSafeMigrationCatalogSqlBuilder.IsRequiredColumnAddGuardNameCandidate(finding.Name)
@@ -238,8 +246,14 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
 
         HashSet<string>? columns = null;
         HashSet<string>? physicalOwners = null;
-        foreach (var operation in operations)
+
+        // WHY: Index this stable list while preserving its order and ownership.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var operationIndex = 0; operationIndex < operations.Count; operationIndex++)
         {
+            var operation = operations[operationIndex];
+
             if (operation is not SafeMigrationOperation { Intent: EnsureColumnIntent ensure } safe
                 || !MySqlSafeMigrationCatalogSqlBuilder.TargetsDatabase(ensure, currentDatabase)
                 || safe
@@ -284,7 +298,15 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
 
         return (authoredOwners
                 .Select(static owner => (Owner: owner.Key, Ordinal: owner.Value))
+
+                // WHY: Retain fluent materialization and its existing snapshot
+                // ownership rather than replacing this boundary with a spread.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray(),
+
+            // WHY: Retain fluent materialization and its existing snapshot
+            // ownership rather than replacing this boundary with a spread.
+            // ReSharper disable once UseCollectionExpression
             physicalOwners.ToArray());
     }
 }

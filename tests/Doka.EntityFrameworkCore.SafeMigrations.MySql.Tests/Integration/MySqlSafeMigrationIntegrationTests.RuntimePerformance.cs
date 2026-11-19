@@ -1,13 +1,9 @@
-using System.Runtime.InteropServices;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Exercises the RuntimePerformance migration contracts in an independent class collection.</summary>
 public sealed partial class MySqlRuntimePerformanceIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
-    private const int MeasuredRuntimeSampleCount = 3;
     private const int RuntimeOperationCount = MySqlRuntimeConvergenceMigration.TableCount * 18 - 1;
-    private static readonly JsonSerializerOptions s_runtimeSerializerOptions = new() { WriteIndented = true };
 
     /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
     /// <param name="fixture">The initialized shared native engine.</param>
@@ -15,8 +11,8 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests : MySqlSafeM
         MySqlEngineContainerFixture fixture
     ) : base(fixture) { }
 
-    /// <summary>Measures real migration application and replay against generic legacy starting states.</summary>
-    /// <param name="initialState">The catalog shape prepared before the measured migration.</param>
+    /// <summary>Verifies one real migration application and replay against each generic legacy starting state.</summary>
+    /// <param name="initialState">The catalog shape prepared before migration execution.</param>
     [Theory]
     [InlineData("empty")]
     [InlineData("matching")]
@@ -26,55 +22,54 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests : MySqlSafeM
         string initialState
     )
     {
-        var sampleCount = RuntimeSampleCount();
-        var samples = new List<RuntimeSample>(sampleCount);
+        // Arrange
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
+        await PrepareRuntimeCatalogAsync(connectionString, initialState, CancellationToken.None);
+        var observer = new MySqlRuntimeCommandInterceptor();
+        await using var context = CreateRuntimeContext(connectionString, observer);
+        await context.Database.OpenConnectionAsync(CancellationToken.None);
 
-        var results = await MeasureRuntimeSamplesAsync(
-            initialState,
-            samples,
-            cancellationToken: CancellationToken.None);
+        // Act
+        await context.Database.MigrateAsync(CancellationToken.None);
+        var executedCommands = observer.CommandCount;
+        var appliedBodies = observer.GuardedBodyCount;
+        var beforeReplay = await ReadRuntimeVerificationAsync(connectionString, CancellationToken.None);
+        observer.Reset();
+        await context.Database.MigrateAsync(CancellationToken.None);
+        var afterReplay = await ReadRuntimeVerificationAsync(connectionString, CancellationToken.None);
 
-        Assert.Equal(sampleCount, results.Count);
+        // Assert
+        // WHY: This is a deterministic transport-work budget, not a hardware-sensitive timing limit.
+        Assert.InRange(executedCommands, 1, RuntimeOperationCount * 14 + 5);
+        Assert.Equal(30, beforeReplay.Tables);
+        Assert.Equal(390, beforeReplay.Columns);
+        Assert.Equal(0, beforeReplay.InvalidColumnContracts);
+        Assert.Equal(30, beforeReplay.PrimaryKeys);
+        Assert.Equal(30, beforeReplay.UniqueConstraints);
+        Assert.Equal(30, beforeReplay.ParentIndexes);
+        Assert.Equal(29, beforeReplay.ForeignKeys);
+        Assert.Equal(2, beforeReplay.HistoryRows);
+        Assert.Equal(
+            initialState == "empty"
+                ? 0
+                : 30,
+            beforeReplay.Rows);
 
-        // WHY: Reject unbatched transport without fixing packing details or dumping full schema records on failure.
-        Assert.All(
-            results.Select(static result => result.ExecutedCommands),
-            commandCount =>
-                Assert.InRange(commandCount, 1, RuntimeOperationCount * 14 + 5));
-
-        Assert.All(
-            results,
-            result =>
-            {
-                Assert.Equal(30, result.Tables);
-                Assert.Equal(390, result.Columns);
-                Assert.Equal(0, result.InvalidColumnContracts);
-                Assert.Equal(30, result.PrimaryKeys);
-                Assert.Equal(30, result.UniqueConstraints);
-                Assert.Equal(30, result.ParentIndexes);
-                Assert.Equal(29, result.ForeignKeys);
-                Assert.Equal(2, result.HistoryRows);
-                Assert.Equal(
-                    initialState == "empty"
-                        ? 0
-                        : 30,
-                    result.Rows);
-
-                Assert.Equal(result.Rows, result.TotalRows);
-                Assert.Equal(0, result.ReplayBodies);
-                Assert.Equal(result.Rows, result.ReplayRows);
-                Assert.Equal(result.TotalRows, result.ReplayTotalRows);
-                Assert.Equal(result.HistoryRows, result.ReplayHistoryRows);
-                Assert.Equal(result.SchemaBeforeReplay, result.SchemaAfterReplay);
-                Assert.True(result.ExecutedCommands > 0);
-                Assert.Equal(RuntimeOperationCount, result.AppliedBodies);
-            });
+        Assert.Equal(beforeReplay.Rows, beforeReplay.TotalRows);
+        Assert.Equal(0, observer.GuardedBodyCount);
+        Assert.Equal(beforeReplay.Rows, afterReplay.Rows);
+        Assert.Equal(beforeReplay.TotalRows, afterReplay.TotalRows);
+        Assert.Equal(beforeReplay.HistoryRows, afterReplay.HistoryRows);
+        Assert.Equal(beforeReplay.SchemaBeforeReplay, afterReplay.SchemaBeforeReplay);
+        Assert.True(executedCommands > 0);
+        Assert.Equal(RuntimeOperationCount, appliedBodies);
     }
 
     /// <summary>Verifies setup failure prevents the guarded body and leaves the same session reusable.</summary>
     [Fact]
     public async Task RuntimeSetupFailure_PreventsBodyAndRecoversSameSession()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var observer = new MySqlRuntimeCommandInterceptor();
         observer.InjectFirstSetup(
@@ -83,8 +78,10 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests : MySqlSafeM
         await using var context = CreateRuntimeScopeProbeContext(connectionString, observer);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
 
+        // Act
         var result = await FailAndRecoverRuntimeAsync(context, observer, CancellationToken.None);
 
+        // Assert
         var exception = Assert.IsType<MySqlException>(result.Exception);
         Assert.Equal(1146, exception.Number);
         Assert.True(result.SetupWasInjected);
@@ -103,6 +100,7 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests : MySqlSafeM
     [Fact]
     public async Task RuntimeSetupCancellation_CleansStateAndRecoversSameSession()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var blocker = await AcquireRuntimeSetupLockAsync(
             connectionString,
@@ -111,15 +109,22 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests : MySqlSafeM
         var observer = new MySqlRuntimeCommandInterceptor();
         using var cancellation = new CancellationTokenSource();
         observer.InjectFirstSetup(
-            "SELECT `Id` FROM `runtime_setup_lock` WHERE `Id` = 1 FOR UPDATE; SET @runtime_setup_after_error = 1;",
-            () => cancellation.CancelAfter(TimeSpan.FromMilliseconds(500)));
+            "SELECT `Id` FROM `runtime_setup_lock` WHERE `Id` = 1 FOR UPDATE; SET @runtime_setup_after_error = 1;");
 
         await using var context = CreateRuntimeScopeProbeContext(connectionString, observer);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
 
-        var result = await FailAndRecoverRuntimeAsync(context, observer, cancellation.Token);
+        // Act
+        var result = await MySqlNativeCancellationCheckpoint.CancelWhenDispatchedAsync(
+            connectionString,
+            ((MySqlConnection)context.Database.GetDbConnection()).ServerThread,
+            "runtime_setup_lock",
+            cancellation,
+            FailAndRecoverRuntimeAsync(context, observer, cancellation.Token),
+            CancellationToken.None);
 
-        Assert.IsAssignableFrom<OperationCanceledException>(result.Exception);
+        // Assert
+        Assert.IsType<OperationCanceledException>(result.Exception, exactMatch: false);
         Assert.True(result.SetupWasInjected);
         Assert.Equal(0, result.SetupSentinelExecuted);
         Assert.Equal(0, result.BodiesBeforeRecovery);
@@ -135,6 +140,7 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests : MySqlSafeM
     [Fact]
     public async Task RuntimeSetupTimeout_CleansStateAndRecoversSameSession()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var blocker = await AcquireRuntimeSetupLockAsync(
             connectionString,
@@ -150,8 +156,10 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests : MySqlSafeM
         context.Database.SetCommandTimeout(1);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
 
+        // Act
         var result = await FailAndRecoverRuntimeAsync(context, observer, CancellationToken.None);
 
+        // Assert
         var exception = Assert.IsType<MySqlException>(result.Exception);
         Assert.Equal(MySqlErrorCode.CommandTimeoutExpired, exception.ErrorCode);
         Assert.Equal(1, observer.InjectedCommandTimeout);
@@ -175,6 +183,7 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests : MySqlSafeM
         string violation
     )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await PrepareRuntimeCatalogAsync(connectionString, "partial", cancellationToken: CancellationToken.None);
         var table = MySqlRuntimeConvergenceMigration.TableName(
@@ -191,6 +200,7 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests : MySqlSafeM
         await using var context = CreateRuntimeContext(connectionString, observer);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
 
+        // Act
         var result = await RejectAndRecoverRuntimeDataAsync(
             context,
             connectionString,
@@ -198,6 +208,7 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests : MySqlSafeM
             violation,
             cancellationToken: CancellationToken.None);
 
+        // Assert
         var exception = AssertOwnedGuardFailure(result.Exception);
         Assert.Equal(1062, exception.Number);
         Assert.Contains("doka_sm_data_blocked", exception.Message, StringComparison.Ordinal);
@@ -221,6 +232,7 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests : MySqlSafeM
     [Fact]
     public async Task RuntimeFreshDataGuard_RejectsAfterEarlierMigrationAndRollsBackLaterDml()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var options = new DbContextOptionsBuilder<MySqlRuntimeFreshStateDbContext>()
             .UseMySql(
@@ -235,8 +247,10 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests : MySqlSafeM
         await using var context = new MySqlRuntimeFreshStateDbContext(options);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
 
+        // Act
         var result = await RejectAndRecoverFreshRuntimeDataAsync(context, cancellationToken: CancellationToken.None);
 
+        // Assert
         var exception = AssertOwnedGuardFailure(result.Exception);
         Assert.Contains("doka_sm_data_blocked", exception.Message, StringComparison.Ordinal);
         Assert.Equal(0, result.TargetConstraintBeforeRecovery);
@@ -334,98 +348,6 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests
         return new MySqlRuntimeScopeProbeDbContext(options);
     }
 
-    /// <summary>Runs isolated databases repeatedly while preserving one execution measurement per sample.</summary>
-    /// <param name="initialState">The fixture catalog state to establish before each measured migration.</param>
-    /// <param name="samples">The caller-owned list receiving application, replay and engine-work measurements.</param>
-    /// <param name="cancellationToken">The caller's operation cancellation.</param>
-    private async Task<List<RuntimeVerification>> MeasureRuntimeSamplesAsync(
-        string initialState,
-        List<RuntimeSample> samples,
-        CancellationToken cancellationToken
-    )
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-
-        var sampleCount = RuntimeSampleCount();
-        var results = new List<RuntimeVerification>(sampleCount);
-        var generationAllocationBytes = await WarmRuntimeGenerationAsync(cancellationToken: cancellationToken);
-        object? engineSettings = null;
-        for (var sample = 0; sample < sampleCount; sample++)
-        {
-            var connectionString = await CreateDatabaseAsync(cancellationToken);
-            await PrepareRuntimeCatalogAsync(connectionString, initialState, cancellationToken: cancellationToken);
-            engineSettings ??= await ReadRuntimeEngineSettingsAsync(
-                connectionString,
-                cancellationToken: cancellationToken);
-
-            var observer = new MySqlRuntimeCommandInterceptor();
-            await using var context = CreateRuntimeContext(connectionString, observer);
-            await context.Database.OpenConnectionAsync(cancellationToken);
-            var started = Stopwatch.GetTimestamp();
-
-            // WHY: The measured path is the actual application workflow; no runner or explicit preflight is invoked.
-            await context.Database.MigrateAsync(cancellationToken);
-            var elapsedMilliseconds = Stopwatch.GetElapsedTime(started)
-                .TotalMilliseconds;
-
-            var applicationCommands = observer.Snapshot();
-            var executedCommands = observer.CommandCount;
-            var appliedBodies = observer.GuardedBodyCount;
-            var before = await ReadRuntimeVerificationAsync(connectionString, cancellationToken: cancellationToken);
-            observer.Reset();
-            var replayStarted = Stopwatch.GetTimestamp();
-            await context.Database.MigrateAsync(cancellationToken);
-            var replayMilliseconds = Stopwatch.GetElapsedTime(replayStarted)
-                .TotalMilliseconds;
-
-            var after = await ReadRuntimeVerificationAsync(connectionString, cancellationToken: cancellationToken);
-
-            results.Add(
-                before with
-                {
-                    ReplayBodies = observer.GuardedBodyCount,
-                    ReplayRows = after.Rows,
-                    ReplayTotalRows = after.TotalRows,
-                    ReplayHistoryRows = after.HistoryRows,
-                    SchemaAfterReplay = after.SchemaBeforeReplay,
-                    ExecutedCommands = executedCommands,
-                    AppliedBodies = appliedBodies,
-                });
-
-            samples.Add(
-                new RuntimeSample(
-                    sample,
-                    elapsedMilliseconds,
-                    replayMilliseconds,
-                    applicationCommands,
-                    observer.Snapshot()));
-        }
-
-        WriteRuntimeEvidence(initialState, generationAllocationBytes, engineSettings!, samples);
-
-        return results;
-    }
-
-    /// <summary>Warms model and generator caches before measuring synchronous SQL-generation allocation.</summary>
-    /// <param name="cancellationToken">The caller's operation cancellation.</param>
-    private async Task<long> WarmRuntimeGenerationAsync(
-        CancellationToken cancellationToken
-    )
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-
-        var connectionString = await CreateDatabaseAsync(cancellationToken);
-        await using var context = CreateRuntimeContext(connectionString, new MySqlRuntimeCommandInterceptor());
-        var generator = context.GetService<IMigrationsSqlGenerator>();
-        var migration = new MySqlRuntimeConvergenceMigration { ActiveProvider = context.Database.ProviderName! };
-        var operations = migration.UpOperations;
-        _ = generator.Generate(operations, context.Model);
-        var before = GC.GetAllocatedBytesForCurrentThread();
-        _ = generator.Generate(operations, context.Model);
-
-        return GC.GetAllocatedBytesForCurrentThread() - before;
-    }
-
     /// <summary>Creates generic legacy tables without altering default engine durability settings.</summary>
     /// <param name="connectionString">The isolated database receiving the legacy catalog and original rows.</param>
     /// <param name="initialState">Selects empty, widening, partial or matching catalog setup for the workload.</param>
@@ -437,7 +359,7 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests
     )
     {
         cancellationToken.ThrowIfCancellationRequested();
-
+        MySqlLiveBenchmarkWorkload.RequireInitialState(initialState);
         if (initialState == "empty")
         {
             return;
@@ -445,47 +367,10 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests
 
         for (var ordinal = 0; ordinal < MySqlRuntimeConvergenceMigration.TableCount; ordinal++)
         {
-            var table = MySqlRuntimeConvergenceMigration.TableName(ordinal);
-            var width = initialState == "widening"
-                ? 20
-                : 80;
-
-            var columnCount = initialState == "partial"
-                ? 3
-                : 9;
-
-            var sql = new StringBuilder($"CREATE TABLE `{table}` (`Id` int NOT NULL, ");
-            sql.Append(CultureInfo.InvariantCulture, $"`Code` varchar({width}) NOT NULL, `ParentId` int NULL");
-            for (var column = 1; column <= columnCount; column++)
-            {
-                sql.Append(CultureInfo.InvariantCulture, $", `Value{column:D2}` varchar(40) NULL");
-            }
-
-            if (initialState == "matching")
-            {
-                sql.Append(
-                    CultureInfo.InvariantCulture,
-                    $", PRIMARY KEY (`Id`), CONSTRAINT `UQ_{table}_Code` UNIQUE (`Code`), ");
-
-                sql.Append(CultureInfo.InvariantCulture, $"KEY `IX_{table}_ParentId` (`ParentId`)");
-                if (ordinal > 0)
-                {
-                    var parent = MySqlRuntimeConvergenceMigration.TableName(ordinal - 1);
-                    sql.Append(
-                        CultureInfo.InvariantCulture,
-                        $", CONSTRAINT `FK_{table}_Parent` FOREIGN KEY (`ParentId`) ");
-
-                    sql.Append(CultureInfo.InvariantCulture, $"REFERENCES `{parent}` (`Id`) ON DELETE RESTRICT");
-                }
-            }
-
-            sql.Append("); ");
-            sql.Append(CultureInfo.InvariantCulture, $"INSERT INTO `{table}` (`Id`, `Code`, `ParentId`, `Value01`) ");
-            sql.Append(
-                CultureInfo.InvariantCulture,
-                $"VALUES (1, 'preserved', {(ordinal == 0 ? "NULL" : "1")}, 'original');");
-
-            await ExecuteSqlAsync(connectionString, sql.ToString(), cancellationToken: cancellationToken);
+            await ExecuteSqlAsync(
+                connectionString,
+                MySqlLiveBenchmarkWorkload.BuildLegacyRuntimeTable(initialState, ordinal),
+                cancellationToken);
         }
     }
 
@@ -568,7 +453,6 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests
                 cancellationToken: cancellationToken),
             rows.Preserved,
             rows.Total,
-            schema,
             schema);
     }
 
@@ -720,40 +604,6 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
 
 public sealed partial class MySqlRuntimePerformanceIntegrationTests
 {
-    /// <summary>Captures default server durability settings separately from the timed migration workflow.</summary>
-    /// <param name="connectionString">The workload server connection used to observe durability settings.</param>
-    /// <param name="cancellationToken">The caller's operation cancellation.</param>
-    private static async Task<object> ReadRuntimeEngineSettingsAsync(
-        string connectionString,
-        CancellationToken cancellationToken
-    )
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-
-        await using var connection = new MySqlConnection(connectionString);
-        await connection.OpenAsync(cancellationToken);
-        await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT VERSION(), @@innodb_flush_log_at_trx_commit, @@innodb_doublewrite, "
-            + "@@innodb_buffer_pool_size, @@log_bin;";
-
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        if (!await reader.ReadAsync(cancellationToken))
-        {
-            throw new InvalidOperationException("The server returned no durability settings.");
-        }
-
-        return new
-        {
-            actualVersion = reader.GetString(0),
-
-            // WHY: MariaDB exposes some settings as ON strings; retain native values without coercing their meaning.
-            flushLogAtTransactionCommit = reader.GetValue(1),
-            doublewrite = reader.GetValue(2),
-            bufferPoolBytes = reader.GetValue(3),
-            binaryLogging = reader.GetValue(4),
-        };
-    }
-
     /// <summary>Observes authoritative row rejection and same-session retry after test-owned repair.</summary>
     /// <param name="context">The caller-owned migration context retained across rejection and retry.</param>
     /// <param name="connectionString">The database connection used to repair the blocking row independently.</param>
@@ -921,55 +771,6 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests
             cleanup);
     }
 
-    /// <summary>Persists generic aggregate counters, timings, and versions in ignored artifacts.</summary>
-    private void WriteRuntimeEvidence(
-        string initialState,
-        long generationAllocationBytes,
-        object engineSettings,
-        IReadOnlyList<RuntimeSample> samples
-    )
-    {
-        var root = new DirectoryInfo(AppContext.BaseDirectory);
-        while (root is not null
-            && !File.Exists(Path.Combine(root.FullName, "global.json")))
-        {
-            root = root.Parent;
-        }
-
-        var directory = Path.Combine(
-            root?.FullName ?? throw new InvalidOperationException("The repository root was not found."),
-            "artifacts",
-            "performance",
-            "runtime");
-
-        Directory.CreateDirectory(directory);
-        var phase = RuntimeMeasurementLabel();
-        var payload = new
-        {
-            schemaVersion = 1,
-            provider = Fixture.IsMariaDb
-                ? "mariadb"
-                : "mysql",
-            serverVersion = Fixture.ServerVersion.ToString(),
-            runtime = Environment.Version.ToString(),
-            phase,
-            initialState,
-            tableCount = MySqlRuntimeConvergenceMigration.TableCount,
-            columnsPerInitialTable = 12,
-            explicitPreflight = false,
-            measuredPath = "Database.MigrateAsync",
-            generationAllocationBytes,
-            engineSettings,
-            processArchitecture = RuntimeInformation.ProcessArchitecture.ToString(),
-            processOperatingSystem = RuntimeInformation.OSDescription,
-            samples,
-        };
-
-        var fileName = $"{(Fixture.IsMariaDb ? "mariadb" : "mysql")}-{phase}-{initialState}.json";
-        var path = Path.Combine(directory, fileName);
-        File.WriteAllBytes(path, JsonSerializer.SerializeToUtf8Bytes(payload, s_runtimeSerializerOptions));
-    }
-
     /// <summary>Reads the entire ordered physical column contract without a server-side concatenation limit.</summary>
     /// <param name="connectionString">The database whose workload schema contracts are read in full.</param>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
@@ -983,26 +784,7 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests
         await using var connection = new MySqlConnection(connectionString);
         await connection.OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = """
-        SELECT CONCAT(TABLE_NAME, ':', COLUMN_NAME, ':', ORDINAL_POSITION, ':',
-        COLUMN_TYPE, ':', IS_NULLABLE, ':', COALESCE(COLLATION_NAME, ''))
-        FROM INFORMATION_SCHEMA.COLUMNS
-        WHERE TABLE_SCHEMA = DATABASE()
-        AND TABLE_NAME LIKE 'runtime_records_%' UNION ALL SELECT CONCAT(TABLE_NAME,
-        ':index:', INDEX_NAME, ':', NON_UNIQUE, ':', SEQ_IN_INDEX, ':', COLUMN_NAME,
-        ':', COALESCE(SUB_PART, '')) FROM INFORMATION_SCHEMA.STATISTICS
-        WHERE TABLE_SCHEMA = DATABASE()
-        AND TABLE_NAME LIKE 'runtime_records_%' UNION ALL SELECT CONCAT(TABLE_NAME,
-        ':key:', CONSTRAINT_NAME, ':', COLUMN_NAME, ':', ORDINAL_POSITION, ':',
-        COALESCE(REFERENCED_TABLE_NAME, ''), ':', COALESCE(REFERENCED_COLUMN_NAME,
-        '')) FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
-        WHERE CONSTRAINT_SCHEMA = DATABASE()
-        AND TABLE_NAME LIKE 'runtime_records_%' UNION ALL SELECT CONCAT(TABLE_NAME,
-        ':fk:', CONSTRAINT_NAME, ':', REFERENCED_TABLE_NAME, ':', UPDATE_RULE,
-        ':', DELETE_RULE) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS
-        WHERE CONSTRAINT_SCHEMA = DATABASE()
-        AND TABLE_NAME LIKE 'runtime_records_%' ORDER BY 1;
-        """;
+        command.CommandText = MySqlLiveBenchmarkWorkload.RuntimeSchemaSql;
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         var schema = new StringBuilder();
@@ -1014,36 +796,10 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests
 
         return schema.ToString();
     }
-
-    /// <summary>Selects repeat measurements only for deliberate baseline/optimized experiments.</summary>
-    private static int RuntimeSampleCount() => RuntimeMeasurementLabel() == "current"
-        ? 1
-        : MeasuredRuntimeSampleCount;
-
-    /// <summary>Validates the artifact label without creating a product runtime configuration knob.</summary>
-    private static string RuntimeMeasurementLabel()
-    {
-        var label = Environment.GetEnvironmentVariable("SAFE_MIGRATIONS_RUNTIME_MEASUREMENT_LABEL") ?? "current";
-        if (label is not ("baseline" or "optimized" or "current"))
-        {
-            throw new InvalidOperationException("The runtime measurement label is not a supported evidence label.");
-        }
-
-        return label;
-    }
 }
 
 public abstract partial class MySqlSafeMigrationIntegrationTests
 {
-    /// <summary>Carries one isolated application's timings and bounded transport counters.</summary>
-    protected sealed record RuntimeSample(
-        int Ordinal,
-        double ApplyMilliseconds,
-        double ReplayMilliseconds,
-        object ApplicationCommands,
-        object ReplayCommands
-    );
-
     /// <summary>Carries authoritative catalog, data-preservation, replay, and history checks.</summary>
     protected sealed record RuntimeVerification(
         int Tables,
@@ -1056,28 +812,8 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
         int InvalidColumnContracts,
         int Rows,
         int TotalRows,
-        string SchemaBeforeReplay,
-        string SchemaAfterReplay
-    )
-    {
-        /// <summary>Gets the guarded bodies executed during history-only replay.</summary>
-        public long ReplayBodies { get; init; }
-
-        /// <summary>Gets exact original rows remaining after replay.</summary>
-        public int ReplayRows { get; init; }
-
-        /// <summary>Gets all rows remaining after replay.</summary>
-        public int ReplayTotalRows { get; init; }
-
-        /// <summary>Gets migration history rows after replay.</summary>
-        public int ReplayHistoryRows { get; init; }
-
-        /// <summary>Gets actual commands executed during initial application.</summary>
-        public long ExecutedCommands { get; init; }
-
-        /// <summary>Gets guarded bodies executed during initial application.</summary>
-        public long AppliedBodies { get; init; }
-    }
+        string SchemaBeforeReplay
+    );
 
     /// <summary>Carries acquired-resource failure and same-session recovery observations.</summary>
     protected sealed record RuntimeRecovery(
@@ -1114,21 +850,33 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
     );
 
     /// <summary>Owns the independent blocking transaction and releases it with its physical connection.</summary>
-    protected sealed class RuntimeSetupLock(
-        MySqlConnection connection,
-        MySqlTransaction transaction
-    ) : IAsyncDisposable
+    protected sealed class RuntimeSetupLock : IAsyncDisposable
     {
+        private readonly MySqlConnection _connection;
+        private readonly MySqlTransaction _transaction;
+
+        /// <summary>Initializes the explicit dependencies of this isolated test helper.</summary>
+        /// <param name="connection">The owned physical connection released after its transaction.</param>
+        /// <param name="transaction">The independent blocking transaction released before its connection.</param>
+        public RuntimeSetupLock(
+            MySqlConnection connection,
+            MySqlTransaction transaction
+        )
+        {
+            _connection = connection;
+            _transaction = transaction;
+        }
+
         /// <inheritdoc />
         public async ValueTask DisposeAsync()
         {
             try
             {
-                await transaction.DisposeAsync();
+                await _transaction.DisposeAsync();
             }
             finally
             {
-                await connection.DisposeAsync();
+                await _connection.DisposeAsync();
             }
         }
     }

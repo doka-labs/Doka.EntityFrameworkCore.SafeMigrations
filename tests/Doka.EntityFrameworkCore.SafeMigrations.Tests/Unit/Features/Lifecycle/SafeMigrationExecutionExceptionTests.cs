@@ -15,11 +15,14 @@ public sealed class SafeMigrationExecutionExceptionTests
         string guardCode
     )
     {
+        // Arrange
         var operation = CreateOperation();
         var nativeFailure = new InvalidOperationException("private-native-detail");
 
+        // Act
         var exception = new SafeMigrationExecutionException(operation, guardCode, 7, nativeFailure);
 
+        // Assert
         Assert.Same(nativeFailure, exception.InnerException);
         Assert.Equal(guardCode, exception.GuardCode);
         Assert.Equal(7, exception.OperationOrdinal);
@@ -37,11 +40,14 @@ public sealed class SafeMigrationExecutionExceptionTests
     [Fact]
     public void UnknownOrdinalRemainsUnknown()
     {
+        // Arrange
         var operation = CreateOperation();
         var nativeFailure = new InvalidOperationException("native rejection");
 
+        // Act
         var exception = new SafeMigrationExecutionException(operation, "doka_sm_data_blocked", null, nativeFailure);
 
+        // Assert
         Assert.Null(exception.OperationOrdinal);
         Assert.DoesNotContain("operation -1", exception.Message, StringComparison.Ordinal);
         Assert.Same(nativeFailure, exception.InnerException);
@@ -58,41 +64,56 @@ public sealed class SafeMigrationExecutionExceptionTests
         string guardCode
     )
     {
+        // Arrange
         var operation = CreateOperation();
         var nativeFailure = new InvalidOperationException("native rejection");
 
-        var exception = Assert.Throws<ArgumentException>(() =>
+        // Act
+        var exception = Record.Exception(() =>
             new SafeMigrationExecutionException(operation, guardCode, 0, nativeFailure));
 
-        Assert.Equal("guardCode", exception.ParamName);
+        // Assert
+        Assert.Equal("guardCode",
+            Assert.IsType<ArgumentException>(exception)
+                .ParamName);
     }
 
     /// <summary>Rejects an impossible negative operation ordinal.</summary>
     [Fact]
     public void NegativeOrdinalIsRejected()
     {
+        // Arrange
         var operation = CreateOperation();
         var nativeFailure = new InvalidOperationException("native rejection");
 
-        var exception = Assert.Throws<ArgumentOutOfRangeException>(() =>
+        // Act
+        var exception = Record.Exception(() =>
             new SafeMigrationExecutionException(operation, "doka_sm_data_blocked", -1, nativeFailure));
 
-        Assert.Equal("operationOrdinal", exception.ParamName);
+        // Assert
+        Assert.Equal("operationOrdinal",
+            Assert.IsType<ArgumentOutOfRangeException>(exception)
+                .ParamName);
     }
 
     /// <summary>Requires the native failure rather than manufacturing an original cause.</summary>
     [Fact]
     public void MissingNativeFailureIsRejected()
     {
+        // Arrange
         var operation = CreateOperation();
 
-        var exception = Assert.Throws<ArgumentNullException>(() =>
+        // Act
+        var exception = Record.Exception(() =>
             new SafeMigrationExecutionException(operation, "doka_sm_data_blocked", 0, null!));
 
-        Assert.Equal("innerException", exception.ParamName);
+        // Assert
+        Assert.Equal("innerException",
+            Assert.IsType<ArgumentNullException>(exception)
+                .ParamName);
     }
 
-    /// <summary>The payload-free command path preserves the public constructor's complete diagnostic contract.</summary>
+    /// <summary>The payload-free command path preserves the public constructor's diagnostic contract.</summary>
     /// <param name="guardCode">The unchanged owned runtime category.</param>
     [Theory]
     [InlineData("doka_sm_different")]
@@ -130,7 +151,7 @@ public sealed class SafeMigrationExecutionExceptionTests
         var nativeFailure = new InvalidOperationException("native rejection");
 
         // Act
-        var exception = Assert.Throws<ArgumentException>(() =>
+        var exception = Record.Exception(() =>
             new SafeMigrationExecutionException(
                 default(SafeMigrationRuntimeDiagnosticContext),
                 "doka_sm_data_blocked",
@@ -138,7 +159,9 @@ public sealed class SafeMigrationExecutionExceptionTests
                 nativeFailure));
 
         // Assert
-        Assert.Equal("context", exception.ParamName);
+        Assert.Equal("context",
+            Assert.IsType<ArgumentException>(exception)
+                .ParamName);
     }
 
     /// <summary>Creates a synthetic required column whose private comment must not enter diagnostics.</summary>

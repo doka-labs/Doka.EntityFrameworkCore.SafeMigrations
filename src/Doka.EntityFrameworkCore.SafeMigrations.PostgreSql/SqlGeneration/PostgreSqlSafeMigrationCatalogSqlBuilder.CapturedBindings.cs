@@ -181,6 +181,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         SafeMigrationSqlBinaryOperator.Multiply => "*",
         SafeMigrationSqlBinaryOperator.Divide => "/",
         SafeMigrationSqlBinaryOperator.Modulo => "%",
+        SafeMigrationSqlBinaryOperator.And or SafeMigrationSqlBinaryOperator.Or => throw new UnreachableException(),
         _ => throw new UnreachableException(),
     };
 
@@ -248,8 +249,13 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     {
         var owner = PostgreSqlSafeMigrationSchemaIdentity.GetOwner(intent);
         var arguments = new List<string>(function.Arguments.Count);
-        foreach (var argument in function.Arguments)
+
+        // WHY: This pass only reads the stable ordered collection by ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var argumentIndex = 0; argumentIndex < function.Arguments.Count; argumentIndex++)
         {
+            var argument = function.Arguments[argumentIndex];
             if (CapturedArgumentType(argument, intent, owner.Table!, owner.Schema) is not { } type)
             {
                 return "FALSE";
@@ -426,12 +432,16 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             EnsureColumnIntent column => [column.Definition],
             AlterColumnIntent column => column.OldDefinition is null
                 ? [column.Definition]
-                : new[] { column.Definition, column.OldDefinition },
+                : (ExpectedColumnDefinition[])[column.Definition, column.OldDefinition],
             _ => Array.Empty<ExpectedColumnDefinition>(),
         };
 
-        foreach (var column in columns)
+        // WHY: This pass only reads the stable ordered collection by ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var columnIndex = 0; columnIndex < columns.Count; columnIndex++)
         {
+            var column = columns[columnIndex];
             if (column is { CapturedComputedSql: { } source, ComputedExpression: { } expression })
             {
                 yield return (expression, source, true);
@@ -445,8 +455,12 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             _ => Array.Empty<ExpectedCheckConstraintDefinition>(),
         };
 
-        foreach (var check in checks)
+        // WHY: This pass only reads the stable ordered collection by ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var checkIndex = 0; checkIndex < checks.Count; checkIndex++)
         {
+            var check = checks[checkIndex];
             if (check is { CapturedSql: { } source, Expression: { } expression })
             {
                 yield return (expression, source, false);

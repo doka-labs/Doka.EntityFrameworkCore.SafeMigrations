@@ -1,6 +1,8 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-/// <summary>Exercises the ModelManagedDataKeyColumnIdentity migration contracts in an independent class collection.</summary>
+/// <summary>
+/// Exercises the ModelManagedDataKeyColumnIdentity migration contracts in an independent class collection.
+/// </summary>
 public sealed class MySqlModelManagedDataKeyColumnIdentityIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
     /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>

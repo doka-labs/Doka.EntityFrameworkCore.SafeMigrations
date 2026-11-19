@@ -118,7 +118,10 @@ public sealed class SqlServerSafeMigrationAllocationIntegrationTests : SqlServer
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        using var rows = new DataTable { Locale = CultureInfo.InvariantCulture };
+        using var rows = new DataTable
+        {
+            Locale = CultureInfo.InvariantCulture,
+        };
         rows.Columns.Add("id", typeof(int));
         rows.Columns.Add("managed_value", typeof(string));
         foreach (var row in ModelManagedDataLargeExecutionContract.InitialRows())

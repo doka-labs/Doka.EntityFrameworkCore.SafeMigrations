@@ -3,6 +3,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 /// <summary>
 /// Supplies the shared model shape for strict and legacy SQL Server EF tooling qualification.
 /// </summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public abstract class SqlServerScaffoldingModelDbContext : DbContext
 {
     /// <summary>
@@ -145,6 +146,7 @@ public sealed class SqlServerLegacySafeMigrationScaffoldingDbContext : SqlServer
 /// <summary>
 /// Creates the SQL Server design-time context for EF tooling.
 /// </summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public sealed class SqlServerSafeMigrationScaffoldingDbContextFactory
     : IDesignTimeDbContextFactory<SqlServerSafeMigrationScaffoldingDbContext>
 {
@@ -170,6 +172,7 @@ public sealed class SqlServerSafeMigrationScaffoldingDbContextFactory
 /// <summary>
 /// Creates the SQL Server legacy-convergence design-time context for EF tooling.
 /// </summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public sealed class SqlServerLegacySafeMigrationScaffoldingDbContextFactory
     : IDesignTimeDbContextFactory<SqlServerLegacySafeMigrationScaffoldingDbContext>
 {
@@ -195,6 +198,7 @@ public sealed class SqlServerLegacySafeMigrationScaffoldingDbContextFactory
 /// <summary>
 /// A model-managed row for SQL Server scaffolding qualification.
 /// </summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public sealed class SqlServerScaffoldingUser
 {
     /// <summary>Gets or sets the user key.</summary>

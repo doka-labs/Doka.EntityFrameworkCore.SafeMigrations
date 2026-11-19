@@ -51,22 +51,48 @@ public sealed class PostgreSqlIntegerWideningAtomicIntegrationTests : PostgreSql
         holderCommand.Transaction = transaction;
         holderCommand.CommandText = "LOCK TABLE ONLY atomic_integer_rows IN ACCESS EXCLUSIVE MODE;";
         await holderCommand.ExecuteNonQueryAsync(CancellationToken.None);
-        using var cancellation = new CancellationTokenSource(TimeSpan.FromMinutes(1));
+        using var cancellation = new CancellationTokenSource();
+        Exception? primaryFailure = null;
+        Exception? failure;
+        var holderReleased = false;
 
         // Act
         var execution = ExecuteOperationsAsync(context, builder.Operations, cancellation.Token);
-        await WaitForIntegerOwnerLockAsync(connectionString, applicationName, execution, cancellation.Token);
-        if (mutation != "none")
+        var observedExecution = Record.ExceptionAsync(() => execution);
+        try
         {
-            holderCommand.CommandText = mutation == "default"
-                ? "ALTER TABLE atomic_integer_rows ALTER COLUMN value SET DEFAULT 7;"
-                : "ALTER TABLE atomic_integer_rows ADD CONSTRAINT ck_atomic_integer CHECK(value > 0);";
+            await WaitForIntegerOwnerLockAsync(connectionString, applicationName, execution, cancellation.Token);
+            if (mutation != "none")
+            {
+                holderCommand.CommandText = mutation == "default"
+                    ? "ALTER TABLE atomic_integer_rows ALTER COLUMN value SET DEFAULT 7;"
+                    : "ALTER TABLE atomic_integer_rows ADD CONSTRAINT ck_atomic_integer CHECK(value > 0);";
 
-            await holderCommand.ExecuteNonQueryAsync(cancellation.Token);
+                await holderCommand.ExecuteNonQueryAsync(cancellation.Token);
+            }
+
+            await transaction.CommitAsync(cancellation.Token);
+            holderReleased = true;
+            failure = await observedExecution;
         }
+        catch (Exception exception)
+        {
+            primaryFailure = exception;
 
-        await transaction.CommitAsync(cancellation.Token);
-        var failure = await Record.ExceptionAsync(() => execution);
+            throw;
+        }
+        finally
+        {
+            await OwnedTestOperationCleanup.CompleteAsync(
+                primaryFailure,
+                observedExecution,
+                holderReleased
+                    ? null
+                    : () => transaction.RollbackAsync(CancellationToken.None),
+                primaryFailure is null
+                    ? null
+                    : cancellation);
+        }
 
         // Assert
         if (mutation == "none")

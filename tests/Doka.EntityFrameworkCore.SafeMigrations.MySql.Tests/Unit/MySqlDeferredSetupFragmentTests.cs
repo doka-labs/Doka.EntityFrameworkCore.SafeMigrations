@@ -47,6 +47,9 @@ public sealed class MySqlDeferredSetupFragmentTests
         var fragment = SplitRaw(expected);
         var destination = Enumerable
             .Repeat('#', length + 7)
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         // Act
@@ -56,6 +59,9 @@ public sealed class MySqlDeferredSetupFragmentTests
         Assert.Equal(expected, new string(destination, 2, length));
         Assert.All(destination
                 .AsSpan(0, 2)
+
+                // WHY: Retain this explicit materialization/copy path and its collection lowering.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray(),
             character => Assert.Equal('#', character));
 
@@ -247,7 +253,7 @@ public sealed class MySqlDeferredSetupFragmentTests
     public void NonemptyHexPartSeparatesRawSurrogatePieces()
     {
         // Arrange
-        var expected = "\ud83d41\ude00";
+        const string expected = "\ud83d41\ude00";
 
         // Act
         var fragment = MySqlSafeMigrationSetupFragment.Compose(
@@ -284,7 +290,9 @@ public sealed class MySqlDeferredSetupFragmentTests
         Assert.Equal(expected.Length, fragment.Utf8ByteCount);
     }
 
-    /// <summary>Large raw and encoded compositions preserve text and UTF-8 size when materialized immediately.</summary>
+    /// <summary>
+    /// Large raw and encoded compositions preserve text and UTF-8 size when materialized immediately.
+    /// </summary>
     /// <param name="length">The complete UTF-16 fragment length at or above the grouping ceiling.</param>
     [Theory]
     [InlineData(4096)]
@@ -315,7 +323,9 @@ public sealed class MySqlDeferredSetupFragmentTests
         Assert.Equal(Encoding.UTF8.GetByteCount(expected), fragment.Utf8ByteCount);
     }
 
-    /// <summary>Large compositions reuse one immutable materialization after the caller changes its descriptors.</summary>
+    /// <summary>
+    /// Large compositions reuse one immutable materialization after the caller changes its descriptors.
+    /// </summary>
     /// <param name="length">The complete fragment length that cannot be copied into a larger group.</param>
     [Theory]
     [InlineData(4096)]
@@ -364,6 +374,9 @@ public sealed class MySqlDeferredSetupFragmentTests
         var expected = "SET @sql = 0x" + Convert.ToHexString(Encoding.UTF8.GetBytes("SELECT '\u20ac';")) + ";";
         var destination = Enumerable
             .Repeat('#', expected.Length + spareLength + 1)
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         // Act
@@ -606,6 +619,9 @@ public sealed class MySqlDeferredSetupFragmentTests
         string[] materialized = ["DO 1;", "DO 2;", "DO 3;"];
         var deferred = materialized
             .Select(SplitRaw)
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var body = new string('x', bodyLength);
@@ -661,7 +677,7 @@ public sealed class MySqlDeferredSetupFragmentTests
     public void DeferredHexAssignmentGroupingMatchesMaterializedSql()
     {
         // Arrange
-        var source = "SELECT '\u20ac';";
+        const string source = "SELECT '\u20ac';";
         var assignment = "SET @sql = 0x" + Convert.ToHexString(Encoding.UTF8.GetBytes(source)) + ";";
         string[] materialized = [assignment, "PREPARE guard FROM @sql;", "EXECUTE guard;", "DEALLOCATE PREPARE guard;"];
         MySqlSafeMigrationSetupFragment[] deferred =
@@ -696,6 +712,9 @@ public sealed class MySqlDeferredSetupFragmentTests
         // Arrange
         var materialized = Enumerable
             .Repeat("DO 0;", setupCount)
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var deferred = materialized
@@ -755,6 +774,9 @@ public sealed class MySqlDeferredSetupFragmentTests
         // Arrange
         var materialized = Enumerable
             .Repeat("DO 0;", 125 - fusedCount)
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var deferred = materialized
@@ -804,6 +826,9 @@ public sealed class MySqlDeferredSetupFragmentTests
 
         var deferred = Enumerable
             .Repeat(SplitRaw("DO 0;"), setupCount)
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         // Act

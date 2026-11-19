@@ -1,3 +1,6 @@
+// WHY: Provider integration copies consume scenario indices; Core's linked copy independently verifies pair coverage.
+// ReSharper disable NotAccessedPositionalProperty.Global
+
 namespace Doka.EntityFrameworkCore.SafeMigrations.Testing;
 
 internal sealed record SafeMigrationStateDimension(
@@ -78,6 +81,8 @@ internal static class SafeMigrationStateSpaceGenerator
     )
     {
         var names = new HashSet<string>(StringComparer.Ordinal);
+        // WHY: Validation updates the uniqueness set in input order and rejects the first invalid dimension.
+        // ReSharper disable once LoopCanBeConvertedToQuery
         foreach (var dimension in dimensions)
         {
             if (string.IsNullOrWhiteSpace(dimension.Name)

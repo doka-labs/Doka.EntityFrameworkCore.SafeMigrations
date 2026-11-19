@@ -1,63 +1,61 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
+/// <summary>Protects explicit provider annotation capability and physical column-shape compatibility.</summary>
 public sealed class MySqlSafeMigrationColumnAnnotationTests
 {
-    [Fact]
-    public void GuidFormat_WithMatchingGuidStoreType_IsSupported()
+    /// <summary>Accepts GUID-format annotations only when the declared physical store shape agrees.</summary>
+    /// <param name="storeType">The physical shape required by the selected GUID format.</param>
+    /// <param name="format">The explicitly authored native GUID format.</param>
+    [Theory]
+    [InlineData("binary(16)", DokaMySqlGuidFormat.Binary16)]
+    [InlineData("char(36)", DokaMySqlGuidFormat.Char36)]
+    public void GuidFormat_WithMatchingGuidStoreType_IsSupported(
+        string storeType,
+        DokaMySqlGuidFormat format
+    )
     {
-        var binary = CreateDefinition(
-            typeof(Guid),
-            "binary(16)",
-            DokaMySqlGuidFormat.Binary16);
+        // Arrange
+        var definition = CreateDefinition(typeof(Guid), storeType, format);
 
-        var character = CreateDefinition(
-            typeof(Guid),
-            "char(36)",
-            DokaMySqlGuidFormat.Char36);
+        // Act
+        var unsupported = MySqlSafeMigrationCatalogSqlBuilder.HasUnsupportedProviderColumnAnnotation(definition);
+        var repairable = MySqlSafeMigrationColumnMetadata.CanSafelyConverge(definition);
 
-        Assert.False(MySqlSafeMigrationCatalogSqlBuilder.HasUnsupportedProviderColumnAnnotation(binary));
-        Assert.False(MySqlSafeMigrationCatalogSqlBuilder.HasUnsupportedProviderColumnAnnotation(character));
-        Assert.True(MySqlSafeMigrationColumnMetadata.CanSafelyConverge(binary));
-        Assert.True(MySqlSafeMigrationColumnMetadata.CanSafelyConverge(character));
+        // Assert
+        Assert.False(unsupported);
+        Assert.True(repairable);
     }
 
-    [Fact]
-    public void GuidFormat_WithUnknownOrContradictoryShape_IsRejected()
+    /// <summary>Rejects undefined GUID formats and contradictory declared physical shapes.</summary>
+    /// <param name="clrType">The CLR domain paired with the authored physical shape.</param>
+    /// <param name="storeType">The declared physical mapping challenged by this case.</param>
+    /// <param name="format">The undefined or incompatible GUID-format annotation.</param>
+    [Theory]
+    [InlineData(typeof(Guid), "binary(16)", (DokaMySqlGuidFormat)int.MaxValue)]
+    [InlineData(typeof(Guid), "char(36)", DokaMySqlGuidFormat.Binary16)]
+    [InlineData(typeof(Guid), "binary(16)", DokaMySqlGuidFormat.Char36)]
+    [InlineData(typeof(string), "char(36)", DokaMySqlGuidFormat.Char36)]
+    public void GuidFormat_WithUnknownOrContradictoryShape_IsRejected(
+        Type clrType,
+        string storeType,
+        DokaMySqlGuidFormat format
+    )
     {
-        var undefinedValue = CreateDefinition(
-            typeof(Guid),
-            "binary(16)",
-            (DokaMySqlGuidFormat)int.MaxValue);
+        // Arrange
+        var definition = CreateDefinition(clrType, storeType, format);
 
-        var binaryWithCharacterStoreType = CreateDefinition(
-            typeof(Guid),
-            "char(36)",
-            DokaMySqlGuidFormat.Binary16);
+        // Act
+        var unsupported = MySqlSafeMigrationCatalogSqlBuilder.HasUnsupportedProviderColumnAnnotation(definition);
+        var repairable = MySqlSafeMigrationColumnMetadata.CanSafelyConverge(definition);
 
-        var characterWithBinaryStoreType = CreateDefinition(
-            typeof(Guid),
-            "binary(16)",
-            DokaMySqlGuidFormat.Char36);
-
-        var nonGuidClrType = CreateDefinition(
-            typeof(string),
-            "char(36)",
-            DokaMySqlGuidFormat.Char36);
-
-        Assert.True(MySqlSafeMigrationCatalogSqlBuilder.HasUnsupportedProviderColumnAnnotation(undefinedValue));
-        Assert.True(
-            MySqlSafeMigrationCatalogSqlBuilder.HasUnsupportedProviderColumnAnnotation(binaryWithCharacterStoreType));
-
-        Assert.True(
-            MySqlSafeMigrationCatalogSqlBuilder.HasUnsupportedProviderColumnAnnotation(characterWithBinaryStoreType));
-
-        Assert.True(MySqlSafeMigrationCatalogSqlBuilder.HasUnsupportedProviderColumnAnnotation(nonGuidClrType));
-        Assert.False(MySqlSafeMigrationColumnMetadata.CanSafelyConverge(undefinedValue));
-        Assert.False(MySqlSafeMigrationColumnMetadata.CanSafelyConverge(binaryWithCharacterStoreType));
-        Assert.False(MySqlSafeMigrationColumnMetadata.CanSafelyConverge(characterWithBinaryStoreType));
-        Assert.False(MySqlSafeMigrationColumnMetadata.CanSafelyConverge(nonGuidClrType));
+        // Assert
+        Assert.True(unsupported);
+        Assert.False(repairable);
     }
 
+    /// <summary>Keeps an explicitly non-generated column eligible for safe mutable-facet repair.</summary>
+    /// <param name="clrType">The CLR domain paired with the declared physical store type.</param>
+    /// <param name="storeType">The exact authored native physical store type.</param>
     [Theory]
     [InlineData(typeof(bool), "tinyint(1)")]
     [InlineData(typeof(string), "varchar(80)")]
@@ -68,16 +66,27 @@ public sealed class MySqlSafeMigrationColumnAnnotationTests
         string storeType
     )
     {
+        // Arrange
         var definition = CreateDefinition(
             clrType,
             storeType,
             "Doka:MySql:ValueGenerationStrategy",
             MySqlValueGenerationStrategy.None);
 
-        Assert.False(MySqlSafeMigrationCatalogSqlBuilder.HasUnsupportedProviderColumnAnnotation(definition));
-        Assert.True(MySqlSafeMigrationColumnMetadata.CanSafelyConverge(definition));
+        // Act
+        var hasUnsupportedAnnotation =
+            MySqlSafeMigrationCatalogSqlBuilder.HasUnsupportedProviderColumnAnnotation(definition);
+
+        var canConverge = MySqlSafeMigrationColumnMetadata.CanSafelyConverge(definition);
+
+        // Assert
+        Assert.False(hasUnsupportedAnnotation);
+        Assert.True(canConverge);
     }
 
+    /// <summary>Accepts only the enumerated supported provider value-generation strategies.</summary>
+    /// <param name="strategy">The provider value-generation strategy under test.</param>
+    /// <param name="expected">The independently specified result for this exact input case.</param>
     [Theory]
     [InlineData(MySqlValueGenerationStrategy.ClientGuid, true)]
     [InlineData(MySqlValueGenerationStrategy.AutoIncrement, true)]
@@ -88,23 +97,40 @@ public sealed class MySqlSafeMigrationColumnAnnotationTests
         bool expected
     )
     {
+        // Arrange
         var definition = CreateDefinition(
             typeof(long),
             "bigint",
             "Doka:MySql:ValueGenerationStrategy",
             strategy);
 
-        Assert.Equal(expected, MySqlSafeMigrationColumnMetadata.CanSafelyConverge(definition));
-        Assert.Equal(!expected, MySqlSafeMigrationCatalogSqlBuilder.HasUnsupportedProviderColumnAnnotation(definition));
+        // Act
+        var hasUnsupportedAnnotation =
+            MySqlSafeMigrationCatalogSqlBuilder.HasUnsupportedProviderColumnAnnotation(definition);
+
+        var canConverge = MySqlSafeMigrationColumnMetadata.CanSafelyConverge(definition);
+
+        // Assert
+        Assert.Equal(expected, canConverge);
+        Assert.Equal(!expected, hasUnsupportedAnnotation);
     }
 
+    /// <summary>Rejects unknown provider annotations rather than assuming they have no SQL effect.</summary>
     [Fact]
     public void UnknownProviderAnnotation_IsRejected()
     {
+        // Arrange
         var definition = CreateDefinition(typeof(string), "varchar(80)", "Test:Unknown", true);
 
-        Assert.True(MySqlSafeMigrationCatalogSqlBuilder.HasUnsupportedProviderColumnAnnotation(definition));
-        Assert.False(MySqlSafeMigrationColumnMetadata.CanSafelyConverge(definition));
+        // Act
+        var hasUnsupportedAnnotation =
+            MySqlSafeMigrationCatalogSqlBuilder.HasUnsupportedProviderColumnAnnotation(definition);
+
+        var canConverge = MySqlSafeMigrationColumnMetadata.CanSafelyConverge(definition);
+
+        // Assert
+        Assert.True(hasUnsupportedAnnotation);
+        Assert.False(canConverge);
     }
 
     private static ExpectedColumnDefinition CreateDefinition(
@@ -120,9 +146,8 @@ public sealed class MySqlSafeMigrationColumnAnnotationTests
             ClrType = clrType,
             ColumnType = storeType,
             IsNullable = false,
+            ["Doka:MySql:GuidFormat"] = guidFormat,
         };
-
-        operation["Doka:MySql:GuidFormat"] = guidFormat;
 
         return SafeMigrationExpectedDefinitionFactory.From(operation);
     }
@@ -141,9 +166,8 @@ public sealed class MySqlSafeMigrationColumnAnnotationTests
             ClrType = clrType,
             ColumnType = storeType,
             IsNullable = false,
+            [annotationName] = annotationValue,
         };
-
-        operation[annotationName] = annotationValue;
 
         return SafeMigrationExpectedDefinitionFactory.From(operation);
     }

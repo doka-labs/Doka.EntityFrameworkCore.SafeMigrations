@@ -67,8 +67,12 @@ internal sealed class SqliteLivePrerequisiteSource : ISafeMigrationLivePrerequis
                     principal.PrimaryKeyName ?? "sqlite_primary_key"));
         }
 
-        foreach (var unique in principal.UniqueConstraints)
+        // WHY: Traverse the stable ordered source by ordinal without materializing another collection.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var uniqueIndex = 0; uniqueIndex < principal.UniqueConstraints.Count; uniqueIndex++)
         {
+            var unique = principal.UniqueConstraints[uniqueIndex];
             if (SqliteCatalogEquivalence.KeyMatchesDeclaredColumns(principal, unique.Keys, definition.PrincipalColumns))
             {
                 (candidates ??= []).Add(
@@ -79,8 +83,12 @@ internal sealed class SqliteLivePrerequisiteSource : ISafeMigrationLivePrerequis
             }
         }
 
-        foreach (var index in principal.Indexes)
+        // WHY: Traverse the stable ordered source by ordinal without materializing another collection.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var physicalIndex = 0; physicalIndex < principal.Indexes.Count; physicalIndex++)
         {
+            var index = principal.Indexes[physicalIndex];
             if (index is { Origin: "c", Unique: true, Partial: false }
                 && SqliteCatalogEquivalence.KeyMatchesDeclaredColumns(
                     principal,
@@ -121,8 +129,12 @@ internal sealed class SqliteLivePrerequisiteSource : ISafeMigrationLivePrerequis
             return false;
         }
 
-        foreach (var name in foreignKey.Columns)
+        // WHY: Traverse the stable ordered source by ordinal without materializing another collection.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var nameIndex = 0; nameIndex < foreignKey.Columns.Count; nameIndex++)
         {
+            var name = foreignKey.Columns[nameIndex];
             if (!columns.TryGetProjectedColumn(foreignKey.Table, foreignKey.Schema, name, out _))
             {
                 return false;
@@ -143,8 +155,12 @@ internal sealed class SqliteLivePrerequisiteSource : ISafeMigrationLivePrerequis
         ISafeMigrationProjectedColumnSource columns
     )
     {
-        foreach (var name in names)
+        // WHY: Traverse the stable ordered source by ordinal without materializing another collection.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var nameIndex = 0; nameIndex < names.Count; nameIndex++)
         {
+            var name = names[nameIndex];
             if (!table.Columns.ContainsKey(name)
                 && !columns.TryGetProjectedColumn(table.Name, schema, name, out _))
             {
@@ -162,8 +178,12 @@ internal sealed class SqliteLivePrerequisiteSource : ISafeMigrationLivePrerequis
         ISafeMigrationProjectedColumnSource columns
     )
     {
-        foreach (var name in foreignKey.PrincipalColumns)
+        // WHY: Traverse the stable ordered source by ordinal without materializing another collection.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var nameIndex = 0; nameIndex < foreignKey.PrincipalColumns.Count; nameIndex++)
         {
+            var name = foreignKey.PrincipalColumns[nameIndex];
             if (principal.Columns.TryGetValue(name, out var actual)
                 && columns.TryGetProjectedColumn(principal.Name, foreignKey.PrincipalSchema, name, out var projected)
                 && (projected.Collation?.Schema is not null

@@ -6,7 +6,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql;
 /// <param name="RepairCapability">The provider-proven repair capability.</param>
 /// <param name="RepairPrecondition">The expression that gates repair execution.</param>
 /// <param name="UnsupportedCode">The stable unsupported-feature code, when present.</param>
-internal sealed record PostgreSqlSafeMigrationRuntimePlan(
+internal sealed partial record PostgreSqlSafeMigrationRuntimePlan(
     string StateExpression,
     string Postcondition,
     SafeMigrationRepairCapability RepairCapability,
@@ -14,6 +14,7 @@ internal sealed record PostgreSqlSafeMigrationRuntimePlan(
     string? UnsupportedCode = null
 )
 {
+    internal const string SchemaIdentityMismatchCode = "schema_search_path_mismatch";
     internal const string DataProbePlaceholder = "__DOKA_SM_DATA_PROBE__";
     internal const string TransitionInvariantPlaceholder = "__DOKA_SM_TRANSITION_INVARIANT__";
     internal const string NullabilityDataProbePlaceholder = "__DOKA_SM_NULLABILITY_DATA_PROBE__";

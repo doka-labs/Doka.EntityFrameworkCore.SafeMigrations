@@ -78,6 +78,8 @@ public abstract partial class SqliteSafeMigrationCatalogIntegrationTests : Sqlit
                     .Property(value => value.Id)
                     .ValueGeneratedNever();
 
+                // WHY: Keep direct fixture mutations explicit; case scopes and breaks would not clarify this setup.
+                // ReSharper disable once ConvertIfStatementToSwitchStatement
                 if (kind == SafeMigrationOperationKind.EnsureUniqueConstraint)
                 {
                     entity
@@ -102,6 +104,8 @@ public abstract partial class SqliteSafeMigrationCatalogIntegrationTests : Sqlit
         }
 
         /// <summary>Represents the fixture principal without generated key values.</summary>
+        // WHY: EF binds this fixture entity through writable property metadata.
+        [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
         private sealed class ConstraintShapeParent
         {
             /// <summary>Gets or sets the fixture's principal key.</summary>
@@ -109,6 +113,8 @@ public abstract partial class SqliteSafeMigrationCatalogIntegrationTests : Sqlit
         }
 
         /// <summary>Represents the stable row copied by each constraint rebuild.</summary>
+        // WHY: EF binds this fixture entity through writable property metadata.
+        [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
         private sealed class ConstraintShapeItem
         {
             /// <summary>Gets or sets the stable row key.</summary>
@@ -192,22 +198,34 @@ public abstract partial class SqliteSafeMigrationCatalogIntegrationTests : Sqlit
     }
 
     /// <summary>Keeps the target rebuild model aligned with an explicit NULL-default ADD.</summary>
-    protected sealed class SqliteProjectedForeignKeyNullDefaultContext(
-        DbConnection connection,
-        IServiceProvider internalServices
-    ) : DbContext
+    protected sealed class SqliteProjectedForeignKeyNullDefaultContext : DbContext
     {
+        private readonly DbConnection _connection;
+        private readonly IServiceProvider _internalServices;
+
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="connection">The supplied connection for this fixture.</param>
+        /// <param name="internalServices">The supplied internal services for this fixture.</param>
+        public SqliteProjectedForeignKeyNullDefaultContext(
+            DbConnection connection,
+            IServiceProvider internalServices
+        )
+        {
+            _connection = connection;
+            _internalServices = internalServices;
+        }
+
         /// <inheritdoc />
         protected override void OnConfiguring(
             DbContextOptionsBuilder optionsBuilder
         )
         {
-            optionsBuilder.UseSqlite(connection);
+            optionsBuilder.UseSqlite(_connection);
             optionsBuilder.UseSqliteSafeMigrations();
 
             // WHY: Distinct target models need model-cache entries, not extra
             // singleton provider caches. The existing class fixture owns both.
-            optionsBuilder.UseInternalServiceProvider(internalServices);
+            optionsBuilder.UseInternalServiceProvider(_internalServices);
         }
 
         /// <inheritdoc />
@@ -256,6 +274,8 @@ public abstract partial class SqliteSafeMigrationCatalogIntegrationTests : Sqlit
         }
 
         /// <summary>Models the untouched native FK principal.</summary>
+        // WHY: EF binds this fixture entity through writable property metadata.
+        [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
         private sealed class NullDefaultParent
         {
             /// <summary>Gets or sets the principal key.</summary>
@@ -263,6 +283,8 @@ public abstract partial class SqliteSafeMigrationCatalogIntegrationTests : Sqlit
         }
 
         /// <summary>Models the FK dependent after adding the NULL-preserving column.</summary>
+        // WHY: EF binds this fixture entity through writable property metadata.
+        [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
         private sealed class NullDefaultChild
         {
             /// <summary>Gets or sets the dependent key.</summary>
@@ -274,22 +296,34 @@ public abstract partial class SqliteSafeMigrationCatalogIntegrationTests : Sqlit
     }
 
     /// <summary>Models one FK containing both an unchanged live column and a newly added nullable column.</summary>
-    protected sealed class SqliteProjectedCompositeForeignKeyContext(
-        DbConnection connection,
-        IServiceProvider internalServices
-    ) : DbContext
+    protected sealed class SqliteProjectedCompositeForeignKeyContext : DbContext
     {
+        private readonly DbConnection _connection;
+        private readonly IServiceProvider _internalServices;
+
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="connection">The supplied connection for this fixture.</param>
+        /// <param name="internalServices">The supplied internal services for this fixture.</param>
+        public SqliteProjectedCompositeForeignKeyContext(
+            DbConnection connection,
+            IServiceProvider internalServices
+        )
+        {
+            _connection = connection;
+            _internalServices = internalServices;
+        }
+
         /// <inheritdoc />
         protected override void OnConfiguring(
             DbContextOptionsBuilder optionsBuilder
         )
         {
-            optionsBuilder.UseSqlite(connection);
+            optionsBuilder.UseSqlite(_connection);
             optionsBuilder.UseSqliteSafeMigrations();
 
             // WHY: Keep independent CLR model identities in the fixture-owned
             // shared provider instead of growing EF's process-wide cache.
-            optionsBuilder.UseInternalServiceProvider(internalServices);
+            optionsBuilder.UseInternalServiceProvider(_internalServices);
         }
 
         /// <inheritdoc />
@@ -350,6 +384,8 @@ public abstract partial class SqliteSafeMigrationCatalogIntegrationTests : Sqlit
         }
 
         /// <summary>Models the native composite principal key.</summary>
+        // WHY: EF binds this fixture entity through writable property metadata.
+        [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
         private sealed class CompositeParent
         {
             /// <summary>Gets or sets the first principal key component.</summary>
@@ -360,6 +396,8 @@ public abstract partial class SqliteSafeMigrationCatalogIntegrationTests : Sqlit
         }
 
         /// <summary>Models the accepted composite FK endpoints.</summary>
+        // WHY: EF binds this fixture entity through writable property metadata.
+        [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
         private sealed class CompositeChild
         {
             /// <summary>Gets or sets the unchanged live dependent component.</summary>
@@ -371,19 +409,31 @@ public abstract partial class SqliteSafeMigrationCatalogIntegrationTests : Sqlit
     }
 
     /// <summary>Supplies only the final rebuild model; preflight consumes actual operation definitions.</summary>
-    protected sealed class SqliteProjectedSeparateAddContext(
-        DbConnection connection,
-        IServiceProvider internalServices
-    ) : DbContext
+    protected sealed class SqliteProjectedSeparateAddContext : DbContext
     {
+        private readonly DbConnection _connection;
+        private readonly IServiceProvider _internalServices;
+
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="connection">The supplied connection for this fixture.</param>
+        /// <param name="internalServices">The supplied internal services for this fixture.</param>
+        public SqliteProjectedSeparateAddContext(
+            DbConnection connection,
+            IServiceProvider internalServices
+        )
+        {
+            _connection = connection;
+            _internalServices = internalServices;
+        }
+
         /// <inheritdoc />
         protected override void OnConfiguring(
             DbContextOptionsBuilder optionsBuilder
         )
         {
-            optionsBuilder.UseSqlite(connection);
+            optionsBuilder.UseSqlite(_connection);
             optionsBuilder.UseSqliteSafeMigrations();
-            optionsBuilder.UseInternalServiceProvider(internalServices);
+            optionsBuilder.UseInternalServiceProvider(_internalServices);
         }
 
         /// <inheritdoc />
@@ -428,6 +478,8 @@ public abstract partial class SqliteSafeMigrationCatalogIntegrationTests : Sqlit
         }
 
         /// <summary>Models the unchanged native principal used by the final rebuild contract.</summary>
+        // WHY: EF binds this fixture entity through writable property metadata.
+        [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
         private sealed class SeparateAddParent
         {
             /// <summary>Gets or sets the native principal key.</summary>
@@ -435,6 +487,8 @@ public abstract partial class SqliteSafeMigrationCatalogIntegrationTests : Sqlit
         }
 
         /// <summary>Models the final child after its separately authored column ADD.</summary>
+        // WHY: EF binds this fixture entity through writable property metadata.
+        [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
         private sealed class SeparateAddChild
         {
             /// <summary>Gets or sets the native child key.</summary>

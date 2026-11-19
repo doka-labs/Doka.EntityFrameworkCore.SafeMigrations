@@ -1,5 +1,6 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
+/// <summary>Verifies PostgreSQL Generated Drop Integration contracts in independently owned test state.</summary>
 public sealed partial class PostgreSqlGeneratedDropIntegrationTests
 {
     /// <summary>Safe DROP never grants itself the explicit-lock privilege missing from a restricted owner.</summary>

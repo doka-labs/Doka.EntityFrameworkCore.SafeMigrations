@@ -314,7 +314,7 @@ internal sealed partial class SqlServerProjectedDependencyGraph : ISafeMigration
         if (targetName.Table != intent.Name
             && targetName.Schema != (intent.Schema ?? "dbo"))
         {
-            var intermediate = new TableKey(intent.Schema ?? "dbo", targetName.Table);
+            var intermediate = targetName with { Schema = intent.Schema ?? "dbo" };
             if (!_tables.TryGetValue(intermediate, out var intermediateId)
                 || !_missingTables.Contains(intermediateId)
                 || _nonTableNames.Contains(intermediate))
@@ -439,8 +439,13 @@ internal sealed partial class SqlServerProjectedDependencyGraph : ISafeMigration
         string Kind
     );
 
+    // WHY: Physical owner and column jointly identify the generated dictionary key.
     private readonly record struct ColumnIdentity(
+
+        // ReSharper disable once NotAccessedPositionalProperty.Local
         int Table,
+
+        // ReSharper disable once NotAccessedPositionalProperty.Local
         int Column
     );
 
@@ -449,13 +454,21 @@ internal sealed partial class SqlServerProjectedDependencyGraph : ISafeMigration
         string Table
     );
 
+    // WHY: Generated equality/hash keeps same-name foreign keys on different physical owners distinct.
     private readonly record struct ForeignKeyKey(
+
+        // ReSharper disable once NotAccessedPositionalProperty.Local
         int Table,
+
+        // ReSharper disable once NotAccessedPositionalProperty.Local
         string Name
     );
 
+    // WHY: Generated equality/hash includes the exact column name, not only its owner.
     private readonly record struct ColumnKey(
         int Table,
+
+        // ReSharper disable once NotAccessedPositionalProperty.Local
         string Column
     );
 }

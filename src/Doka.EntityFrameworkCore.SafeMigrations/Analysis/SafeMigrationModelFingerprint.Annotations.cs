@@ -11,6 +11,9 @@ public static partial class SafeMigrationModelFingerprint
             .GetAnnotations()
             .Where(static annotation => IsMigrationAnnotation(annotation.Name))
             .OrderBy(static annotation => annotation.Name, StringComparer.Ordinal)
+
+            // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         writer.Add(annotations.Length);
@@ -163,6 +166,9 @@ public static partial class SafeMigrationModelFingerprint
 
         var entries = values
             .OrderBy(static entry => entry.Key, StringComparer.Ordinal)
+
+            // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         writer.Add(entries.Length);
@@ -181,6 +187,9 @@ public static partial class SafeMigrationModelFingerprint
     {
         var values = sequence
             .Cast<object?>()
+
+            // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         writer.Add(values.Length);

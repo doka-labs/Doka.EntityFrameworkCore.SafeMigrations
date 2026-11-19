@@ -4,6 +4,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// Wraps one closed SafeMigrations intent so an unregistered provider cannot
 /// interpret it as a standard EF Core migration operation.
 /// </summary>
+[PublicAPI]
 public sealed class SafeMigrationOperation : MigrationOperation
 {
     /// <summary>Initializes a safe migration operation.</summary>

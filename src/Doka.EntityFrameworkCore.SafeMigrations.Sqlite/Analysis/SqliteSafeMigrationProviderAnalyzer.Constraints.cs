@@ -342,15 +342,12 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
         SafeMigrationSqlExpression? expectedExpression
     )
     {
-        if (expectedExpression is null)
-        {
-            return SqlEquivalent(actual, renderedExpected);
-        }
-
         // WHY: Native rebuilds use the model's original identifier quoting and
         // parentheses. Only an explicit structured proof permits normalization;
         // numeric source tokens, literal bytes, and opaque authored text stay strict.
-        return SqliteSqlNormalizer.EquivalentCapturedSource(actual, renderedExpected);
+        return expectedExpression is null
+            ? SqlEquivalent(actual, renderedExpected)
+            : SqliteSqlNormalizer.EquivalentCapturedSource(actual, renderedExpected);
     }
 
     /// <summary>Retains structured catalog proofs for provider-owned EF model expressions during rebuilds.</summary>

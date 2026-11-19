@@ -40,6 +40,8 @@ internal sealed class SqliteGenerationContext : DbContext
 }
 
 [DbContext(typeof(SqliteGenerationContext))]
+// WHY: EF discovers this target-model snapshot through its DbContext attribute.
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 internal sealed class SqliteGenerationContextModelSnapshot : ModelSnapshot
 {
     protected override void BuildModel(

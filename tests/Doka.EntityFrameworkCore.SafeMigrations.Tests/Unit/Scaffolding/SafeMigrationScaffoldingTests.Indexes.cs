@@ -78,9 +78,8 @@ public sealed partial class SafeMigrationScaffoldingTests
             Name = "ix_users_email",
             Table = "users",
             Columns = ["email"],
+            ["Provider:Unknown"] = "value",
         };
-
-        operation["Provider:Unknown"] = "value";
 
         // Act
         var exception = Record.Exception(() => generator.Generate("migrationBuilder", [operation], builder));

@@ -150,6 +150,7 @@ public sealed class SafeMigrationOperationIdentityTests
 
         // Act
         var identity = SafeMigrationOperationIdentity.Create(new EnsureForeignKeyIntent(definition));
+        var mutationFailure = Record.Exception(() => ((IList<string>)identity.Columns)[0] = "Changed");
 
         // Assert
         Assert.Equal("Children", identity.Table);
@@ -159,7 +160,7 @@ public sealed class SafeMigrationOperationIdentityTests
         Assert.Equal(["TenantId", "Id"], identity.PrincipalColumns);
         Assert.Same(definition.Columns, identity.Columns);
         Assert.Same(definition.PrincipalColumns, identity.PrincipalColumns);
-        Assert.Throws<NotSupportedException>(() => ((IList<string>)identity.Columns)[0] = "Changed");
+        Assert.IsType<NotSupportedException>(mutationFailure);
     }
 
     /// <summary>A qualifier-only rename retains the known name without resolving an unqualified database.</summary>

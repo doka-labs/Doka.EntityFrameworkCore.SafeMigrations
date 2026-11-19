@@ -18,6 +18,9 @@ public sealed class SqlServerTestLocalCleanupTests
         var failures = new Dictionary<string, Exception>();
         var firstFailure = new InvalidOperationException("Injected first local cleanup failure.");
         var lastFailure = new InvalidOperationException("Injected last local cleanup failure.");
+
+        // WHY: Act owns local/fixture cleanup; scope exit must not add another fixture database sweep.
+        // ReSharper disable once UseAwaitUsing
         using var fixture = new SqlServerContainerFixture(
             RootConnectionString,
             (database, _) =>
@@ -69,6 +72,9 @@ public sealed class SqlServerTestLocalCleanupTests
         var attempts = new List<string>();
         var expected = new InvalidOperationException("Injected retryable local cleanup failure.");
         var failFirstAttempt = true;
+
+        // WHY: Act owns local/fixture cleanup; scope exit must not add another fixture database sweep.
+        // ReSharper disable once UseAwaitUsing
         using var fixture = new SqlServerContainerFixture(
             RootConnectionString,
             (database, _) =>
@@ -116,6 +122,9 @@ public sealed class SqlServerTestLocalCleanupTests
         var attempts = new List<string>();
         var expected = new InvalidOperationException("Injected failure before final fixture cleanup.");
         var failFirstAttempt = true;
+
+        // WHY: Act owns local/fixture cleanup; scope exit must not add another fixture database sweep.
+        // ReSharper disable once UseAwaitUsing
         using var fixture = new SqlServerContainerFixture(
             RootConnectionString,
             (database, _) =>
@@ -163,6 +172,9 @@ public sealed class SqlServerTestLocalCleanupTests
         // Arrange
         var created = new List<string>();
         var dropped = new List<string>();
+
+        // WHY: Act owns local/fixture cleanup; scope exit must not add another fixture database sweep.
+        // ReSharper disable once UseAwaitUsing
         using var fixture = new SqlServerContainerFixture(
             RootConnectionString,
             (database, _) =>
@@ -202,6 +214,9 @@ public sealed class SqlServerTestLocalCleanupTests
     {
         // Arrange
         var dropped = new List<string>();
+
+        // WHY: Act owns local/fixture cleanup; scope exit must not add another fixture database sweep.
+        // ReSharper disable once UseAwaitUsing
         using var fixture = new SqlServerContainerFixture(
             RootConnectionString,
             (_, _) => Task.CompletedTask,
@@ -225,8 +240,13 @@ public sealed class SqlServerTestLocalCleanupTests
     }
 
     /// <summary>Exposes the actual base ownership path without constructing a native server fixture.</summary>
-    private sealed class DatabaseOwner(SqlServerContainerFixture fixture) : SqlServerIntegrationTestBase(fixture)
+    private sealed class DatabaseOwner : SqlServerIntegrationTestBase
     {
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        public DatabaseOwner(
+            SqlServerContainerFixture fixture
+        ) : base(fixture) { }
+
         /// <summary>Creates a database lease through the same path used by live test classes.</summary>
         /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
         /// <returns>The unpooled connection string owned by this test instance.</returns>

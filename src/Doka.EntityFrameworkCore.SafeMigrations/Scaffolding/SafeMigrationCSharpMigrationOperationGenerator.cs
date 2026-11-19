@@ -9,6 +9,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// shape is replaced. Standalone constraints render from their complete
 /// validated operation values. Unexpected or lossy shapes fail closed.
 /// </remarks>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 internal sealed partial class SafeMigrationCSharpMigrationOperationGenerator : CSharpMigrationOperationGenerator
 {
     private const string LegacyRollbackMessage = "A legacy-convergence migration cannot be rolled back safely "
@@ -36,6 +37,8 @@ internal sealed partial class SafeMigrationCSharpMigrationOperationGenerator : C
         ArgumentNullException.ThrowIfNull(createIndexProjectors);
         ArgumentNullException.ThrowIfNull(providerOperationAdapters);
 
+        // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+        // ReSharper disable once UseCollectionExpression
         var projectorSnapshot = createIndexProjectors.ToArray();
 
         if (projectorSnapshot.Length > 1)
@@ -48,6 +51,8 @@ internal sealed partial class SafeMigrationCSharpMigrationOperationGenerator : C
         _configuration = configuration;
         _createIndexProjector = projectorSnapshot.SingleOrDefault();
 
+        // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+        // ReSharper disable once UseCollectionExpression
         var adapterSnapshot = providerOperationAdapters.ToArray();
 
         if (adapterSnapshot.Length > 1)

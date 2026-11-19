@@ -9,26 +9,60 @@ internal sealed partial class SafeMigrationPreflightProjection
         int ValueMutationOriginOrdinal = -1
     );
 
-    private sealed class ProjectedPrerequisites(
-        bool newlyCreated,
-        long dataMutationVersion,
-        ISafeMigrationProviderObjectIdentityNormalizer? objectIdentityNormalizer,
-        bool sharesUniqueIndexIdentity
-    )
+    private sealed class ProjectedPrerequisites
     {
-        private readonly ISafeMigrationProviderObjectIdentityNormalizer? _objectIdentityNormalizer =
-            objectIdentityNormalizer;
+        private readonly ISafeMigrationProviderObjectIdentityNormalizer? _objectIdentityNormalizer;
 
-        public ProjectedDefinitionSet<ExpectedCheckConstraintDefinition> CheckConstraints { get; } = new(
-            SafeMigrationSemanticDefinitionComparers.CheckConstraint,
-            objectIdentityNormalizer);
+        /// <summary>Initializes accepted prerequisite lifetimes and their provider-specific identity rules.</summary>
+        /// <param name="newlyCreated">Whether accepted DDL created the table.</param>
+        /// <param name="dataMutationVersion">The current projected data lifetime.</param>
+        /// <param name="objectIdentityNormalizer">The provider's physical identity rules.</param>
+        /// <param name="sharesUniqueIndexIdentity">Whether unique constraints share physical index identity.</param>
+        public ProjectedPrerequisites(
+            bool newlyCreated,
+            long dataMutationVersion,
+            ISafeMigrationProviderObjectIdentityNormalizer? objectIdentityNormalizer,
+            bool sharesUniqueIndexIdentity
+        )
+        {
+            _objectIdentityNormalizer = objectIdentityNormalizer;
+            CheckConstraints = new ProjectedDefinitionSet<ExpectedCheckConstraintDefinition>(
+                SafeMigrationSemanticDefinitionComparers.CheckConstraint,
+                objectIdentityNormalizer);
 
-        public Dictionary<string, ProjectedColumn> Columns { get; } = new(
-            new IdentifierComparer(objectIdentityNormalizer, objectIdentityNormalizer?.ColumnIdentifierComparer));
+            Columns = new Dictionary<string, ProjectedColumn>(
+                new IdentifierComparer(objectIdentityNormalizer, objectIdentityNormalizer?.ColumnIdentifierComparer));
 
-        public long DataMutationVersion { get; } = dataMutationVersion;
+            DataMutationVersion = dataMutationVersion;
+            ModelManagedDataMutationVersion = dataMutationVersion;
+            ForeignKeys = new ProjectedDefinitionSet<ExpectedForeignKeyDefinition>(
+                SafeMigrationSemanticDefinitionComparers.ForeignKey,
+                objectIdentityNormalizer,
+                objectIdentityNormalizer?.ForeignKeyIdentifierComparer);
 
-        public long ModelManagedDataMutationVersion { get; set; } = dataMutationVersion;
+            Indexes = new ProjectedDefinitionSet<ExpectedIndexDefinition>(
+                SafeMigrationSemanticDefinitionComparers.IndexForColumns(
+                    objectIdentityNormalizer?.ColumnIdentifierComparer ?? StringComparer.Ordinal),
+                objectIdentityNormalizer,
+                objectIdentityNormalizer?.IndexIdentifierComparer);
+
+            NewlyCreated = newlyCreated;
+            UniqueConstraints = new ProjectedDefinitionSet<ExpectedUniqueConstraintDefinition>(
+                SafeMigrationSemanticDefinitionComparers.UniqueForColumns(
+                    objectIdentityNormalizer?.ColumnIdentifierComparer ?? StringComparer.Ordinal),
+                objectIdentityNormalizer,
+                sharesUniqueIndexIdentity
+                    ? objectIdentityNormalizer?.IndexIdentifierComparer
+                    : null);
+        }
+
+        public ProjectedDefinitionSet<ExpectedCheckConstraintDefinition> CheckConstraints { get; }
+
+        public Dictionary<string, ProjectedColumn> Columns { get; }
+
+        public long DataMutationVersion { get; }
+
+        public long ModelManagedDataMutationVersion { get; set; }
 
         public long? EmptyTableProofVersion { get; set; }
 
@@ -41,18 +75,11 @@ internal sealed partial class SafeMigrationPreflightProjection
         /// <summary>Gets whether only guarded index or constraint removals precede the native snapshot.</summary>
         public bool NativeGeneratedSnapshotPreservedByIndexOrConstraintRemoval { get; set; }
 
-        public ProjectedDefinitionSet<ExpectedForeignKeyDefinition> ForeignKeys { get; } = new(
-            SafeMigrationSemanticDefinitionComparers.ForeignKey,
-            objectIdentityNormalizer,
-            objectIdentityNormalizer?.ForeignKeyIdentifierComparer);
+        public ProjectedDefinitionSet<ExpectedForeignKeyDefinition> ForeignKeys { get; }
 
-        public ProjectedDefinitionSet<ExpectedIndexDefinition> Indexes { get; } = new(
-            SafeMigrationSemanticDefinitionComparers.IndexForColumns(
-                objectIdentityNormalizer?.ColumnIdentifierComparer ?? StringComparer.Ordinal),
-            objectIdentityNormalizer,
-            objectIdentityNormalizer?.IndexIdentifierComparer);
+        public ProjectedDefinitionSet<ExpectedIndexDefinition> Indexes { get; }
 
-        public bool NewlyCreated { get; } = newlyCreated;
+        public bool NewlyCreated { get; }
 
         public ExpectedPrimaryKeyDefinition? PrimaryKey { get; private set; }
 
@@ -66,13 +93,7 @@ internal sealed partial class SafeMigrationPreflightProjection
 
         public ExpectedPrimaryKeyDefinition? RemovedPrimaryKey { get; private set; }
 
-        public ProjectedDefinitionSet<ExpectedUniqueConstraintDefinition> UniqueConstraints { get; } = new(
-            SafeMigrationSemanticDefinitionComparers.UniqueForColumns(
-                objectIdentityNormalizer?.ColumnIdentifierComparer ?? StringComparer.Ordinal),
-            objectIdentityNormalizer,
-            sharesUniqueIndexIdentity
-                ? objectIdentityNormalizer?.IndexIdentifierComparer
-                : null);
+        public ProjectedDefinitionSet<ExpectedUniqueConstraintDefinition> UniqueConstraints { get; }
 
         /// <summary>Accepts key shape with separate authored-alias and physical-identity proof.</summary>
         /// <param name="definition">The accepted key shape.</param>

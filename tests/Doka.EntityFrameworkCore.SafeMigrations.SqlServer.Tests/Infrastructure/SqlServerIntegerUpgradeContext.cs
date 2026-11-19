@@ -58,6 +58,7 @@ public sealed class SqlServerIntegerUpgradeContext : DbContext
 }
 
 /// <summary>Creates a populated, source-stamped integer table with removable physical dependencies.</summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 [DbContext(typeof(SqlServerIntegerUpgradeContext))]
 [Migration(MigrationIdentifier)]
 public sealed class SqlServerIntegerInitialMigration : Migration
@@ -114,6 +115,7 @@ public sealed class SqlServerIntegerInitialMigration : Migration
 }
 
 /// <summary>Runs a general ordered drop, lossless widening, populated CHECK, and index replacement upgrade.</summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 [DbContext(typeof(SqlServerIntegerUpgradeContext))]
 [Migration(MigrationIdentifier)]
 public sealed class SqlServerIntegerUpgradeMigration : Migration

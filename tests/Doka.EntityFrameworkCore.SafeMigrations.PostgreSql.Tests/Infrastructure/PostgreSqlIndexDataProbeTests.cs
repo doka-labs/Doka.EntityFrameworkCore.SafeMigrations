@@ -1,5 +1,3 @@
-using System.Text.RegularExpressions;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
 /// <summary>Constrains native-qualified duplicate-row transport without runtime-dependent timing assertions.</summary>
@@ -237,6 +235,9 @@ public sealed class PostgreSqlIndexDataProbeTests
                     [new ExpectedIndexKeyDefinition("id")],
                     unique: true)),
             SafeMigrationPolicy.ThrowIfDifferent))
+
+        // WHY: Retain explicit fluent materialization and its independently owned result snapshot.
+        // ReSharper disable once UseCollectionExpression
         .ToArray();
 
     private static SafeMigrationProviderAnalysis[] Analyses(
@@ -251,6 +252,9 @@ public sealed class PostgreSqlIndexDataProbeTests
             "initial_state",
             SafeMigrationOperationalImpact.NotApplicable,
             [new SafeMigrationFacetDifference("index_key_order", "id", "other")]))
+
+        // WHY: Retain explicit fluent materialization and its independently owned result snapshot.
+        // ReSharper disable once UseCollectionExpression
         .ToArray();
 
     /// <summary>Runs the isolated PostgreSQL fixture operation with explicit cancellation.</summary>
@@ -338,5 +342,8 @@ public sealed class PostgreSqlIndexDataProbeTests
     ) => Regex
         .Matches(sql, @"SELECT (\d+),")
         .Select(static match => int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture))
+
+        // WHY: Retain explicit fluent materialization and its independently owned result snapshot.
+        // ReSharper disable once UseCollectionExpression
         .ToList();
 }

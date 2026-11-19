@@ -23,7 +23,11 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         var referenced = new HashSet<string>(StringComparer.Ordinal);
         SafeMigrationSqlExpressionInspector.CollectIdentifiers(expression, referenced);
 
-        return referenced.ToArray();
+        return referenced
+
+            // WHY: Preserve fluent snapshot materialization rather than a collection-spread rewrite.
+            // ReSharper disable once UseCollectionExpression
+            .ToArray();
     }
 
     /// <summary>Parses a bounded raw predicate without rewriting its authored SQL or contract fingerprint.</summary>
@@ -105,25 +109,20 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         SafeMigrationSqlExpression expression
     )
     {
-        if (expression is SafeMigrationSqlUnaryExpression
-            {
-                Operator: SafeMigrationSqlUnaryOperator.Negate,
-                Operand: SafeMigrationSqlLiteralExpression { StoreType: null } operand,
-            }
-            && TryGetUnsignedCheckLiteral(operand, out var positive))
+        return expression switch
         {
-            var negativeValue = -positive;
-
-            return negativeValue is >= long.MinValue and <= long.MaxValue;
-        }
-
-        if (expression is SafeMigrationSqlLiteralExpression { StoreType: null } literal
-            && TryGetUnsignedCheckLiteral(literal, out var value))
-        {
-            return value is >= long.MinValue and <= long.MaxValue;
-        }
-
-        return false;
+            SafeMigrationSqlUnaryExpression
+                {
+                    Operator: SafeMigrationSqlUnaryOperator.Negate,
+                    Operand: SafeMigrationSqlLiteralExpression { StoreType: null } operand,
+                }
+                when TryGetUnsignedCheckLiteral(operand, out var positive)
+                => -positive is >= long.MinValue and <= long.MaxValue,
+            SafeMigrationSqlLiteralExpression { StoreType: null } literal
+                when TryGetUnsignedCheckLiteral(literal, out var value)
+                => value is >= long.MinValue and <= long.MaxValue,
+            _ => false,
+        };
     }
 
     private static bool TryGetUnsignedCheckLiteral(

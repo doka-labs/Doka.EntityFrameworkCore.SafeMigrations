@@ -39,14 +39,12 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             return "CURRENT_TIMESTAMP(6)";
         }
 
-        if (value.Kind == SafeMigrationDefaultValueKind.None)
+        switch (value.Kind)
         {
-            return "<none>";
-        }
-
-        if (value.Kind == SafeMigrationDefaultValueKind.Sql)
-        {
-            return value.SqlExpression ?? _expressionRenderer.RenderDefault(value.StructuredExpression!);
+            case SafeMigrationDefaultValueKind.None:
+                return "<none>";
+            case SafeMigrationDefaultValueKind.Sql:
+                return value.SqlExpression ?? _expressionRenderer.RenderDefault(value.StructuredExpression!);
         }
 
         var literal = value.GetLiteralValue();
@@ -145,21 +143,16 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             value = character.ToString();
         }
 
-        if (value is null)
+        switch (value)
         {
-            return NullDefaultMatches();
-        }
-
-        if (value is byte[] bytes)
-        {
-            return BuildBinaryDefaultMatches(table, definition, catalogExpression, bytes, mapping, isMariaDb);
-        }
-
-        if (value is string text)
-        {
-            return isMariaDb
-                ? BuildMariaDbStringDefaultMatches(catalogExpression, text)
-                : BuildMySqlStringDefaultMatches(catalogExpression, text);
+            case null:
+                return NullDefaultMatches();
+            case byte[] bytes:
+                return BuildBinaryDefaultMatches(table, definition, catalogExpression, bytes, mapping, isMariaDb);
+            case string text:
+                return isMariaDb
+                    ? BuildMariaDbStringDefaultMatches(catalogExpression, text)
+                    : BuildMySqlStringDefaultMatches(catalogExpression, text);
         }
 
         var providerLiteral = mapping.GenerateSqlLiteral(value);
@@ -449,6 +442,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var quotedLiteral = Literal($"X'{hex}'");
         var textualMatch = $"UPPER({catalogExpression}) IN ({prefixedLiteral}, {quotedLiteral})";
 
+        // WHY: Native MySQL proof registration must precede the separate MariaDB catalog-display protocol.
+        // ReSharper disable once ConvertIfStatementToSwitchStatement
         if (!isMariaDb
             && definition.ClrType == typeof(byte[]))
         {
@@ -536,8 +531,14 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             """;
 
         _binaryDefaultProofs ??= [];
-        foreach (var existing in _binaryDefaultProofs)
+
+        // WHY: Index this stable list while preserving its order and ownership.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var existingIndex = 0; existingIndex < _binaryDefaultProofs.Count; existingIndex++)
         {
+            var existing = _binaryDefaultProofs[existingIndex];
+
             if (StringComparer.Ordinal.Equals(existing.QueryExpression, query))
             {
                 return existing;
@@ -601,6 +602,10 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 
         return candidates
             .Distinct(StringComparer.Ordinal)
+
+            // WHY: Retain fluent materialization and its existing snapshot
+            // ownership rather than replacing this boundary with a spread.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
     }
 

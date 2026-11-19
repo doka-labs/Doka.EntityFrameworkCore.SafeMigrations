@@ -43,14 +43,26 @@ internal sealed class MySqlSafeMigrationCreateIndexScaffoldingProjector
             Name = operation.Name,
             Table = operation.Table,
             Schema = operation.Schema,
+
+            // WHY: Retain fluent materialization and its existing snapshot
+            // ownership rather than replacing this boundary with a spread.
+            // ReSharper disable once UseCollectionExpression
             Columns = operation.Columns.ToArray(),
             IsUnique = operation.IsUnique,
+
+            // WHY: Retain fluent materialization and its existing snapshot
+            // ownership rather than replacing this boundary with a spread.
+            // ReSharper disable once UseCollectionExpression
             IsDescending = operation.IsDescending?.ToArray(),
             Filter = operation.Filter,
         };
 
         return new SafeMigrationCreateIndexScaffoldingProjection(
             sanitized,
+
+            // WHY: Retain fluent materialization and its existing snapshot
+            // ownership rather than replacing this boundary with a spread.
+            // ReSharper disable once UseCollectionExpression
             metadata.IndexPrefixLengths.ToArray());
     }
 }

@@ -2,6 +2,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Benchmarks;
 
 /// <summary>Measures synthetic guard rendering independently of catalog and integer-proof construction.</summary>
 [MemoryDiagnoser]
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public class SqlServerGuardGenerationBenchmarks
 {
     private GuardGenerationControl? _control;
@@ -16,8 +17,9 @@ public class SqlServerGuardGenerationBenchmarks
         => _control ?? throw new InvalidOperationException("Setup has not completed.");
 
     /// <summary>Constructs the fixed inputs and records SQL shape outside all measured work.</summary>
+    /// <returns>The setup and asynchronous diagnostic evidence persistence.</returns>
     [GlobalSetup]
-    public void Setup()
+    public async Task Setup()
     {
         SqlServerColumnAttribution.ValidateEnvironment();
         _control = CreateGuardGenerationControls()
@@ -25,8 +27,8 @@ public class SqlServerGuardGenerationBenchmarks
 
         _sql = Generate();
         var output = SqlServerColumnAttribution.CreateEvidenceDirectory("guard-" + ControlName);
-        File.WriteAllText(Path.Combine(output, "guard-generation.sql"), _sql);
-        SqlServerColumnAttribution.WriteJson(
+        await File.WriteAllTextAsync(Path.Combine(output, "guard-generation.sql"), _sql, CancellationToken.None);
+        await SqlServerColumnAttribution.WriteJsonAsync(
             Path.Combine(output, "guard-generation-control.json"),
             new
             {
@@ -45,7 +47,8 @@ public class SqlServerGuardGenerationBenchmarks
                 SysColumnsSubqueryOccurrences = SqlServerColumnAttribution.CountOccurrences(_sql, "FROM sys.columns"),
                 Interpretation = "Fixed common plan inputs bypass catalog construction and integer admission. "
                     + "Results measure combined guard helpers, not individual causes or full-generator improvements.",
-            });
+            },
+            CancellationToken.None);
     }
 
     /// <summary>Renders one guard using the same preconstructed immutable control inputs.</summary>

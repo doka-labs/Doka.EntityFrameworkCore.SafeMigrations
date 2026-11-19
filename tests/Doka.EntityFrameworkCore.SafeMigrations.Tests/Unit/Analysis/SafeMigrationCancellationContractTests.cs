@@ -4,18 +4,14 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 public sealed class SafeMigrationCancellationContractTests
 {
     /// <summary>
-    /// A same-operation local preserves its captured token/source and original cancellation identity.
+    /// A same-operation local receives its token explicitly and preserves cancellation identity.
     /// </summary>
     /// <param name="canceled">Whether the enclosing operation is canceled before the local function executes.</param>
-    /// <param name="captureSource">Whether the local captures the owning source rather than its token value.</param>
     [Theory]
-    [InlineData(false, false)]
-    [InlineData(false, true)]
-    [InlineData(true, false)]
-    [InlineData(true, true)]
-    public async Task LocalFunctionCapturePreservesTheOperationToken(
-        bool canceled,
-        bool captureSource
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task LocalFunctionArgumentPreservesTheOperationToken(
+        bool canceled
     )
     {
         // Arrange
@@ -24,20 +20,17 @@ public sealed class SafeMigrationCancellationContractTests
         var observed = CancellationToken.None;
         if (canceled)
         {
-            cancellation.Cancel();
+            await cancellation.CancelAsync();
         }
 
         // Act
-        var failure = await Record.ExceptionAsync(
-            captureSource
-                ? ObserveSourceAsync
-                : ObserveTokenAsync);
+        var failure = await Record.ExceptionAsync(() => ObserveTokenAsync(operationToken));
 
         // Assert
         Assert.Equal(operationToken, observed);
         if (canceled)
         {
-            var exception = Assert.IsAssignableFrom<OperationCanceledException>(failure);
+            var exception = Assert.IsType<OperationCanceledException>(failure, exactMatch: false);
             Assert.Equal(operationToken, exception.CancellationToken);
         }
         else
@@ -45,98 +38,14 @@ public sealed class SafeMigrationCancellationContractTests
             Assert.Null(failure);
         }
 
-        async Task ObserveTokenAsync()
+        async Task ObserveTokenAsync(
+            CancellationToken cancellationToken
+        )
         {
             await Task.Yield();
-            observed = operationToken;
-            operationToken.ThrowIfCancellationRequested();
+            observed = cancellationToken;
+            cancellationToken.ThrowIfCancellationRequested();
         }
-
-        async Task ObserveSourceAsync()
-        {
-            await Task.Yield();
-            observed = cancellation.Token;
-            cancellation.Token.ThrowIfCancellationRequested();
-        }
-    }
-
-    /// <summary>Informational live measurements forward one token to warmup and every retained sample.</summary>
-    [Fact]
-    public async Task LiveMeasurementForwardsCallerCancellationAcrossWarmupAndSamples()
-    {
-        // Arrange
-        using var cancellation = new CancellationTokenSource();
-        var report = MeasurementReport();
-        var observed = new List<CancellationToken>();
-
-        // Act
-        var measurement = await LivePerformanceEvidence.MeasureAsync(
-            token =>
-            {
-                observed.Add(token);
-
-                return Task.FromResult(report);
-            },
-            cancellation.Token);
-
-        // Assert
-        Assert.Same(report, measurement.LastReport);
-        Assert.Equal(21, observed.Count);
-        Assert.All(observed, token => Assert.Equal(cancellation.Token, token));
-    }
-
-    /// <summary>A canceled measurement request cannot start even its unmeasured warmup.</summary>
-    [Fact]
-    public async Task LiveMeasurementRejectsCancellationBeforeWarmup()
-    {
-        // Arrange
-        using var cancellation = new CancellationTokenSource();
-        cancellation.Cancel();
-        var calls = 0;
-
-        // Act
-        var failure = await Record.ExceptionAsync(() => LivePerformanceEvidence.MeasureAsync(
-            _ =>
-            {
-                calls++;
-
-                return Task.FromResult(MeasurementReport());
-            },
-            cancellation.Token));
-
-        // Assert
-        var canceled = Assert.IsAssignableFrom<OperationCanceledException>(failure);
-        Assert.Equal(cancellation.Token, canceled.CancellationToken);
-        Assert.Equal(0, calls);
-    }
-
-    /// <summary>Cancellation after warmup cannot start or publish a partial measured sample sequence.</summary>
-    [Fact]
-    public async Task LiveMeasurementObservesCancellationBetweenWarmupAndSampling()
-    {
-        // Arrange
-        using var cancellation = new CancellationTokenSource();
-        var report = MeasurementReport();
-        var calls = 0;
-        var observedToken = CancellationToken.None;
-
-        // Act
-        var failure = await Record.ExceptionAsync(() => LivePerformanceEvidence.MeasureAsync(
-            cancellationToken =>
-            {
-                observedToken = cancellationToken;
-                calls++;
-                cancellation.Cancel();
-
-                return Task.FromResult(report);
-            },
-            cancellation.Token));
-
-        // Assert
-        var canceled = Assert.IsAssignableFrom<OperationCanceledException>(failure);
-        Assert.Equal(cancellation.Token, canceled.CancellationToken);
-        Assert.Equal(1, calls);
-        Assert.Equal(cancellation.Token, observedToken);
     }
 
     /// <summary>Typed phase measurements retain their functional result and exact caller token.</summary>
@@ -195,7 +104,7 @@ public sealed class SafeMigrationCancellationContractTests
     {
         // Arrange
         using var cancellation = new CancellationTokenSource();
-        cancellation.Cancel();
+        await cancellation.CancelAsync();
         var calls = 0;
         Func<Task> execute = typed
             ? () => ModelManagedDataLargeExecutionEvidence.MeasureAsync(
@@ -219,22 +128,10 @@ public sealed class SafeMigrationCancellationContractTests
         var failure = await Record.ExceptionAsync(execute);
 
         // Assert
-        var canceled = Assert.IsAssignableFrom<OperationCanceledException>(failure);
+        var canceled = Assert.IsType<OperationCanceledException>(failure, exactMatch: false);
         Assert.Equal(cancellation.Token, canceled.CancellationToken);
         Assert.Equal(0, calls);
     }
-
-    /// <summary>Builds a deterministic functional result without any database or timing dependency.</summary>
-    private static SafeMigrationRunReport MeasurementReport() => new(
-        SafeMigrationReportMode.Preflight,
-        SafeMigrationReportStatus.NoOperations,
-        DateTimeOffset.UnixEpoch,
-        "measurement-contract",
-        new SafeMigrationProviderEnvironment("sqlite", "sqlite", "test"),
-        null,
-        $"safe-relational-model:v1:sqlite:sha256:{new string('a', 64)}",
-        new string('b', 64),
-        []);
 
     /// <summary>Explicit caller cancellation is observed before model services or catalog work are accessed.</summary>
     /// <param name="postflight">Whether the public verification or analysis entry point is called.</param>
@@ -247,8 +144,8 @@ public sealed class SafeMigrationCancellationContractTests
     {
         // Arrange
         using var cancellation = new CancellationTokenSource();
-        cancellation.Cancel();
-        using var context = new DbContext(new DbContextOptionsBuilder().Options);
+        await cancellation.CancelAsync();
+        await using var context = new DbContext(new DbContextOptionsBuilder().Options);
         var analyzer = new RecordingAnalyzer();
         var runner = new SafeMigrationRunner(analyzer);
         var options = new SafeMigrationRunOptions("cancellation-contract");
@@ -259,7 +156,7 @@ public sealed class SafeMigrationCancellationContractTests
             : runner.AnalyzeAsync(context, [], options, cancellation.Token));
 
         // Assert
-        var canceled = Assert.IsAssignableFrom<OperationCanceledException>(exception);
+        var canceled = Assert.IsType<OperationCanceledException>(exception, exactMatch: false);
         Assert.Equal(cancellation.Token, canceled.CancellationToken);
         Assert.Equal(0, analyzer.ValidationCount);
         Assert.Empty(analyzer.ObservedTokens);
@@ -276,7 +173,7 @@ public sealed class SafeMigrationCancellationContractTests
     {
         // Arrange
         using var cancellation = new CancellationTokenSource();
-        using var context = new DbContext(new DbContextOptionsBuilder().Options);
+        await using var context = new DbContext(new DbContextOptionsBuilder().Options);
         var analyzer = new RecordingAnalyzer();
         var runner = new SafeMigrationRunner(analyzer);
         var operation = new SafeMigrationOperation(
@@ -472,14 +369,14 @@ public sealed class SafeMigrationCancellationContractTests
         + "System.Threading.CancellationToken token) "
         + "{ return Inner(); async System.Threading.Tasks.Task Inner() "
         + "{ await System.Threading.Tasks.Task.Yield(); token.ThrowIfCancellationRequested(); } } }",
-        0)]
+        1)]
     [InlineData(
         "public class Fixture { public System.Threading.Tasks.Task Run("
         + "System.Threading.CancellationToken token) "
         + "{ var source = System.Threading.CancellationTokenSource.CreateLinkedTokenSource(token); "
         + "return Inner(); async System.Threading.Tasks.Task Inner() "
         + "{ await System.Threading.Tasks.Task.Yield(); source.Token.ThrowIfCancellationRequested(); } } }",
-        0)]
+        1)]
     [InlineData(
         "public class Fixture { public System.Threading.Tasks.Task Run("
         + "System.Threading.CancellationToken token) "
@@ -487,7 +384,7 @@ public sealed class SafeMigrationCancellationContractTests
         + "{ var value = 1; return Inner(); async System.Threading.Tasks.Task Inner() "
         + "{ await System.Threading.Tasks.Task.Yield(); token.ThrowIfCancellationRequested(); "
         + "System.GC.KeepAlive(value); } } } }",
-        0)]
+        2)]
     [InlineData(
         "public class Fixture { public System.Threading.Tasks.Task Run("
         + "System.Threading.CancellationToken token) "
@@ -566,7 +463,37 @@ public sealed class SafeMigrationCancellationContractTests
         + "{ public class SharedContainerFixtureLifecycle<T> { public System.Threading.Tasks.Task DisposeAsync() "
         + "=> System.Threading.Tasks.Task.CompletedTask; } }",
         1)]
+    [InlineData(
+        "namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests "
+        + "{ public static class PostgreSqlNativeAdmission "
+        + "{ public static System.Threading.Tasks.Task CompleteAsync(System.Exception failure, "
+        + "System.Threading.Tasks.Task execution, System.Data.Common.DbConnection observer, "
+        + "System.Data.Common.DbCommand releaseCommand, System.Threading.CancellationTokenSource cancellation) "
+        + "=> System.Threading.Tasks.Task.CompletedTask; } }",
+        1)]
+    [InlineData(
+        "namespace Doka.EntityFrameworkCore.SafeMigrations { public sealed class SafeMigrationCatalogBatch {} } "
+        + "namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer "
+        + "{ public static class SqlServerSafeMigrationProviderAnalyzer "
+        + "{ public static System.Threading.Tasks.Task CleanupTargetCaptureAsync("
+        + "Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationCatalogBatch batch, "
+        + "System.Data.Common.DbCommand command, System.Exception failure) "
+        + "=> System.Threading.Tasks.Task.CompletedTask; } }",
+        1)]
     [InlineData("public delegate System.Threading.Tasks.Task Operation(System.Threading.CancellationToken token);", 0)]
+    [InlineData(
+        "namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests "
+        + "{ public class MySqlProviderAnalysisCleanupTests { public class ProbeCleanupFailureState "
+        + "{ public System.Threading.Tasks.Task DisposeTargetAsync(string stage) "
+        + "=> System.Threading.Tasks.Task.CompletedTask; } } }",
+        1)]
+    [InlineData(
+        "namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer "
+        + "{ public static class SqlServerSafeMigrationProviderAnalyzer "
+        + "{ public static System.Threading.Tasks.Task CleanupTemporaryCommandAsync("
+        + "System.Data.Common.DbConnection connection, System.Data.Common.DbTransaction transaction, "
+        + "string temporaryTable, int? commandTimeout) => System.Threading.Tasks.Task.CompletedTask; } }",
+        1)]
     [InlineData("public delegate System.Threading.Tasks.Task Operation();", 1)]
     public void TokenlessGuardDistinguishesOwnedOperationsFromActualFrameworkContracts(
         string source,
@@ -588,6 +515,156 @@ public sealed class SafeMigrationCancellationContractTests
 
             // Act
             var violations = CancellationTokenContract.FindTokenlessViolations(assembly);
+
+            // Assert
+            Assert.Equal(expectedViolations, violations.Count);
+        }
+        finally
+        {
+            context.Unload();
+        }
+    }
+
+    /// <summary>
+    /// Protected cleanup callbacks are exempt only at their reviewed owner, signature and parameter slot.
+    /// </summary>
+    /// <param name="contract">The exact protected cleanup callback boundary.</param>
+    /// <param name="mutation">The isolated identity or signature mismatch, or the matching contract.</param>
+    /// <param name="expectedViolations">The number of asynchronous callbacks that must remain rejected.</param>
+    [Theory]
+    [InlineData("pg-fixture", "matching", 0)]
+    [InlineData("pg-fixture", "foreign-assembly", 1)]
+    [InlineData("pg-fixture", "renamed-slot", 1)]
+    [InlineData("pg-fixture", "changed-signature", 1)]
+    [InlineData("pg-fixture", "different-member", 1)]
+    [InlineData("pg-attempt", "matching", 0)]
+    [InlineData("pg-attempt", "foreign-assembly", 1)]
+    [InlineData("pg-attempt", "renamed-slot", 1)]
+    [InlineData("pg-attempt", "changed-signature", 1)]
+    [InlineData("pg-attempt", "different-member", 1)]
+    [InlineData("sql-fixture", "matching", 0)]
+    [InlineData("sql-fixture", "foreign-assembly", 1)]
+    [InlineData("sql-fixture", "renamed-slot", 1)]
+    [InlineData("sql-fixture", "changed-signature", 1)]
+    [InlineData("sql-fixture", "different-member", 1)]
+    public void CleanupCallbackExceptionsRequireTheirExactReviewedSlot(
+        string contract,
+        string mutation,
+        int expectedViolations
+    )
+    {
+        // Arrange
+        var (provider, owner, slotName, parameterList) = contract switch
+        {
+            "pg-fixture" => ("PostgreSql", "PostgreSqlContainerFixture", "disposeContainer",
+                "Func<string, CancellationToken, Task> createDatabase, "
+                + "Func<string, CancellationToken, Task> dropDatabase, Func<string, string> testConnectionString, "
+                + "Func<Task> disposeContainer"),
+            "pg-attempt" => ("PostgreSql", "PostgreSqlOwnedConcurrentAttempt", "releaseOnFailure",
+                "Func<CancellationToken, Task> execute, Func<Task, CancellationToken, Task> observe, "
+                + "Func<CancellationToken, Task> release, Func<Task> releaseOnFailure, "
+                + "CancellationTokenSource cancellationSource, CancellationToken cancellationToken"),
+            "sql-fixture" => ("SqlServer", "SqlServerContainerFixture", "disposeContainerAsync",
+                "string rootConnectionString, Func<string, CancellationToken, Task> createDatabaseAsync, "
+                + "Func<string, CancellationToken, Task> dropDatabaseAsync, Func<Task> disposeContainerAsync"),
+            _ => throw new ArgumentOutOfRangeException(nameof(contract), contract, "Unknown cleanup boundary."),
+        };
+
+        if (mutation == "renamed-slot")
+        {
+            parameterList = parameterList.Replace(slotName, "unreviewedCallback", StringComparison.Ordinal);
+        }
+        else if (mutation == "changed-signature")
+        {
+            parameterList = "int unrelated, " + parameterList;
+        }
+
+        var memberName = mutation == "different-member"
+            ? "Forward"
+            : "RunAsync";
+
+        var declaration = contract == "pg-attempt"
+            ? $"public static Task<Exception> {memberName}({parameterList}) => Task.FromResult<Exception>(null);"
+            : mutation == "different-member"
+                ? $"public void Forward({parameterList}) {{ }}"
+                : $"public {owner}({parameterList}) {{ }}";
+
+        var source = "using System; using System.Threading; using System.Threading.Tasks; "
+            + $"namespace Doka.EntityFrameworkCore.SafeMigrations.{provider}.Tests "
+            + $"{{ public class {owner} {{ {declaration} }} }}";
+
+        var assemblyName = mutation == "foreign-assembly"
+            ? "CleanupCallbackSpoof"
+            : $"Doka.EntityFrameworkCore.SafeMigrations.{provider}.Tests";
+
+        using var image = new MemoryStream();
+        var emitted = Compile(source)
+            .WithAssemblyName(assemblyName)
+            .Emit(image);
+
+        Assert.True(emitted.Success, string.Join(Environment.NewLine, emitted.Diagnostics));
+        image.Position = 0;
+        var context = new AssemblyLoadContext("cleanup-callback-contract-control", isCollectible: true);
+
+        try
+        {
+            var assembly = context.LoadFromStream(image);
+
+            // Act
+            var violations = CancellationTokenContract.FindSignatureViolations(assembly);
+
+            // Assert
+            Assert.Equal(expectedViolations, violations.Count);
+            Assert.All(violations,
+                static violation =>
+                    Assert.EndsWith("callback cancellation", violation, StringComparison.Ordinal));
+        }
+        finally
+        {
+            context.Unload();
+        }
+    }
+
+    /// <summary>
+    /// Owned signatures and callback slots cannot hide cancellation behind captures or unrelated names.
+    /// </summary>
+    /// <param name="declaration">The isolated declaration whose actual parameter metadata is inspected.</param>
+    /// <param name="expectedViolations">The exact number of invalid operation or callback contracts.</param>
+    [Theory]
+    [InlineData("void Run(System.Threading.CancellationToken cancellationToken) {}", 0)]
+    [InlineData("void Run(System.Threading.CancellationToken callbackCancellationToken) {}", 0)]
+    [InlineData("void Run(System.Threading.CancellationToken token) {}", 1)]
+    [InlineData("void Run(System.Threading.CancellationToken cancellationToken, int value) {}", 1)]
+    [InlineData("void Run(System.Threading.CancellationToken cancellationToken = default) {}", 1)]
+    [InlineData("void Run(System.Func<System.Threading.Tasks.Task> execute) {}", 1)]
+    [InlineData("void Run(System.Func<System.Threading.Tasks.ValueTask> execute) {}", 1)]
+    [InlineData("System.Func<System.Threading.Tasks.Task> Callback { get; set; }", 0)]
+    [InlineData("void set_Initialize(System.Func<System.Threading.Tasks.Task> execute) {}", 1)]
+    [InlineData("void Run(System.Reflection.MethodBase member) {}", 0)]
+    [InlineData("void Run(System.Func<System.Threading.CancellationToken, System.Threading.Tasks.Task> execute) {}", 0)]
+    [InlineData("void Run(System.Func<System.Threading.CancellationToken, int, "
+        + "System.Threading.Tasks.Task> execute) {}",
+        1)]
+    public void SignatureGuardChecksOwnedTokensAndAsynchronousCallbackContracts(
+        string declaration,
+        int expectedViolations
+    )
+    {
+        // Arrange
+        using var image = new MemoryStream();
+        var emitted = Compile($"public class Fixture {{ public {declaration} }}")
+            .Emit(image);
+
+        Assert.True(emitted.Success, string.Join(Environment.NewLine, emitted.Diagnostics));
+        image.Position = 0;
+        var context = new AssemblyLoadContext("cancellation-signature-control", isCollectible: true);
+
+        try
+        {
+            var assembly = context.LoadFromStream(image);
+
+            // Act
+            var violations = CancellationTokenContract.FindSignatureViolations(assembly);
 
             // Assert
             Assert.Equal(expectedViolations, violations.Count);

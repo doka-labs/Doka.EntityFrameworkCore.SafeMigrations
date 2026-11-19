@@ -62,7 +62,7 @@ public sealed class SqlServerTemporaryTableProbeTests
 
         // Assert
         Assert.Equal("localName",
-            Assert.IsAssignableFrom<ArgumentException>(failure)
+            Assert.IsType<ArgumentException>(failure, exactMatch: false)
                 .ParamName);
 
         Assert.Equal(ConnectionState.Closed, connection.State);

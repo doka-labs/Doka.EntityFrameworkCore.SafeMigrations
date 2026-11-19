@@ -1,5 +1,6 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql;
 
+/// <summary>Renders PostgreSQL index operations while preserving the authored key and storage contracts.</summary>
 public sealed partial class PostgreSqlSafeMigrationsSqlGenerator
 {
     private string BuildCustomCreateIndexSql(
@@ -38,10 +39,12 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator
             }
 
             var key = definition.Keys[index];
-            builder.Append(
-                key.Column is not null
-                    ? _sqlGenerationHelper.DelimitIdentifier(key.Column)
-                    : $"({_expressionRenderer.Render(key.StructuredExpression ?? SafeMigrationSql.Opaque(key.Expression!))})");
+            var renderedKey = key.Column is not null
+                ? _sqlGenerationHelper.DelimitIdentifier(key.Column)
+                : $"({_expressionRenderer.Render(
+                    key.StructuredExpression ?? SafeMigrationSql.Opaque(key.Expression!))})";
+
+            builder.Append(renderedKey);
 
             if (key.Collation is not null)
             {

@@ -23,12 +23,17 @@ internal sealed class PostgreSqlSafeMigrationAnalysisConstraintCatalog
         string? currentSchema
     )
     {
-        var entries = new List<Entry>();
-        var pending = new List<MigrationOperation>();
+        List<Entry> entries = [];
+        List<MigrationOperation> pending = [];
         var start = 0;
         var safeOrdinal = 0;
-        foreach (var operation in operations)
+
+        // WHY: This pass only reads the stable ordered collection by ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var operationIndex = 0; operationIndex < operations.Count; operationIndex++)
         {
+            var operation = operations[operationIndex];
             if (operation is SafeMigrationOperation safeOperation)
             {
                 if (safeOperation.Intent is EnsureSchemaIntent or DropSchemaIntent)
@@ -59,6 +64,8 @@ internal sealed class PostgreSqlSafeMigrationAnalysisConstraintCatalog
 
         Flush();
 
+        // WHY: Retain the explicit snapshot boundary instead of implicit spread materialization.
+        // ReSharper disable once UseCollectionExpression
         return new PostgreSqlSafeMigrationAnalysisConstraintCatalog(entries.ToArray());
 
         void Flush()
@@ -67,10 +74,6 @@ internal sealed class PostgreSqlSafeMigrationAnalysisConstraintCatalog
             {
                 return;
             }
-
-            string? Normalize(
-                string? schema
-            ) => PostgreSqlSafeMigrationSchemaIdentity.Normalize(schema, currentSchema);
 
             // WHY: Rejected identities cannot lend transition contracts to
             // earlier tables, and opaque operations cannot carry index/drop
@@ -86,6 +89,12 @@ internal sealed class PostgreSqlSafeMigrationAnalysisConstraintCatalog
             entries.Add(new Entry(start, safeOrdinal, catalog));
             pending.Clear();
             start = safeOrdinal;
+
+            return;
+
+            string? Normalize(
+                string? schema
+            ) => PostgreSqlSafeMigrationSchemaIdentity.Normalize(schema, currentSchema);
         }
     }
 

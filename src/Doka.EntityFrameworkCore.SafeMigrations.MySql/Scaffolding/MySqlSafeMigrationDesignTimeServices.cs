@@ -4,6 +4,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql;
 /// Registers SafeMigrations design-time services and the Doka metadata
 /// projection for MySQL and MariaDB consumers.
 /// </summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 internal sealed class MySqlSafeMigrationDesignTimeServices : IDesignTimeServices
 {
     /// <summary>

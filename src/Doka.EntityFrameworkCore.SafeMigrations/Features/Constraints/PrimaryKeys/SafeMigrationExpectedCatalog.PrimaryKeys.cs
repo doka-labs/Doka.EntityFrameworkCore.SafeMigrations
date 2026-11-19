@@ -35,6 +35,9 @@ internal static partial class SafeMigrationExpectedCatalog
             .Constraints
             .Where(static value => value.Value == SafeMigrationDatabaseObjectKind.PrimaryKey)
             .Select(static value => value.Key)
+
+            // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         foreach (var name in names)

@@ -14,8 +14,14 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         }
 
         var width = 0;
-        foreach (var name in columns)
+
+        // WHY: Immutable composite-key slots retain their physical key order.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var columnIndex = 0; columnIndex < columns.Count; columnIndex++)
         {
+            var name = columns[columnIndex];
+
             var column = definition.Columns.Single(column => column.Name == name);
             if (!TryGetColumnType(column, out var type))
             {

@@ -762,7 +762,7 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        var expression = "\"right_bound\" > CASE WHEN \"left_bound\" = 9223372036854775807 "
+        const string expression = "\"right_bound\" > CASE WHEN \"left_bound\" = 9223372036854775807 "
             + "THEN \"left_bound\" ELSE \"left_bound\" + 1 END";
 
         var columns = CreateDefinition(stored, nullable: false)
@@ -1081,6 +1081,8 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
                 : "left_bound",
             "generated_nodes");
 
+        // WHY: Keep direct fixture mutations explicit; case scopes and breaks would not clarify this setup.
+        // ReSharper disable once ConvertIfStatementToSwitchStatement
         if (change == "referenced_readd_type")
         {
             builder.AddColumnIfNotExists<string>(
@@ -1133,8 +1135,9 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
             "SELECT COUNT(*) FROM generated_nodes WHERE id = 1 AND has_descendants = 1;",
             cancellationToken: CancellationToken.None);
 
-        // Assert
         var diagnostic = Encoding.UTF8.GetString(SafeMigrationReportJson.SerializeToUtf8Bytes(report));
+
+        // Assert
         Assert.True(
             report.Status
             == (ready
@@ -1270,8 +1273,9 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
             "PRAGMA schema_version;",
             cancellationToken: CancellationToken.None);
 
-        // Assert
         var diagnostic = Encoding.UTF8.GetString(SafeMigrationReportJson.SerializeToUtf8Bytes(report));
+
+        // Assert
         Assert.True(report.Assessments[0].Action == SafeMigrationAction.Apply, diagnostic);
         Assert.True(report.Assessments[1].Action == SafeMigrationAction.NoOp, diagnostic);
         Assert.True(report.Assessments[2].Action == SafeMigrationAction.Apply, diagnostic);
@@ -1369,7 +1373,7 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
                 .ToArray()
             ?? [],
             probes
-                ?.Select(_ => (IModel?)oldModel)
+                ?.Select(IModel? (_) => oldModel)
                 .ToList(),
             cancellationToken: CancellationToken.None);
 
@@ -1413,6 +1417,8 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
         // Act
         var exception = Record.Exception(() => native.GenerateSafe(
             [new CreateSequenceOperation { Name = "unsupported_sequence" }],
+            // WHY: Record.Exception executes this callback synchronously before the owning using scope ends.
+            // ReSharper disable once AccessToDisposedClosure
             context.Model,
             MigrationsSqlGenerationOptions.Default,
             guardedOperations: []));
@@ -1617,9 +1623,20 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
         primaryKey: new ExpectedPrimaryKeyDefinition("pk_generated_nodes", "generated_nodes", ["id"]));
 
     /// <summary>Observes the injected SPI rather than inferring delegation from generated output.</summary>
-    private sealed class RecordingBaselineGenerator(ISqliteSafeMigrationsBaselineGenerator inner)
+    private sealed class RecordingBaselineGenerator
         : ISqliteSafeMigrationsBaselineGenerator
     {
+        private readonly ISqliteSafeMigrationsBaselineGenerator _inner;
+
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="inner">The supplied inner for this fixture.</param>
+        public RecordingBaselineGenerator(
+            ISqliteSafeMigrationsBaselineGenerator inner
+        )
+        {
+            _inner = inner;
+        }
+
         /// <summary>Gets whether native generation was actually requested.</summary>
         public bool WasInvoked { get; private set; }
 
@@ -1638,7 +1655,7 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
             WasInvoked = true;
             PreserveGeneratedColumnFacets = guardedOperations is not null;
 
-            return inner.Generate(operations, model, options, guardedOperations, snapshot);
+            return _inner.Generate(operations, model, options, guardedOperations, snapshot);
         }
     }
 }

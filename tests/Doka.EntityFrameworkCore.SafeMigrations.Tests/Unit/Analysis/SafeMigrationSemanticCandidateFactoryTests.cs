@@ -1,10 +1,18 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
+/// <summary>
+/// Verifies semantic inventory candidates preserve complete endpoint and key shapes without binding unrelated owners.
+/// </summary>
 public sealed class SafeMigrationSemanticCandidateFactoryTests
 {
+    /// <summary>
+    /// Rebinds unexpected physical names while preserving complete FK endpoints, index directions and semantic
+    /// deduplication.
+    /// </summary>
     [Fact]
     public void Create_ProjectsEverySupportedNamedObjectWithoutChangingItsShape()
     {
+        // Arrange
         var operations = new MigrationOperation[]
         {
             Operation(
@@ -66,6 +74,7 @@ public sealed class SafeMigrationSemanticCandidateFactoryTests
             Unexpected(SafeMigrationDatabaseObjectKind.Index, "ix_legacy"),
         };
 
+        // Act
         var candidates = SafeMigrationSemanticCandidateFactory
             .Create(
                 operations,
@@ -73,6 +82,7 @@ public sealed class SafeMigrationSemanticCandidateFactoryTests
                 projectUniqueIndexesAsUniqueConstraints: true)
             .ToArray();
 
+        // Assert
         Assert.Equal(6, candidates.Length);
         Assert.Equal(
             ["pk_legacy", "uq_legacy", "uq_legacy", "ck_legacy", "fk_legacy", "ix_legacy"],
@@ -94,9 +104,13 @@ public sealed class SafeMigrationSemanticCandidateFactoryTests
         Assert.IsType<EnsureIndexIntent>(candidates[2].Operation.Intent);
     }
 
+    /// <summary>
+    /// Produces no semantic candidate for another owner, a column object or an index lacking an owner.
+    /// </summary>
     [Fact]
     public void Create_IgnoresDifferentTablesAndUnsupportedObjectKinds()
     {
+        // Arrange
         var operation = Operation(
             new EnsureIndexIntent(
                 new ExpectedIndexDefinition(
@@ -104,6 +118,7 @@ public sealed class SafeMigrationSemanticCandidateFactoryTests
                     "expected_table",
                     [new ExpectedIndexKeyDefinition(column: "code")])));
 
+        // Act
         var candidates = SafeMigrationSemanticCandidateFactory
             .Create(
                 [operation],
@@ -129,12 +144,17 @@ public sealed class SafeMigrationSemanticCandidateFactoryTests
                 ])
             .ToArray();
 
+        // Assert
         Assert.Empty(candidates);
     }
 
+    /// <summary>
+    /// Binds an unqualified expected index only to the independently declared provider default schema.
+    /// </summary>
     [Fact]
     public void Create_BindsUnqualifiedContractsToTheProviderDefaultSchema()
     {
+        // Arrange
         var operation = Operation(
             new EnsureIndexIntent(
                 new ExpectedIndexDefinition(
@@ -142,6 +162,7 @@ public sealed class SafeMigrationSemanticCandidateFactoryTests
                     "records",
                     [new ExpectedIndexKeyDefinition(column: "code")])));
 
+        // Act
         var candidates = SafeMigrationSemanticCandidateFactory
             .Create(
                 [operation],
@@ -162,6 +183,7 @@ public sealed class SafeMigrationSemanticCandidateFactoryTests
                 defaultSchema: "public")
             .ToArray();
 
+        // Assert
         var candidate = Assert.Single(candidates);
 
         Assert.Equal(1, candidate.UnexpectedObjectIndex);

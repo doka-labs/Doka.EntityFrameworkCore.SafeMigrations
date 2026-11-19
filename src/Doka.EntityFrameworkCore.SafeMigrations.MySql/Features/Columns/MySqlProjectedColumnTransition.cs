@@ -292,11 +292,23 @@ internal static class MySqlProjectedColumnTransition
             .ToLowerInvariant();
     }
 
-    private sealed class TargetColumns(
-        ISafeMigrationProjectedAlterTable table,
-        ExpectedColumnDefinition target
-    ) : ISafeMigrationProjectedColumnSource
+    private sealed class TargetColumns : ISafeMigrationProjectedColumnSource
     {
+        private readonly ISafeMigrationProjectedAlterTable _table;
+        private readonly ExpectedColumnDefinition _target;
+
+        /// <summary>Overlays only the target member on the accepted callback-scoped table view.</summary>
+        /// <param name="table">The existing projected source for all other column identities.</param>
+        /// <param name="target">The exact current transition target.</param>
+        internal TargetColumns(
+            ISafeMigrationProjectedAlterTable table,
+            ExpectedColumnDefinition target
+        )
+        {
+            _table = table;
+            _target = target;
+        }
+
         public bool TryGetProjectedColumn(
             string tableName,
             string? schema,
@@ -304,14 +316,14 @@ internal static class MySqlProjectedColumnTransition
             [NotNullWhen(true)] out ExpectedColumnDefinition? definition
         )
         {
-            if (StringComparer.OrdinalIgnoreCase.Equals(column, target.Name))
+            if (StringComparer.OrdinalIgnoreCase.Equals(column, _target.Name))
             {
-                definition = target;
+                definition = _target;
 
                 return true;
             }
 
-            return table.TryGetProjectedColumn(tableName, schema, column, out definition);
+            return _table.TryGetProjectedColumn(tableName, schema, column, out definition);
         }
     }
 }

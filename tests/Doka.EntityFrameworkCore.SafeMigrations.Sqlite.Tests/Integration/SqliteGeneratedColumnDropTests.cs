@@ -91,6 +91,8 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
 
         // Act
         var exception = synchronous
+            // WHY: Record.Exception executes this callback synchronously before the owning using scope ends.
+            // ReSharper disable once AccessToDisposedClosure
             ? Record.Exception(() => ExecuteOperations(context, builder.Operations))
             : await Record.ExceptionAsync(() => ExecuteOperationsAsync(
                 context,
@@ -174,8 +176,9 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
             $"SELECT COUNT(*) FROM pragma_table_xinfo('drop_nodes') WHERE name = '{column}';",
             cancellationToken: CancellationToken.None);
 
-        // Assert
         var diagnostic = Encoding.UTF8.GetString(SafeMigrationReportJson.SerializeToUtf8Bytes(report));
+
+        // Assert
         Assert.True(report.Status == SafeMigrationReportStatus.Ready, diagnostic);
         Assert.Null(exception);
         Assert.Null(replayException);
@@ -215,8 +218,9 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
             "SELECT COUNT(*) FROM pragma_table_xinfo('drop_nodes') WHERE name IN ('source', 'derived');",
             cancellationToken: CancellationToken.None);
 
-        // Assert
         var diagnostic = Encoding.UTF8.GetString(SafeMigrationReportJson.SerializeToUtf8Bytes(report));
+
+        // Assert
         Assert.True(report.Status == SafeMigrationReportStatus.Ready, diagnostic);
         Assert.All(report.Assessments, value => Assert.Equal(SafeMigrationAction.Apply, value.Action));
         Assert.Equal(1, retainedRows);
@@ -419,8 +423,9 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
             "SELECT COUNT(*) FROM pragma_table_xinfo('drop_nodes') WHERE name IN ('source', 'derived');",
             cancellationToken: CancellationToken.None);
 
-        // Assert
         var diagnostic = Encoding.UTF8.GetString(SafeMigrationReportJson.SerializeToUtf8Bytes(report));
+
+        // Assert
         Assert.True(report.Status == SafeMigrationReportStatus.Ready, diagnostic);
         Assert.Equal(2, remainingColumns);
         Assert.Equal(0, removedColumns);
@@ -530,8 +535,9 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
             "SELECT COUNT(*) FROM native_control WHERE source = 3 AND derived = 6;",
             cancellationToken: CancellationToken.None);
 
-        // Assert
         var diagnostic = Encoding.UTF8.GetString(SafeMigrationReportJson.SerializeToUtf8Bytes(report));
+
+        // Assert
         Assert.True(report.Status == SafeMigrationReportStatus.Ready, diagnostic);
         Assert.Equal(SafeMigrationAction.Apply,
             Assert.Single(report.Assessments)
@@ -566,6 +572,8 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
 
         // Act
         var exception = synchronous
+            // WHY: Record.Exception executes this callback synchronously before the owning using scope ends.
+            // ReSharper disable once AccessToDisposedClosure
             ? Record.Exception(() => ExecuteOperations(context, builder.Operations))
             : await Record.ExceptionAsync(() => ExecuteOperationsAsync(
                 context,
@@ -627,8 +635,9 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
             "SELECT COUNT(*) FROM drop_nodes WHERE id = 1 AND source = 3 AND derived = 96;",
             cancellationToken: CancellationToken.None);
 
-        // Assert
         var diagnostic = Encoding.UTF8.GetString(SafeMigrationReportJson.SerializeToUtf8Bytes(report));
+
+        // Assert
         Assert.True(report.Status == SafeMigrationReportStatus.Ready, diagnostic);
         Assert.Null(exception);
         Assert.Equal(0, removedColumns);
@@ -729,8 +738,9 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
             "SELECT COUNT(*) FROM drop_nodes WHERE id = 1 AND source = 3 AND derived = 6;",
             cancellationToken: CancellationToken.None);
 
-        // Assert
         var diagnostic = Encoding.UTF8.GetString(SafeMigrationReportJson.SerializeToUtf8Bytes(report));
+
+        // Assert
         Assert.True(report.Status == SafeMigrationReportStatus.Ready, diagnostic);
         Assert.Null(exception);
         Assert.Equal(3, columns);
@@ -900,8 +910,9 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
             "SELECT COUNT(*) FROM drop_nodes WHERE id = 1 AND \"so\"\"urce\" = 7 AND derived = 14;",
             cancellationToken: CancellationToken.None);
 
-        // Assert
         var diagnostic = Encoding.UTF8.GetString(SafeMigrationReportJson.SerializeToUtf8Bytes(report));
+
+        // Assert
         Assert.True(report.Status == SafeMigrationReportStatus.Ready, diagnostic);
         Assert.Null(exception);
         Assert.Equal(0, removedColumns);
@@ -1031,8 +1042,8 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
             """,
             cancellationToken: CancellationToken.None);
 
-        await using var context = opaque
-            ? (DropContext)new UnicodeWhitespaceUnrelatedDropContext(connection, _internalServices)
+        await using DropContext context = opaque
+            ? new UnicodeWhitespaceUnrelatedDropContext(connection, _internalServices)
             : new ParsedUnicodeWhitespaceUnrelatedDropContext(connection, _internalServices);
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -1066,8 +1077,9 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
             $"SELECT COUNT(*) FROM drop_nodes WHERE id = 1 AND \"\u00A0operand\" = 7 AND derived = {expectedValue};",
             cancellationToken: CancellationToken.None);
 
-        // Assert
         var diagnostic = Encoding.UTF8.GetString(SafeMigrationReportJson.SerializeToUtf8Bytes(report));
+
+        // Assert
         Assert.True(report.Status == SafeMigrationReportStatus.Ready, diagnostic);
         Assert.Null(exception);
         Assert.Equal(0, removedColumns);
@@ -1143,8 +1155,8 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
         // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await CreateNativeTableAsync(connection, BomSourceExpression, cancellationToken: CancellationToken.None);
-        await using var context = dependent
-            ? (DropContext)new BomSourceDropContext(connection, _internalServices)
+        await using DropContext context = dependent
+            ? new BomSourceDropContext(connection, _internalServices)
             : new BomUnrelatedDropContext(connection, _internalServices);
 
         var name = dependent
@@ -1219,6 +1231,8 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
         SqliteCatalogSnapshot? snapshot = null;
 
         // Act
+        // WHY: Record.Exception executes this callback synchronously before the owning using scope ends.
+        // ReSharper disable once AccessToDisposedClosure
         var exception = Record.Exception(() => snapshot = SqliteSafeMigrationCatalog.Read(connection, null));
         var retainedRows = await ScalarIntAsync(
             connection,
@@ -1248,8 +1262,8 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
         // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await CreateNativeTableAsync(connection, "source << 1", cancellationToken: CancellationToken.None);
-        await using var context = opaqueTarget
-            ? (DropContext)new OpaqueDifferentExtraDropContext(connection, _internalServices)
+        await using DropContext context = opaqueTarget
+            ? new OpaqueDifferentExtraDropContext(connection, _internalServices)
             : new ExtraDropContext(connection, _internalServices);
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -1513,8 +1527,8 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
 
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await CreateNativeTableAsync(connection, expression, cancellationToken: CancellationToken.None);
-        await using var context = cast
-            ? (DropContext)new CastRoleDropContext(connection, _internalServices)
+        await using DropContext context = cast
+            ? new CastRoleDropContext(connection, _internalServices)
             : new LiteralRoleDropContext(connection, _internalServices);
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -1540,8 +1554,9 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
             "SELECT COUNT(*) FROM pragma_table_xinfo('drop_nodes') WHERE name = 'extra';",
             cancellationToken: CancellationToken.None);
 
-        // Assert
         var diagnostic = Encoding.UTF8.GetString(SafeMigrationReportJson.SerializeToUtf8Bytes(report));
+
+        // Assert
         Assert.True(report.Status == SafeMigrationReportStatus.Ready, diagnostic);
         Assert.Equal(1, retainedRows);
         Assert.Equal(0, removedColumns);
@@ -1586,6 +1601,8 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
                 cancellationToken: CancellationToken.None);
 
         var exception = synchronous
+            // WHY: Record.Exception executes this callback synchronously before the owning using scope ends.
+            // ReSharper disable once AccessToDisposedClosure
             ? Record.Exception(() => ExecuteOperations(context, builder.Operations))
             : await Record.ExceptionAsync(() => ExecuteOperationsAsync(
                 context,
@@ -1593,6 +1610,8 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
                 cancellationToken: CancellationToken.None));
 
         var replayException = synchronous
+            // WHY: Record.Exception executes this callback synchronously before the owning using scope ends.
+            // ReSharper disable once AccessToDisposedClosure
             ? Record.Exception(() => ExecuteOperations(context, builder.Operations))
             : await Record.ExceptionAsync(() => ExecuteOperationsAsync(
                 context,
@@ -1610,8 +1629,9 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
             "SELECT COUNT(*) FROM pragma_index_list('drop_nodes') WHERE name = 'ix_drop_source';",
             cancellationToken: CancellationToken.None);
 
-        // Assert
         var diagnostic = Encoding.UTF8.GetString(SafeMigrationReportJson.SerializeToUtf8Bytes(report));
+
+        // Assert
         Assert.True(report.Assessments[0].Action == SafeMigrationAction.Apply, diagnostic);
         Assert.True(report.Assessments[1].Action == SafeMigrationAction.Apply, diagnostic);
         Assert.Equal(1, retainedRows);
@@ -1689,11 +1709,23 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
     }
 
     /// <summary>Supplies exact rebuild ownership without treating the model as dependency evidence.</summary>
-    private class DropContext(
-        DbConnection connection,
-        IServiceProvider internalServices
-    ) : DbContext
+    private class DropContext : DbContext
     {
+        private readonly DbConnection _connection;
+        private readonly IServiceProvider _internalServices;
+
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="connection">The supplied connection for this fixture.</param>
+        /// <param name="internalServices">The supplied internal services for this fixture.</param>
+        public DropContext(
+            DbConnection connection,
+            IServiceProvider internalServices
+        )
+        {
+            _connection = connection;
+            _internalServices = internalServices;
+        }
+
         /// <summary>Gets the target-model members deliberately removed by this fixture's migration.</summary>
         protected virtual int RemovedColumns => 0;
 
@@ -1711,9 +1743,9 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
             DbContextOptionsBuilder optionsBuilder
         )
         {
-            optionsBuilder.UseSqlite(connection);
+            optionsBuilder.UseSqlite(_connection);
             optionsBuilder.UseSqliteSafeMigrations();
-            optionsBuilder.UseInternalServiceProvider(internalServices);
+            optionsBuilder.UseInternalServiceProvider(_internalServices);
         }
 
         /// <inheritdoc />
@@ -1776,6 +1808,8 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
             });
         }
 
+        // WHY: EF binds this fixture entity through writable property metadata.
+        [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
         private sealed class Node
         {
             public int Id { get; set; }
@@ -1789,23 +1823,33 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
     }
 
     /// <summary>Models the real target after an unrelated member is removed.</summary>
-    private sealed class ExtraDropContext(
-        DbConnection connection,
-        IServiceProvider internalServices
-    )
-        : DropContext(connection, internalServices)
+    private sealed class ExtraDropContext
+        : DropContext
     {
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="connection">The supplied connection for this fixture.</param>
+        /// <param name="internalServices">The supplied internal services for this fixture.</param>
+        public ExtraDropContext(
+            DbConnection connection,
+            IServiceProvider internalServices
+        ) : base(connection, internalServices) { }
+
         /// <inheritdoc />
         protected override int RemovedColumns => 1;
     }
 
     /// <summary>Preserves the exact native opaque generated expression while removing an unrelated member.</summary>
-    private sealed class OpaqueExtraDropContext(
-        DbConnection connection,
-        IServiceProvider internalServices
-    )
-        : DropContext(connection, internalServices)
+    private sealed class OpaqueExtraDropContext
+        : DropContext
     {
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="connection">The supplied connection for this fixture.</param>
+        /// <param name="internalServices">The supplied internal services for this fixture.</param>
+        public OpaqueExtraDropContext(
+            DbConnection connection,
+            IServiceProvider internalServices
+        ) : base(connection, internalServices) { }
+
         /// <inheritdoc />
         protected override int RemovedColumns => 1;
 
@@ -1814,12 +1858,17 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
     }
 
     /// <summary>Retains opaque native SQL whose string literal contains the dropped member's spelling.</summary>
-    private sealed class OpaqueLiteralDropContext(
-        DbConnection connection,
-        IServiceProvider internalServices
-    )
-        : DropContext(connection, internalServices)
+    private sealed class OpaqueLiteralDropContext
+        : DropContext
     {
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="connection">The supplied connection for this fixture.</param>
+        /// <param name="internalServices">The supplied internal services for this fixture.</param>
+        public OpaqueLiteralDropContext(
+            DbConnection connection,
+            IServiceProvider internalServices
+        ) : base(connection, internalServices) { }
+
         /// <inheritdoc />
         protected override int RemovedColumns => 1;
 
@@ -1828,12 +1877,17 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
     }
 
     /// <summary>Declares a different opaque expression that no independent DROP may silently substitute.</summary>
-    private sealed class OpaqueDifferentExtraDropContext(
-        DbConnection connection,
-        IServiceProvider internalServices
-    )
-        : DropContext(connection, internalServices)
+    private sealed class OpaqueDifferentExtraDropContext
+        : DropContext
     {
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="connection">The supplied connection for this fixture.</param>
+        /// <param name="internalServices">The supplied internal services for this fixture.</param>
+        public OpaqueDifferentExtraDropContext(
+            DbConnection connection,
+            IServiceProvider internalServices
+        ) : base(connection, internalServices) { }
+
         /// <inheritdoc />
         protected override int RemovedColumns => 1;
 
@@ -1842,12 +1896,17 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
     }
 
     /// <summary>Preserves the exact opaque source while removing its escaped, keyword-adjacent operand.</summary>
-    private sealed class AdjacentQuotedSourceDropContext(
-        DbConnection connection,
-        IServiceProvider internalServices
-    )
-        : DropContext(connection, internalServices)
+    private sealed class AdjacentQuotedSourceDropContext
+        : DropContext
     {
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="connection">The supplied connection for this fixture.</param>
+        /// <param name="internalServices">The supplied internal services for this fixture.</param>
+        public AdjacentQuotedSourceDropContext(
+            DbConnection connection,
+            IServiceProvider internalServices
+        ) : base(connection, internalServices) { }
+
         /// <inheritdoc />
         protected override int RemovedColumns => 1;
 
@@ -1856,12 +1915,17 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
     }
 
     /// <summary>Retains both true operands while removing a different native member.</summary>
-    private sealed class AdjacentQuotedUnrelatedDropContext(
-        DbConnection connection,
-        IServiceProvider internalServices
-    )
-        : DropContext(connection, internalServices)
+    private sealed class AdjacentQuotedUnrelatedDropContext
+        : DropContext
     {
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="connection">The supplied connection for this fixture.</param>
+        /// <param name="internalServices">The supplied internal services for this fixture.</param>
+        public AdjacentQuotedUnrelatedDropContext(
+            DbConnection connection,
+            IServiceProvider internalServices
+        ) : base(connection, internalServices) { }
+
         /// <inheritdoc />
         protected override string ExtraColumnName => "so\"urce";
 
@@ -1870,12 +1934,17 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
     }
 
     /// <summary>Preserves exact native source with an unquoted high-byte operand that resembles whitespace.</summary>
-    private class UnicodeWhitespaceSourceDropContext(
-        DbConnection connection,
-        IServiceProvider internalServices
-    )
-        : DropContext(connection, internalServices)
+    private class UnicodeWhitespaceSourceDropContext
+        : DropContext
     {
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="connection">The supplied connection for this fixture.</param>
+        /// <param name="internalServices">The supplied internal services for this fixture.</param>
+        public UnicodeWhitespaceSourceDropContext(
+            DbConnection connection,
+            IServiceProvider internalServices
+        ) : base(connection, internalServices) { }
+
         /// <inheritdoc />
         protected override int RemovedColumns => 1;
 
@@ -1884,42 +1953,62 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
     }
 
     /// <summary>Starts an opaque native expression with a high-byte source identifier.</summary>
-    private sealed class LeadingUnicodeWhitespaceSourceDropContext(
-        DbConnection connection,
-        IServiceProvider internalServices
-    ) : UnicodeWhitespaceSourceDropContext(connection, internalServices)
+    private sealed class LeadingUnicodeWhitespaceSourceDropContext : UnicodeWhitespaceSourceDropContext
     {
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="connection">The supplied connection for this fixture.</param>
+        /// <param name="internalServices">The supplied internal services for this fixture.</param>
+        public LeadingUnicodeWhitespaceSourceDropContext(
+            DbConnection connection,
+            IServiceProvider internalServices
+        ) : base(connection, internalServices) { }
+
         /// <inheritdoc />
         protected override string GeneratedSql => "\u00A0operand << 1";
     }
 
     /// <summary>Retains a middle high-byte operand in otherwise bounded native arithmetic.</summary>
-    private sealed class ParsedUnicodeWhitespaceSourceDropContext(
-        DbConnection connection,
-        IServiceProvider internalServices
-    ) : UnicodeWhitespaceSourceDropContext(connection, internalServices)
+    private sealed class ParsedUnicodeWhitespaceSourceDropContext : UnicodeWhitespaceSourceDropContext
     {
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="connection">The supplied connection for this fixture.</param>
+        /// <param name="internalServices">The supplied internal services for this fixture.</param>
+        public ParsedUnicodeWhitespaceSourceDropContext(
+            DbConnection connection,
+            IServiceProvider internalServices
+        ) : base(connection, internalServices) { }
+
         /// <inheritdoc />
         protected override string GeneratedSql => "source + \u00A0operand + 1";
     }
 
     /// <summary>Starts bounded native arithmetic with a high-byte source identifier.</summary>
-    private sealed class LeadingParsedUnicodeWhitespaceSourceDropContext(
-        DbConnection connection,
-        IServiceProvider internalServices
-    ) : UnicodeWhitespaceSourceDropContext(connection, internalServices)
+    private sealed class LeadingParsedUnicodeWhitespaceSourceDropContext : UnicodeWhitespaceSourceDropContext
     {
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="connection">The supplied connection for this fixture.</param>
+        /// <param name="internalServices">The supplied internal services for this fixture.</param>
+        public LeadingParsedUnicodeWhitespaceSourceDropContext(
+            DbConnection connection,
+            IServiceProvider internalServices
+        ) : base(connection, internalServices) { }
+
         /// <inheritdoc />
         protected override string GeneratedSql => "\u00A0operand + 1";
     }
 
     /// <summary>Retains the high-byte source while removing a distinct native ordinary member.</summary>
-    private class UnicodeWhitespaceUnrelatedDropContext(
-        DbConnection connection,
-        IServiceProvider internalServices
-    )
-        : DropContext(connection, internalServices)
+    private class UnicodeWhitespaceUnrelatedDropContext
+        : DropContext
     {
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="connection">The supplied connection for this fixture.</param>
+        /// <param name="internalServices">The supplied internal services for this fixture.</param>
+        public UnicodeWhitespaceUnrelatedDropContext(
+            DbConnection connection,
+            IServiceProvider internalServices
+        ) : base(connection, internalServices) { }
+
         /// <inheritdoc />
         protected override string ExtraColumnName => "\u00A0operand";
 
@@ -1930,32 +2019,47 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
     /// <summary>
     /// Retains native high-byte arithmetic in the bounded operator family without rebinding its operand.
     /// </summary>
-    private sealed class ParsedUnicodeWhitespaceUnrelatedDropContext(
-        DbConnection connection,
-        IServiceProvider internalServices
-    ) : UnicodeWhitespaceUnrelatedDropContext(connection, internalServices)
+    private sealed class ParsedUnicodeWhitespaceUnrelatedDropContext : UnicodeWhitespaceUnrelatedDropContext
     {
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="connection">The supplied connection for this fixture.</param>
+        /// <param name="internalServices">The supplied internal services for this fixture.</param>
+        public ParsedUnicodeWhitespaceUnrelatedDropContext(
+            DbConnection connection,
+            IServiceProvider internalServices
+        ) : base(connection, internalServices) { }
+
         /// <inheritdoc />
         protected override string GeneratedSql => "source + \u00A0operand + 1";
     }
 
     /// <summary>Models an incorrectly rebound operand with the high-byte physical identity removed.</summary>
-    private sealed class UnicodeWhitespaceDriftDropContext(
-        DbConnection connection,
-        IServiceProvider internalServices
-    ) : UnicodeWhitespaceUnrelatedDropContext(connection, internalServices)
+    private sealed class UnicodeWhitespaceDriftDropContext : UnicodeWhitespaceUnrelatedDropContext
     {
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="connection">The supplied connection for this fixture.</param>
+        /// <param name="internalServices">The supplied internal services for this fixture.</param>
+        public UnicodeWhitespaceDriftDropContext(
+            DbConnection connection,
+            IServiceProvider internalServices
+        ) : base(connection, internalServices) { }
+
         /// <inheritdoc />
         protected override string GeneratedSql => "source + operand + 1";
     }
 
     /// <summary>Preserves a native BOM token before the operand the proposed target removes.</summary>
-    private sealed class BomSourceDropContext(
-        DbConnection connection,
-        IServiceProvider internalServices
-    )
-        : DropContext(connection, internalServices)
+    private sealed class BomSourceDropContext
+        : DropContext
     {
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="connection">The supplied connection for this fixture.</param>
+        /// <param name="internalServices">The supplied internal services for this fixture.</param>
+        public BomSourceDropContext(
+            DbConnection connection,
+            IServiceProvider internalServices
+        ) : base(connection, internalServices) { }
+
         /// <inheritdoc />
         protected override int RemovedColumns => 4;
 
@@ -1964,12 +2068,17 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
     }
 
     /// <summary>Preserves the native BOM token and its real operand while removing an independent member.</summary>
-    private sealed class BomUnrelatedDropContext(
-        DbConnection connection,
-        IServiceProvider internalServices
-    )
-        : DropContext(connection, internalServices)
+    private sealed class BomUnrelatedDropContext
+        : DropContext
     {
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="connection">The supplied connection for this fixture.</param>
+        /// <param name="internalServices">The supplied internal services for this fixture.</param>
+        public BomUnrelatedDropContext(
+            DbConnection connection,
+            IServiceProvider internalServices
+        ) : base(connection, internalServices) { }
+
         /// <inheritdoc />
         protected override int RemovedColumns => 1;
 
@@ -1978,34 +2087,49 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
     }
 
     /// <summary>Models the real target after the generated member itself is removed.</summary>
-    private sealed class DerivedDropContext(
-        DbConnection connection,
-        IServiceProvider internalServices
-    )
-        : DropContext(connection, internalServices)
+    private sealed class DerivedDropContext
+        : DropContext
     {
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="connection">The supplied connection for this fixture.</param>
+        /// <param name="internalServices">The supplied internal services for this fixture.</param>
+        public DerivedDropContext(
+            DbConnection connection,
+            IServiceProvider internalServices
+        ) : base(connection, internalServices) { }
+
         /// <inheritdoc />
         protected override int RemovedColumns => 2;
     }
 
     /// <summary>Models the real target after explicit dependent-first source removal.</summary>
-    private sealed class DependentFirstDropContext(
-        DbConnection connection,
-        IServiceProvider internalServices
-    )
-        : DropContext(connection, internalServices)
+    private sealed class DependentFirstDropContext
+        : DropContext
     {
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="connection">The supplied connection for this fixture.</param>
+        /// <param name="internalServices">The supplied internal services for this fixture.</param>
+        public DependentFirstDropContext(
+            DbConnection connection,
+            IServiceProvider internalServices
+        ) : base(connection, internalServices) { }
+
         /// <inheritdoc />
         protected override int RemovedColumns => 6;
     }
 
     /// <summary>Retains a literal containing the dropped member's spelling.</summary>
-    private sealed class LiteralRoleDropContext(
-        DbConnection connection,
-        IServiceProvider internalServices
-    )
-        : DropContext(connection, internalServices)
+    private sealed class LiteralRoleDropContext
+        : DropContext
     {
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="connection">The supplied connection for this fixture.</param>
+        /// <param name="internalServices">The supplied internal services for this fixture.</param>
+        public LiteralRoleDropContext(
+            DbConnection connection,
+            IServiceProvider internalServices
+        ) : base(connection, internalServices) { }
+
         /// <inheritdoc />
         protected override int RemovedColumns => 1;
 
@@ -2014,12 +2138,17 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
     }
 
     /// <summary>Retains a CAST whose type spelling is also the dropped member's name.</summary>
-    private sealed class CastRoleDropContext(
-        DbConnection connection,
-        IServiceProvider internalServices
-    )
-        : DropContext(connection, internalServices)
+    private sealed class CastRoleDropContext
+        : DropContext
     {
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="connection">The supplied connection for this fixture.</param>
+        /// <param name="internalServices">The supplied internal services for this fixture.</param>
+        public CastRoleDropContext(
+            DbConnection connection,
+            IServiceProvider internalServices
+        ) : base(connection, internalServices) { }
+
         /// <inheritdoc />
         protected override int RemovedColumns => 1;
 
@@ -2028,12 +2157,17 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
     }
 
     /// <summary>Models both operations in the direct DROP/index structural window.</summary>
-    private sealed class ExtraDropIndexContext(
-        DbConnection connection,
-        IServiceProvider internalServices
-    )
-        : DropContext(connection, internalServices)
+    private sealed class ExtraDropIndexContext
+        : DropContext
     {
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="connection">The supplied connection for this fixture.</param>
+        /// <param name="internalServices">The supplied internal services for this fixture.</param>
+        public ExtraDropIndexContext(
+            DbConnection connection,
+            IServiceProvider internalServices
+        ) : base(connection, internalServices) { }
+
         /// <inheritdoc />
         protected override int RemovedColumns => 1;
 

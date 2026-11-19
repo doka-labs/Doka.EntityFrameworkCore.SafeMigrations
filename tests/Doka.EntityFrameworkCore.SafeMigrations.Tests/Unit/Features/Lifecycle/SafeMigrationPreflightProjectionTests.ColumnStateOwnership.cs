@@ -89,7 +89,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         }
 
         var renameComparisons = normalizer.CountingComparer.EqualityChecks - comparisonsBeforeRename;
-        var columns = (ISafeMigrationProjectedColumnSource)projection;
+        ISafeMigrationProjectedColumnSource columns = projection;
         var renamedColumnExists = columns.TryGetProjectedColumn("renamed", null, "id", out var renamedColumn);
         var unrelatedColumnExists = columns.TryGetProjectedColumn("unrelated_999", null, "id", out _);
 
@@ -255,7 +255,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                     SafeMigrationTableMode.StrictDefinition));
         }
 
-        var columns = (ISafeMigrationProjectedColumnSource)projection;
+        ISafeMigrationProjectedColumnSource columns = projection;
         var missing = ProjectOwnedColumn(projection, "items", null, "missing", SafeMigrationObservedState.Different);
         var opaqueAnalysis = ProjectOwnedColumn(
             projection,
@@ -331,12 +331,22 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             SafeMigrationPolicy.ThrowIfDifferent),
         Live(liveState));
 
-    private sealed class ColumnStateOwnershipNormalizer(
-        bool normalizeAliases = false
-    ) : ISafeMigrationProviderObjectIdentityNormalizer
+    private sealed class ColumnStateOwnershipNormalizer : ISafeMigrationProviderObjectIdentityNormalizer
     {
+        private readonly bool _normalizeAliases;
+
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="normalizeAliases">The supplied normalize aliases for this fixture.</param>
+        public ColumnStateOwnershipNormalizer(
+            bool normalizeAliases = false
+        )
+        {
+            _normalizeAliases = normalizeAliases;
+            CountingComparer = new CountingColumnStateIdentifierComparer(normalizeAliases);
+        }
+
         /// <summary>Gets the instrumented provider identifier comparer.</summary>
-        public CountingColumnStateIdentifierComparer CountingComparer { get; } = new(normalizeAliases);
+        public CountingColumnStateIdentifierComparer CountingComparer { get; }
 
         /// <inheritdoc />
         public StringComparer IdentifierComparer => CountingComparer;
@@ -344,14 +354,14 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         /// <inheritdoc />
         public string NormalizeIdentifier(
             string identifier
-        ) => normalizeAliases
+        ) => _normalizeAliases
             ? identifier.ToUpperInvariant()
             : identifier;
 
         /// <inheritdoc />
         public string? NormalizeSchema(
             string? schema
-        ) => !normalizeAliases
+        ) => !_normalizeAliases
             ? schema
             : schema is null || StringComparer.OrdinalIgnoreCase.Equals(schema, "dbo")
                 ? null
@@ -363,13 +373,20 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         ) => false;
     }
 
-    private sealed class CountingColumnStateIdentifierComparer(
-        bool ignoreCase
-    ) : StringComparer
+    private sealed class CountingColumnStateIdentifierComparer : StringComparer
     {
-        private readonly StringComparer _comparer = ignoreCase
-            ? OrdinalIgnoreCase
-            : Ordinal;
+        private readonly StringComparer _comparer;
+
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="ignoreCase">The supplied ignore case for this fixture.</param>
+        public CountingColumnStateIdentifierComparer(
+            bool ignoreCase
+        )
+        {
+            _comparer = ignoreCase
+                ? OrdinalIgnoreCase
+                : Ordinal;
+        }
 
         /// <summary>Gets the number of identifier equality comparisons.</summary>
         public int EqualityChecks { get; private set; }

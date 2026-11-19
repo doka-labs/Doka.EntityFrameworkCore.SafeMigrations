@@ -41,8 +41,13 @@ public static partial class SafeMigrationContractFingerprint
 
         writer.Add(definition.Keys.Count);
 
-        foreach (var key in definition.Keys)
+        // WHY: This immutable definition snapshot is indexed; retain its authored order without interface enumeration.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var keyIndex = 0; keyIndex < definition.Keys.Count; keyIndex++)
         {
+            var key = definition.Keys[keyIndex];
+
             writer.Add(key.Column);
             writer.Add(key.Expression);
             SafeMigrationSqlExpressionContract.Write(writer, key.StructuredExpression);

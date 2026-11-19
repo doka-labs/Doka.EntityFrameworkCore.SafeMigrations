@@ -6,12 +6,14 @@ public sealed class MySqlFixtureLifecycleTests
     private static readonly string[] s_expectedCreationEvents = ["registered", "created"];
     private static readonly string[] s_expectedCleanupEvents = ["database", "container", "synchronization"];
 
-    /// <summary>Ownership and its empty login set must be recorded before the native CREATE callback executes.</summary>
+    /// <summary>
+    /// Ownership and its empty login set must be recorded before the native CREATE callback executes.
+    /// </summary>
     [Fact]
     public async Task SuccessfulCreateRegistersOwnershipBeforeReturningLease()
     {
         // Arrange
-        var events = new List<string>();
+        List<string> events = [];
         var databaseOwned = false;
         var usersOwned = false;
         var registeredBeforeCreate = false;
@@ -38,7 +40,9 @@ public sealed class MySqlFixtureLifecycleTests
         Assert.Equal(s_expectedCreationEvents, events);
     }
 
-    /// <summary>An acknowledgement failure after server creation retains provisional ownership for final cleanup.</summary>
+    /// <summary>
+    /// An acknowledgement failure after server creation retains provisional ownership for final cleanup.
+    /// </summary>
     /// <param name="cancel">Whether the failed acknowledgement is cancellation rather than a native failure.</param>
     [Theory]
     [InlineData(false)]
@@ -70,7 +74,7 @@ public sealed class MySqlFixtureLifecycleTests
                     databases.Add(database, lease);
                     users.Add(database, new HashSet<string>(StringComparer.Ordinal));
                 },
-                token =>
+                databaseCancellationToken =>
                 {
                     ownedAtCreate = databases.TryGetValue(database, out var ownedLease)
                         && ownedLease == lease
@@ -81,7 +85,7 @@ public sealed class MySqlFixtureLifecycleTests
                     {
                         cancellation.Cancel();
 
-                        return Task.FromCanceled(token);
+                        return Task.FromCanceled(databaseCancellationToken);
                     }
 
                     return Task.FromException(nativeFailure);
@@ -97,6 +101,8 @@ public sealed class MySqlFixtureLifecycleTests
         await MySqlFixtureLifecycle.DisposeAsync(
             () =>
             {
+                // WHY: Retain this explicit materialization/copy path and its collection lowering.
+                // ReSharper disable once UseCollectionExpression
                 foreach (var ownedDatabase in databases.Keys.ToArray())
                 {
                     cleanupCalls++;
@@ -122,7 +128,7 @@ public sealed class MySqlFixtureLifecycleTests
         Assert.Empty(users);
         if (cancel)
         {
-            Assert.IsAssignableFrom<OperationCanceledException>(failure);
+            Assert.IsType<OperationCanceledException>(failure, exactMatch: false);
         }
         else
         {
@@ -152,19 +158,21 @@ public sealed class MySqlFixtureLifecycleTests
             cancellation.Token));
 
         // Assert
-        Assert.IsAssignableFrom<OperationCanceledException>(failure);
+        Assert.IsType<OperationCanceledException>(failure, exactMatch: false);
         Assert.Equal(0, registrations);
         Assert.Equal(0, creates);
     }
 
-    /// <summary>Independent database and container failures remain observable after all cleanup callbacks run.</summary>
+    /// <summary>
+    /// Independent database and container failures remain observable after all cleanup callbacks run.
+    /// </summary>
     [Fact]
     public async Task DatabaseAndContainerCleanupFailuresAreBothPreserved()
     {
         // Arrange
         var databaseFailure = new InvalidOperationException("database cleanup failed");
         var containerFailure = new IOException("container cleanup failed");
-        var events = new List<string>();
+        List<string> events = [];
 
         // Act
         var failure = await Record.ExceptionAsync(() => MySqlFixtureLifecycle.DisposeAsync(
@@ -196,7 +204,7 @@ public sealed class MySqlFixtureLifecycleTests
     public async Task SuccessfulCleanupExecutesAllStepsWithoutFailure()
     {
         // Arrange
-        var events = new List<string>();
+        List<string> events = [];
 
         // Act
         var failure = await Record.ExceptionAsync(() => MySqlFixtureLifecycle.DisposeAsync(

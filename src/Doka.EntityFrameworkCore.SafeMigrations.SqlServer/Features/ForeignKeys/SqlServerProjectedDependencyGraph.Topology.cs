@@ -9,14 +9,14 @@ internal sealed partial class SqlServerProjectedDependencyGraph
         IEnumerable<ForeignKeyEdge> foreignKeys
     )
     {
-        var adjacency = new Dictionary<ActionNode, List<ActionNode>>();
+        Dictionary<ActionNode, List<ActionNode>> adjacency = [];
         foreach (var edge in foreignKeys)
         {
             AddAction(edge.Principal, edge.Dependent, edge.OnDelete, isDelete: true);
             AddAction(edge.Principal, edge.Dependent, edge.OnUpdate, isDelete: false);
         }
 
-        var seen = new HashSet<int>();
+        HashSet<int> seen = [];
         var queue = new Queue<ActionNode>();
         foreach (var root in adjacency.Keys)
         {
@@ -31,8 +31,13 @@ internal sealed partial class SqlServerProjectedDependencyGraph
                     continue;
                 }
 
-                foreach (var child in children)
+                // WHY: Adjacency lists are complete before traversal and never mutate while visited.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
+                for (var childIndex = 0; childIndex < children.Count; childIndex++)
                 {
+                    var child = children[childIndex];
+
                     if (!seen.Add(child.Table))
                     {
                         return false;
@@ -82,8 +87,13 @@ internal sealed partial class SqlServerProjectedDependencyGraph
             return Rejected("inline_foreign_key_prerequisite");
         }
 
-        foreach (var foreignKey in foreignKeys)
+        // WHY: Immutable FK slots preserve validation and prospective-edge order.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var foreignKeyIndex = 0; foreignKeyIndex < foreignKeys.Count; foreignKeyIndex++)
         {
+            var foreignKey = foreignKeys[foreignKeyIndex];
+
             var dependentId = GetTable(foreignKey.Table, foreignKey.Schema);
             var principalId = GetTable(foreignKey.PrincipalTable, foreignKey.PrincipalSchema);
             if (_triggers.TryGetValue(dependentId, out var triggers)
@@ -120,6 +130,8 @@ internal sealed partial class SqlServerProjectedDependencyGraph
                     return Rejected("foreign_key_rowversion_action");
                 }
 
+                // WHY: NULL and DEFAULT actions have independent column prerequisites and ordered rejection codes.
+                // ReSharper disable once ConvertIfStatementToSwitchStatement
                 if ((foreignKey.OnDelete == ReferentialAction.SetNull
                         || foreignKey.OnUpdate == ReferentialAction.SetNull)
                     && dependentColumn?.Nullable == false)
@@ -142,8 +154,8 @@ internal sealed partial class SqlServerProjectedDependencyGraph
             }
         }
 
-        var topologyValid = !additions.Any(static edge => SqlServerForeignKeySafety.IsCascading(edge.OnDelete)
-                || SqlServerForeignKeySafety.IsCascading(edge.OnUpdate))
+        var topologyValid = additions.All(static edge => !SqlServerForeignKeySafety.IsCascading(edge.OnDelete)
+                && !SqlServerForeignKeySafety.IsCascading(edge.OnUpdate))
             || HasValidTopology(_foreignKeys.Values.Concat(additions));
 
         if (!topologyValid)
@@ -182,8 +194,11 @@ internal sealed partial class SqlServerProjectedDependencyGraph
         int? PrincipalKeyIndex = null
     );
 
+    // WHY: Generated equality/hash distinguishes UPDATE and DELETE paths on the same physical table.
     private readonly record struct ActionNode(
         int Table,
+
+        // ReSharper disable once NotAccessedPositionalProperty.Local
         bool Delete
     );
 }

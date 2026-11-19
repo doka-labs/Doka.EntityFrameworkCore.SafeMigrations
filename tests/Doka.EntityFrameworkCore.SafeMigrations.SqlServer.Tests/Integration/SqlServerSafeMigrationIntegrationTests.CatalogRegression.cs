@@ -19,6 +19,7 @@ public sealed class SqlServerSafeMigrationCatalogRegressionIntegrationTests : Sq
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync(cancellationToken: CancellationToken.None);
+
         // WHY: Compile-time chunks retain the exact native fixture text without adding runtime concatenation.
         await context.Database.ExecuteSqlRawAsync(
             """CREATE TABLE #doka_sm_identifiers (Sentinel int NOT NULL); INSERT INTO #doka_sm_identifiers """
@@ -28,6 +29,7 @@ public sealed class SqlServerSafeMigrationCatalogRegressionIntegrationTests : Sq
         var originalObjectId = await SqlServerTemporaryTableProbe.ReadObjectIdAsync(
             connection,
             "#doka_sm_identifiers",
+            transaction: null,
             cancellationToken: CancellationToken.None);
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -60,6 +62,7 @@ public sealed class SqlServerSafeMigrationCatalogRegressionIntegrationTests : Sq
         var retainedObjectId = await SqlServerTemporaryTableProbe.ReadObjectIdAsync(
             connection,
             "#doka_sm_identifiers",
+            transaction: null,
             cancellationToken: CancellationToken.None);
 
         // Assert

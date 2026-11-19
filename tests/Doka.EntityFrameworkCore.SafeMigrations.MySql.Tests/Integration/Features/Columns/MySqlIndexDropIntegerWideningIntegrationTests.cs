@@ -211,18 +211,24 @@ public sealed class MySqlIndexDropIntegerWideningIntegrationTests : MySqlSafeMig
             new SafeMigrationRunOptions("integer-upgrade-pending"),
             CancellationToken.None);
 
-        var beforeHistory = await context.Database.GetAppliedMigrationsAsync();
+        var beforeHistory = await context.Database.GetAppliedMigrationsAsync(CancellationToken.None);
         pending.ThrowIfBlocked();
-        await context.Database.MigrateAsync();
-        var applied = (await context.Database.GetAppliedMigrationsAsync()).ToArray();
+        await context.Database.MigrateAsync(CancellationToken.None);
+
+        // WHY: Retain this explicit materialization/copy path and its collection lowering.
+        // ReSharper disable once UseCollectionExpression
+        var applied = (await context.Database.GetAppliedMigrationsAsync(CancellationToken.None)).ToArray();
         var replay = await runner.AnalyzePendingMigrationsAsync(
             context,
             new SafeMigrationRunOptions("integer-upgrade-completed"),
             CancellationToken.None);
 
         replay.ThrowIfBlocked();
-        await context.Database.MigrateAsync();
-        var replayed = (await context.Database.GetAppliedMigrationsAsync()).ToArray();
+        await context.Database.MigrateAsync(CancellationToken.None);
+
+        // WHY: Retain this explicit materialization/copy path and its collection lowering.
+        // ReSharper disable once UseCollectionExpression
+        var replayed = (await context.Database.GetAppliedMigrationsAsync(CancellationToken.None)).ToArray();
         var rows = await ScalarIntAsync(
             connectionString,
             "SELECT COUNT(*) FROM `integer_upgrade` WHERE `payload` IN ('first','second');",
@@ -474,6 +480,9 @@ public sealed class MySqlIndexDropIntegerWideningIntegrationTests : MySqlSafeMig
             context,
             operations
                 .Cast<SafeMigrationOperation>()
+
+                // WHY: Retain this explicit materialization/copy path and its collection lowering.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray(),
             CancellationToken.None);
 
@@ -859,9 +868,9 @@ public sealed class MySqlIndexDropIntegerWideningIntegrationTests : MySqlSafeMig
         int NOT NULL,
         `right_value` int NOT NULL, `position` int NOT NULL, `payload` varchar(32)
         NOT NULL{(alreadyDropped
-            ? ""
-            : ", INDEX `ix_upgrade_coordinates` (`left_value`,`right_value`,`position`)"
-        )}) ENGINE=InnoDB DEFAULT CHARACTER SET
+                ? ""
+                : ", INDEX `ix_upgrade_coordinates` (`left_value`,`right_value`,`position`)"
+            )}) ENGINE=InnoDB DEFAULT CHARACTER SET
         utf8mb4 COLLATE utf8mb4_unicode_ci; INSERT INTO `integer_upgrade` VALUES
         (1,-2147483648,2147483647,0,'first'),(2,0,1,2,'second');
         """;
@@ -872,7 +881,7 @@ public sealed class MySqlIndexDropIntegerWideningIntegrationTests : MySqlSafeMig
         bool columnAliases = false
     )
     {
-        var operations = new List<MigrationOperation>();
+        List<MigrationOperation> operations = [];
         if (dropIndex)
         {
             operations.Add(
@@ -928,22 +937,32 @@ public sealed class MySqlIndexDropIntegerWideningIntegrationTests : MySqlSafeMig
 }
 
 /// <summary>Hosts only the isolated persisted integer upgrade without an unrelated application model.</summary>
-/// <param name="connectionString">The uniquely owned native test database.</param>
-/// <param name="serverVersion">The native engine contract selected by the assembly fixture.</param>
-public sealed class IndexDropIntegerUpgradeDbContext(
-    string connectionString,
-    MySqlServerVersion serverVersion
-)
+public sealed class IndexDropIntegerUpgradeDbContext
     : DbContext
 {
+    private readonly string _connectionString;
+    private readonly MySqlServerVersion _serverVersion;
+
+    /// <summary>Initializes the explicit dependencies of this isolated test helper.</summary>
+    /// <param name="connectionString">The uniquely owned native test database.</param>
+    /// <param name="serverVersion">The native engine contract selected by the assembly fixture.</param>
+    public IndexDropIntegerUpgradeDbContext(
+        string connectionString,
+        MySqlServerVersion serverVersion
+    )
+    {
+        _connectionString = connectionString;
+        _serverVersion = serverVersion;
+    }
+
     /// <inheritdoc />
     protected override void OnConfiguring(
         DbContextOptionsBuilder optionsBuilder
     )
     {
         optionsBuilder.UseMySql(
-            connectionString,
-            serverVersion,
+            _connectionString,
+            _serverVersion,
             provider => provider
                 .MigrationsAssembly(typeof(IndexDropIntegerUpgradeDbContext).Assembly.FullName)
                 .MigrationsHistoryTable("__IntegerUpgradeHistory"));
@@ -955,6 +974,7 @@ public sealed class IndexDropIntegerUpgradeDbContext(
 /// <summary>Retains the same exact-source index-removal and three-column widening stream in EF history.</summary>
 [DbContext(typeof(IndexDropIntegerUpgradeDbContext))]
 [Migration("20261023000001_IndexDropIntegerUpgrade")]
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public sealed class IndexDropIntegerUpgradeMigration : Migration
 {
     /// <inheritdoc />

@@ -16,7 +16,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         CancellationToken cancellationToken
     )
     {
-        var candidates = new List<int>();
+        List<int> candidates = [];
 
         // WHY: Select diagnostics from matching operation and analysis slots.
         // ReSharper disable once ForCanBeConvertedToForeach
@@ -83,10 +83,10 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
 
                 return new SafeMigrationCatalogProbeStatement(count, parameters.Utf8PayloadBytes, candidates[offset]);
             },
-            async (reader, offset, count, token) =>
+            async (reader, offset, count, callbackCancellationToken) =>
             {
                 var row = 0;
-                while (await reader.ReadAsync(token))
+                while (await reader.ReadAsync(callbackCancellationToken))
                 {
                     if (row >= count
                         || reader.GetInt32(0) != candidates[offset + row])
@@ -114,7 +114,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                         "The PostgreSQL diagnostic query returned an inconsistent row count.");
                 }
             },
-            cancellationToken);
+            transaction: null,
+            maximumParameters: SafeMigrationCatalogQueryLimits.MaximumParameters,
+            cancellationToken: cancellationToken);
     }
 
     /// <summary>Preserves qualified nullability proof while attaching exact physical differences.</summary>

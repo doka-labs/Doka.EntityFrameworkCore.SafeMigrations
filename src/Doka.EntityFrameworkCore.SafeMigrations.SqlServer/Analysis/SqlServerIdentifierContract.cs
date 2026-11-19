@@ -18,7 +18,7 @@ internal readonly record struct SqlServerIdentifierReference(
 /// <summary>Captures physical identifier scopes for SQL Server catalog-collation guards.</summary>
 internal static class SqlServerIdentifierContract
 {
-    internal const string ResultVariable = "@doka_identity_safe";
+    private const string ResultVariable = "@doka_identity_safe";
 
     // WHY: The stream-level collision guard has no single operation owner.
     // Explain only its proven boundary rather than attributing a rejection to
@@ -40,7 +40,7 @@ internal static class SqlServerIdentifierContract
     {
         ArgumentNullException.ThrowIfNull(operations);
 
-        var names = new HashSet<SqlServerIdentifierReference>();
+        HashSet<SqlServerIdentifierReference> names = [];
         foreach (var operation in operations)
         {
             ArgumentNullException.ThrowIfNull(operation);
@@ -87,16 +87,27 @@ internal static class SqlServerIdentifierContract
                     break;
                 case EnsureIndexIntent value:
                     AddIndex(names, value.Definition.Schema, value.Definition.Table, value.Definition.Name);
-                    foreach (var key in value.Definition.Keys)
+
+                    // WHY: Immutable indexed slots retain their authored order without mutating the source.
+                    // ReSharper disable once ForCanBeConvertedToForeach
+                    // ReSharper disable once LoopCanBeConvertedToQuery
+                    for (var keyIndex = 0; keyIndex < value.Definition.Keys.Count; keyIndex++)
                     {
+                        var key = value.Definition.Keys[keyIndex];
+
                         if (key.Column is { } column)
                         {
                             AddColumn(names, value.Definition.Schema, value.Definition.Table, column);
                         }
                     }
 
-                    foreach (var column in value.Definition.IncludedColumns)
+                    // WHY: Immutable indexed slots retain their authored order without mutating the source.
+                    // ReSharper disable once ForCanBeConvertedToForeach
+                    // ReSharper disable once LoopCanBeConvertedToQuery
+                    for (var includedIndex = 0; includedIndex < value.Definition.IncludedColumns.Count; includedIndex++)
                     {
+                        var column = value.Definition.IncludedColumns[includedIndex];
+
                         AddColumn(names, value.Definition.Schema, value.Definition.Table, column);
                     }
 
@@ -174,44 +185,66 @@ internal static class SqlServerIdentifierContract
         IReadOnlyList<SqlServerIdentifierReference> references
     )
     {
-        if (!operations.Any(static operation => operation is AddCheckConstraintOperation
+        if (operations.All(static operation => operation is not (AddCheckConstraintOperation
             or CreateTableOperation { CheckConstraints.Count: > 0 }
             or SafeMigrationOperation
             {
                 Intent: EnsureCheckConstraintIntent
                 or EnsureTableIntent { Definition.CheckConstraints.Count: > 0 },
-            }))
+            })))
         {
             return references;
         }
 
         HashSet<SqlServerIdentifierReference>? names = null;
-        foreach (var operation in operations)
+
+        // WHY: The immutable operation inventory retains declaration order while only the output set grows.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var operationIndex = 0; operationIndex < operations.Count; operationIndex++)
         {
+            var operation = operations[operationIndex];
+
             switch (operation)
             {
                 case CreateTableOperation { CheckConstraints.Count: > 0 } table:
+                    // WHY: Preserve the set constructor's count-aware snapshot copy of caller-owned references.
+                    // ReSharper disable once UseCollectionExpression
                     names ??= new HashSet<SqlServerIdentifierReference>(references);
                     AddTable(names, table.Schema, table.Name);
-                    foreach (var check in table.CheckConstraints)
+
+                    // WHY: Immutable indexed slots retain their authored order without mutating the source.
+                    // ReSharper disable once ForCanBeConvertedToForeach
+                    // ReSharper disable once LoopCanBeConvertedToQuery
+                    for (var checkIndex = 0; checkIndex < table.CheckConstraints.Count; checkIndex++)
                     {
+                        var check = table.CheckConstraints[checkIndex];
+
                         AddConstraint(names, table.Schema, table.Name, check.Name);
                     }
 
                     break;
                 case AddCheckConstraintOperation check:
+                    // WHY: Preserve the set constructor's count-aware snapshot copy of caller-owned references.
+                    // ReSharper disable once UseCollectionExpression
                     names ??= new HashSet<SqlServerIdentifierReference>(references);
                     AddConstraint(names, check.Schema, check.Table, check.Name);
                     break;
                 case DropCheckConstraintOperation check:
+                    // WHY: Preserve the set constructor's count-aware snapshot copy of caller-owned references.
+                    // ReSharper disable once UseCollectionExpression
                     names ??= new HashSet<SqlServerIdentifierReference>(references);
                     AddConstraint(names, check.Schema, check.Table, check.Name);
                     break;
                 case DropTableOperation table:
+                    // WHY: Preserve the set constructor's count-aware snapshot copy of caller-owned references.
+                    // ReSharper disable once UseCollectionExpression
                     names ??= new HashSet<SqlServerIdentifierReference>(references);
                     AddTable(names, table.Schema, table.Name);
                     break;
                 case RenameTableOperation table:
+                    // WHY: Preserve the set constructor's count-aware snapshot copy of caller-owned references.
+                    // ReSharper disable once UseCollectionExpression
                     names ??= new HashSet<SqlServerIdentifierReference>(references);
                     AddTable(names, table.Schema, table.Name);
                     AddTable(names, table.NewSchema ?? table.Schema, table.NewName ?? table.Name);
@@ -271,8 +304,8 @@ internal static class SqlServerIdentifierContract
                 .NewGuid()
                 .ToString("N");
 
-        var commands = new List<string>();
-        commands.Add(
+        List<string> commands =
+        [
             $"""
             IF OBJECT_ID(N'tempdb..{temporaryTable}') IS NOT NULL THROW 51002,
             N'{ScratchScopeFailureMessage}', 1; CREATE TABLE {temporaryTable}
@@ -280,13 +313,20 @@ internal static class SqlServerIdentifierContract
             schema_name nvarchar(128) COLLATE CATALOG_DEFAULT NOT NULL, table_name nvarchar(128)
             COLLATE CATALOG_DEFAULT NOT NULL,
             name nvarchar(128) COLLATE CATALOG_DEFAULT NOT NULL);
-            """);
+            """,
+        ];
 
         var batch = new StringBuilder(4096);
         var batchBytes = 0;
         var count = 0;
-        foreach (var reference in references)
+
+        // WHY: Immutable indexed slots retain their authored order without mutating the source.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var referenceIndex = 0; referenceIndex < references.Count; referenceIndex++)
         {
+            var reference = references[referenceIndex];
+
             var row = "("
                 + ((byte)reference.Scope).ToString(CultureInfo.InvariantCulture)
                 + ", "
@@ -369,7 +409,7 @@ internal static class SqlServerIdentifierContract
         // WHY: The caller only needs to know whether a scope repeats, not its
         // grouped names. Stop at the first repeat while leaving every original
         // reference available to the unchanged catalog guard after validation.
-        var scopes = new HashSet<(SqlServerIdentifierScope Scope, string Schema, string? Table)>();
+        HashSet<(SqlServerIdentifierScope Scope, string Schema, string? Table)> scopes = [];
 
         // WHY: Scan the captured reference list without an interface enumerator.
         // ReSharper disable once ForCanBeConvertedToForeach
@@ -451,8 +491,14 @@ internal static class SqlServerIdentifierContract
     )
     {
         AddTable(names, definition.Schema, definition.Table);
-        foreach (var column in definition.Columns)
+
+        // WHY: Immutable indexed slots retain their authored order without mutating the source.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var columnIndex = 0; columnIndex < definition.Columns.Count; columnIndex++)
         {
+            var column = definition.Columns[columnIndex];
+
             AddColumn(names, definition.Schema, definition.Table, column.Name);
         }
 
@@ -461,18 +507,33 @@ internal static class SqlServerIdentifierContract
             AddKey(names, definition.Schema, definition.Table, primaryKey.Name, primaryKey.Columns);
         }
 
-        foreach (var unique in definition.UniqueConstraints)
+        // WHY: Immutable indexed slots retain their authored order without mutating the source.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var uniqueIndex = 0; uniqueIndex < definition.UniqueConstraints.Count; uniqueIndex++)
         {
+            var unique = definition.UniqueConstraints[uniqueIndex];
+
             AddKey(names, definition.Schema, definition.Table, unique.Name, unique.Columns);
         }
 
-        foreach (var check in definition.CheckConstraints)
+        // WHY: Immutable indexed slots retain their authored order without mutating the source.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var checkIndex = 0; checkIndex < definition.CheckConstraints.Count; checkIndex++)
         {
+            var check = definition.CheckConstraints[checkIndex];
+
             AddConstraint(names, definition.Schema, definition.Table, check.Name);
         }
 
-        foreach (var foreignKey in definition.ForeignKeys)
+        // WHY: Immutable indexed slots retain their authored order without mutating the source.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var foreignKeyIndex = 0; foreignKeyIndex < definition.ForeignKeys.Count; foreignKeyIndex++)
         {
+            var foreignKey = definition.ForeignKeys[foreignKeyIndex];
+
             AddForeignKey(names, foreignKey);
         }
     }
@@ -483,14 +544,26 @@ internal static class SqlServerIdentifierContract
     )
     {
         AddConstraint(names, definition.Schema, definition.Table, definition.Name);
-        foreach (var column in definition.Columns)
+
+        // WHY: The stable indexed snapshot preserves declaration order without mutating the source.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var foreignColumnIndex0 = 0; foreignColumnIndex0 < definition.Columns.Count; foreignColumnIndex0++)
         {
+            var column = definition.Columns[foreignColumnIndex0];
+
             AddColumn(names, definition.Schema, definition.Table, column);
         }
 
         AddTable(names, definition.PrincipalSchema, definition.PrincipalTable);
-        foreach (var column in definition.PrincipalColumns)
+
+        // WHY: Immutable indexed slots retain their authored order without mutating the source.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var principalIndex = 0; principalIndex < definition.PrincipalColumns.Count; principalIndex++)
         {
+            var column = definition.PrincipalColumns[principalIndex];
+
             AddColumn(names, definition.PrincipalSchema, definition.PrincipalTable, column);
         }
     }
@@ -504,8 +577,14 @@ internal static class SqlServerIdentifierContract
     )
     {
         AddKeyName(names, schema, table, name);
-        foreach (var column in columns)
+
+        // WHY: Immutable indexed slots retain their authored order without mutating the source.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var columnIndex = 0; columnIndex < columns.Count; columnIndex++)
         {
+            var column = columns[columnIndex];
+
             AddColumn(names, schema, table, column);
         }
     }

@@ -2,8 +2,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Benchmarks;
 
 internal static class ModelManagedDataBenchmarkWorkload
 {
-    public const int RowsPerOperation = 128;
-    public const int TransitionCount = RowsPerOperation * 3;
+    private const int RowsPerOperation = 128;
 
     public static IReadOnlyList<MigrationOperation> CreateOperations(
         string providerName,

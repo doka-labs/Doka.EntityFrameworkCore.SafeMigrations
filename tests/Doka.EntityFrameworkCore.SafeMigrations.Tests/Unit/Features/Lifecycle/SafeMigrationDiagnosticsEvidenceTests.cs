@@ -1,20 +1,39 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
+/// <summary>
+/// Pins bounded structural evidence and payload-free rejection summaries without truncating the attached full report.
+/// </summary>
 public sealed class SafeMigrationDiagnosticsEvidenceTests
 {
+    /// <summary>
+    /// Accepts complete 256-character printable expected and actual values without truncating their structural
+    /// evidence.
+    /// </summary>
     [Fact]
     public void FacetDifference_AcceptsBoundedPrintableMetadata()
     {
+        // Arrange
+        var expected = new string('e', 256);
+        var actual = new string('a', 256);
+
+        // Act
         var difference = new SafeMigrationFacetDifference(
             "column_max_length",
-            new string('e', 256),
-            new string('a', 256));
+            expected,
+            actual);
 
+        // Assert
         Assert.Equal("column_max_length", difference.Facet);
         Assert.Equal(256, difference.Expected.Length);
         Assert.Equal(256, difference.Actual.Length);
     }
 
+    /// <summary>
+    /// Rejects empty, blank, mixed-case or punctuation-bearing diagnostic facets before storing evidence.
+    /// </summary>
+    /// <param name="facet">
+    /// The independently invalid diagnostic facet code.
+    /// </param>
     [Theory]
     [InlineData("Column_Type")]
     [InlineData("column-type")]
@@ -24,58 +43,96 @@ public sealed class SafeMigrationDiagnosticsEvidenceTests
         string facet
     )
     {
-        Assert.Throws<ArgumentException>(() => new SafeMigrationFacetDifference(
+        // Arrange: The theory supplies the invalid facet code.
+
+        // Act
+        var exception = Record.Exception(() => new SafeMigrationFacetDifference(
             facet,
             "expected",
             "actual"));
+
+        // Assert
+        Assert.IsType<ArgumentException>(exception);
     }
 
+    /// <summary>Rejects each invalid display value independently in both metadata positions.</summary>
+    /// <param name="value">The invalid empty or nonprintable display value.</param>
+    /// <param name="invalidActual">Whether the invalid value occupies the actual metadata position.</param>
     [Theory]
-    [InlineData("")]
-    [InlineData(" ")]
-    [InlineData("line\nbreak")]
+    [InlineData("", false)]
+    [InlineData("", true)]
+    [InlineData(" ", false)]
+    [InlineData(" ", true)]
+    [InlineData("line\nbreak", false)]
+    [InlineData("line\nbreak", true)]
     public void FacetDifference_RejectsEmptyOrNonPrintableValues(
-        string value
+        string value,
+        bool invalidActual
     )
     {
-        Assert.Throws<ArgumentException>(() => new SafeMigrationFacetDifference(
-            "column_store_type",
-            value,
-            "actual"));
+        // Arrange
+        var expected = invalidActual
+            ? "expected"
+            : value;
 
-        Assert.Throws<ArgumentException>(() => new SafeMigrationFacetDifference(
+        var actual = invalidActual
+            ? value
+            : "actual";
+
+        // Act
+        var exception = Record.Exception(() => new SafeMigrationFacetDifference(
             "column_store_type",
-            "expected",
-            value));
+            expected,
+            actual));
+
+        // Assert
+        Assert.IsType<ArgumentException>(exception);
     }
 
-    [Fact]
-    public void FacetDifference_RejectsOversizedCodesAndValues()
+    /// <summary>Rejects each independently oversized structural metadata field.</summary>
+    /// <param name="field">The facet, expected-value or actual-value ordinal.</param>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void FacetDifference_RejectsOversizedCodesAndValues(
+        int field
+    )
     {
-        Assert.Throws<ArgumentException>(() => new SafeMigrationFacetDifference(
-            new string('f', 65),
-            "expected",
-            "actual"));
+        // Arrange
+        var facet = field == 0
+            ? new string('f', 65)
+            : "column_store_type";
 
-        Assert.Throws<ArgumentException>(() => new SafeMigrationFacetDifference(
-            "column_store_type",
-            new string('e', 257),
-            "actual"));
+        var expected = field == 1
+            ? new string('e', 257)
+            : "expected";
 
-        Assert.Throws<ArgumentException>(() => new SafeMigrationFacetDifference(
-            "column_store_type",
-            "expected",
-            new string('a', 257)));
+        var actual = field == 2
+            ? new string('a', 257)
+            : "actual";
+
+        // Act
+        var exception = Record.Exception(() => new SafeMigrationFacetDifference(facet, expected, actual));
+
+        // Assert
+        Assert.IsType<ArgumentException>(exception);
     }
 
+    /// <summary>
+    /// Retains diagnostic differences and operational impact after the caller clears the original mutable
+    /// collection.
+    /// </summary>
     [Fact]
     public void ProviderAnalysis_SnapshotsAndBoundsDifferences()
     {
+        // Arrange
         var mutable = new List<SafeMigrationFacetDifference>
         {
             new("column_max_length", "200", "10"),
         };
 
+        // Act
         var analysis = new SafeMigrationProviderAnalysis(
             SafeMigrationObservedState.Different,
             SafeMigrationRepairCapability.Safe,
@@ -86,57 +143,88 @@ public sealed class SafeMigrationDiagnosticsEvidenceTests
 
         mutable.Clear();
 
+        // Assert
         Assert.Single(analysis.Differences);
         Assert.Equal(SafeMigrationOperationalImpact.TableRewritePossible, analysis.OperationalImpact);
-        Assert.Throws<ArgumentException>(() => new SafeMigrationProviderAnalysis(
+    }
+
+    /// <summary>Rejects excessive difference evidence rather than truncating the structural proof.</summary>
+    [Fact]
+    public void ProviderAnalysis_RejectsExcessiveDifferences()
+    {
+        // Arrange
+        var differences = Enumerable
+            .Range(0, 17)
+            .Select(index => new SafeMigrationFacetDifference(
+                "column_store_type",
+                index.ToString(CultureInfo.InvariantCulture),
+                "actual"));
+
+        // Act
+        var exception = Record.Exception(() => new SafeMigrationProviderAnalysis(
             SafeMigrationObservedState.Different,
             SafeMigrationRepairCapability.None,
             postconditionSatisfied: false,
             "too_many_differences",
             SafeMigrationOperationalImpact.Unknown,
-            Enumerable
-                .Range(0, 17)
-                .Select(index => new SafeMigrationFacetDifference(
-                    "column_store_type",
-                    index.ToString(CultureInfo.InvariantCulture),
-                    "actual"))));
+            differences));
+
+        // Assert
+        Assert.IsType<ArgumentException>(exception);
     }
 
-    [Fact]
-    public void DifferenceParser_RejectsMalformedPayloadWithoutEchoingIt()
+    /// <summary>Rejects malformed and oversized evidence independently without echoing private payload.</summary>
+    /// <param name="oversized">Whether the supplied payload exceeds the parser's bounded size.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void DifferenceParser_RejectsMalformedPayloadWithoutEchoingIt(
+        bool oversized
+    )
     {
-        const string sensitivePayload = "column_store_type\u001fexpected\u001fsecret\nvalue";
-        var oversizedPayload = new string('s', 16_000);
+        // Arrange
+        var payload = oversized
+            ? new string('s', 16_000)
+            : "column_store_type\u001fexpected\u001fsecret\nvalue";
 
-        var exception = Assert.Throws<InvalidOperationException>(() =>
-            SafeMigrationFacetDifferenceParser.Parse(sensitivePayload, "TestProvider"));
+        // Act
+        var exception = Record.Exception(() => SafeMigrationFacetDifferenceParser.Parse(payload, "TestProvider"));
 
-        var oversizedException = Assert.Throws<InvalidOperationException>(() =>
-            SafeMigrationFacetDifferenceParser.Parse(oversizedPayload, "TestProvider"));
+        // Assert
+        var failure = Assert.IsType<InvalidOperationException>(exception);
 
-        Assert.Contains("malformed", exception.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("secret", exception.Message, StringComparison.Ordinal);
-        Assert.DoesNotContain(sensitivePayload, exception.Message, StringComparison.Ordinal);
-        Assert.Contains("malformed", oversizedException.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain(oversizedPayload, oversizedException.Message, StringComparison.Ordinal);
+        Assert.Contains("malformed", failure.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("secret", failure.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(payload, failure.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Preserves the authored store-type and nullability record order while parsing the bounded evidence protocol.
+    /// </summary>
     [Fact]
     public void DifferenceParser_PreservesOrderedBoundedRecords()
     {
+        // Arrange
         const string payload = "column_store_type\u001fvarchar(200)\u001fvarchar(10)"
             + "\u001ecolumn_nullability\u001fnot_nullable\u001fnullable";
 
+        // Act
         var differences = SafeMigrationFacetDifferenceParser.Parse(payload, "TestProvider");
 
+        // Assert
         Assert.Equal(2, differences.Count);
         Assert.Equal("column_store_type", differences[0].Facet);
         Assert.Equal("column_nullability", differences[1].Facet);
     }
 
+    /// <summary>
+    /// Retains the complete twenty-conflict report while emitting only the first bounded structural rejection
+    /// summary.
+    /// </summary>
     [Fact]
     public void BlockedPreflight_ThrowsTypedExceptionWithCompleteReportAndBoundedSummary()
     {
+        // Arrange
         var assessments = Enumerable
             .Range(0, 20)
             .Select(index => new SafeMigrationAssessment(
@@ -162,7 +250,11 @@ public sealed class SafeMigrationDiagnosticsEvidenceTests
             SafeMigrationReportStatus.Blocked,
             assessments);
 
-        var exception = Assert.Throws<SafeMigrationPreflightException>(report.ThrowIfBlocked);
+        // Act
+        var failure = Record.Exception(report.ThrowIfBlocked);
+
+        // Assert
+        var exception = Assert.IsType<SafeMigrationPreflightException>(failure);
 
         Assert.Same(report, exception.Report);
         Assert.Contains("blocked 20 operations", exception.Message, StringComparison.Ordinal);
@@ -171,9 +263,14 @@ public sealed class SafeMigrationDiagnosticsEvidenceTests
         Assert.DoesNotContain("column_19", exception.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Bounds displayed identifiers and facets without changing their complete values in the attached immutable
+    /// report.
+    /// </summary>
     [Fact]
     public void BlockedPreflight_BoundsCallerSuppliedSummaryFieldsWithoutMutatingTheReport()
     {
+        // Arrange
         var objectName = new string('o', 512);
         var analysisCode = new string('a', 512);
         var decisionCode = new string('d', 512);
@@ -199,7 +296,11 @@ public sealed class SafeMigrationDiagnosticsEvidenceTests
             SafeMigrationReportStatus.Blocked,
             [assessment]);
 
-        var exception = Assert.Throws<SafeMigrationPreflightException>(report.ThrowIfBlocked);
+        // Act
+        var failure = Record.Exception(report.ThrowIfBlocked);
+
+        // Assert
+        var exception = Assert.IsType<SafeMigrationPreflightException>(failure);
 
         Assert.InRange(exception.Message.Length, 1, 2300);
         Assert.DoesNotContain(objectName, exception.Message, StringComparison.Ordinal);
@@ -220,9 +321,13 @@ public sealed class SafeMigrationDiagnosticsEvidenceTests
                 .Actual);
     }
 
+    /// <summary>
+    /// Escapes caller-supplied line breaks and terminal controls without altering the original report metadata.
+    /// </summary>
     [Fact]
     public void BlockedPreflight_SanitizesCallerSuppliedControlCharactersInSummary()
     {
+        // Arrange
         const string objectName = "column\nforged";
         const string analysisCode = "analysis\u001bcode";
         const string decisionCode = "decision\r\ncode";
@@ -247,35 +352,54 @@ public sealed class SafeMigrationDiagnosticsEvidenceTests
             SafeMigrationReportStatus.Blocked,
             [assessment]);
 
-        var exception = Assert.Throws<SafeMigrationPreflightException>(report.ThrowIfBlocked);
+        // Act
+        var failure = Record.Exception(report.ThrowIfBlocked);
+
+        // Assert
+        var exception = Assert.IsType<SafeMigrationPreflightException>(failure);
 
         Assert.DoesNotContain('\n', exception.Message);
         Assert.DoesNotContain('\r', exception.Message);
         Assert.DoesNotContain('\u001b', exception.Message);
         Assert.Contains("column\\u000Aforged", exception.Message, StringComparison.Ordinal);
         Assert.Contains("analysis\\u001Bcode", exception.Message, StringComparison.Ordinal);
-        Assert.Contains("decision\\u000D\\u000Acode", exception.Message, StringComparison.Ordinal);
+        Assert.Contains(@"decision\u000D\u000Acode", exception.Message, StringComparison.Ordinal);
         Assert.Equal(objectName, assessment.ObjectName);
         Assert.Equal(analysisCode, assessment.AnalysisCode);
         Assert.Equal(decisionCode, assessment.DecisionCode);
     }
 
-    [Fact]
-    public void ThrowIfBlocked_RejectsPostflightAndAcceptsReadyPreflight()
+    /// <summary>Separates accepted ready preflight from the unsupported postflight throwing contract.</summary>
+    /// <param name="postflight">Whether the report is a blocked postflight instead of ready preflight.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ThrowIfBlocked_RejectsPostflightAndAcceptsReadyPreflight(
+        bool postflight
+    )
     {
-        var ready = CreateReport(
-            SafeMigrationReportMode.Preflight,
-            SafeMigrationReportStatus.Ready,
+        // Arrange
+        var report = CreateReport(
+            postflight
+                ? SafeMigrationReportMode.Postflight
+                : SafeMigrationReportMode.Preflight,
+            postflight
+                ? SafeMigrationReportStatus.Blocked
+                : SafeMigrationReportStatus.Ready,
             []);
 
-        var postflight = CreateReport(
-            SafeMigrationReportMode.Postflight,
-            SafeMigrationReportStatus.Blocked,
-            []);
+        // Act
+        var exception = Record.Exception(report.ThrowIfBlocked);
 
-        ready.ThrowIfBlocked();
-
-        Assert.Throws<InvalidOperationException>(postflight.ThrowIfBlocked);
+        // Assert
+        if (postflight)
+        {
+            Assert.IsType<InvalidOperationException>(exception);
+        }
+        else
+        {
+            Assert.Null(exception);
+        }
     }
 
     private static SafeMigrationRunReport CreateReport(

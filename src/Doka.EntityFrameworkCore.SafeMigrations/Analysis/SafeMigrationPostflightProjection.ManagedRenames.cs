@@ -9,8 +9,8 @@ internal sealed partial class SafeMigrationPostflightProjection
         ISafeMigrationProviderObjectIdentityNormalizer? identity
     )
     {
-        if (!operations.Any(static operation => operation is SafeMigrationOperation { Intent: RenameColumnIntent })
-            || !operations.Any(static operation => operation is SafeMigrationOperation
+        if (operations.All(static operation => operation is not SafeMigrationOperation { Intent: RenameColumnIntent })
+            || operations.All(static operation => operation is not SafeMigrationOperation
             {
                 Intent: ModelManagedDataIntent,
             }))
@@ -53,8 +53,14 @@ internal sealed partial class SafeMigrationPostflightProjection
                 Register(Owner(managed.Table, managed.Schema), pending);
                 if (managed is DeleteModelManagedDataIntent delete)
                 {
-                    foreach (var foreignKey in delete.ForeignKeys)
+                    // WHY: This immutable definition snapshot is indexed; retain its authored order without interface
+                    // enumeration.
+                    // ReSharper disable once ForCanBeConvertedToForeach
+                    // ReSharper disable once LoopCanBeConvertedToQuery
+                    for (var foreignKeyIndex = 0; foreignKeyIndex < delete.ForeignKeys.Count; foreignKeyIndex++)
                     {
+                        var foreignKey = delete.ForeignKeys[foreignKeyIndex];
+
                         Register(Owner(foreignKey.Table, foreignKey.Schema), pending);
                     }
                 }
@@ -96,6 +102,9 @@ internal sealed partial class SafeMigrationPostflightProjection
             }
 
             var comparer = normalizer?.ColumnIdentifierComparer ?? StringComparer.Ordinal;
+
+            // WHY: Mutate pending lifetimes in their owned list order without an intermediate query iterator.
+            // ReSharper disable once ForeachCanBePartlyConvertedToQueryUsingAnotherGetEnumerator
             foreach (var pending in affected)
             {
                 if (!pending.Valid)
@@ -145,6 +154,9 @@ internal sealed partial class SafeMigrationPostflightProjection
         }
 
         return rewritten is { Count: > 0 }
+
+            // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+            // ReSharper disable once UseCollectionExpression
             ? rewritten.Values.ToList()
             : null;
 
@@ -230,6 +242,9 @@ internal sealed partial class SafeMigrationPostflightProjection
 
                 if (!ReferenceEquals(members, key.Columns))
                 {
+                    // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based
+                    // materialization.
+                    // ReSharper disable once UseCollectionExpression
                     rewrittenKeys ??= uniqueKeys.ToArray();
                     rewrittenKeys[index] = new ExpectedModelManagedDataUniqueKeyDefinition(members);
                 }
@@ -264,6 +279,9 @@ internal sealed partial class SafeMigrationPostflightProjection
                 if (!ReferenceEquals(principalMembers, key.PrincipalColumns)
                     || !ReferenceEquals(dependentMembers, key.Columns))
                 {
+                    // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based
+                    // materialization.
+                    // ReSharper disable once UseCollectionExpression
                     rewrittenKeys ??= foreignKeys.ToArray();
                     rewrittenKeys[index] = new ExpectedModelManagedDataForeignKeyDefinition(
                         key.Table,
@@ -340,6 +358,8 @@ internal sealed partial class SafeMigrationPostflightProjection
                 return false;
             }
 
+            // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+            // ReSharper disable once UseCollectionExpression
             rewritten ??= members.ToArray();
             rewritten[index] = rename.NewName;
         }
@@ -352,17 +372,28 @@ internal sealed partial class SafeMigrationPostflightProjection
         return true;
     }
 
-    private sealed class PendingManagedData(
-        int ordinal,
-        int safeOrdinal,
-        SafeMigrationOperation operation
-    )
+    private sealed class PendingManagedData
     {
-        public int Ordinal { get; } = ordinal;
+        /// <summary>Initializes a pending row mutation with its authored and safe-operation ordinals.</summary>
+        /// <param name="ordinal">The authored migration operation ordinal.</param>
+        /// <param name="safeOrdinal">The safe-operation ordinal.</param>
+        /// <param name="operation">The row mutation operation.</param>
+        public PendingManagedData(
+            int ordinal,
+            int safeOrdinal,
+            SafeMigrationOperation operation
+        )
+        {
+            Ordinal = ordinal;
+            SafeOrdinal = safeOrdinal;
+            Operation = operation;
+        }
 
-        public int SafeOrdinal { get; } = safeOrdinal;
+        public int Ordinal { get; }
 
-        public SafeMigrationOperation Operation { get; set; } = operation;
+        public int SafeOrdinal { get; }
+
+        public SafeMigrationOperation Operation { get; set; }
 
         public bool Valid { get; set; } = true;
     }

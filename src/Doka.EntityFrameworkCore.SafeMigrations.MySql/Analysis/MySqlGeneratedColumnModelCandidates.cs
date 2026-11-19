@@ -71,8 +71,13 @@ internal static class MySqlGeneratedColumnModelCandidates
                 continue;
             }
 
-            foreach (var operation in request.Value)
+            // WHY: Index this stable list while preserving its order and ownership.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var operationIndex = 0; operationIndex < request.Value.Count; operationIndex++)
             {
+                var operation = request.Value[operationIndex];
+
                 result.TryAdd((SafeMigrationOperation)operation, candidates);
             }
         }
@@ -90,22 +95,29 @@ internal static class MySqlGeneratedColumnModelCandidates
     )
     {
         if (model is null or RuntimeModel
-            || !operations.Any(static operation =>
-                operation is SafeMigrationOperation { Intent: DropColumnIntent or RenameColumnIntent }))
+            || operations.All(static operation =>
+                operation is not SafeMigrationOperation { Intent: DropColumnIntent or RenameColumnIntent }))
         {
             return [];
         }
 
         var requested = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var operation in operations)
+
+        // WHY: Index this stable list while preserving its order and ownership.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var operationIndex = 0; operationIndex < operations.Count; operationIndex++)
         {
-            if (operation is SafeMigrationOperation { Intent: DropColumnIntent drop })
+            var operation = operations[operationIndex];
+
+            switch (operation)
             {
-                requested.Add(drop.Table);
-            }
-            else if (operation is SafeMigrationOperation { Intent: RenameColumnIntent rename })
-            {
-                requested.Add(rename.Table);
+                case SafeMigrationOperation { Intent: DropColumnIntent drop }:
+                    requested.Add(drop.Table);
+                    break;
+                case SafeMigrationOperation { Intent: RenameColumnIntent rename }:
+                    requested.Add(rename.Table);
+                    break;
             }
         }
 

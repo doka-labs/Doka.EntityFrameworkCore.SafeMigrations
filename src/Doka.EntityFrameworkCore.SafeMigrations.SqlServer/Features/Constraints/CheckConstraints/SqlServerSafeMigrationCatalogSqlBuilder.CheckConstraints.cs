@@ -111,6 +111,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                         definition.Schema,
                         columns
                             .Order(StringComparer.Ordinal)
+
+                            // WHY: Retain this explicit fluent snapshot instead of a collection-spread rewrite.
+                            // ReSharper disable once UseCollectionExpression
                             .ToArray())),
                 StateEvaluationGuardExpression = Bit(
                     orderedCapture

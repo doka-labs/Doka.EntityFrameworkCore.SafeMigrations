@@ -14,6 +14,9 @@ public class SqlServerCatalogCommandAssemblyBenchmarks
     {
         _selections = Enumerable
             .Repeat(new string('x', 2_048), 32)
+
+            // WHY: Retain fluent materialization and the resulting snapshot ownership.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         _expectedText = string.Join("\n", _selections);

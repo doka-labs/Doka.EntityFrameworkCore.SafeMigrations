@@ -20,7 +20,7 @@ public sealed class PostgreSqlIndexesCollationSetsIntegrationTests : PostgreSqlS
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await CreateMixedCollationIndexAsync(connectionString, cancellationToken: CancellationToken.None);
+        await CreateMixedCollationIndexAsync(connectionString, "pg_catalog", "C", CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = MixedCollationBuilder(context, alias, new SafeMigrationCollationIdentifier("C", "pg_catalog"));
 
@@ -64,7 +64,7 @@ public sealed class PostgreSqlIndexesCollationSetsIntegrationTests : PostgreSqlS
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await CreateMixedCollationIndexAsync(connectionString, cancellationToken: CancellationToken.None);
+        await CreateMixedCollationIndexAsync(connectionString, "pg_catalog", "C", CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var expected = collation is null
             ? null
@@ -123,7 +123,7 @@ public sealed class PostgreSqlIndexesCollationSetsIntegrationTests : PostgreSqlS
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await CreateMixedCollationIndexAsync(connectionString, CancellationToken.None, collationName: "POSIX");
+        await CreateMixedCollationIndexAsync(connectionString, "pg_catalog", "POSIX", CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = MixedCollationBuilder(context, alias, collation: null, explicitOperatorClass);
 
@@ -164,7 +164,7 @@ public sealed class PostgreSqlIndexesCollationSetsIntegrationTests : PostgreSqlS
             "CREATE SCHEMA custom; CREATE COLLATION custom.\"C\" FROM pg_catalog.\"C\";",
             cancellationToken: CancellationToken.None);
 
-        await CreateMixedCollationIndexAsync(connectionString, CancellationToken.None, "custom");
+        await CreateMixedCollationIndexAsync(connectionString, "custom", "C", CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = MixedCollationBuilder(context, alias, new SafeMigrationCollationIdentifier("C", "pg_catalog"));
 
@@ -212,7 +212,7 @@ public sealed class PostgreSqlIndexesCollationSetsIntegrationTests : PostgreSqlS
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await CreateMixedCollationIndexAsync(connectionString, cancellationToken: CancellationToken.None);
+        await CreateMixedCollationIndexAsync(connectionString, "pg_catalog", "C", CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var expected = collation is null
             ? null
@@ -690,9 +690,9 @@ public sealed class PostgreSqlIndexesCollationSetsIntegrationTests : PostgreSqlS
     /// <param name="cancellationToken">Cancels the owned operation before and during asynchronous work.</param>
     private static Task CreateMixedCollationIndexAsync(
         string connectionString,
-        CancellationToken cancellationToken,
-        string collationSchema = "pg_catalog",
-        string collationName = "C"
+        string collationSchema,
+        string collationName,
+        CancellationToken cancellationToken
     ) => ExecuteSqlAsync(
         connectionString,
         $"""

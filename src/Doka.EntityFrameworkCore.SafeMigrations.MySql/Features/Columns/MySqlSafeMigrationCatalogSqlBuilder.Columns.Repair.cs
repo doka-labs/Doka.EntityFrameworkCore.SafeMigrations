@@ -95,7 +95,6 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         {
             SafeMigrationDefaultValueKind.None => true,
             SafeMigrationDefaultValueKind.Literal => definition.DefaultValue.GetLiteralValue() is null or bool,
-            SafeMigrationDefaultValueKind.Sql => false,
             _ => false,
         };
     }
@@ -552,7 +551,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             return """
                 LOCATE('auto_increment', LOWER(c.EXTRA)) = 0
                 AND TRIM(REPLACE(LOWER(COALESCE(c.EXTRA, '')),
-                """ + " 'default_generated', '')) = 'on update current_timestamp(6)'";
+                """
+                + " 'default_generated', '')) = 'on update current_timestamp(6)'";
         }
 
         return "LOCATE('auto_increment', LOWER(c.EXTRA)) = 0";

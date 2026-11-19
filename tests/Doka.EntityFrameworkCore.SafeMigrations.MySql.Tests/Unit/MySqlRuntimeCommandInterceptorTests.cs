@@ -253,7 +253,7 @@ public sealed class MySqlRuntimeCommandInterceptorTests
     public void Classify_UnknownDiagnosticValueAssignmentRetainsMixedPurpose()
     {
         // Arrange
-        var sql = CorrelatedActionAssignment + "SET @doka_sm_diag_future = 0;";
+        const string sql = CorrelatedActionAssignment + "SET @doka_sm_diag_future = 0;";
 
         // Act
         var category = MySqlRuntimeCommandInterceptor.Classify(sql);
@@ -287,5 +287,94 @@ public sealed class MySqlRuntimeCommandInterceptorTests
         Assert.Equal(expectedInjected, interceptor.SetupWasInjected);
         Assert.Equal(expectedInjected, command.CommandText.EndsWith(injection, StringComparison.Ordinal));
         Assert.Equal(1, interceptor.CommandCount);
+    }
+
+    /// <summary>
+    /// Preserves exact aggregate counts and payload sizes across overlapping simulated command dispatches.
+    /// </summary>
+    [Fact]
+    public async Task ConcurrentDispatchRetainsExactAggregates()
+    {
+        // Arrange
+        const int commandsPerOwner = 128;
+        const string commandText = RuntimeMarker + "SET @doka_sm_post_ok = TRUE;";
+        var interceptor = new MySqlRuntimeCommandInterceptor();
+        using var rendezvous = new Barrier(2);
+
+        void RecordStarts()
+        {
+            try
+            {
+                for (var index = 0; index < commandsPerOwner; index++)
+                {
+                    // WHY: Both dedicated owners reach every dispatch boundary; no timer or
+                    // thread-pool admission guess supplies the overlap. Failure releases the peer.
+                    rendezvous.SignalAndWait();
+                    using var command = new MySqlCommand(commandText);
+                    _ = interceptor.NonQueryExecuting(command, null!, default);
+                }
+            }
+            finally
+            {
+                rendezvous.RemoveParticipant();
+            }
+        }
+
+        // Act
+        var first = Task.Factory.StartNew(
+            RecordStarts,
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
+
+        var second = Task.Factory.StartNew(
+            RecordStarts,
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
+
+        await Task.WhenAll(first, second);
+        var snapshot = JsonSerializer.SerializeToElement(interceptor.Snapshot());
+
+        // Assert
+        const int expectedCount = commandsPerOwner * 2;
+        var category = snapshot
+            .GetProperty("categories")
+            .GetProperty("guarded_body");
+
+        Assert.Equal(expectedCount,
+            snapshot
+                .GetProperty("CommandCount")
+                .GetInt32());
+
+        Assert.Equal(expectedCount,
+            snapshot
+                .GetProperty("GuardedBodyCount")
+                .GetInt32());
+
+        Assert.Equal(expectedCount,
+            category
+                .GetProperty("Started")
+                .GetInt32());
+
+        Assert.Equal(0,
+            category
+                .GetProperty("Completed")
+                .GetInt32());
+
+        Assert.Equal(0,
+            category
+                .GetProperty("Failed")
+                .GetInt32());
+
+        Assert.Equal(Encoding.UTF8.GetByteCount(commandText) * (long)expectedCount,
+            category
+                .GetProperty("PayloadBytes")
+                .GetInt64());
+
+        Assert.Equal(Encoding.UTF8.GetByteCount(commandText),
+            category
+                .GetProperty("MaximumPayloadBytes")
+                .GetInt32());
     }
 }

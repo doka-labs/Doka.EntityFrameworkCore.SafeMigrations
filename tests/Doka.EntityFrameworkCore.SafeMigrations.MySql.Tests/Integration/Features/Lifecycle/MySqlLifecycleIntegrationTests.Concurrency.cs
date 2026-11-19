@@ -21,22 +21,19 @@ public sealed partial class MySqlLifecycleIntegrationTests
         await using var first = CreateAdmissionContext(connectionString, firstGate);
         await using var second = CreateAdmissionContext(connectionString, secondGate);
 
-        // WHY: This deadline only prevents a broken admission protocol from hanging the suite;
-        // no duration or relative execution-speed assertion is used.
-        using var watchdog = new CancellationTokenSource(TimeSpan.FromMinutes(2));
         var secondMigration = Task.CompletedTask;
         bool secondEnteredBeforeRelease;
 
         // Act.
-        var firstMigration = first.Database.MigrateAsync(cancellationToken: watchdog.Token);
+        var firstMigration = first.Database.MigrateAsync(cancellationToken: CancellationToken.None);
         try
         {
-            await AwaitMigrationAdmissionAsync(firstMigration, firstGate.Entered, watchdog.Token);
+            await AwaitMigrationAdmissionAsync(firstMigration, firstGate.Entered, CancellationToken.None);
             secondMigration = second
                 .GetService<IMigrator>()
-                .MigrateAsync(cancellationToken: watchdog.Token);
+                .MigrateAsync(cancellationToken: CancellationToken.None);
 
-            await AwaitNativeMigrationLockWaitAsync(connectionString, watchdog.Token);
+            await AwaitNativeMigrationLockWaitAsync(connectionString, secondMigration, CancellationToken.None);
             secondEnteredBeforeRelease = secondGate.HasEntered;
         }
         finally
@@ -55,14 +52,14 @@ public sealed partial class MySqlLifecycleIntegrationTests
                 connectionString,
                 "SELECT COUNT(*) FROM `__ApplicationDbContextMigrationsHistory` "
                 + $"WHERE `MigrationId` = '{CoreConvergenceMigration.MigrationIdentifier}';",
-                cancellationToken: watchdog.Token));
+                cancellationToken: CancellationToken.None));
 
         Assert.Equal(
             1,
             await ScalarIntAsync(
                 connectionString,
                 "SELECT COUNT(*) FROM `__LegacyMigrationsHistory` WHERE `MigrationId` = 'legacy-unchanged';",
-                cancellationToken: watchdog.Token));
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Admits both databases before either migrator is permitted to execute its first target DDL.</summary>
@@ -77,17 +74,16 @@ public sealed partial class MySqlLifecycleIntegrationTests
         await using var left = CreateAdmissionContext(leftConnectionString, leftGate);
         await using var right = CreateAdmissionContext(rightConnectionString, rightGate);
 
-        // WHY: Admission is the concurrency evidence; the deadline is only a deadlock watchdog.
-        using var watchdog = new CancellationTokenSource(TimeSpan.FromMinutes(2));
-
         // Act.
-        var leftMigration = left.Database.MigrateAsync(cancellationToken: watchdog.Token);
-        var rightMigration = right.Database.MigrateAsync(cancellationToken: watchdog.Token);
+        var leftMigration = left.Database.MigrateAsync(cancellationToken: CancellationToken.None);
+        var rightMigration = right.Database.MigrateAsync(cancellationToken: CancellationToken.None);
         try
         {
-            await Task.WhenAll(
-                AwaitMigrationAdmissionAsync(leftMigration, leftGate.Entered, watchdog.Token),
-                AwaitMigrationAdmissionAsync(rightMigration, rightGate.Entered, watchdog.Token));
+            await AwaitMigrationAdmissionsAsync(
+                leftMigration,
+                rightMigration,
+                Task.WhenAll(leftGate.Entered, rightGate.Entered),
+                CancellationToken.None);
         }
         finally
         {
@@ -105,7 +101,7 @@ public sealed partial class MySqlLifecycleIntegrationTests
                 leftConnectionString,
                 "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'pipeline_state';",
-                cancellationToken: watchdog.Token));
+                cancellationToken: CancellationToken.None));
 
         Assert.Equal(
             1,
@@ -113,7 +109,7 @@ public sealed partial class MySqlLifecycleIntegrationTests
                 rightConnectionString,
                 "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'pipeline_state';",
-                cancellationToken: watchdog.Token));
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Uses the ordinary migration context with an operation-local test admission observer.</summary>
@@ -137,7 +133,10 @@ public sealed partial class MySqlLifecycleIntegrationTests
     }
 
     /// <summary>Fails immediately when a migrator finishes or faults without reaching the expected DDL.</summary>
-    private static async Task AwaitMigrationAdmissionAsync(
+    /// <param name="migration">The actual owned native migration task, not a timer proxy.</param>
+    /// <param name="admission">The exact DDL-admission signal.</param>
+    /// <param name="cancellationToken">The caller cancellation of the wait.</param>
+    internal static async Task AwaitMigrationAdmissionAsync(
         Task migration,
         Task admission,
         CancellationToken cancellationToken
@@ -157,9 +156,39 @@ public sealed partial class MySqlLifecycleIntegrationTests
         await admission;
     }
 
+    /// <summary>Waits for both real admissions without hiding one failed owner behind the other's held gate.</summary>
+    /// <param name="firstMigration">The first actual owned migration.</param>
+    /// <param name="secondMigration">The second actual owned migration.</param>
+    /// <param name="admissions">Completion of both exact admission signals.</param>
+    /// <param name="cancellationToken">The caller cancellation of the wait.</param>
+    internal static async Task AwaitMigrationAdmissionsAsync(
+        Task firstMigration,
+        Task secondMigration,
+        Task admissions,
+        CancellationToken cancellationToken
+    )
+    {
+        // WHY: A combined producer WhenAll can hide one fault behind a peer waiting at its
+        // deliberately held DDL gate. Race actual producers independently; the caller then
+        // releases both gates and drains both migrations, without orphaned async admission work.
+        var completed = await Task
+            .WhenAny(firstMigration, secondMigration, admissions)
+            .WaitAsync(cancellationToken);
+
+        if (completed != admissions)
+        {
+            await completed;
+
+            throw new InvalidOperationException("A migrator completed before both target DDL admissions.");
+        }
+
+        await admissions;
+    }
+
     /// <summary>Observes the second migrator waiting for this test's exact native advisory-lock identity.</summary>
     private static async Task AwaitNativeMigrationLockWaitAsync(
         string connectionString,
+        Task migration,
         CancellationToken cancellationToken
     )
     {
@@ -183,6 +212,14 @@ public sealed partial class MySqlLifecycleIntegrationTests
         while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (migration.IsCompleted)
+            {
+                await migration;
+
+                throw new InvalidOperationException(
+                    "The migrator completed without waiting for the owned native lock.");
+            }
+
             var count = Convert.ToInt32(
                 await command.ExecuteScalarAsync(cancellationToken),
                 CultureInfo.InvariantCulture);
@@ -192,6 +229,8 @@ public sealed partial class MySqlLifecycleIntegrationTests
                 return;
             }
 
+            // WHY: This is native-state polling cadence, not a correctness deadline. A faulted
+            // migrator is observed above; the caller always releases and drains both migrations.
             await Task.Delay(TimeSpan.FromMilliseconds(10), cancellationToken);
         }
     }

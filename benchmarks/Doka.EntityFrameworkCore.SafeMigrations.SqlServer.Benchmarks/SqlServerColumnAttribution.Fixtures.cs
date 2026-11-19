@@ -155,12 +155,17 @@ public partial class SqlServerColumnAttribution
     }
 
     /// <summary>Hashes all ordered fixture data and the relevant physical column/default/index catalog.</summary>
-    private static string Snapshot(
+    /// <param name="connection">The owned fixture connection.</param>
+    /// <param name="scenario">The exact snapshot interpretation.</param>
+    /// <param name="cancellationToken">The token controlling the database read.</param>
+    /// <returns>The complete asynchronous fixture fingerprint.</returns>
+    private static async Task<string> SnapshotAsync(
         SqlConnection connection,
-        Scenario scenario
+        Scenario scenario,
+        CancellationToken cancellationToken
     )
     {
-        using var command = connection.CreateCommand();
+        await using var command = connection.CreateCommand();
         command.CommandTimeout = CommandTimeoutSeconds;
         command.CommandText = """
         SELECT CONVERT(varchar(64), HASHBYTES('SHA2_256', (SELECT *
@@ -181,8 +186,8 @@ public partial class SqlServerColumnAttribution
         FROM dbo.attribution_items;
         """;
 
-        using var reader = command.ExecuteReader();
-        if (!reader.Read())
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken))
         {
             throw new InvalidOperationException($"{scenario.Name}: fixture snapshot is missing.");
         }

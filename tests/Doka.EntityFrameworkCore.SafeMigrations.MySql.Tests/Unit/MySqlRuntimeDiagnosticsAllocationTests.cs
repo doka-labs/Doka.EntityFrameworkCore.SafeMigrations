@@ -35,6 +35,9 @@ public sealed class MySqlRuntimeDiagnosticsAllocationTests
 
         var included = conditions
             .Where(static condition => condition.Length > 0)
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var expected = "EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS c "
@@ -163,7 +166,7 @@ public sealed class MySqlRuntimeDiagnosticsAllocationTests
         // Arrange
         using var context = Context();
         var mappings = DispatchProxy.Create<IRelationalTypeMappingSource, MappingProbe>();
-        var probe = Assert.IsAssignableFrom<MappingProbe>(mappings);
+        var probe = Assert.IsType<MappingProbe>(mappings, exactMatch: false);
         probe.Inner = context.GetService<IRelationalTypeMappingSource>();
         var catalog = Catalog(mappings, context);
         var operation = Operation("failed_items", "failed_value", 13);
@@ -202,7 +205,7 @@ public sealed class MySqlRuntimeDiagnosticsAllocationTests
         // Arrange
         using var context = Context();
         var mappings = DispatchProxy.Create<IRelationalTypeMappingSource, MappingProbe>();
-        var probe = Assert.IsAssignableFrom<MappingProbe>(mappings);
+        var probe = Assert.IsType<MappingProbe>(mappings, exactMatch: false);
         probe.Inner = context.GetService<IRelationalTypeMappingSource>();
         var catalog = Catalog(mappings, context);
         var outer = Operation("outer_items", "outer_value", 13);
@@ -253,7 +256,7 @@ public sealed class MySqlRuntimeDiagnosticsAllocationTests
     private static int ScratchCount(
         MySqlSafeMigrationCatalogSqlBuilder catalog,
         string name
-    ) => Assert.IsAssignableFrom<ICollection>(Field(catalog, name))
+    ) => Assert.IsType<ICollection>(Field(catalog, name), exactMatch: false)
         .Count;
 
     /// <summary>Requires the exact field to exist so an absent scratch probe cannot pass vacuously.</summary>

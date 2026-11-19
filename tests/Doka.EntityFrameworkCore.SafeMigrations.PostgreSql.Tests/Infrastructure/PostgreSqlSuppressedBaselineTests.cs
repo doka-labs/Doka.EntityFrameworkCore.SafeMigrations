@@ -1,5 +1,6 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
+/// <summary>Verifies PostgreSQL Suppressed Baseline contracts in independently owned test state.</summary>
 public sealed class PostgreSqlSuppressedBaselineTests
 {
     private const string AddColumnSql = "ALTER TABLE \"items\" ADD COLUMN \"value\" integer;";
@@ -57,7 +58,9 @@ public sealed class PostgreSqlSuppressedBaselineTests
     }
 
     /// <summary>Rejects a transaction-suppressed safe baseline with authored owner and corrective guidance.</summary>
-    /// <param name="hasPrecedingUnsuppressedCommand">Whether the rejected baseline also contains ordinary commands.</param>
+    /// <param name="hasPrecedingUnsuppressedCommand">
+    /// Whether the rejected baseline also contains ordinary commands.
+    /// </param>
     /// <param name="options">The EF Core generation flags to preserve.</param>
     [Theory]
     [InlineData(false, MigrationsSqlGenerationOptions.Default)]
@@ -96,7 +99,7 @@ public sealed class PostgreSqlSuppressedBaselineTests
         Assert.Equal("items", operation.Table);
         Assert.Equal("value", operation.Name);
         Assert.Same(baseline.ColumnBaselineCommands, call.Commands);
-        Assert.True(call.Commands[call.Commands.Count - 1].TransactionSuppressed);
+        Assert.True(call.Commands[^1].TransactionSuppressed);
         if (hasPrecedingUnsuppressedCommand)
         {
             Assert.False(call.Commands[0].TransactionSuppressed);
@@ -165,6 +168,7 @@ public sealed class PostgreSqlSuppressedBaselineTests
         Assert.True(call.Commands[1].TransactionSuppressed);
     }
 
+    /// <summary>Unsuppressed Column Baseline Keeps Every Command Inside One Guard.</summary>
     [Theory]
     [InlineData(MigrationsSqlGenerationOptions.Default)]
     [InlineData(MigrationsSqlGenerationOptions.NoTransactions)]
@@ -172,6 +176,7 @@ public sealed class PostgreSqlSuppressedBaselineTests
         MigrationsSqlGenerationOptions options
     )
     {
+        // Arrange
         using var context = CreateContext();
         var baseline = context.GetService<RecordingBaselineGenerator>();
         var generator = context.GetService<IMigrationsSqlGenerator>();
@@ -181,8 +186,10 @@ public sealed class PostgreSqlSuppressedBaselineTests
             baseline.CreateCommand(AddColumnSql, false), baseline.CreateCommand(CommentColumnSql, false),
         ];
 
+        // Act
         var commands = generator.Generate(migrationBuilder.Operations, context.Model, options);
 
+        // Assert
         var command = Assert.Single(commands);
         Assert.Equal(2, baseline.Calls.Count);
         Assert.Same(baseline.ColumnBaselineCommands, baseline.Calls[0].Commands);
@@ -209,9 +216,11 @@ public sealed class PostgreSqlSuppressedBaselineTests
             });
     }
 
+    /// <summary>Ordinary Suppressed Sql Preserves Its Command And Order Before A Safe Operation.</summary>
     [Fact]
     public void OrdinarySuppressedSqlPreservesItsCommandAndOrderBeforeASafeOperation()
     {
+        // Arrange
         const string ordinarySql = "VACUUM \"items\";";
 
         using var context = CreateContext();
@@ -226,8 +235,10 @@ public sealed class PostgreSqlSuppressedBaselineTests
 
         baseline.ColumnBaselineCommands = [baseline.CreateCommand(AddColumnSql, false)];
 
+        // Act
         var commands = generator.Generate(migrationBuilder.Operations, context.Model);
 
+        // Assert
         Assert.Equal(2, commands.Count);
         Assert.Equal(3, baseline.Calls.Count);
         Assert.Same(migrationBuilder.Operations[0], Assert.Single(baseline.Calls[0].Operations));
@@ -302,6 +313,7 @@ public sealed class PostgreSqlSuppressedBaselineTests
         IReadOnlyList<MigrationCommand> Commands
     );
 
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class RecordingBaselineGenerator : IMigrationsSqlGenerator
     {
         private readonly MigrationsSqlGeneratorDependencies _dependencies;
@@ -337,6 +349,7 @@ public sealed class PostgreSqlSuppressedBaselineTests
                     .ToArray();
 
             Calls.Add(new BaselineCall(operations.ToArray(), model, options, commands));
+
             return commands;
         }
 

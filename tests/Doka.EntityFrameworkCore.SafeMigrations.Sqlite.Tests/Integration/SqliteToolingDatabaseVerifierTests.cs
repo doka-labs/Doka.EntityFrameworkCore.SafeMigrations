@@ -1,5 +1,3 @@
-using Doka.EntityFrameworkCore.SafeMigrations.Sqlite.PackageConsumer;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 
 /// <summary>Checks the real CLI/bundle verifier against complete and independently damaged databases.</summary>
@@ -7,6 +5,7 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
 {
     private const string InitialMigrationId = "20990101000000_Initial";
     private const string TransitionMigrationId = "20990101000001_Transition";
+    private const string DefaultCheckExpression = "\"RightBound\" > \"LeftBound\"";
 
     /// <summary>A complete target passes and behavioral probes leave its rows unchanged.</summary>
     [Fact]
@@ -14,27 +13,23 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
     {
         // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
-        await CreateFixtureAsync(connection, cancellationToken: CancellationToken.None);
+        await CreateFixtureAsync(connection, false, true, null, DefaultCheckExpression, CancellationToken.None);
 
         // Act
         ToolingDatabaseVerifier.Verify(connection, InitialMigrationId, TransitionMigrationId);
+        var generatedRows = await ScalarIntAsync(connection,
+            "SELECT COUNT(*) FROM scaffolding_generated_nodes;",
+            CancellationToken.None);
+
+        var existingRows = await ScalarIntAsync(connection,
+            "SELECT COUNT(*) FROM tooling_entities;",
+            CancellationToken.None);
+
+        await using var transaction = connection.BeginTransaction();
 
         // Assert
-        Assert.Equal(
-            0,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM scaffolding_generated_nodes;",
-                cancellationToken: CancellationToken.None));
-
-        Assert.Equal(
-            1,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM tooling_entities;",
-                cancellationToken: CancellationToken.None));
-
-        using var transaction = connection.BeginTransaction();
+        Assert.Equal(0, generatedRows);
+        Assert.Equal(1, existingRows);
         Assert.Same(connection, transaction.Connection);
     }
 
@@ -48,10 +43,14 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
             connection,
             baselineOnly: true,
             includeGeneratedTable: false,
+            generatedExpression: null,
+            checkExpression: DefaultCheckExpression,
             cancellationToken: CancellationToken.None);
 
         // Act
         var exception = Record.Exception(() => ToolingDatabaseVerifier.Verify(
+            // WHY: Record.Exception executes this callback synchronously before the owning using scope ends.
+            // ReSharper disable once AccessToDisposedClosure
             connection,
             InitialMigrationId,
             TransitionMigrationId));
@@ -75,7 +74,7 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
     {
         // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
-        await CreateFixtureAsync(connection, cancellationToken: CancellationToken.None);
+        await CreateFixtureAsync(connection, false, true, null, DefaultCheckExpression, CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
             $"""
@@ -88,6 +87,8 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
 
         // Act
         var exception = Record.Exception(() => ToolingDatabaseVerifier.Verify(
+            // WHY: Record.Exception executes this callback synchronously before the owning using scope ends.
+            // ReSharper disable once AccessToDisposedClosure
             connection,
             InitialMigrationId,
             TransitionMigrationId));
@@ -106,7 +107,7 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
     {
         // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
-        await CreateFixtureAsync(connection, cancellationToken: CancellationToken.None);
+        await CreateFixtureAsync(connection, false, true, null, DefaultCheckExpression, CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
             "UPDATE __EFMigrationsHistory SET MigrationId = '20990101000001_Other' "
@@ -117,6 +118,8 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
 
         // Act
         var exception = Record.Exception(() => ToolingDatabaseVerifier.Verify(
+            // WHY: Record.Exception executes this callback synchronously before the owning using scope ends.
+            // ReSharper disable once AccessToDisposedClosure
             connection,
             InitialMigrationId,
             TransitionMigrationId));
@@ -140,7 +143,7 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
     {
         // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
-        await CreateFixtureAsync(connection, cancellationToken: CancellationToken.None);
+        await CreateFixtureAsync(connection, false, true, null, DefaultCheckExpression, CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
             "ALTER TABLE tooling_entities DROP COLUMN \"" + column + "\";",
@@ -148,6 +151,8 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
 
         // Act
         var exception = Record.Exception(() => ToolingDatabaseVerifier.Verify(
+            // WHY: Record.Exception executes this callback synchronously before the owning using scope ends.
+            // ReSharper disable once AccessToDisposedClosure
             connection,
             InitialMigrationId,
             TransitionMigrationId));
@@ -172,7 +177,7 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
     {
         // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
-        await CreateFixtureAsync(connection, cancellationToken: CancellationToken.None);
+        await CreateFixtureAsync(connection, false, true, null, DefaultCheckExpression, CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
             "DROP INDEX IX_tooling_entities_Code; " + replacement + ";",
@@ -180,6 +185,8 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
 
         // Act
         var exception = Record.Exception(() => ToolingDatabaseVerifier.Verify(
+            // WHY: Record.Exception executes this callback synchronously before the owning using scope ends.
+            // ReSharper disable once AccessToDisposedClosure
             connection,
             InitialMigrationId,
             TransitionMigrationId));
@@ -198,10 +205,12 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
     {
         // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
-        await CreateFixtureAsync(connection, includeGeneratedTable: false, cancellationToken: CancellationToken.None);
+        await CreateFixtureAsync(connection, false, false, null, DefaultCheckExpression, CancellationToken.None);
 
         // Act
         var exception = Record.Exception(() => ToolingDatabaseVerifier.Verify(
+            // WHY: Record.Exception executes this callback synchronously before the owning using scope ends.
+            // ReSharper disable once AccessToDisposedClosure
             connection,
             InitialMigrationId,
             TransitionMigrationId));
@@ -220,7 +229,7 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
     {
         // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
-        await CreateFixtureAsync(connection, cancellationToken: CancellationToken.None);
+        await CreateFixtureAsync(connection, false, true, null, DefaultCheckExpression, CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
             """
@@ -233,6 +242,8 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
 
         // Act
         var exception = Record.Exception(() => ToolingDatabaseVerifier.Verify(
+            // WHY: Record.Exception executes this callback synchronously before the owning using scope ends.
+            // ReSharper disable once AccessToDisposedClosure
             connection,
             InitialMigrationId,
             TransitionMigrationId));
@@ -251,13 +262,19 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
     {
         // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
-        await CreateFixtureAsync(connection, generatedExpression: "0", cancellationToken: CancellationToken.None);
+        await CreateFixtureAsync(connection, false, true, "0", DefaultCheckExpression, CancellationToken.None);
 
         // Act
         var exception = Record.Exception(() => ToolingDatabaseVerifier.Verify(
+            // WHY: Record.Exception executes this callback synchronously before the owning using scope ends.
+            // ReSharper disable once AccessToDisposedClosure
             connection,
             InitialMigrationId,
             TransitionMigrationId));
+
+        var generatedRows = await ScalarIntAsync(connection,
+            "SELECT COUNT(*) FROM scaffolding_generated_nodes;",
+            CancellationToken.None);
 
         // Assert
         Assert.Contains(
@@ -266,12 +283,7 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
                 .Message,
             StringComparison.Ordinal);
 
-        Assert.Equal(
-            0,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM scaffolding_generated_nodes;",
-                cancellationToken: CancellationToken.None));
+        Assert.Equal(0, generatedRows);
     }
 
     /// <summary>A named but ineffective CHECK must fail its behavioral negative control.</summary>
@@ -287,14 +299,23 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await CreateFixtureAsync(
             connection,
+            baselineOnly: false,
+            includeGeneratedTable: true,
+            generatedExpression: null,
             checkExpression: checkExpression,
             cancellationToken: CancellationToken.None);
 
         // Act
         var exception = Record.Exception(() => ToolingDatabaseVerifier.Verify(
+            // WHY: Record.Exception executes this callback synchronously before the owning using scope ends.
+            // ReSharper disable once AccessToDisposedClosure
             connection,
             InitialMigrationId,
             TransitionMigrationId));
+
+        var generatedRows = await ScalarIntAsync(connection,
+            "SELECT COUNT(*) FROM scaffolding_generated_nodes;",
+            CancellationToken.None);
 
         // Assert
         Assert.Contains(
@@ -303,12 +324,7 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
                 .Message,
             StringComparison.Ordinal);
 
-        Assert.Equal(
-            0,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM scaffolding_generated_nodes;",
-                cancellationToken: CancellationToken.None));
+        Assert.Equal(0, generatedRows);
     }
 
     /// <summary>Foreign-key violations remain fatal even when all selected application objects match.</summary>
@@ -317,7 +333,7 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
     {
         // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
-        await CreateFixtureAsync(connection, cancellationToken: CancellationToken.None);
+        await CreateFixtureAsync(connection, false, true, null, DefaultCheckExpression, CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
             """
@@ -331,6 +347,8 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
 
         // Act
         var exception = Record.Exception(() => ToolingDatabaseVerifier.Verify(
+            // WHY: Record.Exception executes this callback synchronously before the owning using scope ends.
+            // ReSharper disable once AccessToDisposedClosure
             connection,
             InitialMigrationId,
             TransitionMigrationId));
@@ -352,11 +370,11 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
     /// <param name="checkExpression">The bounds CHECK expression, or null to omit that constraint.</param>
     private static async Task CreateFixtureAsync(
         SqliteConnection connection,
-        CancellationToken cancellationToken,
-        bool baselineOnly = false,
-        bool includeGeneratedTable = true,
-        string? generatedExpression = null,
-        string? checkExpression = "\"RightBound\" > \"LeftBound\""
+        bool baselineOnly,
+        bool includeGeneratedTable,
+        string? generatedExpression,
+        string? checkExpression,
+        CancellationToken cancellationToken
     )
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -372,9 +390,9 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
             ProductVersion TEXT NOT NULL); INSERT INTO __EFMigrationsHistory VALUES
             ('{InitialMigrationId}',
             '10.0.13'); {(baselineOnly
-                ? string.Empty
-                : "INSERT INTO __EFMigrationsHistory VALUES ('" + TransitionMigrationId + "', '10.0.13'); "
-            )}CREATE TABLE tooling_entities (Id
+                    ? string.Empty
+                    : "INSERT INTO __EFMigrationsHistory VALUES ('" + TransitionMigrationId + "', '10.0.13'); "
+                )}CREATE TABLE tooling_entities (Id
             INTEGER NOT NULL PRIMARY KEY,
             Code TEXT NOT NULL, {transitionColumns}); CREATE UNIQUE INDEX IX_tooling_entities_Code
             ON tooling_entities (Code); INSERT INTO tooling_entities (Id,

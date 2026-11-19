@@ -7,10 +7,13 @@ public sealed partial class MySqlCatalogSnapshotTests
     [Fact]
     public async Task PooledSessionWithoutResetRetainsLiveCatalogWithoutCreatingTemporaryTables()
     {
+        // Arrange
         await using var connection = new SnapshotConnection { ConnectionString = "Pooling=true;ConnectionReset=false" };
 
+        // Act
         var snapshot = await MySqlCatalogSnapshot.TryCreateAsync(connection, null, CancellationToken.None);
 
+        // Assert
         Assert.Null(snapshot);
         Assert.Empty(connection.Commands);
         Assert.Empty(connection.Tables);
@@ -21,11 +24,14 @@ public sealed partial class MySqlCatalogSnapshotTests
     [Fact]
     public async Task NonPooledSessionDoesNotRequireConnectionReset()
     {
+        // Arrange
         await using var connection =
             new SnapshotConnection { ConnectionString = "Pooling=false;ConnectionReset=false" };
 
+        // Act
         await using var snapshot = await MySqlCatalogSnapshot.TryCreateAsync(connection, null, CancellationToken.None);
 
+        // Assert
         Assert.NotNull(snapshot);
         Assert.Equal(9, connection.Commands.Count);
         Assert.Equal(ConnectionState.Open, connection.State);
@@ -35,15 +41,18 @@ public sealed partial class MySqlCatalogSnapshotTests
     [Fact]
     public async Task CreationUsesUniqueBoundedNamesAndNeverDropsCallerTables()
     {
+        // Arrange
         await using var connection = new SnapshotConnection();
         connection.Tables.Add("__doka_sm_cat_columns");
 
+        // Act
         await using var first = Assert.IsType<MySqlCatalogSnapshot>(
             await MySqlCatalogSnapshot.TryCreateAsync(connection, 43, CancellationToken.None));
 
         await using var second = Assert.IsType<MySqlCatalogSnapshot>(
             await MySqlCatalogSnapshot.TryCreateAsync(connection, 43, CancellationToken.None));
 
+        // Assert
         Assert.Equal(19, connection.Tables.Count);
         Assert.NotEqual(first.Resolve("INFORMATION_SCHEMA.COLUMNS"), second.Resolve("INFORMATION_SCHEMA.COLUMNS"));
         Assert.All(connection.Tables, table => Assert.InRange(table.Length, 1, 64));
@@ -66,10 +75,13 @@ public sealed partial class MySqlCatalogSnapshotTests
     [Fact]
     public async Task SnapshotIncludesCrossDatabaseIncomingForeignKeys()
     {
+        // Arrange
         await using var connection = new SnapshotConnection();
 
+        // Act
         await using var snapshot = await MySqlCatalogSnapshot.TryCreateAsync(connection, null, CancellationToken.None);
 
+        // Assert
         var command = Assert.Single(
             connection.Commands,
             command =>
@@ -83,14 +95,17 @@ public sealed partial class MySqlCatalogSnapshotTests
     [Fact]
     public async Task DisposalDropsOnlyOwnedTablesInOneCommandAndIsIdempotent()
     {
+        // Arrange
         await using var connection = new SnapshotConnection();
         connection.Tables.Add("caller_table");
         var snapshot = Assert.IsType<MySqlCatalogSnapshot>(
             await MySqlCatalogSnapshot.TryCreateAsync(connection, 31, CancellationToken.None));
 
+        // Act
         await snapshot.DisposeAsync();
         await snapshot.DisposeAsync();
 
+        // Assert
         Assert.Equal(["caller_table"], connection.Tables);
         var cleanup = Assert.Single(
             connection.Commands,
@@ -107,15 +122,19 @@ public sealed partial class MySqlCatalogSnapshotTests
     [Fact]
     public async Task PartialCreationFailureCleansOnlyAcknowledgedTablesAndPreservesOriginalException()
     {
+        // Arrange
         await using var connection = new SnapshotConnection();
         var failure = new InvalidOperationException("Catalog projection failed.");
         connection.Failure = (ordinal, _) => ordinal == 4
             ? failure
             : null;
 
-        var actual = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        // Act
+        var capturedException = await Record.ExceptionAsync(() =>
             MySqlCatalogSnapshot.TryCreateAsync(connection, null, CancellationToken.None));
 
+        // Assert
+        var actual = Assert.IsType<InvalidOperationException>(capturedException);
         Assert.Same(failure, actual);
         Assert.Empty(connection.Tables);
         Assert.Equal(5, connection.Commands.Count);
@@ -133,15 +152,19 @@ public sealed partial class MySqlCatalogSnapshotTests
     [Fact]
     public async Task AcknowledgedCreationIsCleanedWhenCommandDisposalFails()
     {
+        // Arrange
         await using var connection = new SnapshotConnection();
         var failure = new InvalidOperationException("Command disposal failed.");
         connection.DisposalFailure = sql => sql.StartsWith("CREATE TEMPORARY TABLE ", StringComparison.Ordinal)
             ? failure
             : null;
 
-        var actual = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        // Act
+        var capturedException = await Record.ExceptionAsync(() =>
             MySqlCatalogSnapshot.TryCreateAsync(connection, null, CancellationToken.None));
 
+        // Assert
+        var actual = Assert.IsType<InvalidOperationException>(capturedException);
         Assert.Same(failure, actual);
         Assert.Empty(connection.Tables);
         Assert.Equal(2, connection.Commands.Count);
@@ -151,7 +174,9 @@ public sealed partial class MySqlCatalogSnapshotTests
     }
 
     /// <summary>A command wrapper cannot replace the server execution error with its own disposal error.</summary>
-    /// <param name="capabilityFailure">Whether the execution error would otherwise permit live-catalog fallback.</param>
+    /// <param name="capabilityFailure">
+    /// Whether the execution error would otherwise permit live-catalog fallback.
+    /// </param>
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -159,6 +184,7 @@ public sealed partial class MySqlCatalogSnapshotTests
         bool capabilityFailure
     )
     {
+        // Arrange
         await using var connection = new SnapshotConnection();
         Exception executionFailure = capabilityFailure
             ? CreateServerException(MySqlErrorCode.DatabaseAccessDenied)
@@ -168,9 +194,12 @@ public sealed partial class MySqlCatalogSnapshotTests
         connection.Failure = (_, _) => executionFailure;
         connection.DisposalFailure = _ => disposalFailure;
 
-        var actual = await Assert.ThrowsAnyAsync<Exception>(() =>
+        // Act
+        var capturedException = await Record.ExceptionAsync(() =>
             MySqlCatalogSnapshot.TryCreateAsync(connection, null, CancellationToken.None));
 
+        // Assert
+        var actual = Assert.IsType<Exception>(capturedException, exactMatch: false);
         Assert.Same(executionFailure, actual);
         Assert.Same(disposalFailure, actual.Data["SafeMigrations.CatalogSnapshotCommandCleanupException"]);
         Assert.Single(connection.Commands);
@@ -182,6 +211,7 @@ public sealed partial class MySqlCatalogSnapshotTests
     [Fact]
     public async Task TableCollisionDoesNotDeleteTheUnownedTarget()
     {
+        // Arrange
         await using var connection = new SnapshotConnection();
         string? callerTable = null;
         connection.BeforeExecute = (ordinal, sql) =>
@@ -193,9 +223,12 @@ public sealed partial class MySqlCatalogSnapshotTests
             }
         };
 
-        var exception = await Assert.ThrowsAsync<MySqlException>(() =>
+        // Act
+        var capturedException = await Record.ExceptionAsync(() =>
             MySqlCatalogSnapshot.TryCreateAsync(connection, null, CancellationToken.None));
 
+        // Assert
+        var exception = Assert.IsType<MySqlException>(capturedException);
         Assert.Equal(MySqlErrorCode.TableExists, exception.ErrorCode);
         Assert.Equal(callerTable, Assert.Single(connection.Tables));
         Assert.DoesNotContain(callerTable!, connection.Commands[^1].Sql, StringComparison.Ordinal);
@@ -218,13 +251,16 @@ public sealed partial class MySqlCatalogSnapshotTests
         int failedCommand
     )
     {
+        // Arrange
         await using var connection = new SnapshotConnection();
         connection.Failure = (ordinal, _) => ordinal == failedCommand
             ? CreateServerException(code)
             : null;
 
+        // Act
         var snapshot = await MySqlCatalogSnapshot.TryCreateAsync(connection, null, CancellationToken.None);
 
+        // Assert
         Assert.Null(snapshot);
         Assert.Empty(connection.Tables);
         Assert.Equal(
@@ -248,15 +284,19 @@ public sealed partial class MySqlCatalogSnapshotTests
         MySqlErrorCode code
     )
     {
+        // Arrange
         await using var connection = new SnapshotConnection();
         var failure = CreateServerException(code);
         connection.Failure = (ordinal, _) => ordinal == 2
             ? failure
             : null;
 
-        var actual = await Assert.ThrowsAsync<MySqlException>(() =>
+        // Act
+        var capturedException = await Record.ExceptionAsync(() =>
             MySqlCatalogSnapshot.TryCreateAsync(connection, null, CancellationToken.None));
 
+        // Assert
+        var actual = Assert.IsType<MySqlException>(capturedException);
         Assert.Same(failure, actual);
         Assert.Empty(connection.Tables);
         Assert.Equal(ConnectionState.Open, connection.State);
@@ -266,6 +306,7 @@ public sealed partial class MySqlCatalogSnapshotTests
     [Fact]
     public async Task CancellationCleansPreviousTablesWithoutUsingTheCancelledToken()
     {
+        // Arrange
         await using var connection = new SnapshotConnection();
         using var cancellation = new CancellationTokenSource();
         connection.BeforeExecute = (ordinal, _) =>
@@ -276,9 +317,12 @@ public sealed partial class MySqlCatalogSnapshotTests
             }
         };
 
-        var exception = await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+        // Act
+        var capturedException = await Record.ExceptionAsync(() =>
             MySqlCatalogSnapshot.TryCreateAsync(connection, null, cancellation.Token));
 
+        // Assert
+        var exception = Assert.IsType<OperationCanceledException>(capturedException, exactMatch: false);
         Assert.Equal(cancellation.Token, exception.CancellationToken);
         Assert.Empty(connection.Tables);
         Assert.False(connection.Commands[^1].Token.CanBeCanceled);
@@ -289,6 +333,7 @@ public sealed partial class MySqlCatalogSnapshotTests
     [Fact]
     public async Task CreationDoesNotFallbackWhenCapabilityFailureCleanupFails()
     {
+        // Arrange
         await using var connection = new SnapshotConnection();
         var failure = CreateServerException(MySqlErrorCode.DatabaseAccessDenied);
         var cleanupFailure = new InvalidOperationException("Drop failed.");
@@ -297,9 +342,12 @@ public sealed partial class MySqlCatalogSnapshotTests
             3 => failure, 4 => cleanupFailure, _ => null,
         };
 
-        var actual = await Assert.ThrowsAsync<MySqlException>(() =>
+        // Act
+        var capturedException = await Record.ExceptionAsync(() =>
             MySqlCatalogSnapshot.TryCreateAsync(connection, null, CancellationToken.None));
 
+        // Assert
+        var actual = Assert.IsType<MySqlException>(capturedException);
         Assert.Same(failure, actual);
         Assert.Same(cleanupFailure, actual.Data["SafeMigrations.CatalogSnapshotCleanupException"]);
         Assert.Equal(ConnectionState.Closed, connection.State);
@@ -310,6 +358,7 @@ public sealed partial class MySqlCatalogSnapshotTests
     [Fact]
     public async Task CleanupAfterAnalysisFailurePreservesThePrimaryExceptionAndInvalidatesTheSession()
     {
+        // Arrange
         await using var connection = new SnapshotConnection();
         var snapshot = Assert.IsType<MySqlCatalogSnapshot>(
             await MySqlCatalogSnapshot.TryCreateAsync(connection, null, CancellationToken.None));
@@ -318,9 +367,11 @@ public sealed partial class MySqlCatalogSnapshotTests
         var cleanupFailure = new InvalidOperationException("Drop failed.");
         connection.Failure = (_, _) => cleanupFailure;
 
+        // Act
         var cleaned = await snapshot.DisposeAfterFailureAsync(primary);
         await snapshot.DisposeAsync();
 
+        // Assert
         Assert.False(cleaned);
         Assert.Same(cleanupFailure, primary.Data["SafeMigrations.CatalogSnapshotCleanupException"]);
         Assert.Equal(ConnectionState.Closed, connection.State);
@@ -332,6 +383,7 @@ public sealed partial class MySqlCatalogSnapshotTests
     [Fact]
     public async Task NormalDisposalReportsCleanupFailureAndInvalidatesTheSession()
     {
+        // Arrange
         await using var connection = new SnapshotConnection();
         var snapshot = Assert.IsType<MySqlCatalogSnapshot>(
             await MySqlCatalogSnapshot.TryCreateAsync(connection, null, CancellationToken.None));
@@ -339,10 +391,13 @@ public sealed partial class MySqlCatalogSnapshotTests
         var failure = new InvalidOperationException("Drop failed.");
         connection.Failure = (_, _) => failure;
 
-        var actual = await Assert.ThrowsAsync<InvalidOperationException>(() => snapshot
+        // Act
+        var capturedException = await Record.ExceptionAsync(() => snapshot
             .DisposeAsync()
             .AsTask());
 
+        // Assert
+        var actual = Assert.IsType<InvalidOperationException>(capturedException);
         Assert.Same(failure, actual);
         Assert.Equal(ConnectionState.Closed, connection.State);
         Assert.Empty(connection.Tables);
@@ -352,6 +407,7 @@ public sealed partial class MySqlCatalogSnapshotTests
     [Fact]
     public async Task ClosedSessionDoesNotExecuteCleanupSqlOrReplaceThePrimaryFailure()
     {
+        // Arrange
         await using var connection = new SnapshotConnection();
         var snapshot = Assert.IsType<MySqlCatalogSnapshot>(
             await MySqlCatalogSnapshot.TryCreateAsync(connection, null, CancellationToken.None));
@@ -359,33 +415,42 @@ public sealed partial class MySqlCatalogSnapshotTests
         var primary = new IOException("Connection lost.");
         connection.Close();
 
+        // Act
         var cleaned = await snapshot.DisposeAfterFailureAsync(primary);
 
+        // Assert
         Assert.False(cleaned);
         Assert.IsType<InvalidOperationException>(primary.Data["SafeMigrations.CatalogSnapshotCleanupException"]);
         Assert.Equal(9, connection.Commands.Count);
         Assert.Equal(ConnectionState.Closed, connection.State);
     }
 
-    /// <summary>A successfully cleaned capability failure leaves the caller session available for a later attempt.</summary>
+    /// <summary>
+    /// A successfully cleaned capability failure leaves the caller session available for a later attempt.
+    /// </summary>
     [Fact]
     public async Task FailedCreationCanBeRetriedOnTheSameCleanSession()
     {
+        // Arrange
         await using var connection = new SnapshotConnection();
         connection.Failure = (ordinal, _) => ordinal == 3
             ? CreateServerException(MySqlErrorCode.DatabaseAccessDenied)
             : null;
 
+        // Act
         var unavailable = await MySqlCatalogSnapshot.TryCreateAsync(connection, null, CancellationToken.None);
         await using var retry = await MySqlCatalogSnapshot.TryCreateAsync(connection, null, CancellationToken.None);
 
+        // Assert
         Assert.Null(unavailable);
         Assert.NotNull(retry);
         Assert.Equal(9, connection.Tables.Count);
         Assert.Equal(ConnectionState.Open, connection.State);
     }
 
-    /// <summary>Creates a realistic exception from the locked connector without opening a database connection.</summary>
+    /// <summary>
+    /// Creates a realistic exception from the locked connector without opening a database connection.
+    /// </summary>
     private static MySqlException CreateServerException(
         MySqlErrorCode code
     )
@@ -399,7 +464,7 @@ public sealed partial class MySqlCatalogSnapshotTests
             modifiers: null);
 
         return (MySqlException)Assert
-            .IsAssignableFrom<ConstructorInfo>(constructor)
+            .IsType<ConstructorInfo>(constructor, exactMatch: false)
             .Invoke([code, "Injected server error."]);
     }
 }

@@ -11,7 +11,7 @@ internal sealed class SqliteTableConstraintTransitions
         IReadOnlyList<MigrationOperation> operations
     )
     {
-        if (!operations.Any(static operation => operation is SafeMigrationOperation { Intent: EnsureTableIntent }))
+        if (operations.All(static operation => operation is not SafeMigrationOperation { Intent: EnsureTableIntent }))
         {
             return;
         }
@@ -19,11 +19,15 @@ internal sealed class SqliteTableConstraintTransitions
         _tables = new Dictionary<SafeMigrationOperation, SafeMigrationExpectedTableConstraints>(
             ReferenceEqualityComparer.Instance);
 
-        var pending = new List<MigrationOperation>();
+        List<MigrationOperation> pending = [];
         var creators = new HashSet<string>(SqliteIdentifierComparer.Instance);
 
-        foreach (var operation in operations)
+        // WHY: Traverse the stable ordered source by ordinal without materializing another collection.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var operationIndex = 0; operationIndex < operations.Count; operationIndex++)
         {
+            var operation = operations[operationIndex];
             var table = operation switch
             {
                 SafeMigrationOperation { Intent: EnsureTableIntent ensure } => ensure.Definition.Table,
@@ -54,6 +58,8 @@ internal sealed class SqliteTableConstraintTransitions
 
         Flush();
 
+        return;
+
         void Flush()
         {
             if (pending.Count == 0)
@@ -81,8 +87,12 @@ internal sealed class SqliteTableConstraintTransitions
                 foldUnquotedCapturedSqlIdentifiers: false,
                 columnComparer: SqliteIdentifierComparer.Instance);
 
-            foreach (var operation in pending)
+            // WHY: Traverse the stable ordered source by ordinal without materializing another collection.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var operationIndex = 0; operationIndex < pending.Count; operationIndex++)
             {
+                var operation = pending[operationIndex];
                 if (operation is SafeMigrationOperation { Intent: EnsureTableIntent intent } safe
                     && catalog.TryGetValue((intent.Definition.Schema, intent.Definition.Table), out var contract))
                 {

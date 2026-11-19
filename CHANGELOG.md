@@ -6,6 +6,59 @@ the shared release identity described in [Release process](docs/release-process.
 
 ## [Unreleased]
 
+### Changed
+
+- Raise the MySQL/MariaDB adapter's Doka range to `[10.7.0,10.8.0)` and
+  restore the public 10.7.0 package with System.IO.Hashing minimum 10.0.15.
+  Retain .NET/EF Core 10, explicit MySqlConnector minimum 2.6.2, provider
+  isolation and application-owned opt-in feature configuration. Allow an
+  explicitly selected MySqlConnector 3.0.0 without requiring a transport-major
+  upgrade for existing 2.x consumers.
+- Require explicit final operation tokens on owned asynchronous local functions
+  and callbacks while preserving framework signatures and protected cleanup.
+  Align source constructors, imports, XML/IDE annotations and solution-shared
+  `Built-in: Custom` cleanup settings; Markdown reformatting stays excluded.
+  Retain classical public extensions where the current API analyzer cannot
+  represent extension blocks without changing the shipped inventory.
+- Retain reviewed default-profile lockfiles for all 24 repository projects and
+  evaluate CI identity before locked restore. Shipping providers declare their
+  existing transport/security floors explicitly instead of relying on implicit
+  transitive promotion. Each adapter requires its exact matching own-Core
+  version, including candidates, because it consumes Core internals; external
+  provider ranges remain independently bounded. Keep installed SafeMigrations versions aligned.
+- Make BenchmarkDotNet execution explicitly opt-in, including Dry jobs. Default
+  CI retains deterministic benchmark workload/configuration checks without
+  launching BenchmarkDotNet; requested execution/export remains validated and
+  numeric timing/allocation values remain informational.
+- Preserve native clean/noisy catalog, column runtime and migration/replay
+  measurements in explicitly selected provider BenchmarkDotNet modes. Ordinary
+  tests retain functional oracles without the former statistical loops or
+  percentile/budget collector. Core equality and SQL Server capture allocation
+  measurements also move to BenchmarkDotNet; no numeric acceptance gate is added.
+- Consolidate native image identities in `docker/database-images.Dockerfile`,
+  preserving explicit environment overrides, native server defaults, independent
+  engine qualification and native x64 SQL Server requirements.
+- Reconcile all 20 ADRs with actual update dates, reciprocal relationships,
+  exact options, reachable references and explicit historical evidence limits.
+  Verify the runnable sample's real streams, output, native SQLite constraints,
+  replay and blocked end state through an internal shared entrypoint; no new
+  public product API or version is introduced.
+
+### Fixed
+
+- Await actual owned analysis/recovery/disposal work before releasing its command,
+  transaction or connection. Preserve primary work/cancellation identity when
+  cleanup also fails, retain cleanup-only errors and session quarantine, and
+  remove observer-only deadlines that could abandon native ownership. Native
+  command timeouts remain distinct and unchanged.
+- Reject unproven SQL Server application-lock status and quarantine failed scope
+  release without disposing caller transactions or masking the first known work
+  failure. Retain secondary cleanup evidence through synchronous and asynchronous
+  scope disposal.
+- Check native server identity before EF tooling selects its provider profile or
+  scaffolds migrations. Reject mismatched, missing or malformed version evidence
+  while preserving native client budgets, cleanup and sanitized diagnostics.
+
 ## [10.7.2] - 2026-11-11
 
 Version 10.7.2 corrects native expression identity, temporal values and catalog

@@ -234,16 +234,12 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
         ISafeMigrationProjectedColumnSource columns
     )
     {
-        if (projectedAnalysis.ObservedState == SafeMigrationObservedState.Missing)
-        {
-            return projectedAnalysis;
-        }
-
         if (projectedAnalysis is
             {
                 ObservedState: SafeMigrationObservedState.Unsupported,
                 Code: not ("generated_column_drop_dependency" or "generated_column_drop_unproven"),
-            })
+            }
+            or { ObservedState: SafeMigrationObservedState.Missing })
         {
             return projectedAnalysis;
         }
@@ -255,12 +251,14 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
             drop.Name,
             s_identifierComparer);
 
-        if (dependency == true)
+        // WHY: A proven dependency rejects immediately; the independent recreated-owner proof may permit the drop.
+        // ReSharper disable once ConvertIfStatementToSwitchStatement
+        if (dependency is true)
         {
             return Unsupported("generated_column_drop_dependency");
         }
 
-        if (dependency == false
+        if (dependency is false
             && projectedTables is not null
             && projectedTables.TryGetProjectedTableState(drop.Table, drop.Schema, out var state)
             && state.IsNewlyCreated)
@@ -366,8 +364,12 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
             return false;
         }
 
-        foreach (var key in definition.Keys)
+        // WHY: Traverse the stable ordered source by ordinal without materializing another collection.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var keyIndex = 0; keyIndex < definition.Keys.Count; keyIndex++)
         {
+            var key = definition.Keys[keyIndex];
             if (key.Column is null)
             {
                 return false;
@@ -384,8 +386,12 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
         ExpectedIndexDefinition definition
     )
     {
-        foreach (var key in definition.Keys)
+        // WHY: Traverse the stable ordered source by ordinal without materializing another collection.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var keyIndex = 0; keyIndex < definition.Keys.Count; keyIndex++)
         {
+            var key = definition.Keys[keyIndex];
             if (key.Column is not { } column
                 || !HasRetainedColumnSource(table, dropped, column, null))
             {
@@ -429,6 +435,9 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
 
         var references = new HashSet<string>(s_identifierComparer);
         SafeMigrationSqlExpressionInspector.CollectIdentifiers(expression, references);
+
+        // WHY: Preserve the set's concrete enumerator and stop before inspecting any later dependency.
+        // ReSharper disable once ForeachCanBeConvertedToQueryUsingAnotherGetEnumerator
         foreach (var reference in references)
         {
             if (!HasRetainedColumnSource(table, dropped, reference, visited))

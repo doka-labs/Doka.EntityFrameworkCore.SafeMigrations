@@ -54,6 +54,9 @@ internal static partial class SafeMigrationExpectedCatalog
         }
 
         var table = Find(tables, intent.Schema, intent.Table)!;
+
+        // WHY: Snapshot before changing the source collection; retain the existing materialization contract.
+        // ReSharper disable once UseCollectionExpression
         foreach (var pair in table.IndexDefinitions.ToArray())
         {
             var keys = pair
@@ -68,6 +71,10 @@ internal static partial class SafeMigrationExpectedCatalog
                         collation: key.Collation,
                         operatorClass: key.OperatorClass)
                     : key)
+
+                // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based
+                // materialization.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray();
 
             table.IndexDefinitions[pair.Key] = Copy(
@@ -79,6 +86,10 @@ internal static partial class SafeMigrationExpectedCatalog
                     .Select(column => StringComparer.Ordinal.Equals(column, intent.Name)
                         ? intent.NewName
                         : column)
+
+                    // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based
+                    // materialization.
+                    // ReSharper disable once UseCollectionExpression
                     .ToArray());
         }
     }

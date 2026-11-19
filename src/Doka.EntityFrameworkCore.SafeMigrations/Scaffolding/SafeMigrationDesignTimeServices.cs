@@ -7,6 +7,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// Applications normally do not call this type. Provider package build assets
 /// expose it to EF Core through <see cref="DesignTimeServicesReferenceAttribute" />.
 /// </remarks>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 internal sealed class SafeMigrationDesignTimeServices : IDesignTimeServices
 {
     /// <summary>

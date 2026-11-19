@@ -7,7 +7,6 @@ internal sealed partial class SafeMigrationPreflightProjection
         private readonly List<string> _columnOrder;
         private readonly string? _comment;
         private readonly ISafeMigrationProviderObjectIdentityNormalizer? _objectIdentityNormalizer;
-        private readonly IReadOnlyList<SafeMigrationProviderAnnotation> _providerAnnotations;
 
         public ProjectedTable(
             ExpectedTableDefinition definition,
@@ -24,10 +23,14 @@ internal sealed partial class SafeMigrationPreflightProjection
             Table = definition.Table;
             Schema = definition.Schema;
             _comment = definition.Comment;
-            _providerAnnotations = definition.ProviderAnnotations;
+            ProviderAnnotations = definition.ProviderAnnotations;
             _columnOrder = definition
                 .Columns
                 .Select(static value => value.Name)
+
+                // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based
+                // materialization.
+                // ReSharper disable once UseCollectionExpression
                 .ToList();
 
             var identifierComparer = new IdentifierComparer(objectIdentityNormalizer);
@@ -70,13 +73,13 @@ internal sealed partial class SafeMigrationPreflightProjection
             CheckConstraints.Values,
             ForeignKeys.Values)
         {
-            ProviderAnnotations = _providerAnnotations,
+            ProviderAnnotations = ProviderAnnotations,
         };
 
         public Dictionary<string, ExpectedColumnDefinition> Columns { get; }
 
         /// <summary>Gets the immutable creation facets without rebuilding the complete projected definition.</summary>
-        internal IReadOnlyList<SafeMigrationProviderAnnotation> ProviderAnnotations => _providerAnnotations;
+        internal IReadOnlyList<SafeMigrationProviderAnnotation> ProviderAnnotations { get; }
 
         public long DataMutationVersion { get; }
 
@@ -115,6 +118,8 @@ internal sealed partial class SafeMigrationPreflightProjection
             Func<T, T> transform
         )
         {
+            // WHY: Snapshot before changing the source collection; retain the existing materialization contract.
+            // ReSharper disable once UseCollectionExpression
             foreach (var key in dictionary.Keys.ToArray())
             {
                 dictionary[key] = transform(dictionary[key]);
@@ -129,6 +134,9 @@ internal sealed partial class SafeMigrationPreflightProjection
             .Select(value => Columns.Comparer.Equals(value, source)
                 ? target
                 : value)
+
+            // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         private bool SameIdentity(

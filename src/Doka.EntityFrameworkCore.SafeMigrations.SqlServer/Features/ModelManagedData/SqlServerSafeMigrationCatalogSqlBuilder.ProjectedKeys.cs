@@ -28,8 +28,14 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 
         var primaryColumns = seeds[0].KeyColumns;
         var projected = columns.ToDictionary(static column => column.Name, StringComparer.Ordinal);
-        foreach (var definition in columns)
+
+        // WHY: Immutable indexed slots retain their authored order without mutating the source.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var definitionIndex = 0; definitionIndex < columns.Count; definitionIndex++)
         {
+            var definition = columns[definitionIndex];
+
             if (definition.Collation is { } collation
                 && _expressionRenderer.GetUnsupportedFeature(
                     new SafeMigrationSqlCollateExpression(
@@ -55,6 +61,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         var selectedColumns = primaryColumns
             .Concat(uniqueColumns)
             .Concat(filterColumns.Keys)
+
+            // WHY: Retain this explicit fluent snapshot instead of a collection-spread rewrite.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var aliases = Enumerable
@@ -64,28 +73,42 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 .Range(0, uniqueColumns.Count)
                 .Select(static index => $"u{index}"))
             .Concat(filterColumns.Values)
+
+            // WHY: Retain this explicit fluent snapshot instead of a collection-spread rewrite.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var collations = new HashSet<string>(StringComparer.Ordinal);
         var valueGuards = new HashSet<string>(StringComparer.Ordinal);
-        var rows = new List<string>();
+        List<string> rows = [];
 
         // WHY: The complete lineage has no row-count cap. Account for dynamic
         // literal escaping while accumulating, before materializing large joins.
         var payloadBytes = 4096;
-        foreach (var seed in seeds)
+
+        // WHY: Immutable indexed slots retain their authored order without mutating the source.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var seedIndex = 0; seedIndex < seeds.Count; seedIndex++)
         {
+            var seed = seeds[seedIndex];
+
             if (GetUnsupportedModelManagedDataFeature(seed) is not null
                 || !seed.KeyColumns.SequenceEqual(primaryColumns, StringComparer.Ordinal)
                 || (requireCapturedUniqueKey
                     && !seed.KeyColumns.SequenceEqual(uniqueColumns, StringComparer.Ordinal)
-                    && !seed.UniqueKeys.Any(key => key.Columns.SequenceEqual(uniqueColumns, StringComparer.Ordinal))))
+                    && seed.UniqueKeys.All(key => !key.Columns.SequenceEqual(uniqueColumns, StringComparer.Ordinal))))
             {
                 return null;
             }
 
-            foreach (var omitted in columns)
+            // WHY: Immutable indexed slots retain their authored order without mutating the source.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var omittedIndex = 0; omittedIndex < columns.Count; omittedIndex++)
             {
+                var omitted = columns[omittedIndex];
+
                 if (seed.Columns.Contains(omitted.Name, StringComparer.Ordinal))
                 {
                     continue;

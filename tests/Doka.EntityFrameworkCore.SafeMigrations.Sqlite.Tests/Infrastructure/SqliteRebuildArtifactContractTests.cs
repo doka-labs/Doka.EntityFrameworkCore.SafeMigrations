@@ -1,7 +1,15 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 
+/// <summary>
+/// Provides isolated SQLite coverage for rebuild artifact contract.
+/// </summary>
 public sealed class SqliteRebuildArtifactContractTests
 {
+    /// <summary>
+    /// Rebuild validation classifies every independent native/model ownership drift.
+    /// </summary>
+    /// <param name="drift">The drift defining this isolated fixture case.</param>
+    /// <param name="expectedCode">The exact expected code.</param>
     [Theory]
     [MemberData(nameof(RebuildArtifactDriftCases))]
     public void GetUnsupportedRebuildFeature_ClassifiesEveryModelOwnershipDrift(
@@ -9,6 +17,7 @@ public sealed class SqliteRebuildArtifactContractTests
         string expectedCode
     )
     {
+        // Arrange
         using var connection = new SqliteConnection("Data Source=:memory:");
         using var context = new SqliteSafeMigrationTestContext(connection);
         var model = context.GetService<IDesignTimeModel>()
@@ -18,15 +27,20 @@ public sealed class SqliteRebuildArtifactContractTests
         var table = CreateDriftedTable(drift);
         var snapshot = Snapshot(table);
 
+        // Act
         var code = contract.GetUnsupportedRebuildFeature(
             snapshot,
             table.Name,
             (_, _) => true,
             (_, _) => true);
 
+        // Assert
         Assert.Equal(expectedCode, code);
     }
 
+    /// <summary>
+    /// Supplies independent native/model ownership drift pairs for rebuild validation.
+    /// </summary>
     public static TheoryData<string, string> RebuildArtifactDriftCases() => new()
     {
         { "unmanaged_index", "table_rebuild_unmanaged_index" },
@@ -48,9 +62,13 @@ public sealed class SqliteRebuildArtifactContractTests
         { "missing_check", "table_rebuild_unmodeled_target_check_constraint" },
     };
 
+    /// <summary>
+    /// Added index name cannot authorize missing column with same name.
+    /// </summary>
     [Fact]
     public void AddedIndexNameCannotAuthorizeMissingColumnWithSameName()
     {
+        // Arrange
         using var connection = new SqliteConnection("Data Source=:memory:");
         using var context = new SqliteSafeMigrationTestContext(connection);
         var operation = new CreateIndexOperation
@@ -67,12 +85,14 @@ public sealed class SqliteRebuildArtifactContractTests
 
         var table = RebuildTable(includeCode: false);
 
+        // Act
         var code = contract.GetUnsupportedRebuildFeature(
             Snapshot(table),
             table.Name,
             (_, _) => true,
             (_, _) => true);
 
+        // Assert
         Assert.Equal("table_rebuild_unmodeled_target_column", code);
     }
 
@@ -221,8 +241,7 @@ public sealed class SqliteRebuildArtifactContractTests
                 "BINARY",
                 IsKey: true),
         ],
-        Filter: null,
-        $"CREATE INDEX \"{name}\" ON \"unused\" (\"{column}\")");
+        Filter: null);
 
     private static SqliteUniqueSnapshot Unique(
         string name,

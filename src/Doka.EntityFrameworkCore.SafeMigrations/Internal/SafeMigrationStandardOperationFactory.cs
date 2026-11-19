@@ -189,11 +189,8 @@ internal static partial class SafeMigrationStandardOperationFactory
             return null;
         }
 
-        if (renderCollation is null)
-        {
-            throw new NotSupportedException("A collation identity requires a provider-specific renderer.");
-        }
-
-        return renderCollation(collation);
+        return renderCollation is null
+            ? throw new NotSupportedException("A collation identity requires a provider-specific renderer.")
+            : renderCollation(collation);
     }
 }

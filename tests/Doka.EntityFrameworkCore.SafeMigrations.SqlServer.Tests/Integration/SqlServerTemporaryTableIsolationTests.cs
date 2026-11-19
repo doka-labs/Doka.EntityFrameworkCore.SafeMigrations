@@ -37,8 +37,8 @@ public sealed class SqlServerTemporaryTableIsolationTests : SqlServerIntegration
             peer,
             "CREATE TABLE #doka_sm_identifiers (Sentinel int NOT NULL); "
             + "INSERT INTO #doka_sm_identifiers VALUES (91);",
-            cancellationToken: CancellationToken.None,
-            peerTransaction);
+            transaction: peerTransaction,
+            cancellationToken: CancellationToken.None);
 
         if (ownerState != 0)
         {
@@ -46,12 +46,14 @@ public sealed class SqlServerTemporaryTableIsolationTests : SqlServerIntegration
                 owner,
                 "CREATE TABLE #doka_sm_identifiers (Sentinel int NOT NULL); "
                 + "INSERT INTO #doka_sm_identifiers VALUES (73);",
+                transaction: null,
                 cancellationToken: CancellationToken.None);
         }
 
         var originalObjectId = await SqlServerTemporaryTableProbe.ReadObjectIdAsync(
             owner,
             CallerTable,
+            transaction: null,
             cancellationToken: CancellationToken.None);
 
         if (ownerState == 2)
@@ -59,6 +61,7 @@ public sealed class SqlServerTemporaryTableIsolationTests : SqlServerIntegration
             await ExecuteSessionSqlAsync(
                 owner,
                 "DROP TABLE #doka_sm_identifiers;",
+                transaction: null,
                 cancellationToken: CancellationToken.None);
         }
 
@@ -69,24 +72,26 @@ public sealed class SqlServerTemporaryTableIsolationTests : SqlServerIntegration
             SqlServerTemporaryTableProbe.ReadObjectIdAsync(
                 owner,
                 CallerTable,
+                transaction: null,
                 cancellationToken: CancellationToken.None),
             SqlServerTemporaryTableProbe.ReadObjectIdAsync(
                 peer,
                 CallerTable,
-                cancellationToken: CancellationToken.None,
-                peerTransaction));
+                transaction: peerTransaction,
+                cancellationToken: CancellationToken.None));
 
         var ownerReadFailure = await Record.ExceptionAsync(async () =>
             ownerSentinel = await ReadSessionIntAsync(
                 owner,
                 "SELECT Sentinel FROM #doka_sm_identifiers;",
+                transaction: null,
                 cancellationToken: CancellationToken.None));
 
         var peerSentinel = await ReadSessionIntAsync(
             peer,
             "SELECT Sentinel FROM #doka_sm_identifiers;",
-            cancellationToken: CancellationToken.None,
-            peerTransaction);
+            transaction: peerTransaction,
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.NotEqual(owner.ClientConnectionId, peer.ClientConnectionId);
@@ -146,6 +151,7 @@ public sealed class SqlServerTemporaryTableIsolationTests : SqlServerIntegration
             owner,
             "CREATE TABLE #doka_sm_identifiers (Sentinel int NOT NULL); "
             + "INSERT INTO #doka_sm_identifiers VALUES (73);",
+            transaction: null,
             cancellationToken: CancellationToken.None);
 
         await ExecuteSessionSqlAsync(
@@ -154,19 +160,20 @@ public sealed class SqlServerTemporaryTableIsolationTests : SqlServerIntegration
             CREATE TABLE [{ownedTable}] (Sentinel int NOT NULL); INSERT
             INTO [{ownedTable}] VALUES (91);
             """,
-            cancellationToken: CancellationToken.None,
-            peerTransaction);
+            transaction: peerTransaction,
+            cancellationToken: CancellationToken.None);
 
         var callerObjectId = await SqlServerTemporaryTableProbe.ReadObjectIdAsync(
             owner,
             CallerTable,
+            transaction: null,
             cancellationToken: CancellationToken.None);
 
         var peerObjectId = await SqlServerTemporaryTableProbe.ReadObjectIdAsync(
             peer,
             ownedTable,
-            cancellationToken: CancellationToken.None,
-            peerTransaction);
+            transaction: peerTransaction,
+            cancellationToken: CancellationToken.None);
 
         var analyzer = (SqlServerSafeMigrationProviderAnalyzer)context.GetService<ISafeMigrationProviderAnalyzer>();
         Exception? originalFailure = interrupted
@@ -176,22 +183,33 @@ public sealed class SqlServerTemporaryTableIsolationTests : SqlServerIntegration
         int? classification = null;
 
         // Act
-        await ExecuteSessionSqlAsync(owner, statements[0], cancellationToken: CancellationToken.None);
+        await ExecuteSessionSqlAsync(
+            owner,
+            statements[0],
+            transaction: null,
+            cancellationToken: CancellationToken.None);
+
         var createdObjectId = await SqlServerTemporaryTableProbe.ReadObjectIdAsync(
             owner,
             ownedTable,
+            transaction: null,
             cancellationToken: CancellationToken.None);
 
         if (!interrupted)
         {
             for (var index = 1; index + 1 < statements.Count; index++)
             {
-                await ExecuteSessionSqlAsync(owner, statements[index], cancellationToken: CancellationToken.None);
+                await ExecuteSessionSqlAsync(
+                    owner,
+                    statements[index],
+                    transaction: null,
+                    cancellationToken: CancellationToken.None);
             }
 
             classification = await ReadSessionIntAsync(
                 owner,
                 statements[^1],
+                transaction: null,
                 cancellationToken: CancellationToken.None);
         }
 
@@ -200,28 +218,31 @@ public sealed class SqlServerTemporaryTableIsolationTests : SqlServerIntegration
             SqlServerTemporaryTableProbe.ReadObjectIdAsync(
                 owner,
                 ownedTable,
+                transaction: null,
                 cancellationToken: CancellationToken.None),
             SqlServerTemporaryTableProbe.ReadObjectIdAsync(
                 peer,
                 ownedTable,
-                cancellationToken: CancellationToken.None,
-                peerTransaction));
+                transaction: peerTransaction,
+                cancellationToken: CancellationToken.None));
 
         var retainedCallerObjectId = await SqlServerTemporaryTableProbe.ReadObjectIdAsync(
             owner,
             CallerTable,
+            transaction: null,
             cancellationToken: CancellationToken.None);
 
         var callerSentinel = await ReadSessionIntAsync(
             owner,
             "SELECT Sentinel FROM #doka_sm_identifiers;",
+            transaction: null,
             cancellationToken: CancellationToken.None);
 
         var peerSentinel = await ReadSessionIntAsync(
             peer,
             "SELECT Sentinel FROM [" + ownedTable + "];",
-            cancellationToken: CancellationToken.None,
-            peerTransaction);
+            transaction: peerTransaction,
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.NotEqual(owner.ClientConnectionId, peer.ClientConnectionId);
@@ -248,13 +269,13 @@ public sealed class SqlServerTemporaryTableIsolationTests : SqlServerIntegration
     /// <summary>Executes authored setup or actual provider statements on one retained native session.</summary>
     /// <param name="connection">The caller-owned open session retaining the temporary objects under test.</param>
     /// <param name="sql">The trusted setup or provider SQL to execute on the retained session.</param>
-    /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     /// <param name="transaction">The caller-owned transaction to enlist in, or null for execution without one.</param>
+    /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static async Task ExecuteSessionSqlAsync(
         SqlConnection connection,
         string sql,
-        CancellationToken cancellationToken,
-        SqlTransaction? transaction = null
+        SqlTransaction? transaction,
+        CancellationToken cancellationToken
     )
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -268,13 +289,13 @@ public sealed class SqlServerTemporaryTableIsolationTests : SqlServerIntegration
     /// <summary>Reads a scalar without opening another session or enumerating unrelated metadata.</summary>
     /// <param name="connection">The caller-owned open session retaining the temporary objects under test.</param>
     /// <param name="sql">The trusted scalar query whose result is converted to an integer.</param>
-    /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     /// <param name="transaction">The caller-owned transaction to enlist in, or null for execution without one.</param>
+    /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static async Task<int> ReadSessionIntAsync(
         SqlConnection connection,
         string sql,
-        CancellationToken cancellationToken,
-        SqlTransaction? transaction = null
+        SqlTransaction? transaction,
+        CancellationToken cancellationToken
     )
     {
         cancellationToken.ThrowIfCancellationRequested();

@@ -174,7 +174,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             add.Policy,
             live.RepairCapability);
 
-        var columns = (ISafeMigrationProjectedColumnSource)projection;
+        ISafeMigrationProjectedColumnSource columns = projection;
 
         // Act
         projection.Observe(add, live, live, decision);
@@ -215,7 +215,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
         // Act
         projection.Observe(operation, live, live, decision);
-        var columns = (ISafeMigrationProjectedColumnSource)projection;
+        ISafeMigrationProjectedColumnSource columns = projection;
 
         // Assert
         Assert.True(columns.PreservesLiveColumnValues("items", null, "id"));
@@ -264,7 +264,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
         // Act
         projection.Observe(operation, live, result, decision);
-        var columns = (ISafeMigrationProjectedColumnSource)projection;
+        ISafeMigrationProjectedColumnSource columns = projection;
 
         // Assert
         Assert.Equal(SafeMigrationAction.Repair, decision.Action);
@@ -521,7 +521,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             SafeMigrationObservedState.Matching);
 
         // Act
-        var columns = (ISafeMigrationProjectedColumnSource)projection;
+        ISafeMigrationProjectedColumnSource columns = projection;
         var unchanged = columns.PreservesLiveColumnValues("items", null, "id");
 
         // Assert
@@ -734,7 +734,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
         // Act
         projection.Observe(operation, missing, missing, decision);
-        var columns = (ISafeMigrationProjectedColumnSource)projection;
+        ISafeMigrationProjectedColumnSource columns = projection;
 
         // Assert
         var preservesValues = resumesStaging && !previouslyAdded;
@@ -783,7 +783,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                 operation.Policy,
                 missing.RepairCapability));
 
-        var columns = (ISafeMigrationProjectedColumnSource)projection;
+        ISafeMigrationProjectedColumnSource columns = projection;
         var originalValuesPreserved = columns.PreservesLiveColumnValues("items", null, "id");
         MigrationOperation boundary = opaque
             ? new SqlOperation { Sql = "SELECT 1;" }
@@ -832,13 +832,25 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     }
 
     /// <summary>Models narrow native certificates without treating complete physical tables as known.</summary>
-    private sealed class IndependentColumnDropProbe(
-        bool certifiesDrop = true,
-        bool validatesKey = true
-    )
+    private sealed class IndependentColumnDropProbe
         : ISafeMigrationProjectedColumnAnalyzer,
             ISafeMigrationProjectedKeyAnalyzer
     {
+        private readonly bool _certifiesDrop;
+        private readonly bool _validatesKey;
+
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="certifiesDrop">The supplied certifies drop for this fixture.</param>
+        /// <param name="validatesKey">The supplied validates key for this fixture.</param>
+        public IndependentColumnDropProbe(
+            bool certifiesDrop = true,
+            bool validatesKey = true
+        )
+        {
+            _certifiesDrop = certifiesDrop;
+            _validatesKey = validatesKey;
+        }
+
         /// <summary>Gets native exact-column certificate queries.</summary>
         public int ColumnQueries { get; private set; }
 
@@ -857,7 +869,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         /// <inheritdoc />
         public bool PreservesIntrinsicColumnSources(
             SafeMigrationIntent intent
-        ) => intent is DropPrimaryKeyIntent || (certifiesDrop && intent is DropColumnIntent);
+        ) => intent is DropPrimaryKeyIntent || (_certifiesDrop && intent is DropColumnIntent);
 
         /// <inheritdoc />
         public bool CanReuseLiveColumnProofAfterKeyChanges(
@@ -889,7 +901,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         public bool PrimaryKeyUsesNameIndependentIdentity => true;
 
         /// <inheritdoc />
-        public bool CanValidateAfterColumnDrops => validatesKey;
+        public bool CanValidateAfterColumnDrops => _validatesKey;
 
         /// <inheritdoc />
         public SafeMigrationProviderAnalysis ValidateProjectedPrimaryKey(

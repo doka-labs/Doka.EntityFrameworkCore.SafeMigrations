@@ -1,11 +1,16 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
+/// <summary>Defines the shared structured column, key, and discriminator scaffolding fixture.</summary>
 public abstract class SafeMigrationScaffoldingDbContext : DbContext
 {
     private readonly string _connectionString;
     private readonly SafeMigrationScaffoldingMode _mode;
     private readonly MySqlServerVersion _serverVersion;
 
+    /// <summary>Initializes the isolated model and explicit provider dependencies.</summary>
+    /// <param name="connectionString">The uniquely owned native test database.</param>
+    /// <param name="serverVersion">The selected native engine family and version contract.</param>
+    /// <param name="mode">The explicitly selected strict or legacy-convergence scaffolding mode.</param>
     protected SafeMigrationScaffoldingDbContext(
         string connectionString,
         MySqlServerVersion serverVersion,
@@ -17,8 +22,11 @@ public abstract class SafeMigrationScaffoldingDbContext : DbContext
         _mode = mode;
     }
 
+    /// <summary>Gets the dependent user rows configured by this isolated scaffolding model.</summary>
+    [UsedImplicitly]
     public DbSet<SafeMigrationScaffoldingUser> Users => Set<SafeMigrationScaffoldingUser>();
 
+    /// <inheritdoc />
     protected override void OnConfiguring(
         DbContextOptionsBuilder optionsBuilder
     )
@@ -34,6 +42,7 @@ public abstract class SafeMigrationScaffoldingDbContext : DbContext
         });
     }
 
+    /// <inheritdoc />
     protected override void OnModelCreating(
         ModelBuilder modelBuilder
     )
@@ -198,100 +207,151 @@ public abstract class SafeMigrationScaffoldingDbContext : DbContext
     }
 }
 
+/// <summary>Scaffolds the shared model through strict guarded operation policies.</summary>
 public sealed class StrictSafeMigrationScaffoldingDbContext : SafeMigrationScaffoldingDbContext
 {
+    /// <summary>Initializes the isolated model and explicit provider dependencies.</summary>
+    /// <param name="connectionString">The uniquely owned native test database.</param>
+    /// <param name="serverVersion">The selected native engine family and version contract.</param>
     public StrictSafeMigrationScaffoldingDbContext(
         string connectionString,
         MySqlServerVersion serverVersion
     ) : base(connectionString, serverVersion, SafeMigrationScaffoldingMode.Strict) { }
 }
 
+/// <summary>Scaffolds the shared model through explicit legacy-convergence policies.</summary>
 public sealed class LegacySafeMigrationScaffoldingDbContext : SafeMigrationScaffoldingDbContext
 {
+    /// <summary>Initializes the isolated model and explicit provider dependencies.</summary>
+    /// <param name="connectionString">The uniquely owned native test database.</param>
+    /// <param name="serverVersion">The selected native engine family and version contract.</param>
     public LegacySafeMigrationScaffoldingDbContext(
         string connectionString,
         MySqlServerVersion serverVersion
     ) : base(connectionString, serverVersion, SafeMigrationScaffoldingMode.LegacyConvergence) { }
 }
 
+/// <summary>Defines the dependent user row used to capture column and relationship scaffolding.</summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public sealed class SafeMigrationScaffoldingUser
 {
+    /// <summary>Gets or sets the mapped row identity used by the isolated fixture model.</summary>
     public int Id { get; set; }
 
+    /// <summary>Gets or sets the tenant key participating in the scaffolded compound ownership contract.</summary>
     public int TenantId { get; set; }
 
+    /// <summary>Gets or sets the mapped email value used by length, uniqueness, and seed-transition probes.</summary>
     public string Email { get; set; } = string.Empty;
 
+    /// <summary>Gets or sets the optional principal key used by the scaffolded user relationship.</summary>
     public int? RequestId { get; set; }
 
+    /// <summary>Gets or sets the optional request payload used to capture provider column facets.</summary>
     public string? RequestMetadata { get; set; }
 
+    /// <summary>Gets or sets the optional principal navigation represented by the scaffolded foreign key.</summary>
     public SafeMigrationScaffoldingRequest? Request { get; set; }
 }
 
+/// <summary>Defines the principal request identity used by the scaffolded relationship.</summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public sealed class SafeMigrationScaffoldingRequest
 {
+    /// <summary>Gets or sets the mapped row identity used by the isolated fixture model.</summary>
     public int Id { get; set; }
 }
 
+/// <summary>Defines the base row for numeric discriminator scaffolding.</summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public abstract class SafeMigrationScaffoldingWorkItem
 {
+    /// <summary>Gets or sets the mapped row identity used by the isolated fixture model.</summary>
     public int Id { get; set; }
 
+    /// <summary>Gets or sets the mapped text value used by discriminator and seed-transition probes.</summary>
     public string Caption { get; set; } = string.Empty;
 }
 
+/// <summary>Defines the locally owned numeric-discriminator subtype.</summary>
 public sealed class SafeMigrationScaffoldingTask : SafeMigrationScaffoldingWorkItem;
 
+/// <summary>Defines the externally owned numeric-discriminator subtype.</summary>
 public sealed class SafeMigrationScaffoldingExternalWorkItem : SafeMigrationScaffoldingWorkItem;
 
+/// <summary>Identifies locally and externally owned numeric discriminator values.</summary>
 public enum SafeMigrationScaffoldingWorkItemKind
 {
+    /// <summary>Selects the locally owned task discriminator.</summary>
     Task,
+
+    /// <summary>Selects the externally owned work-item discriminator.</summary>
     External,
 }
 
+/// <summary>Defines the base row for attributed string-discriminator scaffolding.</summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public abstract class SafeMigrationAttributedWorkItem
 {
+    /// <summary>Gets or sets the mapped row identity used by the isolated fixture model.</summary>
     public int Id { get; set; }
 
+    /// <summary>Gets or sets the mapped text value used by discriminator and seed-transition probes.</summary>
     public string Caption { get; set; } = string.Empty;
 }
 
+/// <summary>Selects the discriminator value declared by JsonStringEnumMemberName.</summary>
 public sealed class SafeMigrationJsonNamedWorkItem : SafeMigrationAttributedWorkItem;
 
+/// <summary>Selects the discriminator value declared by EnumMember.</summary>
 public sealed class SafeMigrationContractNamedWorkItem : SafeMigrationAttributedWorkItem;
 
+/// <summary>Selects the discriminator value derived from the unannotated enum member.</summary>
 public sealed class SafeMigrationFallbackNamedWorkItem : SafeMigrationAttributedWorkItem;
 
+/// <summary>Defines one side of the cyclic optional foreign-key scaffolding fixture.</summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public sealed class SafeMigrationScaffoldingCycleLeft
 {
+    /// <summary>Gets or sets the mapped row identity used by the isolated fixture model.</summary>
     public int Id { get; set; }
 
+    /// <summary>Gets or sets the optional key referring to the right-hand cyclic principal.</summary>
     public int? RightId { get; set; }
 }
 
+/// <summary>Defines the other side of the cyclic optional foreign-key scaffolding fixture.</summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public sealed class SafeMigrationScaffoldingCycleRight
 {
+    /// <summary>Gets or sets the mapped row identity used by the isolated fixture model.</summary>
     public int Id { get; set; }
 
+    /// <summary>Gets or sets the optional key referring to the left-hand cyclic principal.</summary>
     public int? LeftId { get; set; }
 }
 
+/// <summary>Defines JSON-named, contract-named, and fallback string discriminator identities.</summary>
 public enum SafeMigrationAttributedWorkItemKind
 {
+    /// <summary>Uses the explicitly declared JSON string discriminator spelling.</summary>
     [JsonStringEnumMemberName("json-named")]
     JsonNamed,
 
+    /// <summary>Uses the explicitly declared data-contract discriminator spelling.</summary>
     [EnumMember(Value = "contract-named")]
     ContractNamed,
 
+    /// <summary>Uses the unannotated enum member name as the discriminator spelling.</summary>
     Fallback,
 }
 
+/// <summary>Creates the strict design-time context for real EF scaffolding probes.</summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public sealed class StrictSafeMigrationScaffoldingDbContextFactory
     : IDesignTimeDbContextFactory<StrictSafeMigrationScaffoldingDbContext>
 {
+    /// <inheritdoc />
     public StrictSafeMigrationScaffoldingDbContext CreateDbContext(
         string[] args
     )
@@ -304,9 +364,12 @@ public sealed class StrictSafeMigrationScaffoldingDbContextFactory
     }
 }
 
+/// <summary>Creates the legacy design-time context for real EF scaffolding probes.</summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public sealed class LegacySafeMigrationScaffoldingDbContextFactory
     : IDesignTimeDbContextFactory<LegacySafeMigrationScaffoldingDbContext>
 {
+    /// <inheritdoc />
     public LegacySafeMigrationScaffoldingDbContext CreateDbContext(
         string[] args
     )
@@ -319,12 +382,17 @@ public sealed class LegacySafeMigrationScaffoldingDbContextFactory
     }
 }
 
+/// <summary>Defines the shared seeded model used to scaffold managed-data transitions.</summary>
 public abstract class SafeMigrationDataTransitionScaffoldingDbContext : DbContext
 {
     private readonly string _connectionString;
     private readonly SafeMigrationScaffoldingMode _mode;
     private readonly MySqlServerVersion _serverVersion;
 
+    /// <summary>Initializes the isolated model and explicit provider dependencies.</summary>
+    /// <param name="connectionString">The uniquely owned native test database.</param>
+    /// <param name="serverVersion">The selected native engine family and version contract.</param>
+    /// <param name="mode">The explicitly selected strict or legacy-convergence scaffolding mode.</param>
     protected SafeMigrationDataTransitionScaffoldingDbContext(
         string connectionString,
         MySqlServerVersion serverVersion,
@@ -336,8 +404,11 @@ public abstract class SafeMigrationDataTransitionScaffoldingDbContext : DbContex
         _mode = mode;
     }
 
+    /// <summary>Gets the dependent user rows configured by this isolated scaffolding model.</summary>
+    [UsedImplicitly]
     public DbSet<SafeMigrationDataTransitionUser> Users => Set<SafeMigrationDataTransitionUser>();
 
+    /// <inheritdoc />
     protected override void OnConfiguring(
         DbContextOptionsBuilder optionsBuilder
     )
@@ -353,6 +424,7 @@ public abstract class SafeMigrationDataTransitionScaffoldingDbContext : DbContex
         });
     }
 
+    /// <inheritdoc />
     protected override void OnModelCreating(
         ModelBuilder modelBuilder
     )
@@ -468,52 +540,75 @@ public abstract class SafeMigrationDataTransitionScaffoldingDbContext : DbContex
     }
 }
 
+/// <summary>Captures managed-data transitions under strict scaffolding policy.</summary>
 public sealed class StrictSafeMigrationDataTransitionScaffoldingDbContext
     : SafeMigrationDataTransitionScaffoldingDbContext
 {
+    /// <summary>Initializes the isolated model and explicit provider dependencies.</summary>
+    /// <param name="connectionString">The uniquely owned native test database.</param>
+    /// <param name="serverVersion">The selected native engine family and version contract.</param>
     public StrictSafeMigrationDataTransitionScaffoldingDbContext(
         string connectionString,
         MySqlServerVersion serverVersion
     ) : base(connectionString, serverVersion, SafeMigrationScaffoldingMode.Strict) { }
 }
 
+/// <summary>Captures managed-data transitions under legacy-convergence policy.</summary>
 public sealed class LegacySafeMigrationDataTransitionScaffoldingDbContext
     : SafeMigrationDataTransitionScaffoldingDbContext
 {
+    /// <summary>Initializes the isolated model and explicit provider dependencies.</summary>
+    /// <param name="connectionString">The uniquely owned native test database.</param>
+    /// <param name="serverVersion">The selected native engine family and version contract.</param>
     public LegacySafeMigrationDataTransitionScaffoldingDbContext(
         string connectionString,
         MySqlServerVersion serverVersion
     ) : base(connectionString, serverVersion, SafeMigrationScaffoldingMode.LegacyConvergence) { }
 }
 
+/// <summary>Defines a seeded dependent user row whose values participate in transition capture.</summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public sealed class SafeMigrationDataTransitionUser
 {
+    /// <summary>Gets or sets the mapped row identity used by the isolated fixture model.</summary>
     public int Id { get; set; }
 
+    /// <summary>Gets or sets the mapped email value used by length, uniqueness, and seed-transition probes.</summary>
     public string Email { get; set; } = string.Empty;
 
+    /// <summary>Gets or sets the optional principal key used by the scaffolded user relationship.</summary>
     public int? RequestId { get; set; }
 
+    /// <summary>Gets or sets the optional request payload used to capture provider column facets.</summary>
     public string? RequestMetadata { get; set; }
 
+    /// <summary>Gets or sets the optional principal navigation represented by the scaffolded foreign key.</summary>
     public SafeMigrationDataTransitionRequest? Request { get; set; }
 }
 
+/// <summary>Defines a seeded principal request row for managed relationship transitions.</summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public sealed class SafeMigrationDataTransitionRequest
 {
+    /// <summary>Gets or sets the mapped row identity used by the isolated fixture model.</summary>
     public int Id { get; set; }
 
+    /// <summary>Gets or sets the mapped text value used by discriminator and seed-transition probes.</summary>
     public string Caption { get; set; } = string.Empty;
 }
 
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 internal sealed class SafeMigrationDataTransitionAuxiliary
 {
     public int Id { get; set; }
 }
 
+/// <summary>Creates strict seeded design-time models for real transition scaffolding.</summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public sealed class StrictSafeMigrationDataTransitionScaffoldingDbContextFactory
     : IDesignTimeDbContextFactory<StrictSafeMigrationDataTransitionScaffoldingDbContext>
 {
+    /// <inheritdoc />
     public StrictSafeMigrationDataTransitionScaffoldingDbContext CreateDbContext(
         string[] args
     )
@@ -526,9 +621,12 @@ public sealed class StrictSafeMigrationDataTransitionScaffoldingDbContextFactory
     }
 }
 
+/// <summary>Creates legacy seeded design-time models for real transition scaffolding.</summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public sealed class LegacySafeMigrationDataTransitionScaffoldingDbContextFactory
     : IDesignTimeDbContextFactory<LegacySafeMigrationDataTransitionScaffoldingDbContext>
 {
+    /// <inheritdoc />
     public LegacySafeMigrationDataTransitionScaffoldingDbContext CreateDbContext(
         string[] args
     )

@@ -3,7 +3,9 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 /// <summary>Guards ordered capability scans of immutable table definitions without a live server.</summary>
 public sealed class PostgreSqlCapabilitySnapshotTraversalTests
 {
-    /// <summary>UUID admission examines the final generated column even after many supported ordinary columns.</summary>
+    /// <summary>
+    /// UUID admission examines the final generated column even after many supported ordinary columns.
+    /// </summary>
     /// <param name="width">The complete immutable table-column count.</param>
     /// <param name="valid">Whether the last column's captured literal is a canonical UUID.</param>
     [Theory]

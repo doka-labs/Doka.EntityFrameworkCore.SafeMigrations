@@ -43,8 +43,13 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                     {
                         Operand: SafeMigrationSqlIdentifierExpression identifier,
                     } predicate:
-                        foreach (var value in predicate.Values)
+                        // WHY: The stable indexed snapshot preserves declaration order without mutating the source.
+                        // ReSharper disable once ForCanBeConvertedToForeach
+                        // ReSharper disable once LoopCanBeConvertedToQuery
+                        for (var valueIndex0 = 0; valueIndex0 < predicate.Values.Count; valueIndex0++)
                         {
+                            var value = predicate.Values[valueIndex0];
+
                             yield return (identifier.Parts[0], (SafeMigrationSqlLiteralExpression)value);
                         }
 

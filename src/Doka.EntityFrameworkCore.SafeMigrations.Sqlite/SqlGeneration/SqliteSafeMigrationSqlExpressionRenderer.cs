@@ -267,11 +267,12 @@ internal sealed class SqliteSafeMigrationSqlExpressionRenderer
                 break;
             case SafeMigrationSqlCaseExpression value:
                 builder.Append(
-                    position / 2 == value.WhenClauses.Count
-                        ? " ELSE "
-                        : position % 2 == 0
-                            ? " WHEN "
-                            : " THEN ");
+                    position switch
+                    {
+                        _ when position / 2 == value.WhenClauses.Count => " ELSE ",
+                        _ when position % 2 == 0 => " WHEN ",
+                        _ => " THEN ",
+                    });
 
                 break;
         }
@@ -414,13 +415,15 @@ internal sealed class SqliteSafeMigrationSqlExpressionRenderer
 
     private string? LiteralUnsupportedFeature(
         SafeMigrationSqlLiteralExpression expression
-    ) => expression.StoreType is not null && !IsStoreType(expression.StoreType)
-        ? "structured_cast_type"
-        : expression.BorrowedValue is not null
-        && _typeMappingSource.FindMapping(expression.BorrowedValue.GetType(), expression.StoreType) is null
-        && _typeMappingSource.FindMapping(expression.BorrowedValue.GetType()) is null
-            ? "structured_literal_mapping"
-            : null;
+    ) => expression switch
+    {
+        _ when expression.StoreType is not null && !IsStoreType(expression.StoreType) => "structured_cast_type",
+        _ when expression.BorrowedValue is not null
+            && _typeMappingSource.FindMapping(expression.BorrowedValue.GetType(), expression.StoreType) is null
+            && _typeMappingSource.FindMapping(expression.BorrowedValue.GetType()) is null =>
+            "structured_literal_mapping",
+        _ => null,
+    };
 
     private static bool IsStoreType(
         string storeType
@@ -447,15 +450,24 @@ internal sealed class SqliteSafeMigrationSqlExpressionRenderer
     };
 
     /// <summary>Retains the next child so traversal storage grows with depth rather than list width.</summary>
-    private struct ExpressionFrame(
-        SafeMigrationSqlExpression expression,
-        int position
-    )
+    private struct ExpressionFrame
     {
+        /// <summary>Creates traversal state for one expression and its next ordered child.</summary>
+        /// <param name="expression">The node whose ordered children will be visited.</param>
+        /// <param name="position">The next child ordinal.</param>
+        public ExpressionFrame(
+            SafeMigrationSqlExpression expression,
+            int position
+        )
+        {
+            Expression = expression;
+            Position = position;
+        }
+
         /// <summary>Gets the node whose ordered children are being visited.</summary>
-        public SafeMigrationSqlExpression Expression { get; } = expression;
+        public SafeMigrationSqlExpression Expression { get; }
 
         /// <summary>Gets or sets the next child ordinal.</summary>
-        public int Position { get; set; } = position;
+        public int Position { get; set; }
     }
 }

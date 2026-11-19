@@ -1,6 +1,8 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-/// <summary>Exercises the ColumnsNullabilityConcurrency migration contracts in an independent class collection.</summary>
+/// <summary>
+/// Exercises the ColumnsNullabilityConcurrency migration contracts in an independent class collection.
+/// </summary>
 public sealed class MySqlColumnsNullabilityConcurrencyIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
     /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>

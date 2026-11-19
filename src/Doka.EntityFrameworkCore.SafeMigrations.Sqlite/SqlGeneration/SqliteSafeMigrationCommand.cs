@@ -153,8 +153,13 @@ internal sealed class SqliteSafeMigrationCommand : MigrationCommand
         }
 
         var affected = 0;
-        foreach (var command in commands)
+
+        // WHY: Traverse the stable ordered source by ordinal without materializing another collection.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var commandIndex = 0; commandIndex < commands.Count; commandIndex++)
         {
+            var command = commands[commandIndex];
             affected += command.ExecuteNonQuery(connection, parameterValues);
         }
 
@@ -279,6 +284,9 @@ internal sealed class SqliteSafeMigrationCommand : MigrationCommand
                     Enumerable
                         .Range(0, intent.Columns.Count)
                         .Select(static index => $"value_{index}"))
+
+                // WHY: Preserve explicit fluent materialization for the ordered snapshot.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray();
 
             var rows = new string[count];
@@ -372,6 +380,9 @@ internal sealed class SqliteSafeMigrationCommand : MigrationCommand
                     Enumerable
                         .Range(0, intent.Columns.Count)
                         .Select(static index => $"target_{index}"))
+
+                // WHY: Preserve explicit fluent materialization for the ordered snapshot.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray();
 
             var rows = new string[count];
@@ -473,6 +484,9 @@ internal sealed class SqliteSafeMigrationCommand : MigrationCommand
                     Enumerable
                         .Range(0, intent.Columns.Count)
                         .Select(static index => $"source_{index}"))
+
+                // WHY: Preserve explicit fluent materialization for the ordered snapshot.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray();
 
             var rows = new string[count];

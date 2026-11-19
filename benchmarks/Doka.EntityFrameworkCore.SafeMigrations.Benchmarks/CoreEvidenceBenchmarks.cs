@@ -160,6 +160,8 @@ public class CoreEvidenceBenchmarks
     public int CaptureOrdinaryColumnIdentities()
     {
         var count = 0;
+        // WHY: Preserve the prepared array's direct traversal rather than adding a projection and aggregation pipeline.
+        // ReSharper disable once LoopCanBeConvertedToQuery
         foreach (var operation in _ordinaryColumns)
         {
             count += SafeMigrationRunner.CaptureProviderIdentity(operation)!
@@ -386,8 +388,16 @@ public class CoreEvidenceBenchmarks
             SafeMigrationProviderAnalysis projectedAnalysis
         )
         {
+            // WHY: Retain fluent materialization and the resulting snapshot ownership.
+            // ReSharper disable once UseCollectionExpression
             var columns = context.Table.Columns.ToArray();
+
+            // WHY: Retain fluent materialization and the resulting snapshot ownership.
+            // ReSharper disable once UseCollectionExpression
             var uniqueConstraints = context.Table.UniqueConstraints.ToArray();
+
+            // WHY: Retain fluent materialization and the resulting snapshot ownership.
+            // ReSharper disable once UseCollectionExpression
             var indexes = context.Table.Indexes.ToArray();
             var primaryKey = context.Table.PrimaryKey;
 

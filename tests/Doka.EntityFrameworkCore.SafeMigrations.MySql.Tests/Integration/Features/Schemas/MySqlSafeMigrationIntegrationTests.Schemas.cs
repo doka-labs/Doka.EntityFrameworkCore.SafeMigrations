@@ -9,21 +9,25 @@ public sealed class MySqlSchemasIntegrationTests : MySqlSafeMigrationIntegration
         MySqlEngineContainerFixture fixture
     ) : base(fixture) { }
 
+    /// <summary>Rejects unsupported schema operations without issuing database-level DDL.</summary>
     [Fact]
     public async Task SchemaOperations_AreClassifiedUnsupportedWithoutDatabaseDdl()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureSchemaExists("independent_schema");
         var runner = context.GetService<ISafeMigrationRunner>();
 
+        // Act
         var report = await runner.AnalyzeAsync(
             context,
             builder.Operations,
             new SafeMigrationRunOptions("test-instance"),
             CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(
             SafeMigrationObservedState.Unsupported,
@@ -31,9 +35,11 @@ public sealed class MySqlSchemasIntegrationTests : MySqlSafeMigrationIntegration
                 .ObservedState);
     }
 
+    /// <summary>Treats ensuring the current database qualifier as an idempotent no-op.</summary>
     [Fact]
     public async Task CurrentDatabaseEnsureSchema_IsAnIdempotentNoOp()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var database = new MySqlConnectionStringBuilder(connectionString).Database;
         await using var context = CreateContext(connectionString);
@@ -41,6 +47,7 @@ public sealed class MySqlSchemasIntegrationTests : MySqlSafeMigrationIntegration
         builder.EnsureSchemaExists(database);
         var runner = context.GetService<ISafeMigrationRunner>();
 
+        // Act
         var report = await runner.AnalyzeAsync(
             context,
             builder.Operations,
@@ -54,6 +61,7 @@ public sealed class MySqlSchemasIntegrationTests : MySqlSafeMigrationIntegration
             new SafeMigrationRunOptions("current-database-schema-replay"),
             CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
         Assert.Equal(SafeMigrationAction.NoOp,
             Assert.Single(report.Assessments)
@@ -65,9 +73,13 @@ public sealed class MySqlSchemasIntegrationTests : MySqlSafeMigrationIntegration
                 .Action);
     }
 
+    /// <summary>
+    /// Rejects removing the current database through a schema operation without issuing native database DDL.
+    /// </summary>
     [Fact]
     public async Task CurrentDatabaseDropSchema_RemainsUnsupportedWithoutDatabaseDdl()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var database = new MySqlConnectionStringBuilder(connectionString).Database;
         await using var context = CreateContext(connectionString);
@@ -75,6 +87,7 @@ public sealed class MySqlSchemasIntegrationTests : MySqlSafeMigrationIntegration
         builder.DropSchemaIfExists(database);
         var runner = context.GetService<ISafeMigrationRunner>();
 
+        // Act
         var report = await runner.AnalyzeAsync(
             context,
             builder.Operations,
@@ -86,6 +99,7 @@ public sealed class MySqlSchemasIntegrationTests : MySqlSafeMigrationIntegration
                 ExecuteOperationsAsync(context, builder.Operations, operationToken),
             cancellationToken: CancellationToken.None);
 
+        // Assert
         var assessment = Assert.Single(report.Assessments);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -101,6 +115,7 @@ public sealed class MySqlSchemasIntegrationTests : MySqlSafeMigrationIntegration
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Rejects a foreign database identity before considering schema-removal capability.</summary>
     [Fact]
     public async Task ForeignDatabaseDropSchemaRejectsIdentityBeforeSchemaCapability()
     {
@@ -145,9 +160,13 @@ public sealed class MySqlSchemasIntegrationTests : MySqlSafeMigrationIntegration
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>
+    /// Treats current-database qualification and an unqualified owner as one native catalog identity.
+    /// </summary>
     [Fact]
     public async Task CurrentDatabaseQualifierSharesCurrentCatalogInventoryIdentity()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var database = new MySqlConnectionStringBuilder(connectionString).Database;
         await ExecuteSqlAsync(
@@ -175,6 +194,7 @@ public sealed class MySqlSchemasIntegrationTests : MySqlSafeMigrationIntegration
             "qualified_inventory",
             ["Id"]);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -183,6 +203,7 @@ public sealed class MySqlSchemasIntegrationTests : MySqlSafeMigrationIntegration
                 new SafeMigrationRunOptions("current-database-inventory"),
                 CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
         Assert.All(report.Assessments, assessment => Assert.Equal(SafeMigrationAction.NoOp, assessment.Action));
         Assert.DoesNotContain(
@@ -191,9 +212,11 @@ public sealed class MySqlSchemasIntegrationTests : MySqlSafeMigrationIntegration
                 || StringComparer.Ordinal.Equals(value.Name, "qualified_inventory"));
     }
 
+    /// <summary>Installs and replays an explicitly current-database-qualified prefix index.</summary>
     [Fact]
     public async Task CurrentDatabaseQualifiedPrefixIndex_ExecutesAndReplays()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var database = new MySqlConnectionStringBuilder(connectionString).Database;
         await ExecuteSqlAsync(
@@ -212,6 +235,7 @@ public sealed class MySqlSchemasIntegrationTests : MySqlSafeMigrationIntegration
 
         var runner = context.GetService<ISafeMigrationRunner>();
 
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
@@ -227,6 +251,7 @@ public sealed class MySqlSchemasIntegrationTests : MySqlSafeMigrationIntegration
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
         Assert.Equal(SafeMigrationAction.Apply,
             Assert.Single(preflight.Assessments)
@@ -251,9 +276,11 @@ public sealed class MySqlSchemasIntegrationTests : MySqlSafeMigrationIntegration
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Preserves owner identity and row contents through a qualified index lifecycle.</summary>
     [Fact]
     public async Task CurrentDatabaseQualifiedIndexLifecyclePreservesIdentityAndData()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var database = new MySqlConnectionStringBuilder(connectionString).Database;
         await ExecuteSqlAsync(
@@ -278,6 +305,7 @@ public sealed class MySqlSchemasIntegrationTests : MySqlSafeMigrationIntegration
             [191],
             database);
 
+        // Act
         var createReport = await runner.AnalyzeAsync(
             context,
             create.Operations,
@@ -339,6 +367,7 @@ public sealed class MySqlSchemasIntegrationTests : MySqlSafeMigrationIntegration
             new SafeMigrationRunOptions("qualified-index-drop-replay"),
             CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationAction.Apply,
             Assert.Single(createReport.Assessments)
                 .Action);
@@ -385,6 +414,7 @@ public sealed class MySqlSchemasIntegrationTests : MySqlSafeMigrationIntegration
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Treats a qualified drop and unqualified replacement as one physical index in postflight.</summary>
     [Fact]
     public async Task QualifiedDropThenUnqualifiedEnsurePassesPostflightAsOnePhysicalIndex()
     {
@@ -436,9 +466,11 @@ public sealed class MySqlSchemasIntegrationTests : MySqlSafeMigrationIntegration
         Assert.True(postflight.Assessments[1].PostconditionSatisfied);
     }
 
+    /// <summary>Executes and replays model-managed data qualified with the current database identity.</summary>
     [Fact]
     public async Task CurrentDatabaseQualifiedModelManagedData_ExecutesAndReplays()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var database = new MySqlConnectionStringBuilder(connectionString).Database;
         await ExecuteSqlAsync(
@@ -460,6 +492,7 @@ public sealed class MySqlSchemasIntegrationTests : MySqlSafeMigrationIntegration
 
         var runner = context.GetService<ISafeMigrationRunner>();
 
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
@@ -475,6 +508,7 @@ public sealed class MySqlSchemasIntegrationTests : MySqlSafeMigrationIntegration
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
         Assert.Equal(SafeMigrationAction.Apply,
             Assert.Single(preflight.Assessments)
@@ -494,9 +528,11 @@ public sealed class MySqlSchemasIntegrationTests : MySqlSafeMigrationIntegration
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Rejects foreign-database qualifiers before index or seed-data mutation.</summary>
     [Fact]
     public async Task ForeignDatabaseQualificationRejectsBeforeIndexOrDataMutation()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var foreignDatabase = "doka_foreign_"
             + Guid
@@ -538,8 +574,12 @@ public sealed class MySqlSchemasIntegrationTests : MySqlSafeMigrationIntegration
             var operations = index
                 .Operations
                 .Concat(data.Operations)
+
+                // WHY: Retain this explicit materialization/copy path and its collection lowering.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray();
 
+            // Act
             var report = await context
                 .GetService<ISafeMigrationRunner>()
                 .AnalyzeAsync(
@@ -558,6 +598,7 @@ public sealed class MySqlSchemasIntegrationTests : MySqlSafeMigrationIntegration
                     ExecuteOperationsAsync(context, data.Operations, operationToken),
                 cancellationToken: CancellationToken.None);
 
+            // Assert
             Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
             Assert.All(
                 report.Assessments,
@@ -601,6 +642,7 @@ public sealed class MySqlSchemasIntegrationTests : MySqlSafeMigrationIntegration
         }
     }
 
+    /// <summary>Rejects a stream-wide foreign qualifier before earlier unqualified target DDL can run.</summary>
     [Fact]
     public async Task ForeignStreamQualifierRejectsBeforeEarlierUnqualifiedTableMutation()
     {
@@ -643,9 +685,11 @@ public sealed class MySqlSchemasIntegrationTests : MySqlSafeMigrationIntegration
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Rejects unsupported schema qualification consistently across every exposed operation family.</summary>
     [Fact]
     public async Task SchemaQualifiedOperationMatrix_FailsClosedForEveryPublicObjectFamily()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -705,6 +749,7 @@ public sealed class MySqlSchemasIntegrationTests : MySqlSafeMigrationIntegration
 
         builder.DropForeignKeyIfExists("fk_qualified_parent", "qualified_table", "tenant_schema");
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -713,6 +758,18 @@ public sealed class MySqlSchemasIntegrationTests : MySqlSafeMigrationIntegration
                 new SafeMigrationRunOptions("schema-qualified-matrix"),
                 CancellationToken.None);
 
+        var exception = await AssertOwnedGuardFailureAsync(
+            operationToken =>
+                ExecuteOperationsAsync(context, [builder.Operations[2]], operationToken),
+            cancellationToken: CancellationToken.None);
+
+        var unexpectedSchemaCount = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.SCHEMATA "
+            + "WHERE SCHEMA_NAME IN ('tenant_schema', 'tenant_archive');",
+            cancellationToken: CancellationToken.None);
+
+        // Assert
         Assert.Equal(22, builder.Operations.Count);
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(builder.Operations.Count, report.Assessments.Count);
@@ -724,24 +781,15 @@ public sealed class MySqlSchemasIntegrationTests : MySqlSafeMigrationIntegration
                 Assert.Equal(SafeMigrationAction.RejectUnsupported, assessment.Action);
             });
 
-        var exception = await AssertOwnedGuardFailureAsync(
-            operationToken =>
-                ExecuteOperationsAsync(context, [builder.Operations[2]], operationToken),
-            cancellationToken: CancellationToken.None);
-
         Assert.Contains("doka_sm_unsupported", exception.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal(
-            0,
-            await ScalarIntAsync(
-                connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.SCHEMATA "
-                + "WHERE SCHEMA_NAME IN ('tenant_schema', 'tenant_archive');",
-                cancellationToken: CancellationToken.None));
+        Assert.Equal(0, unexpectedSchemaCount);
     }
 
+    /// <summary>Does not hide current-database inventory behind unsupported qualified expectations.</summary>
     [Fact]
     public async Task SchemaQualifiedExpectations_NeverSuppressCurrentDatabaseInventory()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -770,6 +818,7 @@ public sealed class MySqlSchemasIntegrationTests : MySqlSafeMigrationIntegration
                 Id = table.Column<int>(type: "int", nullable: false),
             });
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -778,6 +827,7 @@ public sealed class MySqlSchemasIntegrationTests : MySqlSafeMigrationIntegration
                 new SafeMigrationRunOptions("schema-inventory-collision"),
                 CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationObservedState.Unsupported, report.Assessments[0].ObservedState);
         Assert.Equal(SafeMigrationAction.RejectUnsupported, report.Assessments[0].Action);

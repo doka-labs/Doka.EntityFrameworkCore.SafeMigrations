@@ -10,8 +10,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
     /// <inheritdoc />
     bool ISafeMigrationLivePrerequisiteSource.CanRequalifyLiveDropIndexPrerequisites(
         DropIndexIntent intent,
-        SafeMigrationProviderAnalysis liveAnalysis,
-        ISafeMigrationProjectedColumnSource columns
+        SafeMigrationProviderAnalysis liveAnalysis
     )
     {
         var owner = (NormalizeProofSchema(intent.Schema), intent.Table);
@@ -25,6 +24,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             return false;
         }
 
+        // WHY: This loop validates each captured physical member against two current namespace sets.
+        // ReSharper disable once LoopCanBeConvertedToQuery
         foreach (var name in proof.ForeignKeyNames)
         {
             var identity = (owner.Item1, owner.Table, name);
@@ -51,7 +52,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         CancellationToken cancellationToken
     )
     {
-        if (!analyses.Any(static analysis => analysis is
+        if (analyses.All(static analysis => analysis is not
             {
                 ObservedState: SafeMigrationObservedState.Unsupported,
                 IsInvariantUnsupported: false,
@@ -75,21 +76,24 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                 continue;
             }
 
-            if (intent is DropForeignKeyIntent foreignKey)
+            switch (intent)
             {
-                (removalOwners ??= new HashSet<(string? Schema, string Table)>(PhysicalOwnerComparer))
-                    .Add((NormalizeProofSchema(foreignKey.Schema), foreignKey.Table));
-            }
-            else if (intent is DropIndexIntent index
-                && analyses[ordinal].ObservedState == SafeMigrationObservedState.Unsupported
-                && !analyses[ordinal].IsInvariantUnsupported
-                && analyses[ordinal].Code == "foreign_key_multi_valued_supporting_index"
-                && removalOwners?.Contains((NormalizeProofSchema(index.Schema), index.Table)) == true)
-            {
-                (requests ??=
-                        new Dictionary<(string? Schema, string Table, string Name), DropIndexIntent>(
-                            PhysicalMemberComparer))
-                    .TryAdd((NormalizeProofSchema(index.Schema), index.Table, index.Name), index);
+                case DropForeignKeyIntent foreignKey:
+                    (removalOwners ??= new HashSet<(string? Schema, string Table)>(PhysicalOwnerComparer))
+                        .Add((NormalizeProofSchema(foreignKey.Schema), foreignKey.Table));
+
+                    break;
+                case DropIndexIntent index when
+                    analyses[ordinal].ObservedState == SafeMigrationObservedState.Unsupported
+                    && !analyses[ordinal].IsInvariantUnsupported
+                    && analyses[ordinal].Code == "foreign_key_multi_valued_supporting_index"
+                    && removalOwners?.Contains((NormalizeProofSchema(index.Schema), index.Table)) == true:
+                    (requests ??=
+                            new Dictionary<(string? Schema, string Table, string Name), DropIndexIntent>(
+                                PhysicalMemberComparer))
+                        .TryAdd((NormalizeProofSchema(index.Schema), index.Table, index.Name), index);
+
+                    break;
             }
         }
 
@@ -98,6 +102,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             return;
         }
 
+        // WHY: Retain fluent materialization and its existing snapshot
+        // ownership rather than replacing this boundary with a spread.
+        // ReSharper disable once UseCollectionExpression
         var targets = requests.ToArray();
         var captured = new Dictionary<(string? Schema, string Table, string Name), MultiValuedIndexDropProof>(
             PhysicalMemberComparer);
@@ -118,12 +125,15 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                     targets[ordinal].Value,
                     version.IsMariaDb),
                 ordinal),
-            async (reader, ordinal, _, token) =>
+            async (reader, ordinal, _, callbackCancellationToken) =>
             {
-                captured.Add(targets[ordinal].Key, await ReadMultiValuedIndexDropProofAsync(reader, token));
+                captured.Add(
+                    targets[ordinal].Key,
+                    await ReadMultiValuedIndexDropProofAsync(reader, callbackCancellationToken));
             },
-            cancellationToken,
-            context.Database.CurrentTransaction?.GetDbTransaction());
+            context.Database.CurrentTransaction?.GetDbTransaction(),
+            SafeMigrationCatalogQueryLimits.MaximumParameters,
+            cancellationToken);
 
         // Publish only complete independent aliases; canceled captures must
         // never expose partial dependency-removal authority to another run.
@@ -192,6 +202,10 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             exists.Value,
             aliases is null
                 ? []
+
+                // WHY: Retain fluent materialization and its existing snapshot
+                // ownership rather than replacing this boundary with a spread.
+                // ReSharper disable once UseCollectionExpression
                 : aliases.ToArray());
     }
 

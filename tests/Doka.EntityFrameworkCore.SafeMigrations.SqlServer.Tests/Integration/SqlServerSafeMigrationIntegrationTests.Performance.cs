@@ -23,7 +23,9 @@ public sealed class SqlServerSafeMigrationPerformanceIntegrationTests : SqlServe
         SqlServerContainerFixture fixture
     ) : base(fixture) { }
 
-    /// <summary>Checks managed-data deferral in several mixed-stream cycles before costly stress qualification.</summary>
+    /// <summary>
+    /// Checks managed-data deferral in several mixed-stream cycles before costly stress qualification.
+    /// </summary>
     [SqlServerLiveFact]
     public async Task Analyzer_BoundedMixedOperationsRetainExactDeferredContracts()
     {
@@ -88,14 +90,14 @@ public sealed class SqlServerSafeMigrationPerformanceIntegrationTests : SqlServe
     }
 
     /// <summary>
-    /// Records informational pooled-runner timings while asserting clean and noisy catalog behavior.
+    /// Classifies identical managed tables in clean and noisy catalogs using the same pooled runner.
     /// </summary>
     [SqlServerLiveFact]
     [Trait("Category", "LivePerformance")]
-    public async Task FullRunner_LiveCatalogP95RemainsBoundedWithForeignObjectsAndPooling()
+    public async Task FullRunner_PooledCatalogPreservesExactScopeWithForeignObjects()
     {
         // Arrange
-        SqlServerLiveQualificationEvidence.WriteStage("catalog-p95", "fixture-setup");
+        SqlServerLiveQualificationEvidence.WriteStage("catalog-scope", "fixture-setup");
         var databaseConnectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         var connectionString = new SqlConnectionStringBuilder(databaseConnectionString)
         {
@@ -123,70 +125,48 @@ public sealed class SqlServerSafeMigrationPerformanceIntegrationTests : SqlServe
 
         var runner = context.GetService<ISafeMigrationRunner>();
         var options = new SafeMigrationRunOptions("sqlserver-live-performance");
-        var environment = await context
-            .GetService<ISafeMigrationProviderAnalyzer>()
-            .GetEnvironmentAsync(
-                context,
-                cancellationToken: CancellationToken.None);
-
-        using var stageCapture = SqlServerLiveQualificationEvidence.CaptureAnalysisStages("catalog-p95");
+        using var stageCapture = SqlServerLiveQualificationEvidence.CaptureAnalysisStages("catalog-scope");
 
         // Act
-        SqlServerLiveQualificationEvidence.WriteStage("catalog-p95", "clean-samples");
-        var clean = await LivePerformanceEvidence.MeasureAsync(
-            token =>
-                runner.AnalyzeAsync(
-                    context,
-                    builder.Operations,
-                    options,
-                    cancellationToken: token),
-            CancellationToken.None);
+        SqlServerLiveQualificationEvidence.WriteStage("catalog-scope", "clean-analysis");
+        var clean = await runner.AnalyzeAsync(context, builder.Operations, options, CancellationToken.None);
 
-        SqlServerLiveQualificationEvidence.WriteStage("catalog-p95", "create-foreign-objects");
+        SqlServerLiveQualificationEvidence.WriteStage("catalog-scope", "create-foreign-objects");
         await ExecuteSqlAsync(
             connectionString,
             BuildSqlServerPerformanceTables("foreign_perf_", ForeignPerformanceTableCount, includeIndex: true),
             cancellationToken: CancellationToken.None);
 
-        SqlServerLiveQualificationEvidence.WriteStage("catalog-p95", "noisy-samples");
-        var noisy = await LivePerformanceEvidence.MeasureAsync(
-            token =>
-                runner.AnalyzeAsync(
-                    context,
-                    builder.Operations,
-                    options,
-                    cancellationToken: token),
-            CancellationToken.None);
-
-        LivePerformanceEvidence.Write(
-            "sqlserver",
-            environment.ServerVersion,
-            clean,
-            noisy,
-            ExpectedPerformanceTableCount,
-            ForeignPerformanceTableCount);
+        SqlServerLiveQualificationEvidence.WriteStage("catalog-scope", "noisy-analysis");
+        var noisy = await runner.AnalyzeAsync(context, builder.Operations, options, CancellationToken.None);
 
         // Assert
-        Assert.All(
-            clean.LastReport.Assessments,
-            static assessment => Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState));
+        MatchingTableAssessmentAssertions.AssertComplete(
+            clean.Assessments,
+            ExpectedPerformanceTableCount,
+            "expected_perf_");
 
-        Assert.Empty(clean.LastReport.UnexpectedObjects);
+        MatchingTableAssessmentAssertions.AssertComplete(
+            noisy.Assessments,
+            ExpectedPerformanceTableCount,
+            "expected_perf_");
+
+        Assert.Empty(clean.UnexpectedObjects);
         Assert.Equal(
             ForeignPerformanceTableCount,
-            noisy.LastReport.UnexpectedObjects.Count(static value =>
+            noisy.UnexpectedObjects.Count(static value =>
                 value.ObjectKind == SafeMigrationDatabaseObjectKind.Table));
 
         Assert.DoesNotContain(
-            noisy.LastReport.UnexpectedObjects,
+            noisy.UnexpectedObjects,
             static value => value.ObjectKind != SafeMigrationDatabaseObjectKind.Table);
 
         Assert.Equal(
-            clean.LastReport.Assessments.Select(static value => value.Code),
-            noisy.LastReport.Assessments.Select(static value => value.Code));
+            clean.Assessments.Select(static value => value.Code),
+            noisy.Assessments.Select(static value => value.Code));
 
         stageCapture.ThrowIfWriteFailed();
-        SqlServerLiveQualificationEvidence.WriteStage("catalog-p95", "completed");
+        SqlServerLiveQualificationEvidence.WriteStage("catalog-scope", "completed");
     }
 
     private static string BuildSqlServerPerformanceTables(
@@ -229,7 +209,10 @@ public sealed class SqlServerSafeMigrationPerformanceIntegrationTests : SqlServe
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        using var rows = new DataTable { Locale = CultureInfo.InvariantCulture };
+        using var rows = new DataTable
+        {
+            Locale = CultureInfo.InvariantCulture,
+        };
         rows.Columns.Add("id", typeof(int));
         rows.Columns.Add("managed_value", typeof(string));
         var ordinals = LargeMigrationStressContract.ModelManagedUpdateOrdinals(

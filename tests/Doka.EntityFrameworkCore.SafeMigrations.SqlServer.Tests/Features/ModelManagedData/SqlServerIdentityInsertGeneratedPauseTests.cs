@@ -37,7 +37,8 @@ public sealed class SqlServerIdentityInsertGeneratedPauseTests
             ["int", "nvarchar(80)"],
             new object?[,] { { 7, "Administrator" } });
 
-        var command = context.GetService<IMigrationsSqlGenerator>()
+        var command = context
+            .GetService<IMigrationsSqlGenerator>()
             .Generate(builder.Operations, context.Model, options)
             .Single(candidate => candidate.CommandText.Contains("SET IDENTITY_INSERT", StringComparison.Ordinal));
 
@@ -61,7 +62,11 @@ public sealed class SqlServerIdentityInsertGeneratedPauseTests
 
         // Assert
         Assert.NotEqual(command.CommandText, paused);
-        Assert.Equal(1, execution.Split("EXEC @doka_identity_ready =", StringSplitOptions.None).Length - 1);
+        Assert.Equal(1,
+            execution.Split("EXEC @doka_identity_ready =")
+                .Length
+            - 1);
+
         Assert.True(identity >= 0 && identity < identityOn && identityOn < marker && marker < wait && wait < insert);
         Assert.True(acquired > identityOn);
         Assert.Equal(beforeConfirmation, wait < acquired);
@@ -73,7 +78,9 @@ public sealed class SqlServerIdentityInsertGeneratedPauseTests
         Assert.Contains("@LockOwner = N'Session'", execution, StringComparison.Ordinal);
         Assert.DoesNotContain("RAISERROR", paused, StringComparison.Ordinal);
         Assert.DoesNotContain("NOWAIT", paused, StringComparison.Ordinal);
-        Assert.Equal(ConnectionState.Closed, context.Database.GetDbConnection().State);
+        Assert.Equal(ConnectionState.Closed,
+            context.Database.GetDbConnection()
+                .State);
     }
 
     /// <summary>Token spacing changes only the acquisition statement, never the authored value payload.</summary>
@@ -107,18 +114,22 @@ public sealed class SqlServerIdentityInsertGeneratedPauseTests
         // WHY: Reflow only the known provider-owned acquisition fragment. Whole-command normalization
         // would erase the authored CRLF, GO line and tab whose byte preservation this test requires.
         var command = generated.Replace(acquisition,
-            "SET IDENTITY_INSERT [dbo].[identity_roles]" + separator + "ON;", StringComparison.Ordinal);
+            "SET IDENTITY_INSERT [dbo].[identity_roles]" + separator + "ON;",
+            StringComparison.Ordinal);
 
         // Act
         var paused = SqlServerIdentityInsertPauseInterceptor.BuildPausedCommand(
-            command, "layout'_resource", beforeConfirmation);
+            command,
+            "layout'_resource",
+            beforeConfirmation);
 
         var originalExecution = IdentityExecution(command);
         var execution = IdentityExecution(paused);
         var identity = execution.IndexOf("SET IDENTITY_INSERT [dbo].[identity_roles]", StringComparison.Ordinal);
         var identityOn = execution.IndexOf("ON;", identity, StringComparison.Ordinal);
         var acquired = execution.IndexOf(
-            SqlServerSafeMigrationIdentityInsertScope.AcquiredMarkerComment, StringComparison.Ordinal);
+            SqlServerSafeMigrationIdentityInsertScope.AcquiredMarkerComment,
+            StringComparison.Ordinal);
 
         var marker = execution.IndexOf("EXEC @doka_identity_ready =", StringComparison.Ordinal);
         var wait = execution.IndexOf("WAITFOR DELAY '00:05:00';", StringComparison.Ordinal);
@@ -126,8 +137,16 @@ public sealed class SqlServerIdentityInsertGeneratedPauseTests
         var originalInsert = originalExecution.IndexOf("INSERT INTO [dbo].[identity_roles]", StringComparison.Ordinal);
 
         // Assert
-        Assert.Equal(1, generated.Split(acquisition, StringSplitOptions.None).Length - 1);
-        Assert.Equal(1, execution.Split("EXEC @doka_identity_ready =", StringSplitOptions.None).Length - 1);
+        Assert.Equal(1,
+            generated.Split(acquisition)
+                .Length
+            - 1);
+
+        Assert.Equal(1,
+            execution.Split("EXEC @doka_identity_ready =")
+                .Length
+            - 1);
+
         Assert.True(identity >= 0 && identity < identityOn && identityOn < marker && marker < wait && wait < insert);
         Assert.True(acquired > identityOn);
         Assert.Equal(beforeConfirmation, wait < acquired);
@@ -135,7 +154,9 @@ public sealed class SqlServerIdentityInsertGeneratedPauseTests
         Assert.Contains("@Resource = N'layout''_resource'", execution, StringComparison.Ordinal);
         Assert.DoesNotContain("RAISERROR", paused, StringComparison.Ordinal);
         Assert.DoesNotContain("NOWAIT", paused, StringComparison.Ordinal);
-        Assert.Equal(ConnectionState.Closed, context.Database.GetDbConnection().State);
+        Assert.Equal(ConnectionState.Closed,
+            context.Database.GetDbConnection()
+                .State);
     }
 
     /// <summary>Authored seed text cannot move the pause from the native acquisition into a VALUE literal.</summary>
@@ -166,32 +187,44 @@ public sealed class SqlServerIdentityInsertGeneratedPauseTests
         const string forged = "SET IDENTITY_INSERT [dbo].[identity_roles] ON; "
             + "/* doka_sm_identity_acquired */ EXEC sys.sp_executesql N'SELECT 1;'; O'Brien";
 
-        var caption = multiline ? "line1\r\nGO\n" + forged : forged;
+        var caption = multiline
+            ? "line1\r\nGO\n" + forged
+            : forged;
+
         var command = GenerateIdentity(context, options, caption: caption);
 
         // Act
         var paused = SqlServerIdentityInsertPauseInterceptor.BuildPausedCommand(
-            command, "value_resource", beforeConfirmation);
+            command,
+            "value_resource",
+            beforeConfirmation);
 
         var originalExecution = IdentityExecution(command);
         var execution = IdentityExecution(paused);
         var insert = execution.IndexOf("INSERT INTO [dbo].[identity_roles]", StringComparison.Ordinal);
         var originalInsert = originalExecution.IndexOf("INSERT INTO [dbo].[identity_roles]", StringComparison.Ordinal);
         var acquired = execution.IndexOf(
-            SqlServerSafeMigrationIdentityInsertScope.AcquiredMarkerComment, StringComparison.Ordinal);
+            SqlServerSafeMigrationIdentityInsertScope.AcquiredMarkerComment,
+            StringComparison.Ordinal);
 
         var marker = execution.IndexOf("EXEC @doka_identity_ready =", StringComparison.Ordinal);
         var wait = execution.IndexOf("WAITFOR DELAY '00:05:00';", StringComparison.Ordinal);
 
         // Assert
         Assert.NotEqual(command, paused);
-        Assert.Equal(1, execution.Split("EXEC @doka_identity_ready =", StringSplitOptions.None).Length - 1);
+        Assert.Equal(1,
+            execution.Split("EXEC @doka_identity_ready =")
+                .Length
+            - 1);
+
         Assert.True(marker >= 0 && marker < wait && wait < insert);
         Assert.Equal(beforeConfirmation, wait < acquired);
         Assert.Equal(originalExecution[originalInsert..], execution[insert..]);
         Assert.DoesNotContain("RAISERROR", paused, StringComparison.Ordinal);
         Assert.DoesNotContain("NOWAIT", paused, StringComparison.Ordinal);
-        Assert.Equal(ConnectionState.Closed, context.Database.GetDbConnection().State);
+        Assert.Equal(ConnectionState.Closed,
+            context.Database.GetDbConnection()
+                .State);
     }
 
     /// <summary>Different physical tables never publish readiness for the fixture's dbo identity target.</summary>
@@ -216,7 +249,9 @@ public sealed class SqlServerIdentityInsertGeneratedPauseTests
         Assert.Same(command, paused);
         Assert.DoesNotContain("EXEC @doka_identity_ready =", paused, StringComparison.Ordinal);
         Assert.DoesNotContain("WAITFOR", paused, StringComparison.Ordinal);
-        Assert.Equal(ConnectionState.Closed, context.Database.GetDbConnection().State);
+        Assert.Equal(ConnectionState.Closed,
+            context.Database.GetDbConnection()
+                .State);
     }
 
     /// <summary>Forged control text in defaults or ordinary data cannot publish identity readiness.</summary>
@@ -241,19 +276,31 @@ public sealed class SqlServerIdentityInsertGeneratedPauseTests
         else
         {
             builder.AddColumnIfNotExists<string>(
-                "Caption", "identity_roles", type: "nvarchar(max)", nullable: true, defaultValue: forged);
+                "Caption",
+                "identity_roles",
+                type: "nvarchar(max)",
+                nullable: true,
+                defaultValue: forged);
         }
 
-        var commands = context.GetService<IMigrationsSqlGenerator>().Generate(builder.Operations, context.Model);
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate(builder.Operations, context.Model);
 
         // Act
-        var paused = commands.Select(command => SqlServerIdentityInsertPauseInterceptor.BuildPausedCommand(
-            command.CommandText, "forged_resource")).ToArray();
+        var paused = commands
+            .Select(command => SqlServerIdentityInsertPauseInterceptor.BuildPausedCommand(
+                command.CommandText,
+                "forged_resource"))
+            .ToArray();
 
         // Assert
         Assert.NotEmpty(commands);
-        Assert.Contains(commands, command => command.CommandText.Contains(
-            "SET IDENTITY_INSERT", StringComparison.Ordinal));
+        Assert.Contains(commands,
+            command => command.CommandText.Contains(
+                "SET IDENTITY_INSERT",
+                StringComparison.Ordinal));
+
         for (var index = 0; index < commands.Count; index++)
         {
             Assert.Same(commands[index].CommandText, paused[index]);
@@ -261,7 +308,9 @@ public sealed class SqlServerIdentityInsertGeneratedPauseTests
             Assert.DoesNotContain("WAITFOR", paused[index], StringComparison.Ordinal);
         }
 
-        Assert.Equal(ConnectionState.Closed, context.Database.GetDbConnection().State);
+        Assert.Equal(ConnectionState.Closed,
+            context.Database.GetDbConnection()
+                .State);
     }
 
     /// <summary>Identifier inventory and guard literals cannot impersonate an identity-acquisition command.</summary>
@@ -273,16 +322,23 @@ public sealed class SqlServerIdentityInsertGeneratedPauseTests
         const string table = "DECLARE @doka_state; SET IDENTITY_INSERT [dbo].[identity_roles] ON;";
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.RenameColumnIfExists("Caption", table, "DisplayCaption");
-        var commands = context.GetService<IMigrationsSqlGenerator>().Generate(builder.Operations, context.Model);
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate(builder.Operations, context.Model);
 
         // Act
-        var paused = commands.Select(command => SqlServerIdentityInsertPauseInterceptor.BuildPausedCommand(
-            command.CommandText, "preamble_resource")).ToArray();
+        var paused = commands
+            .Select(command => SqlServerIdentityInsertPauseInterceptor.BuildPausedCommand(
+                command.CommandText,
+                "preamble_resource"))
+            .ToArray();
 
         // Assert
-        Assert.Contains(commands, command => command.CommandText.Contains(
-            "CREATE TABLE #doka_sm_identifiers_", StringComparison.Ordinal)
-            && command.CommandText.Contains(table, StringComparison.Ordinal));
+        Assert.Contains(commands,
+            command => command.CommandText.Contains(
+                    "CREATE TABLE #doka_sm_identifiers_",
+                    StringComparison.Ordinal)
+                && command.CommandText.Contains(table, StringComparison.Ordinal));
 
         for (var index = 0; index < commands.Count; index++)
         {
@@ -291,7 +347,9 @@ public sealed class SqlServerIdentityInsertGeneratedPauseTests
             Assert.DoesNotContain("WAITFOR", paused[index], StringComparison.Ordinal);
         }
 
-        Assert.Equal(ConnectionState.Closed, context.Database.GetDbConnection().State);
+        Assert.Equal(ConnectionState.Closed,
+            context.Database.GetDbConnection()
+                .State);
     }
 
     /// <summary>Generates the real managed-data mutation without copying or normalizing its acquisition text.</summary>
@@ -311,10 +369,16 @@ public sealed class SqlServerIdentityInsertGeneratedPauseTests
     {
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureModelManagedDataFromModel(
-            table, ["Id"], ["int"], ["Id", "Caption"], ["int", "nvarchar(512)"],
-            new object?[,] { { 7, caption } }, schema: schema);
+            table,
+            ["Id"],
+            ["int"],
+            ["Id", "Caption"],
+            ["int", "nvarchar(512)"],
+            new object?[,] { { 7, caption } },
+            schema: schema);
 
-        return context.GetService<IMigrationsSqlGenerator>()
+        return context
+            .GetService<IMigrationsSqlGenerator>()
             .Generate(builder.Operations, context.Model, options)
             .Single(candidate => candidate.CommandText.Contains("SET IDENTITY_INSERT", StringComparison.Ordinal))
             .CommandText;
@@ -325,7 +389,8 @@ public sealed class SqlServerIdentityInsertGeneratedPauseTests
     /// <returns>The decoded native identity-acquisition and insertion batch.</returns>
     private static string IdentityExecution(
         string command
-    ) => SqlServerGeneratedHistoryScriptTests.DecodeNestedPayloads(command)
+    ) => SqlServerGeneratedHistoryScriptTests
+        .DecodeNestedPayloads(command)
         .Single(payload => payload.StartsWith("DECLARE @doka_identity_insert bit", StringComparison.Ordinal));
 
     /// <summary>Creates provider services without opening a native connection or loading migration history.</summary>

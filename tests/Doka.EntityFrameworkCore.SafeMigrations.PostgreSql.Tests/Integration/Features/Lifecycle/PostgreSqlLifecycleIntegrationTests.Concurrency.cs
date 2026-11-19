@@ -1,5 +1,6 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
+/// <summary>Verifies PostgreSQL Lifecycle Integration contracts in independently owned test state.</summary>
 public sealed partial class PostgreSqlLifecycleIntegrationTests
 {
     /// <summary>Observes the second migrator waiting on the same database's native history lock.</summary>
@@ -7,16 +8,16 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests
     public async Task ConcurrentMigrators_SerializeOnTheSameDatabaseHistoryLock()
     {
         // Arrange
-        using var watchdog = new CancellationTokenSource(TimeSpan.FromMinutes(2));
-        var token = watchdog.Token;
-        var connectionString = await CreateDatabaseAsync(token);
+        using var cancellation = new CancellationTokenSource();
+        var cancellationToken = cancellation.Token;
+        var connectionString = await CreateDatabaseAsync(cancellationToken);
         await ExecuteSqlAsync(
             connectionString,
             """
             CREATE TABLE "__LegacyMigrationsHistory" ("MigrationId" text NOT NULL);
             INSERT INTO "__LegacyMigrationsHistory" VALUES ('legacy-unchanged');
             """,
-            cancellationToken: token);
+            cancellationToken: cancellationToken);
 
         var barrier = new MigrationAdmissionBarrier(expectedArrivals: 1);
         var secondIdentity = $"sm-second-{Guid.NewGuid():N}";
@@ -31,34 +32,56 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests
         bool secondIncomplete;
 
         // Act
-        var firstMigration = first.Database.MigrateAsync(token);
+        var firstMigration = first.Database.MigrateAsync(cancellationToken);
         var secondMigration = Task.CompletedTask;
+        Exception? primaryFailure = null;
         try
         {
-            await barrier.Admitted.WaitAsync(token);
+            await WaitForMigrationAdmissionAsync(barrier.Admitted, [firstMigration], cancellationToken);
             secondMigration = second
                 .GetService<IMigrator>()
-                .MigrateAsync(cancellationToken: token);
+                .MigrateAsync(cancellationToken: cancellationToken);
 
-            waiterObserved = await ObserveHistoryLockWaiterAsync(connectionString, secondIdentity, token);
+            waiterObserved = await ObserveHistoryLockWaiterAsync(
+                connectionString,
+                secondIdentity,
+                secondMigration,
+                cancellationToken);
+
             secondIncomplete = !secondMigration.IsCompleted;
+        }
+        catch (Exception exception)
+        {
+            primaryFailure = exception;
+
+            throw;
         }
         finally
         {
-            barrier.Release();
-            await Task.WhenAll(firstMigration, secondMigration);
+            await OwnedTestOperationCleanup.CompleteAsync(
+                primaryFailure,
+                Task.WhenAll(firstMigration, secondMigration),
+                () =>
+                {
+                    barrier.Release();
+
+                    return Task.CompletedTask;
+                },
+                primaryFailure is null
+                    ? null
+                    : cancellation);
         }
 
         var historyRows = await ScalarIntAsync(
             connectionString,
             "SELECT COUNT(*) FROM \"__ApplicationDbContextMigrationsHistory\" "
             + $"WHERE \"MigrationId\" = '{CoreConvergenceMigration.MigrationIdentifier}';",
-            cancellationToken: token);
+            cancellationToken: cancellationToken);
 
         var legacyRows = await ScalarIntAsync(
             connectionString,
             "SELECT COUNT(*) FROM \"__LegacyMigrationsHistory\" WHERE \"MigrationId\" = 'legacy-unchanged';",
-            cancellationToken: token);
+            cancellationToken: cancellationToken);
 
         // Assert
         Assert.True(waiterObserved);
@@ -73,46 +96,90 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests
     public async Task ConcurrentMigrators_AdmitDifferentDatabasesIndependently()
     {
         // Arrange
-        using var watchdog = new CancellationTokenSource(TimeSpan.FromMinutes(2));
-        var token = watchdog.Token;
-        var leftConnectionString = await CreateDatabaseAsync(token);
-        var rightConnectionString = await CreateDatabaseAsync(token);
+        using var cancellation = new CancellationTokenSource();
+        var cancellationToken = cancellation.Token;
+        var leftConnectionString = await CreateDatabaseAsync(cancellationToken);
+        var rightConnectionString = await CreateDatabaseAsync(cancellationToken);
         var barrier = new MigrationAdmissionBarrier(expectedArrivals: 2);
         await using var left = CreateAdmissionContext(leftConnectionString, barrier);
         await using var right = CreateAdmissionContext(rightConnectionString, barrier);
         bool bothIncomplete;
 
         // Act
-        var leftMigration = left.Database.MigrateAsync(token);
-        var rightMigration = right.Database.MigrateAsync(token);
+        var leftMigration = left.Database.MigrateAsync(cancellationToken);
+        var rightMigration = right.Database.MigrateAsync(cancellationToken);
+        Exception? primaryFailure = null;
         try
         {
-            await barrier.Admitted.WaitAsync(token);
+            await WaitForMigrationAdmissionAsync(
+                barrier.Admitted,
+                [leftMigration, rightMigration],
+                cancellationToken);
+
             bothIncomplete = !leftMigration.IsCompleted && !rightMigration.IsCompleted;
+        }
+        catch (Exception exception)
+        {
+            primaryFailure = exception;
+
+            throw;
         }
         finally
         {
-            barrier.Release();
-            await Task.WhenAll(leftMigration, rightMigration);
+            await OwnedTestOperationCleanup.CompleteAsync(
+                primaryFailure,
+                Task.WhenAll(leftMigration, rightMigration),
+                () =>
+                {
+                    barrier.Release();
+
+                    return Task.CompletedTask;
+                },
+                primaryFailure is null
+                    ? null
+                    : cancellation);
         }
 
         var leftTables = await ScalarIntAsync(
             leftConnectionString,
             "SELECT COUNT(*) FROM information_schema.tables "
             + "WHERE table_schema = current_schema() AND table_name = 'pipeline_state';",
-            cancellationToken: token);
+            cancellationToken: cancellationToken);
 
         var rightTables = await ScalarIntAsync(
             rightConnectionString,
             "SELECT COUNT(*) FROM information_schema.tables "
             + "WHERE table_schema = current_schema() AND table_name = 'pipeline_state';",
-            cancellationToken: token);
+            cancellationToken: cancellationToken);
 
         // Assert
         Assert.True(bothIncomplete);
         Assert.Equal(2, barrier.ArrivalCount);
         Assert.Equal(1, leftTables);
         Assert.Equal(1, rightTables);
+    }
+
+    /// <summary>
+    /// Observes admission without a speed threshold and fails promptly if a producer terminates first.
+    /// </summary>
+    private static async Task WaitForMigrationAdmissionAsync(
+        Task admitted,
+        IReadOnlyList<Task> producers,
+        CancellationToken cancellationToken
+    )
+    {
+        var completed = await Task
+            .WhenAny(producers.Prepend(admitted))
+            .WaitAsync(cancellationToken);
+
+        if (!ReferenceEquals(completed, admitted))
+        {
+            await completed;
+
+            throw new InvalidOperationException("A migration completed before the required native DDL admission.");
+        }
+
+        await admitted;
     }
 
     /// <summary>Attaches only a test-owned admission observer without changing migration services.</summary>
@@ -134,10 +201,11 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests
         return new SafeMigrationDbContext(options);
     }
 
-    /// <summary>Polls native lock state for the exact second session; the deadline only prevents a hung test.</summary>
+    /// <summary>Observes the exact second session until native lock admission or producer completion.</summary>
     private static async Task<bool> ObserveHistoryLockWaiterAsync(
         string connectionString,
         string applicationName,
+        Task pending,
         CancellationToken cancellationToken
     )
     {
@@ -153,7 +221,7 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests
 
         command.Parameters.AddWithValue("application", applicationName);
 
-        while (true)
+        while (!pending.IsCompleted)
         {
             var waiting = Convert.ToBoolean(
                 await command.ExecuteScalarAsync(cancellationToken),
@@ -166,16 +234,29 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests
 
             await Task.Delay(TimeSpan.FromMilliseconds(25), cancellationToken);
         }
+
+        await pending;
+
+        return false;
     }
 
     /// <summary>
     /// Holds real admitted migration DDL so native serialization and cross-database overlap are observable.
     /// </summary>
-    private sealed class MigrationAdmissionBarrier(int expectedArrivals) : DbCommandInterceptor
+    private sealed class MigrationAdmissionBarrier : DbCommandInterceptor
     {
         private readonly TaskCompletionSource _admitted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly int _expectedArrivals;
         private readonly TaskCompletionSource _release = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private int _arrivalCount;
+
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        public MigrationAdmissionBarrier(
+            int expectedArrivals
+        )
+        {
+            _expectedArrivals = expectedArrivals;
+        }
 
         /// <summary>Completes only when every expected migration has reached its first application DDL.</summary>
         public Task Admitted => _admitted.Task;
@@ -202,7 +283,7 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests
             // WHY: The migrator owns its database history lock before application
             // DDL. Holding this command exposes that ownership without sleep-based
             // performance assertions or replacing the provider's locking protocol.
-            if (Interlocked.Increment(ref _arrivalCount) == expectedArrivals)
+            if (Interlocked.Increment(ref _arrivalCount) == _expectedArrivals)
             {
                 _admitted.TrySetResult();
             }

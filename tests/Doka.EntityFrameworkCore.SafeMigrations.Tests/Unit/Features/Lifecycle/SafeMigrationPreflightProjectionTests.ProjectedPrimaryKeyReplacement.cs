@@ -2,6 +2,16 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
 public sealed partial class SafeMigrationPreflightProjectionTests
 {
+    /// <summary>
+    /// Preserves the exact provider replacement result, callback ownership and planner action after a verified PK
+    /// removal.
+    /// </summary>
+    /// <param name="providerState">
+    /// The exact replacement classification returned by the independently supplied provider proof.
+    /// </param>
+    /// <param name="expectedAction">
+    /// The exact independently declared planner action for the returned provider classification.
+    /// </param>
     [Theory]
     [InlineData(SafeMigrationObservedState.Missing, SafeMigrationAction.Apply)]
     [InlineData(SafeMigrationObservedState.Unsupported, SafeMigrationAction.RejectUnsupported)]
@@ -58,6 +68,9 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         Assert.False(table.IsNewlyCreated);
     }
 
+    /// <summary>
+    /// Rejects a standalone PK replacement when no provider proves its post-drop structure and row prerequisites.
+    /// </summary>
     [Fact]
     public void StandalonePrimaryKeyReplacementWithoutProviderProofRemainsStructureUnknown()
     {
@@ -81,6 +94,9 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         Assert.Equal(SafeMigrationAction.RejectPrerequisiteMissing, decision.Action);
     }
 
+    /// <summary>
+    /// Does not invoke provider replacement validation after the preceding physical key removal was rejected.
+    /// </summary>
     [Fact]
     public void RejectedPrimaryKeyDropDoesNotAuthorizeProviderReplacementProof()
     {
@@ -111,6 +127,12 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         Assert.Equal(0, validator.ValidationCount);
     }
 
+    /// <summary>
+    /// Rejects unknown post-drop structure before invoking any provider primary-key replacement proof.
+    /// </summary>
+    /// <param name="rawSql">
+    /// Whether raw SQL supplies the opaque boundary instead of an unknown provider operation.
+    /// </param>
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -139,6 +161,12 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         Assert.Equal(0, validator.ValidationCount);
     }
 
+    /// <summary>
+    /// Retains an intrinsic native primary-key rejection ahead of replacement callbacks and opaque SQL handling.
+    /// </summary>
+    /// <param name="opaqueSql">
+    /// Whether opaque SQL follows the accepted key removal.
+    /// </param>
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -172,6 +200,10 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         Assert.Equal(0, validator.ValidationCount);
     }
 
+    /// <summary>
+    /// Keeps the accepted PK removal marker but rejects row-dependent replacement after ordinary DML invalidates
+    /// its proof.
+    /// </summary>
     [Fact]
     public void DataMutationAfterPrimaryKeyDropReplacesMarkerWithDataUncertainty()
     {
@@ -232,12 +264,21 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             new ExpectedPrimaryKeyDefinition("pk_items_replacement", "items", ["external_id"])),
         SafeMigrationPolicy.ThrowIfDifferent);
 
-    private sealed class UnknownPrimaryKeyReplacementOperation : MigrationOperation { }
+    private sealed class UnknownPrimaryKeyReplacementOperation : MigrationOperation;
 
-    private sealed class PrimaryKeyReplacementProbe(
-        SafeMigrationProviderAnalysis replacement
-    ) : ISafeMigrationProjectedKeyAnalyzer
+    private sealed class PrimaryKeyReplacementProbe : ISafeMigrationProjectedKeyAnalyzer
     {
+        private readonly SafeMigrationProviderAnalysis _replacement;
+
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="replacement">The supplied replacement for this fixture.</param>
+        public PrimaryKeyReplacementProbe(
+            SafeMigrationProviderAnalysis replacement
+        )
+        {
+            _replacement = replacement;
+        }
+
         public int ValidationCount { get; private set; }
 
         public EnsurePrimaryKeyIntent? LastIntent { get; private set; }
@@ -263,7 +304,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             LastProjectedAnalysis = projectedAnalysis;
 
             return projectedAnalysis.Code == "projected_primary_key_replacement_unproven"
-                ? replacement
+                ? _replacement
                 : projectedAnalysis;
         }
 

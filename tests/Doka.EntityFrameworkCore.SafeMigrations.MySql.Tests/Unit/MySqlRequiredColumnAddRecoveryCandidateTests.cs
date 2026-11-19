@@ -401,6 +401,9 @@ public sealed class MySqlRequiredColumnAddRecoveryCandidateTests
         var operations = Enumerable
             .Range(0, 1024)
             .Select(index => Operation(table: "items" + index.ToString(CultureInfo.InvariantCulture)))
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var findings = Enumerable
@@ -448,6 +451,9 @@ public sealed class MySqlRequiredColumnAddRecoveryCandidateTests
         var operations = Enumerable
             .Range(0, 1024)
             .Select(index => Operation(table: "items" + index.ToString(CultureInfo.InvariantCulture)))
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var findings = operations
@@ -459,6 +465,9 @@ public sealed class MySqlRequiredColumnAddRecoveryCandidateTests
                     MySqlSafeMigrationCatalogSqlBuilder.GetRequiredColumnAddGuardName(intent),
                     table: intent.Table);
             })
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         // Act

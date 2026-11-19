@@ -633,7 +633,7 @@ public sealed class SqlServerSafeMigrationScriptScopesIntegrationTests : SqlServ
         // WHY: GO is a client-side EF script separator, not server SQL. These
         // fixed fixtures contain no GO lines inside authored SQL literals;
         // retaining one connection preserves the script's transaction/history.
-        while (reader.ReadLine() is { } line)
+        while (await reader.ReadLineAsync(cancellationToken) is { } line)
         {
             if (!line
                 .Trim()

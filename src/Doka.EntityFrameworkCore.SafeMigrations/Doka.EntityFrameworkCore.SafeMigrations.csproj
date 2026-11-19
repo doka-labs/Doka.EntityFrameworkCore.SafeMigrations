@@ -68,6 +68,9 @@
     <Compile Update="Expressions\SafeMigrationSqlExpressionInspector.*.cs">
       <DependentUpon>SafeMigrationSqlExpressionInspector.cs</DependentUpon>
     </Compile>
+    <Compile Update="Expressions\SafeMigrationSqlExpressionParser.*.cs">
+      <DependentUpon>SafeMigrationSqlExpressionParser.cs</DependentUpon>
+    </Compile>
     <Compile Update="Features\Columns\SafeMigrationPreflightProjection.*.cs">
       <DependentUpon Condition="'%(Filename)' != 'SafeMigrationPreflightProjection.Columns'">SafeMigrationPreflightProjection.Columns.cs</DependentUpon>
     </Compile>

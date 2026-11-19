@@ -3,12 +3,14 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 /// <summary>Captures the complete bounded stress classifiers, including guards and source parameter facets.</summary>
 public sealed class SqlServerFullCatalogCaptureTests
 {
-    /// <summary>Preserves every captured result and optionally replays both SQL shapes on an explicit local server.</summary>
+    /// <summary>
+    /// Preserves every captured result and optionally replays both SQL shapes on an explicit local server.
+    /// </summary>
     [Fact]
     public async Task FullCapture_RetainsCompleteClassifiersAndIndependentParameters()
     {
         // Arrange
-        using var context = new SafeMigrationDbContext(
+        await using var context = new SafeMigrationDbContext(
             "Server=127.0.0.1,1;Database=unused;User ID=unused;Password=unused;TrustServerCertificate=true",
             registerSafeMigrations: false);
 
@@ -155,7 +157,9 @@ public sealed class SqlServerFullCatalogCaptureTests
         return plans;
     }
 
-    /// <summary>Rebuilds the previous literal dispatch shape from captured plans, without rewriting generated SQL.</summary>
+    /// <summary>
+    /// Rebuilds the previous literal dispatch shape from captured plans, without rewriting generated SQL.
+    /// </summary>
     private static string[] BuildStandaloneStatements(
         SqlServerSafeMigrationRuntimePlan?[] plans,
         SqlServerCatalogTestConnection connection

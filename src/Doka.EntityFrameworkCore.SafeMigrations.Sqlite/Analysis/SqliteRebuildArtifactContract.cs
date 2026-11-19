@@ -72,6 +72,9 @@ internal sealed class SqliteRebuildArtifactContract
                         .PrimaryKey
                         ?.Columns
                         .Select(static column => column.Name)
+
+                        // WHY: Preserve explicit fluent materialization for the ordered snapshot.
+                        // ReSharper disable once UseCollectionExpression
                         .ToArray()
                     ?? [],
                     table
@@ -82,7 +85,13 @@ internal sealed class SqliteRebuildArtifactContract
                             constraint
                                 .Columns
                                 .Select(static column => column.Name)
+
+                                // WHY: Preserve explicit fluent materialization for the ordered snapshot.
+                                // ReSharper disable once UseCollectionExpression
                                 .ToArray()))
+
+                        // WHY: Preserve explicit fluent materialization for the ordered snapshot.
+                        // ReSharper disable once UseCollectionExpression
                         .ToArray(),
                     table
                         .ForeignKeyConstraints
@@ -92,17 +101,29 @@ internal sealed class SqliteRebuildArtifactContract
                             foreignKey
                                 .Columns
                                 .Select(static column => column.Name)
+
+                                // WHY: Preserve explicit fluent materialization for the ordered snapshot.
+                                // ReSharper disable once UseCollectionExpression
                                 .ToArray(),
                             foreignKey
                                 .PrincipalColumns
                                 .Select(static column => column.Name)
+
+                                // WHY: Preserve explicit fluent materialization for the ordered snapshot.
+                                // ReSharper disable once UseCollectionExpression
                                 .ToArray(),
                             ReferentialAction.NoAction,
                             foreignKey.OnDeleteAction))
+
+                        // WHY: Preserve explicit fluent materialization for the ordered snapshot.
+                        // ReSharper disable once UseCollectionExpression
                         .ToArray(),
                     table
                         .CheckConstraints
                         .Select(static check => new CheckShape(check.Name, check.Sql))
+
+                        // WHY: Preserve explicit fluent materialization for the ordered snapshot.
+                        // ReSharper disable once UseCollectionExpression
                         .ToArray());
             }
         }
@@ -134,6 +155,8 @@ internal sealed class SqliteRebuildArtifactContract
         IReadOnlyList<MigrationOperation>? constraintOperations
     )
     {
+        // WHY: Preserve explicit fluent materialization for the ordered snapshot.
+        // ReSharper disable once UseCollectionExpression
         var operationSnapshot = operations?.ToArray() ?? [];
 
         return new SqliteRebuildArtifactContract(
@@ -150,6 +173,8 @@ internal sealed class SqliteRebuildArtifactContract
         IReadOnlyList<MigrationOperation>? operations
     )
     {
+        // WHY: Preserve explicit fluent materialization for the ordered snapshot.
+        // ReSharper disable once UseCollectionExpression
         var operationSnapshot = operations?.ToArray() ?? [];
 
         return new SqliteRebuildArtifactContract(
@@ -202,15 +227,20 @@ internal sealed class SqliteRebuildArtifactContract
         IReadOnlyList<MigrationOperation> operations
     )
     {
-        if (!operations.Any(static operation => operation is SafeMigrationOperation { Intent: DropColumnIntent }))
+        if (operations.All(static operation => operation is not SafeMigrationOperation { Intent: DropColumnIntent }))
         {
             return null;
         }
 
         Dictionary<string, HashSet<string>>? added = null;
         HashSet<SafeMigrationOperation>? candidates = null;
-        foreach (var operation in operations)
+
+        // WHY: Traverse the stable ordered source by ordinal without materializing another collection.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var operationIndex = 0; operationIndex < operations.Count; operationIndex++)
         {
+            var operation = operations[operationIndex];
             switch (operation)
             {
                 case SafeMigrationOperation { Intent: EnsureColumnIntent value }:
@@ -356,10 +386,17 @@ internal sealed class SqliteRebuildArtifactContract
                 table.Name,
                 foreignKey.Name,
                 foreignKey.PrincipalTable)))
+
+            // WHY: Retain explicit list materialization for the mutable ordered working set.
+            // ReSharper disable once UseCollectionExpression
             .ToList();
 
-        foreach (var operation in _operations)
+        // WHY: Traverse the stable ordered source by ordinal without materializing another collection.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var operationIndex = 0; operationIndex < _operations.Count; operationIndex++)
         {
+            var operation = _operations[operationIndex];
             if (ReferenceEquals(operation, currentOperation))
             {
                 break;
@@ -370,8 +407,14 @@ internal sealed class SqliteRebuildArtifactContract
                 case SafeMigrationOperation { Intent: EnsureTableIntent value }:
                     if (tables.Add(value.Definition.Table))
                     {
-                        foreach (var foreignKey in value.Definition.ForeignKeys)
+                        // WHY: Traverse the stable ordered source by ordinal without materializing another collection.
+                        // ReSharper disable once ForCanBeConvertedToForeach
+                        // ReSharper disable once LoopCanBeConvertedToQuery
+                        for (var foreignKeyIndex = 0;
+                            foreignKeyIndex < value.Definition.ForeignKeys.Count;
+                            foreignKeyIndex++)
                         {
+                            var foreignKey = value.Definition.ForeignKeys[foreignKeyIndex];
                             AddProjectedForeignKey(foreignKeys, foreignKey);
                         }
                     }
@@ -380,8 +423,12 @@ internal sealed class SqliteRebuildArtifactContract
                 case CreateTableOperation value:
                     if (tables.Add(value.Name))
                     {
-                        foreach (var foreignKey in value.ForeignKeys)
+                        // WHY: Traverse the stable ordered source by ordinal without materializing another collection.
+                        // ReSharper disable once ForCanBeConvertedToForeach
+                        // ReSharper disable once LoopCanBeConvertedToQuery
+                        for (var foreignKeyIndex = 0; foreignKeyIndex < value.ForeignKeys.Count; foreignKeyIndex++)
                         {
+                            var foreignKey = value.ForeignKeys[foreignKeyIndex];
                             AddProjectedForeignKey(foreignKeys, foreignKey);
                         }
                     }
@@ -666,8 +713,12 @@ internal sealed class SqliteRebuildArtifactContract
             return "table_rebuild_primary_key_drift";
         }
 
-        foreach (var unique in tableSnapshot.UniqueConstraints)
+        // WHY: Traverse the stable ordered source by ordinal without materializing another collection.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var uniqueIndex = 0; uniqueIndex < tableSnapshot.UniqueConstraints.Count; uniqueIndex++)
         {
+            var unique = tableSnapshot.UniqueConstraints[uniqueIndex];
             var expectedUnique = expected.UniqueConstraints.FirstOrDefault(shape =>
                 SqliteCatalogEquivalence.IdentifiersEqual(unique.Columns, shape.Columns));
 
@@ -693,8 +744,12 @@ internal sealed class SqliteRebuildArtifactContract
             }
         }
 
-        foreach (var foreignKey in tableSnapshot.ForeignKeys)
+        // WHY: Traverse the stable ordered source by ordinal without materializing another collection.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var foreignKeyIndex = 0; foreignKeyIndex < tableSnapshot.ForeignKeys.Count; foreignKeyIndex++)
         {
+            var foreignKey = tableSnapshot.ForeignKeys[foreignKeyIndex];
             var expectedForeignKey = expected.ForeignKeys.FirstOrDefault(shape =>
                 ForeignKeySemanticsMatch(snapshot, foreignKey, shape));
 
@@ -720,8 +775,12 @@ internal sealed class SqliteRebuildArtifactContract
             }
         }
 
-        foreach (var check in tableSnapshot.Checks)
+        // WHY: Traverse the stable ordered source by ordinal without materializing another collection.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var checkIndex = 0; checkIndex < tableSnapshot.Checks.Count; checkIndex++)
         {
+            var check = tableSnapshot.Checks[checkIndex];
             var expectedCheck = expected.Checks.FirstOrDefault(shape => checkMatches(check.Expression, shape.Sql));
             if (expectedCheck is null)
             {
@@ -770,14 +829,11 @@ internal sealed class SqliteRebuildArtifactContract
             return "table_rebuild_unmodeled_target_foreign_key";
         }
 
-        if (expected.Checks.Any(check =>
+        return expected.Checks.Any(check =>
             tableSnapshot.Checks.All(actual => !checkMatches(actual.Expression, check.Sql))
-            && (check.Name is null || added?.Checks.Contains(check.Name) != true)))
-        {
-            return "table_rebuild_unmodeled_target_check_constraint";
-        }
-
-        return null;
+            && (check.Name is null || added?.Checks.Contains(check.Name) != true))
+            ? "table_rebuild_unmodeled_target_check_constraint"
+            : null;
     }
 
     /// <summary>Shares physical-shape exclusions between rebuilds and complete retirement components.</summary>
@@ -803,13 +859,10 @@ internal sealed class SqliteRebuildArtifactContract
             return "table_rebuild_trigger";
         }
 
-        if (snapshot.OtherObjects.Any(value => value.Type == "view"
-            && SqliteSqlIdentifierScanner.ReferencesIdentifier(value.Sql, table.Name)))
-        {
-            return "table_rebuild_view";
-        }
-
-        return null;
+        return snapshot.OtherObjects.Any(value => value.Type == "view"
+            && SqliteSqlIdentifierScanner.ReferencesIdentifier(value.Sql, table.Name))
+            ? "table_rebuild_view"
+            : null;
     }
 
     /// <summary>Validates every retiring owner in the native FK component without inspecting unrelated drops.</summary>
@@ -962,13 +1015,10 @@ internal sealed class SqliteRebuildArtifactContract
             return "table_retirement_generated_column";
         }
 
-        if (table.Indexes.Any(static index =>
-            index.Partial || index.Keys.Any(static key => key.Expression is not null)))
-        {
-            return "table_retirement_index_expression";
-        }
-
-        return null;
+        return table.Indexes.Any(static index =>
+            index.Partial || index.Keys.Any(static key => key.Expression is not null))
+            ? "table_retirement_index_expression"
+            : null;
     }
 
     private static bool PrimaryKeyMatches(
@@ -1063,12 +1113,14 @@ internal sealed class SqliteRebuildArtifactContract
     }
 
     private static Dictionary<string, AddedTableArtifacts> ReadAddedArtifacts(
-        IReadOnlyList<MigrationOperation> operations
+        MigrationOperation[] operations
     )
     {
         var result = new Dictionary<string, AddedTableArtifacts>(s_identifierComparer);
         foreach (var operation in operations)
         {
+            // WHY: Keep artifact-ledger mutations as statements; unmatched operations have no synthetic result.
+            // ReSharper disable once ConvertSwitchStatementToSwitchExpression
             switch (operation)
             {
                 case SafeMigrationOperation { Intent: EnsureColumnIntent value }:
@@ -1186,7 +1238,7 @@ internal sealed class SqliteRebuildArtifactContract
     }
 
     private static Dictionary<string, RemovedTableArtifacts> ReadRemovedArtifacts(
-        IReadOnlyList<MigrationOperation> operations
+        MigrationOperation[] operations
     )
     {
         var result = new Dictionary<string, RemovedTableArtifacts>(s_identifierComparer);
@@ -1307,12 +1359,14 @@ internal sealed class SqliteRebuildArtifactContract
     }
 
     private static HashSet<string> ReadRemovedTables(
-        IReadOnlyList<MigrationOperation> operations
+        MigrationOperation[] operations
     )
     {
         var result = new HashSet<string>(s_identifierComparer);
         foreach (var operation in operations)
         {
+            // WHY: Keep retirement-set mutations as statements without inventing a fallback result.
+            // ReSharper disable once ConvertSwitchStatementToSwitchExpression
             switch (operation)
             {
                 case SafeMigrationOperation { Intent: DropTableIntent value }:

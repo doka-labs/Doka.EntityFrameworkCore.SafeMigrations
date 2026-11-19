@@ -1,5 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 
 /// <summary>Exercises catalog streaming with independently owned SQLite state.</summary>
@@ -36,7 +34,7 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
             }
         }
 
-        using var counter = new SnapshotCountingConnection(connection);
+        await using var counter = new SnapshotCountingConnection(connection);
 
         // Act
         var snapshot = SqliteSafeMigrationCatalog.Read(counter, transaction: null);
@@ -69,7 +67,7 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
             """,
             cancellationToken: CancellationToken.None);
 
-        using var versionCommand = connection.CreateCommand();
+        await using var versionCommand = connection.CreateCommand();
         versionCommand.CommandText = "SELECT sqlite_version();";
         var version = versionCommand.ExecuteScalar();
 
@@ -238,7 +236,7 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
             $"CREATE VIRTUAL TABLE keyword_module USING fts5({arguments});",
             cancellationToken: CancellationToken.None);
 
-        using var counter = new SnapshotCountingConnection(connection);
+        await using var counter = new SnapshotCountingConnection(connection);
 
         // Act
         var snapshot = SqliteSafeMigrationCatalog.Read(counter, transaction: null);
@@ -308,10 +306,10 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
             "CREATE TABLE changing (Id INTEGER);",
             cancellationToken: CancellationToken.None);
 
-        using var transaction = connection.BeginTransaction();
-        using var counter = new SnapshotCountingConnection(connection);
+        await using var transaction = connection.BeginTransaction();
+        await using var counter = new SnapshotCountingConnection(connection);
         var first = SqliteSafeMigrationCatalog.Read(counter, transaction);
-        using var change = connection.CreateCommand();
+        await using var change = connection.CreateCommand();
         change.Transaction = transaction;
         change.CommandText = "ALTER TABLE changing ADD COLUMN Later TEXT; CREATE INDEX ix_later ON changing(Later);";
         _ = change.ExecuteNonQuery();
@@ -354,12 +352,18 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
             "CREATE TABLE failure_items (Id INTEGER);",
             cancellationToken: CancellationToken.None);
 
-        using var transaction = connection.BeginTransaction();
-        using var counter = new SnapshotCountingConnection(connection, "pragma_index_list", "execute");
+        await using var transaction = connection.BeginTransaction();
+        await using var counter = new SnapshotCountingConnection(connection, "pragma_index_list", "execute");
 
         // Act
         var exception = Assert.Throws<InvalidOperationException>(() =>
             SqliteSafeMigrationCatalog.Read(counter, transaction));
+
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "SELECT COUNT(*) FROM failure_items;";
+        var remainingRows = command.ExecuteScalar();
+        transaction.Rollback();
 
         // Assert
         Assert.Equal("Injected catalog command failure.", exception.Message);
@@ -367,11 +371,7 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
         Assert.Equal(4, counter.DisposedCommandCount);
         Assert.All(counter.Readers, reader => Assert.True(reader.IsClosed));
         Assert.All(counter.Transactions, actual => Assert.Same(transaction, actual));
-        using var command = connection.CreateCommand();
-        command.Transaction = transaction;
-        command.CommandText = "SELECT COUNT(*) FROM failure_items;";
-        Assert.Equal(0L, command.ExecuteScalar());
-        transaction.Rollback();
+        Assert.Equal(0L, remainingRows);
         Assert.Equal(ConnectionState.Open, connection.State);
     }
 
@@ -404,7 +404,7 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
             """,
             cancellationToken: CancellationToken.None);
 
-        using var counter = new SnapshotCountingConnection(connection, segment, fault);
+        await using var counter = new SnapshotCountingConnection(connection, segment, fault);
 
         // Act
         var exception = Assert.Throws<InvalidOperationException>(() =>
@@ -431,7 +431,7 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
         // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connection, sql, cancellationToken: CancellationToken.None);
-        using var counter = new SnapshotCountingConnection(connection, "pragma_index_list", "empty_collection");
+        await using var counter = new SnapshotCountingConnection(connection, "pragma_index_list", "empty_collection");
 
         // Act
         var exception = Assert.Throws<InvalidOperationException>(() =>
@@ -463,7 +463,8 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
             + $"CREATE TABLE declared_child ({declaration});",
             cancellationToken: CancellationToken.None);
 
-        using var counter = new SnapshotCountingConnection(connection, "pragma_foreign_key_list", "empty_collection");
+        await using var counter = new SnapshotCountingConnection(
+            connection, "pragma_foreign_key_list", "empty_collection");
 
         // Act
         var exception = Assert.Throws<InvalidOperationException>(() =>
@@ -492,7 +493,7 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
             $"CREATE TABLE empty_collections ({columns});",
             cancellationToken: CancellationToken.None);
 
-        using var counter = new SnapshotCountingConnection(connection);
+        await using var counter = new SnapshotCountingConnection(connection);
 
         // Act
         var snapshot = SqliteSafeMigrationCatalog.Read(counter, transaction: null);
@@ -527,7 +528,7 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
             """,
             cancellationToken: CancellationToken.None);
 
-        using var counter = new SnapshotCountingConnection(connection);
+        await using var counter = new SnapshotCountingConnection(connection);
 
         // Act
         var snapshot = SqliteSafeMigrationCatalog.Read(counter, transaction: null);
@@ -586,7 +587,7 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
             """,
             cancellationToken: CancellationToken.None);
 
-        using var counter = new SnapshotCountingConnection(connection);
+        await using var counter = new SnapshotCountingConnection(connection);
 
         // Act
         var snapshot = SqliteSafeMigrationCatalog.Read(counter, transaction: null);
@@ -622,7 +623,7 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
             """,
             cancellationToken: CancellationToken.None);
 
-        using var counter = new SnapshotCountingConnection(connection);
+        await using var counter = new SnapshotCountingConnection(connection);
 
         // Act
         var snapshot = SqliteSafeMigrationCatalog.Read(counter, transaction: null);
@@ -656,7 +657,7 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
             + $"CREATE TABLE token_child ({declaration});",
             cancellationToken: CancellationToken.None);
 
-        using var counter = new SnapshotCountingConnection(connection);
+        await using var counter = new SnapshotCountingConnection(connection);
 
         // Act
         var snapshot = SqliteSafeMigrationCatalog.Read(counter, transaction: null);
@@ -779,6 +780,8 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
             result.Add(CatalogRow(values));
         }
 
+        // WHY: Retain explicit fluent materialization and invocation-owned snapshot semantics.
+        // ReSharper disable once UseCollectionExpression
         return result.ToArray();
     }
 
@@ -904,6 +907,8 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
                     }
                 }
 
+                // WHY: Keep direct fixture mutations explicit; case scopes and breaks would not clarify this setup.
+                // ReSharper disable once ConvertIfStatementToSwitchStatement
                 if (_fault == "owner")
                 {
                     values[0] = "unowned_table";

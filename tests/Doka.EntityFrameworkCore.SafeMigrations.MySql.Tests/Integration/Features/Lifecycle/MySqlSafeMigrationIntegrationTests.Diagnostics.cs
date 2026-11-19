@@ -9,9 +9,11 @@ public sealed class MySqlDiagnosticsIntegrationTests : MySqlSafeMigrationIntegra
         MySqlEngineContainerFixture fixture
     ) : base(fixture) { }
 
+    /// <summary>Reports foreign-key action drift separately from index-shape drift.</summary>
     [Fact]
     public async Task PreflightDiagnostics_DistinguishForeignKeyActionsAndIndexShape()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -50,6 +52,7 @@ public sealed class MySqlDiagnosticsIntegrationTests : MySqlSafeMigrationIntegra
                 ]),
             SafeMigrationPolicy.ThrowIfDifferent);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -58,6 +61,7 @@ public sealed class MySqlDiagnosticsIntegrationTests : MySqlSafeMigrationIntegra
                 new SafeMigrationRunOptions("typed-diagnostics"),
                 CancellationToken.None);
 
+        // Assert
         var foreignKey = Assert.Single(
             report.Assessments,
             assessment => assessment.OperationKind == SafeMigrationOperationKind.EnsureForeignKey);
@@ -75,12 +79,17 @@ public sealed class MySqlDiagnosticsIntegrationTests : MySqlSafeMigrationIntegra
         Assert.Contains(index.Differences, difference => difference.Facet == "index_prefix_length");
     }
 
+    /// <summary>Bounds composite identity diagnostics without leaking unbounded catalog values.</summary>
     [Fact]
     public async Task PreflightDiagnostics_BoundLongCompositeIdentityValues()
     {
+        // Arrange
         var principalColumns = Enumerable
             .Range(1, 8)
             .Select(ordinal => $"principal_column_{ordinal:00}_{new string('p', 24)}")
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var dependentColumns = Enumerable
@@ -139,6 +148,7 @@ public sealed class MySqlDiagnosticsIntegrationTests : MySqlSafeMigrationIntegra
                 dependentColumns.Select(column => new ExpectedIndexKeyDefinition(column: column))),
             SafeMigrationPolicy.ThrowIfDifferent);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -151,8 +161,12 @@ public sealed class MySqlDiagnosticsIntegrationTests : MySqlSafeMigrationIntegra
             .Assessments
             .SelectMany(static assessment => assessment.Differences)
             .Where(static difference => difference.Facet is "foreign_key_column_order" or "index_key_order")
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(2, differences.Length);
         Assert.All(
@@ -167,9 +181,13 @@ public sealed class MySqlDiagnosticsIntegrationTests : MySqlSafeMigrationIntegra
             });
     }
 
+    /// <summary>
+    /// Distinguishes default values through hashes without exposing the values in reports or exceptions.
+    /// </summary>
     [Fact]
     public async Task PreflightDiagnostics_HashDifferentDefaultsWithoutDisclosingTheirContent()
     {
+        // Arrange
         const string liveDefault = "private-live-default";
         const string targetDefault = "private-target-default";
 
@@ -192,6 +210,7 @@ public sealed class MySqlDiagnosticsIntegrationTests : MySqlSafeMigrationIntegra
                 defaultValue: SafeMigrationDefaultValue.Literal(targetDefault)),
             SafeMigrationPolicy.ThrowIfDifferent);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -200,13 +219,16 @@ public sealed class MySqlDiagnosticsIntegrationTests : MySqlSafeMigrationIntegra
                 new SafeMigrationRunOptions("private-default-diagnostic"),
                 CancellationToken.None);
 
+        var json = Encoding.UTF8.GetString(SafeMigrationReportJson.SerializeToUtf8Bytes(report));
+        var failure = Record.Exception(report.ThrowIfBlocked);
+
+        // Assert
+        var exception = Assert.IsType<SafeMigrationPreflightException>(failure);
+
         var assessment = Assert.Single(report.Assessments);
         var difference = Assert.Single(
             assessment.Differences,
             static candidate => candidate.Facet == "column_default_digest");
-
-        var json = Encoding.UTF8.GetString(SafeMigrationReportJson.SerializeToUtf8Bytes(report));
-        var exception = Assert.Throws<SafeMigrationPreflightException>(report.ThrowIfBlocked);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.DoesNotContain(assessment.Differences, static candidate => candidate.Facet == "column_default_kind");

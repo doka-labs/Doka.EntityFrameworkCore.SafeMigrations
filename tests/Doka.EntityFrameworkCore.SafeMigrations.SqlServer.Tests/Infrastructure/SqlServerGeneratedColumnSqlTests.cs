@@ -32,8 +32,8 @@ public sealed class SqlServerGeneratedColumnSqlTests
                 : null,
             computedColumnSql: "LOWER([Code])");
 
-        var intent = declared
-            ? (SafeMigrationIntent)new EnsureTableIntent(
+        SafeMigrationIntent intent = declared
+            ? new EnsureTableIntent(
                 new ExpectedTableDefinition(
                     "generated_nodes",
                     [

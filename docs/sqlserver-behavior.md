@@ -438,15 +438,13 @@ Executing default generated CommandText directly likewise does not execute that
 wrapper; it is not a substitute for managed session recovery and requires a
 clean dedicated session plus client-owned interruption handling.
 
-Asynchronous recovery uses one 30-second deadline for the returned cleanup
-and command-disposal tasks. When physical recovery is required after body
-dispatch, it uses 15 seconds for the returned close task and, when needed,
-another 15 seconds for disposal. These waits cannot preempt a
-synchronous provider override that blocks before returning its task, so they
-are not an unconditional wall-clock bound. See the documented
-[CloseAsync](https://learn.microsoft.com/en-us/dotnet/api/system.data.common.dbconnection.closeasync?view=net-10.0#remarks)
-and [DisposeAsync](https://learn.microsoft.com/en-us/dotnet/api/system.data.common.dbconnection.disposeasync?view=net-10.0#remarks)
-defaults.
+Asynchronous recovery awaits the actual cleanup command, command disposal and,
+when quarantine requires it, physical connection close/disposal. Cancellation of
+an observer or expiry of an artificial wait never frees an owner while its native
+operation is pending. Native command timeouts remain configured; they are not a
+wall-clock guarantee for disposal. Primary work failure/cancellation retains its
+identity when recovery also fails; an independent recovery failure remains an
+error. See [cleanup ownership](runbooks/deployment-and-recovery.md#cleanup-ownership).
 
 Catalog analysis also owns a unique temporary identifier scope. Failed cleanup
 preserves the original error with a sanitized recovery status and quarantines

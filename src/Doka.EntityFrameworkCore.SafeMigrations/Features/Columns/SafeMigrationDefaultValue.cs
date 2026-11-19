@@ -3,6 +3,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// <summary>
 /// Identifies the expected default-value representation of a column.
 /// </summary>
+[PublicAPI]
 public enum SafeMigrationDefaultValueKind
 {
     /// <summary>The column has no default.</summary>
@@ -19,6 +20,7 @@ public enum SafeMigrationDefaultValueKind
 /// Represents no default, a typed literal default or a SQL expression without
 /// serializing CLR type names into migration metadata.
 /// </summary>
+[PublicAPI]
 public sealed class SafeMigrationDefaultValue
 {
     private readonly object? _literalValue;
@@ -139,6 +141,9 @@ public sealed class SafeMigrationDefaultValue
     private static object? CloneLiteral(
         object? value
     ) => value is byte[] bytes
+
+        // WHY: Keep the defensive array clone so caller mutations cannot change captured binary values.
+        // ReSharper disable once UseCollectionExpression
         ? bytes.ToArray()
         : value;
 }

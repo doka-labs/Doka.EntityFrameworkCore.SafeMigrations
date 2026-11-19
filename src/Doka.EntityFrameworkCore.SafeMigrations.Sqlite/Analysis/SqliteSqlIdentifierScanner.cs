@@ -32,6 +32,9 @@ internal static class SqliteSqlIdentifierScanner
             }
 
             var character = sql[position];
+
+            // WHY: Quoted text is skipped before the independent native-whitespace rejection.
+            // ReSharper disable once ConvertIfStatementToSwitchStatement
             if (character is '\'' or '"' or '`' or '[')
             {
                 SkipQuoted(
@@ -258,30 +261,22 @@ internal static class SqliteSqlIdentifierScanner
                 break;
             }
 
-            if (sql[position] == '\'')
+            switch (sql[position])
             {
-                SkipQuoted(sql, ref position, '\'', '\'');
-                continue;
-            }
-
-            if (sql[position] is '"' or '`' or '[')
-            {
-                _ = TryReadIdentifier(sql, ref position, out _);
-                continue;
-            }
-
-            if (sql[position] == '(')
-            {
-                depth++;
-                position++;
-                continue;
-            }
-
-            if (sql[position] == ')')
-            {
-                depth--;
-                position++;
-                continue;
+                case '\'':
+                    SkipQuoted(sql, ref position, '\'', '\'');
+                    continue;
+                case '"' or '`' or '[':
+                    _ = TryReadIdentifier(sql, ref position, out _);
+                    continue;
+                case '(':
+                    depth++;
+                    position++;
+                    continue;
+                case ')':
+                    depth--;
+                    position++;
+                    continue;
             }
 
             var start = position;
@@ -446,6 +441,8 @@ internal static class SqliteSqlIdentifierScanner
                 break;
             }
 
+            // WHY: Two quoted-token guards skip different readers before ordinary bare-word recognition.
+            // ReSharper disable once ConvertIfStatementToSwitchStatement
             if (sql[position] == '\'')
             {
                 SkipQuoted(sql, ref position, '\'', '\'');

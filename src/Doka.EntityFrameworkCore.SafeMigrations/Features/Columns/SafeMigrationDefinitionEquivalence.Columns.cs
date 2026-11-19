@@ -24,16 +24,6 @@ internal static partial class SafeMigrationDefinitionEquivalence
         && ColumnIntrinsicExceptNullability(left, right, nameComparer)
         && ProviderAnnotations(left.ProviderAnnotations, right.ProviderAnnotations);
 
-    /// <summary>Compares every column facet except the explicitly reviewed nullability transition.</summary>
-    /// <param name="left">The immutable source column definition.</param>
-    /// <param name="right">The immutable target column definition.</param>
-    /// <returns>True only when all storage, generation, default, comment and provider facets agree.</returns>
-    public static bool ColumnExceptNullability(
-        ExpectedColumnDefinition left,
-        ExpectedColumnDefinition right
-    ) => ColumnIntrinsicExceptNullability(left, right)
-        && ProviderAnnotations(left.ProviderAnnotations, right.ProviderAnnotations);
-
     /// <summary>Compares provider-neutral column facets except nullability for provider-owned qualification.</summary>
     /// <param name="left">The immutable source column definition.</param>
     /// <param name="right">The immutable target column definition.</param>

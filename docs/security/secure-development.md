@@ -29,19 +29,19 @@ acceptance criteria, not invented labels or an empty template.
 
 [Directory.Build.props](../../Directory.Build.props) enables nullable analysis,
 warnings-as-errors, the SDK's recommended .NET analyzers, and NuGet audit of all
-dependencies. Publishable projects additionally enable locked restore through
-[src/Directory.Build.props](../../src/Directory.Build.props). SDK code-analysis
+dependencies. All 24 default source-mode projects inherit CI locked restore
+from that root after CI identity is established. SDK code-analysis
 rules are separate from compiler warnings. The shared quality workflow
 additionally runs public API, style/import, architecture, coverage, performance,
 engineering, package, and SBOM checks. Record the SDK and enabled rules with
 analysis evidence; a build command name alone does not establish which analysis
 ran.
 
-The five committed package-project lockfiles define the exact graph used to
-compile and qualify package artifacts. Engineering projects resolve the central
-declarations during CI. Dependabot proposes declaration and package-lockfile
-updates through ordinary pull requests, where the complete quality workflow
-tests every resolved graph. Dependency Review separates PR-owned resolution
+All 24 committed default-profile lockfiles retain reviewed graphs and content
+hashes. Dependabot proposes declaration and every affected lock update through
+ordinary pull requests. Shipping providers declare their own security floors
+explicitly without shipping transitive promotion; matching-Core constraints
+protect the own-package private ABI. The complete workflow tests these graphs. Dependency Review separates PR-owned resolution
 from trusted data validation and publication:
 
 - The unprivileged PR workflow resolves the exact base/head revisions in separate

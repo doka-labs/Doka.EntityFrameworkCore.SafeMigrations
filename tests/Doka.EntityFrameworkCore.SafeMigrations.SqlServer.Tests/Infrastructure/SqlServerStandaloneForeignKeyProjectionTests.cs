@@ -1,5 +1,3 @@
-using System.Text.RegularExpressions;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
 /// <summary>Verifies live-parent prerequisites for new children and new operands on existing children.</summary>
@@ -465,7 +463,7 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
             projectedDependencyAnalyzer: graph,
             livePrerequisiteSource: graph);
 
-        var columnSource = (ISafeMigrationProjectedColumnSource)projection;
+        ISafeMigrationProjectedColumnSource columnSource = projection;
 
         Accept(projection, principal, Live(SafeMigrationObservedState.Matching));
         Accept(projection, key, Live(SafeMigrationObservedState.Matching));
@@ -785,7 +783,8 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
         var analysis = projection.Project(ensure, UnknownLivePrerequisite());
 
         // Assert
-        var candidate = Assert.Single(Assert.IsAssignableFrom<IReadOnlyList<SafeMigrationLiveCandidateKey>>(original));
+        var candidate = Assert.Single(
+            Assert.IsType<IReadOnlyList<SafeMigrationLiveCandidateKey>>(original, exactMatch: false));
         Assert.Equal(
             keyKind switch
             {
@@ -807,7 +806,7 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
                 : "IX_parent",
             candidate.BackingIndexName);
 
-        Assert.Empty(Assert.IsAssignableFrom<IReadOnlyList<SafeMigrationLiveCandidateKey>>(afterDrop));
+        Assert.Empty(Assert.IsType<IReadOnlyList<SafeMigrationLiveCandidateKey>>(afterDrop, exactMatch: false));
         Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, analysis.ObservedState);
     }
 

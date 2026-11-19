@@ -1,5 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 
 /// <summary>Verifies immutable native metadata boundaries independently of Core row projection.</summary>
@@ -17,6 +15,7 @@ public sealed class SqliteLivePrerequisiteSourceTests : SqliteIntegrationTestBas
         bool expectedProof
     )
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
@@ -38,13 +37,15 @@ public sealed class SqliteLivePrerequisiteSourceTests : SqliteIntegrationTestBas
 
         var columns = new PrincipalColumnSource(projectedCollation);
 
+        // Act
         var candidates = source.GetLiveForeignKeyCandidateKeys(intent, columns);
 
+        // Assert
         Assert.Equal(expectedProof, candidates is { Count: 1 });
         if (expectedProof)
         {
             var candidate = Assert.Single(
-                Assert.IsAssignableFrom<IReadOnlyList<SafeMigrationLiveCandidateKey>>(candidates));
+                Assert.IsType<IReadOnlyList<SafeMigrationLiveCandidateKey>>(candidates, exactMatch: false));
 
             Assert.Equal(SafeMigrationDatabaseObjectKind.PrimaryKey, candidate.Kind);
             Assert.Equal("pk_proof_parent", candidate.PhysicalName);
@@ -66,6 +67,7 @@ public sealed class SqliteLivePrerequisiteSourceTests : SqliteIntegrationTestBas
         bool expectedPresence
     )
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
@@ -74,14 +76,27 @@ public sealed class SqliteLivePrerequisiteSourceTests : SqliteIntegrationTestBas
 
         var source = new SqliteLivePrerequisiteSource(SqliteSafeMigrationCatalog.Read(connection, transaction: null));
 
+        // Act
         var present = source.HasLiveColumn("proof_parent", schema, column);
 
+        // Assert
         Assert.Equal(expectedPresence, present);
     }
 
     /// <summary>Supplies only an explicitly accepted principal column, never a target-model surrogate.</summary>
-    private sealed class PrincipalColumnSource(string? collation) : ISafeMigrationProjectedColumnSource
+    private sealed class PrincipalColumnSource : ISafeMigrationProjectedColumnSource
     {
+        private readonly string? _collation;
+
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="collation">The supplied collation for this fixture.</param>
+        public PrincipalColumnSource(
+            string? collation
+        )
+        {
+            _collation = collation;
+        }
+
         /// <inheritdoc />
         public bool TryGetProjectedColumn(
             string table,
@@ -90,13 +105,13 @@ public sealed class SqliteLivePrerequisiteSourceTests : SqliteIntegrationTestBas
             [NotNullWhen(true)] out ExpectedColumnDefinition? definition
         )
         {
-            definition = collation is not null && table == "proof_parent" && column == "Id"
+            definition = _collation is not null && table == "proof_parent" && column == "Id"
                 ? new ExpectedColumnDefinition(
                     "Id",
                     typeof(string),
                     false,
                     storeType: "TEXT",
-                    collation: new SafeMigrationCollationIdentifier(collation))
+                    collation: new SafeMigrationCollationIdentifier(_collation))
                 : null;
 
             return definition is not null;

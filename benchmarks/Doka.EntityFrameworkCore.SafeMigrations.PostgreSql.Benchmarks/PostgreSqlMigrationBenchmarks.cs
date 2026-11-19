@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks;
 
 /// <summary>Measures the retained PostgreSQL canonical, repair and model-managed-data workloads.</summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public class PostgreSqlMigrationBenchmarks : IDisposable
 {
     private PostgreSqlSafeMigrationCatalogSqlBuilder _catalogBuilder = null!;

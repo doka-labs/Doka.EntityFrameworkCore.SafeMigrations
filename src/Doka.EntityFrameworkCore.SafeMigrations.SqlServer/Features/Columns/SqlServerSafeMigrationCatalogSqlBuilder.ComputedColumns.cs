@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer;
 
 internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
@@ -129,6 +127,10 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     )
     {
         var result = new StringBuilder();
+
+        // WHY: Preserve the read-only snapshot representation, including single-element collection literals.
+        // Narrowing this private boundary to List for indexed access would change those allocations.
+        // ReSharper disable once LoopCanBeConvertedToQuery
         foreach (var column in columns)
         {
             if (!SqlServerComputedColumnContract.IsComputed(column))
@@ -143,6 +145,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             SafeMigrationSqlExpressionInspector.CollectIdentifiers(expression, referenced);
             var names = referenced
                 .Order(StringComparer.Ordinal)
+
+                // WHY: Retain this explicit fluent snapshot instead of a collection-spread rewrite.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray();
 
             var definitionVariable = ComputedVariable(column, "definition");
@@ -503,6 +508,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 
         return columns
             .Order(StringComparer.Ordinal)
+
+            // WHY: Retain this explicit fluent snapshot instead of a collection-spread rewrite.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
     }
 

@@ -151,21 +151,13 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
                 }
                 && context is { TableWasCreated: false, ColumnWasDropped: false, HasDataMutation: false };
 
-            if (!currentOwnedStage
-                && (liveAnalysis.ObservedState != SafeMigrationObservedState.Missing
-                    || !liveAnalysis.RequiresLiveDataProof
-                    || context.HasDataMutation
-                    || context.TableWasCreated))
-            {
-                return new SafeMigrationProviderAnalysis(
-                    SafeMigrationObservedState.PrerequisiteMissing,
-                    SafeMigrationRepairCapability.None,
-                    false,
-                    "projected_required_add_rows_unproven");
-            }
-
-            if (liveAnalysis.RequiredColumnAddResumesOwnedStaging
-                && (context.TableWasCreated || context.ColumnWasDropped))
+            if ((!currentOwnedStage
+                    && (liveAnalysis.ObservedState != SafeMigrationObservedState.Missing
+                        || !liveAnalysis.RequiresLiveDataProof
+                        || context.HasDataMutation
+                        || context.TableWasCreated))
+                || (liveAnalysis.RequiredColumnAddResumesOwnedStaging
+                    && (context.TableWasCreated || context.ColumnWasDropped)))
             {
                 return new SafeMigrationProviderAnalysis(
                     SafeMigrationObservedState.PrerequisiteMissing,
@@ -235,8 +227,14 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         // prove a nullability-only change; an earlier widening certificate can
         // become invalid when a new physical index constrains the column width.
         var removesImplicitNullDefault = RemovesImplicitNullableDefault(intent.Definition, liveAnalysis.Differences);
-        foreach (var difference in liveAnalysis.Differences)
+
+        // WHY: Index this stable list while preserving its order and ownership.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var differenceIndex = 0; differenceIndex < liveAnalysis.Differences.Count; differenceIndex++)
         {
+            var difference = liveAnalysis.Differences[differenceIndex];
+
             if (!StringComparer.Ordinal.Equals(difference.Facet, "column_nullability")
                 && !(removesImplicitNullDefault
                     && difference.Facet is "column_default_kind" or "column_default_digest"))
@@ -436,25 +434,26 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         for (var index = 0; index < differences.Count; index++)
         {
             var difference = differences[index];
-            if (difference.Facet == "column_nullability")
+            switch (difference.Facet)
             {
-                if (difference.Expected != "not_nullable"
-                    || difference.Actual != "nullable")
-                {
-                    return false;
-                }
+                case "column_nullability":
+                    if (difference.Expected != "not_nullable"
+                        || difference.Actual != "nullable")
+                    {
+                        return false;
+                    }
 
-                tightensNullability = true;
-            }
-            else if (difference.Facet == "column_default_kind")
-            {
-                if (difference.Expected != "none"
-                    || difference.Actual != "null")
-                {
-                    return false;
-                }
+                    tightensNullability = true;
+                    break;
+                case "column_default_kind":
+                    if (difference.Expected != "none"
+                        || difference.Actual != "null")
+                    {
+                        return false;
+                    }
 
-                removesNullDefault = true;
+                    removesNullDefault = true;
+                    break;
             }
         }
 
@@ -587,187 +586,235 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
                 && RequiresProjectedMissingAddQualification(intent.Definition))
             .Select(static operation => ((EnsureColumnIntent)operation.Intent).Table)
             .Distinct(StringComparer.Ordinal)
+
+            // WHY: Retain fluent materialization and its existing snapshot
+            // ownership rather than replacing this boundary with a spread.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         if (requiredAddTables.Length == 0
-            && !operations.Any(operation => operation.Intent is AlterColumnIntent intent
-                && (RequiresProjectedTimestampDefaults(intent.Definition)
-                    || MySqlSafeMigrationCatalogSqlBuilder.RequiresNativeEnumNoBackslashEscapes(intent.Definition)))
-            && !operations.Any(static operation => operation.Intent is EnsureColumnIntent ensure
-                && MySqlSafeMigrationCatalogSqlBuilder.RequiresNativeEnumNoBackslashEscapes(ensure.Definition)))
+            && operations.All(operation => operation.Intent is not AlterColumnIntent intent
+                || (!RequiresProjectedTimestampDefaults(intent.Definition)
+                    && !MySqlSafeMigrationCatalogSqlBuilder.RequiresNativeEnumNoBackslashEscapes(intent.Definition)))
+            && operations.All(static operation => operation.Intent is not EnsureColumnIntent ensure
+                || !MySqlSafeMigrationCatalogSqlBuilder.RequiresNativeEnumNoBackslashEscapes(ensure.Definition)))
         {
             return null;
         }
 
-        await using var command = connection.CreateCommand();
-        ApplyCommandTimeout(command, commandTimeout);
-        var isMariaDb = MySqlServerVersion.AutoDetect(connection, MySqlServerVersionCompatibilityMode.AllowUnsupported)
-            .IsMariaDb;
-
-        command.CommandText = $"""
-            SELECT @@default_storage_engine, @@SESSION.sql_mode, @@SESSION.explicit_defaults_for_timestamp,
-            {(isMariaDb
-                ? "@@SESSION.check_constraint_checks;"
-                : "1;")}
-            """;
-
-        bool defaultEngineIsInnoDb;
-        bool strict;
-        bool explicitTimestampDefaults;
-        bool checksEnforced;
-        bool backslashEscapesEnabled;
-        bool doubleQuotesAreLiteral;
-        await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
+        // WHY: Drain both owned resources without replacing the actual environment failure or cancellation.
+        var command = connection.CreateCommand();
+        Exception? commandFailure = null;
+        try
         {
-            if (!await reader.ReadAsync(cancellationToken)
-                || reader.IsDBNull(0)
-                || reader.IsDBNull(2))
+            ApplyCommandTimeout(command, commandTimeout);
+            var isMariaDb = MySqlServerVersion.AutoDetect(
+                    connection,
+                    MySqlServerVersionCompatibilityMode.AllowUnsupported)
+                .IsMariaDb;
+
+            command.CommandText = $"""
+                SELECT @@default_storage_engine, @@SESSION.sql_mode, @@SESSION.explicit_defaults_for_timestamp,
+                {(isMariaDb
+                    ? "@@SESSION.check_constraint_checks;"
+                    : "1;")}
+                """;
+
+            bool defaultEngineIsInnoDb;
+            bool strict;
+            bool explicitTimestampDefaults;
+            bool checksEnforced;
+            bool backslashEscapesEnabled;
+            bool doubleQuotesAreLiteral;
+            var reader = await command.ExecuteReaderAsync(cancellationToken);
+            Exception? readerFailure = null;
+            try
             {
-                throw new InvalidOperationException("MySQL did not return its column repair environment.");
-            }
+                if (!await reader.ReadAsync(cancellationToken)
+                    || reader.IsDBNull(0)
+                    || reader.IsDBNull(2))
+                {
+                    throw new InvalidOperationException("MySQL did not return its column repair environment.");
+                }
 
-            defaultEngineIsInnoDb = StringComparer.OrdinalIgnoreCase.Equals(reader.GetString(0), "InnoDB");
-            var sqlMode = reader.IsDBNull(1)
-                ? string.Empty
-                : reader.GetString(1);
+                defaultEngineIsInnoDb = StringComparer.OrdinalIgnoreCase.Equals(reader.GetString(0), "InnoDB");
+                var sqlMode = reader.IsDBNull(1)
+                    ? string.Empty
+                    : reader.GetString(1);
 
-            strict = sqlMode
-                .Split(',')
-                .Any(static mode => mode
+                strict = sqlMode
+                    .Split(',')
+                    .Any(static mode => mode
+                            .AsSpan()
+                            .Trim()
+                            .Equals("STRICT_TRANS_TABLES", StringComparison.OrdinalIgnoreCase)
+                        || mode
+                            .AsSpan()
+                            .Trim()
+                            .Equals("STRICT_ALL_TABLES", StringComparison.OrdinalIgnoreCase));
+
+                var enabled = Convert.ToInt32(reader.GetValue(2), CultureInfo.InvariantCulture);
+                var checks = reader.IsDBNull(3)
+                    ? -1
+                    : Convert.ToInt32(reader.GetValue(3), CultureInfo.InvariantCulture);
+
+                if (enabled is not 0 and not 1
+                    || checks is not 0 and not 1
+                    || await reader.ReadAsync(cancellationToken))
+                {
+                    throw new InvalidOperationException("MySQL returned an unknown column repair environment.");
+                }
+
+                explicitTimestampDefaults = enabled == 1;
+                checksEnforced = checks == 1;
+                backslashEscapesEnabled = !sqlMode
+                    .Split(',')
+                    .Any(static mode => mode
                         .AsSpan()
                         .Trim()
-                        .Equals("STRICT_TRANS_TABLES", StringComparison.OrdinalIgnoreCase)
-                    || mode
+                        .Equals("NO_BACKSLASH_ESCAPES", StringComparison.OrdinalIgnoreCase));
+
+                doubleQuotesAreLiteral = !sqlMode
+                    .Split(',')
+                    .Any(static mode => mode
                         .AsSpan()
                         .Trim()
-                        .Equals("STRICT_ALL_TABLES", StringComparison.OrdinalIgnoreCase));
-
-            var enabled = Convert.ToInt32(reader.GetValue(2), CultureInfo.InvariantCulture);
-            var checks = reader.IsDBNull(3)
-                ? -1
-                : Convert.ToInt32(reader.GetValue(3), CultureInfo.InvariantCulture);
-
-            if (enabled is not 0 and not 1
-                || checks is not 0 and not 1
-                || await reader.ReadAsync(cancellationToken))
+                        .Equals("ANSI_QUOTES", StringComparison.OrdinalIgnoreCase));
+            }
+            catch (Exception exception)
             {
-                throw new InvalidOperationException("MySQL returned an unknown column repair environment.");
+                readerFailure = exception;
+
+                throw;
+            }
+            finally
+            {
+                await SafeMigrationAnalysisCleanup.DisposeAsync(
+                    reader,
+                    readerFailure,
+                    "SafeMigrations.AnalysisReaderDisposeException");
             }
 
-            explicitTimestampDefaults = enabled == 1;
-            checksEnforced = checks == 1;
-            backslashEscapesEnabled = !sqlMode
-                .Split(',')
-                .Any(static mode => mode
-                    .AsSpan()
-                    .Trim()
-                    .Equals("NO_BACKSLASH_ESCAPES", StringComparison.OrdinalIgnoreCase));
+            var innoDbTables = new HashSet<string>(StringComparer.Ordinal);
+            await SafeMigrationCatalogProbeBatch.ReadAsync(
+                connection,
+                requiredAddTables.Length,
+                maximumPayloadBytes,
+                commandTimeout,
+                (probe, offset) =>
+                {
+                    var parameterizer = new MySqlCatalogQueryParameterizer(probe, _typeMappingSource);
+                    List<string> selections = [];
+                    List<string> ownerParameters = [];
+                    var separatorBytes = Encoding.UTF8.GetByteCount(SafeMigrationCatalogQueryLimits.Separator);
+                    var sqlBytes = Encoding.UTF8.GetByteCount(
+                        BuildRequiredColumnAddOwnerEngineQuery(string.Empty, string.Empty));
 
-            doubleQuotesAreLiteral = !sqlMode
-                .Split(',')
-                .Any(static mode => mode
-                    .AsSpan()
-                    .Trim()
-                    .Equals("ANSI_QUOTES", StringComparison.OrdinalIgnoreCase));
+                    while (offset + selections.Count < requiredAddTables.Length
+                        && selections.Count < SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
+                    {
+                        var checkpoint = parameterizer.Capture();
+                        var ordinal = offset + selections.Count;
+                        var ownerParameter = parameterizer.AddString(requiredAddTables[ordinal]);
+                        var selection = $"SELECT {ordinal.ToString(CultureInfo.InvariantCulture)} AS ordinal, "
+                            + $"{ownerParameter} AS owner";
+
+                        var selectionBytes = Encoding.UTF8.GetByteCount(selection)
+                            + Encoding.UTF8.GetByteCount(ownerParameter)
+                            + (selections.Count == 0
+                                ? 0
+                                : separatorBytes + 2);
+
+                        var payload = checked(sqlBytes + selectionBytes + parameterizer.Utf8PayloadBytes);
+                        if (!SafeMigrationCatalogQueryLimits.Exceeded(
+                            parameterizer.Count,
+                            payload,
+                            maximumPayloadBytes))
+                        {
+                            selections.Add(selection);
+                            ownerParameters.Add(ownerParameter);
+                            sqlBytes += selectionBytes;
+
+                            continue;
+                        }
+
+                        var parameters = parameterizer.Count;
+                        parameterizer.Rollback(checkpoint);
+                        if (selections.Count == 0)
+                        {
+                            throw SafeMigrationCatalogQueryLimits.OversizedOperation(offset, parameters, payload);
+                        }
+
+                        break;
+                    }
+
+                    probe.CommandText = BuildRequiredColumnAddOwnerEngineQuery(
+                        string.Join(SafeMigrationCatalogQueryLimits.Separator, selections),
+                        string.Join(", ", ownerParameters));
+
+                    return new SafeMigrationCatalogProbeStatement(
+                        selections.Count,
+                        parameterizer.Utf8PayloadBytes,
+                        offset);
+                },
+                async (ownerReader, offset, count, callbackCancellationToken) =>
+                {
+                    var row = 0;
+                    while (await ownerReader.ReadAsync(callbackCancellationToken))
+                    {
+                        if (row >= count
+                            || ownerReader.GetInt32(0) != offset + row
+                            || ownerReader.IsDBNull(1))
+                        {
+                            throw new InvalidOperationException("MySQL returned an unowned column-add engine fact.");
+                        }
+
+                        var innoDb = Convert.ToInt32(ownerReader.GetValue(1), CultureInfo.InvariantCulture);
+                        if (innoDb is not 0 and not 1)
+                        {
+                            throw new InvalidOperationException("MySQL returned an unknown column-add engine fact.");
+                        }
+
+                        if (innoDb == 1)
+                        {
+                            innoDbTables.Add(requiredAddTables[offset + row]);
+                        }
+
+                        row++;
+                    }
+
+                    if (row != count)
+                    {
+                        throw new InvalidOperationException(
+                            "MySQL returned an incomplete column-add engine inventory.");
+                    }
+                },
+                transaction: null,
+                SafeMigrationCatalogQueryLimits.MaximumParameters,
+                cancellationToken);
+
+            return new ProjectedColumnSessionEnvironment(
+                strict,
+                defaultEngineIsInnoDb,
+                explicitTimestampDefaults,
+                checksEnforced,
+                backslashEscapesEnabled,
+                doubleQuotesAreLiteral,
+                innoDbTables);
         }
+        catch (Exception exception)
+        {
+            commandFailure = exception;
 
-        var innoDbTables = new HashSet<string>(StringComparer.Ordinal);
-        await SafeMigrationCatalogProbeBatch.ReadAsync(
-            connection,
-            requiredAddTables.Length,
-            maximumPayloadBytes,
-            commandTimeout,
-            (probe, offset) =>
-            {
-                var parameterizer = new MySqlCatalogQueryParameterizer(probe, _typeMappingSource);
-                var selections = new List<string>();
-                var ownerParameters = new List<string>();
-                var separatorBytes = Encoding.UTF8.GetByteCount(SafeMigrationCatalogQueryLimits.Separator);
-                var sqlBytes = Encoding.UTF8.GetByteCount(
-                    BuildRequiredColumnAddOwnerEngineQuery(string.Empty, string.Empty));
-
-                while (offset + selections.Count < requiredAddTables.Length
-                    && selections.Count < SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
-                {
-                    var checkpoint = parameterizer.Capture();
-                    var ordinal = offset + selections.Count;
-                    var ownerParameter = parameterizer.AddString(requiredAddTables[ordinal]);
-                    var selection = $"SELECT {ordinal.ToString(CultureInfo.InvariantCulture)} AS ordinal, "
-                        + $"{ownerParameter} AS owner";
-
-                    var selectionBytes = Encoding.UTF8.GetByteCount(selection)
-                        + Encoding.UTF8.GetByteCount(ownerParameter)
-                        + (selections.Count == 0
-                            ? 0
-                            : separatorBytes + 2);
-
-                    var payload = checked(sqlBytes + selectionBytes + parameterizer.Utf8PayloadBytes);
-                    if (!SafeMigrationCatalogQueryLimits.Exceeded(parameterizer.Count, payload, maximumPayloadBytes))
-                    {
-                        selections.Add(selection);
-                        ownerParameters.Add(ownerParameter);
-                        sqlBytes += selectionBytes;
-
-                        continue;
-                    }
-
-                    var parameters = parameterizer.Count;
-                    parameterizer.Rollback(checkpoint);
-                    if (selections.Count == 0)
-                    {
-                        throw SafeMigrationCatalogQueryLimits.OversizedOperation(offset, parameters, payload);
-                    }
-
-                    break;
-                }
-
-                probe.CommandText = BuildRequiredColumnAddOwnerEngineQuery(
-                    string.Join(SafeMigrationCatalogQueryLimits.Separator, selections),
-                    string.Join(", ", ownerParameters));
-
-                return new SafeMigrationCatalogProbeStatement(selections.Count, parameterizer.Utf8PayloadBytes, offset);
-            },
-            async (reader, offset, count, token) =>
-            {
-                var row = 0;
-                while (await reader.ReadAsync(token))
-                {
-                    if (row >= count
-                        || reader.GetInt32(0) != offset + row
-                        || reader.IsDBNull(1))
-                    {
-                        throw new InvalidOperationException("MySQL returned an unowned column-add engine fact.");
-                    }
-
-                    var innoDb = Convert.ToInt32(reader.GetValue(1), CultureInfo.InvariantCulture);
-                    if (innoDb is not 0 and not 1)
-                    {
-                        throw new InvalidOperationException("MySQL returned an unknown column-add engine fact.");
-                    }
-
-                    if (innoDb == 1)
-                    {
-                        innoDbTables.Add(requiredAddTables[offset + row]);
-                    }
-
-                    row++;
-                }
-
-                if (row != count)
-                {
-                    throw new InvalidOperationException("MySQL returned an incomplete column-add engine inventory.");
-                }
-            },
-            cancellationToken);
-
-        return new ProjectedColumnSessionEnvironment(
-            strict,
-            defaultEngineIsInnoDb,
-            explicitTimestampDefaults,
-            checksEnforced,
-            backslashEscapesEnabled,
-            doubleQuotesAreLiteral,
-            innoDbTables);
+            throw;
+        }
+        finally
+        {
+            await SafeMigrationAnalysisCleanup.DisposeAsync(
+                command,
+                commandFailure,
+                "SafeMigrations.AnalysisCommandDisposeException");
+        }
     }
 
     /// <summary>Binds native engine evidence to authored ordinals without folding unrelated owner identities.</summary>

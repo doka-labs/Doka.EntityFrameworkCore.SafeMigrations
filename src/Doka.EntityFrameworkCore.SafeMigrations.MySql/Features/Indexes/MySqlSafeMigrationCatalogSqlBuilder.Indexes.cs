@@ -91,13 +91,15 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 
         var physicallyAchievable = BuildIndexPhysicalShapeSupported(definition);
 
-        var physicalFailureCode = definition.Keys.Count > MySqlProjectedIndexPhysicalShape.MaximumKeyParts
-            ? "index_too_many_key_parts"
-            : definition.Keys.Any(static key => key.Expression is not null || key.StructuredExpression is not null)
-            || (definition.Method is not null
-                && !StringComparer.OrdinalIgnoreCase.Equals(definition.Method, "BTREE"))
-                ? "index_key_length_unverifiable"
-                : "index_prefix_required_for_key_limit";
+        var physicalFailureCode = definition.Keys.Count switch
+        {
+            > MySqlProjectedIndexPhysicalShape.MaximumKeyParts => "index_too_many_key_parts",
+            _ when definition.Keys.Any(static key => key.Expression is not null || key.StructuredExpression is not null)
+                || (definition.Method is not null
+                    && !StringComparer.OrdinalIgnoreCase.Equals(definition.Method, "BTREE")) =>
+                "index_key_length_unverifiable",
+            _ => "index_prefix_required_for_key_limit",
+        };
 
         var satisfied = $"({matching}) OR (NOT ({indexExists}) AND ({semanticAlias}))";
         var semanticCandidates = BuildIndexMatchQuery(
@@ -189,10 +191,10 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                     : "'non_unique'",
                 "CASE MIN(s.NON_UNIQUE) WHEN 0 THEN 'unique' WHEN 1 THEN 'non_unique' ELSE 'unknown' END"
             )}, {DiagnosticRecord(
-                $"UPPER(MIN(s.INDEX_TYPE)) <> {Literal((definition.Method ?? "BTREE").ToUpperInvariant())}",
-                "index_method",
-                Literal((definition.Method ?? "BTREE").ToLowerInvariant()),
-                "LOWER(LEFT(MIN(s.INDEX_TYPE), 256))")}), '')
+            $"UPPER(MIN(s.INDEX_TYPE)) <> {Literal((definition.Method ?? "BTREE").ToUpperInvariant())}",
+            "index_method",
+            Literal((definition.Method ?? "BTREE").ToLowerInvariant()),
+            "LOWER(LEFT(MIN(s.INDEX_TYPE), 256))")}), '')
             FROM INFORMATION_SCHEMA.STATISTICS s
             WHERE s.TABLE_SCHEMA = DATABASE()
             AND s.TABLE_NAME = {Literal(definition.Table)}
@@ -369,13 +371,12 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             var keyConditions = new List<string>
             {
                 $"s.SEQ_IN_INDEX = {position}",
-                key.Column is not null
-                    ? $"s.COLUMN_NAME = {Literal(key.Column)}"
-                    : isMariaDb
-                        ? "FALSE"
-                        : BuildIndexExpressionMatches(
-                            "s.EXPRESSION",
-                            key),
+                key.Column switch
+                {
+                    { } column => $"s.COLUMN_NAME = {Literal(column)}",
+                    _ when isMariaDb => "FALSE",
+                    _ => BuildIndexExpressionMatches("s.EXPRESSION", key),
+                },
                 BuildIndexSortMatches(key),
                 key.PrefixLength is null
                     ? "s.SUB_PART IS NULL"
@@ -423,6 +424,10 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var keys = definition
             .Keys
             .Select(IndexDataExpression)
+
+            // WHY: Retain fluent materialization and its existing snapshot
+            // ownership rather than replacing this boundary with a spread.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var nonNull = string.Join(" AND ", keys.Select(static key => $"({key}) IS NOT NULL"));
@@ -514,6 +519,10 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var keyWidths = definition
             .Keys
             .Select(key => BuildIndexKeyWidth(definition.Table, key.Column!, key.PrefixLength))
+
+            // WHY: Retain fluent materialization and its existing snapshot
+            // ownership rather than replacing this boundary with a spread.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var totalWidth = string.Join(" + ", keyWidths.Select(static width => $"COALESCE(({width}), 2147483647)"));
@@ -540,6 +549,10 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 
         var keyWidths = columns
             .Select(column => BuildIndexKeyWidth(table, column, prefixLengthValue: null))
+
+            // WHY: Retain fluent materialization and its existing snapshot
+            // ownership rather than replacing this boundary with a spread.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var totalWidth = string.Join(

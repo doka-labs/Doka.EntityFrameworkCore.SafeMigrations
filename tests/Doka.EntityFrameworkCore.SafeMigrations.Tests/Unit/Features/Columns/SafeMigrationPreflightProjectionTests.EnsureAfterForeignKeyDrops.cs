@@ -105,7 +105,9 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         Assert.Equal(boundary is "relax" or "tighten" or "provider-declines", provider.LayoutQueries == 1);
     }
 
-    /// <summary>Observation consumes the projected certificate, retaining keys and later sibling proof only when certified.</summary>
+    /// <summary>
+    /// Observation consumes the projected certificate, retaining keys and later sibling proof only when certified.
+    /// </summary>
     /// <param name="certified">Whether the exact native layout-preservation callback accepts the source.</param>
     [Theory]
     [InlineData(false)]

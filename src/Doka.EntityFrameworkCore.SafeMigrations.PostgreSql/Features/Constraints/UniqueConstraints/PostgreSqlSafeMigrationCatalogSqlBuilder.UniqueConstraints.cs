@@ -52,6 +52,10 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         var keys = definition
             .Columns
             .Select(Delimited)
+
+            // WHY: Keep explicit fluent materialization and its existing
+            // ownership/evaluation boundary instead of an implicit spread.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var nonNull = string.Join(" AND ", keys.Select(static key => $"{key} IS NOT NULL"));

@@ -9,9 +9,16 @@ public sealed class MySqlModelManagedDataConcurrencyIntegrationTests : MySqlSafe
         MySqlEngineContainerFixture fixture
     ) : base(fixture) { }
 
-    [Fact]
-    public async Task ModelManagedUpdateRechecksSourceAndPostconditionAtExecution()
+    /// <summary>Independently rechecks late source drift and trigger-modified target postconditions.</summary>
+    /// <param name="lateMutation">The concurrent source replacement or target-rewriting trigger.</param>
+    [Theory]
+    [InlineData("source-row")]
+    [InlineData("target-trigger")]
+    public async Task ModelManagedUpdateRechecksSourceAndPostconditionAtExecution(
+        string lateMutation
+    )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -27,37 +34,29 @@ public sealed class MySqlModelManagedDataConcurrencyIntegrationTests : MySqlSafe
         var update = ModelManagedNameUpdate(context.Database.ProviderName!, "model_race_roles");
         var runner = context.GetService<ISafeMigrationRunner>();
 
+        var mutationSql = lateMutation == "source-row"
+            ? "UPDATE `model_race_roles` SET `name` = 'concurrent' WHERE `id` = 1;"
+            : "CREATE TRIGGER `trg_model_race_roles_rewrite` BEFORE UPDATE "
+            + "ON `model_race_roles` FOR EACH ROW SET NEW.`name` = 'triggered';";
+
+        var preservedValue = lateMutation == "source-row"
+            ? "concurrent"
+            : "source";
+
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             update.Operations,
             new SafeMigrationRunOptions("model-data-source-race"),
             CancellationToken.None);
 
-        await ExecuteSqlAsync(
-            connectionString,
-            "UPDATE `model_race_roles` SET `name` = 'concurrent' WHERE `id` = 1;",
-            cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(connectionString, mutationSql, cancellationToken: CancellationToken.None);
 
-        _ = await AssertOwnedGuardFailureAsync(
-            operationToken =>
-                ExecuteOperationsAsync(context, update.Operations, operationToken),
-            cancellationToken: CancellationToken.None);
-
-        await ExecuteSqlAsync(
-            connectionString,
-            """
-            UPDATE `model_race_roles` SET `name` = 'source'
-            WHERE `id` = 1;CREATE TRIGGER `trg_model_race_roles_rewrite` BEFORE UPDATE
-            ON `model_race_roles` FOR EACH ROW SET NEW.`name` = 'triggered';
-            """,
-            cancellationToken: CancellationToken.None);
-
+        Exception? failure;
         await using (var transaction = await context.Database.BeginTransactionAsync(CancellationToken.None))
         {
-            _ = await AssertOwnedGuardFailureAsync(
-                operationToken =>
-                    ExecuteOperationsAsync(context, update.Operations, operationToken),
-                cancellationToken: CancellationToken.None);
+            failure = await Record.ExceptionAsync(() =>
+                ExecuteOperationsAsync(context, update.Operations, CancellationToken.None));
 
             // The provider intentionally leaves transaction ownership with EF.
             // Roll back explicitly here because this helper invokes the generated
@@ -65,19 +64,23 @@ public sealed class MySqlModelManagedDataConcurrencyIntegrationTests : MySqlSafe
             await transaction.RollbackAsync(CancellationToken.None);
         }
 
+        var preservedRows = await ScalarIntAsync(
+            connectionString,
+            $"SELECT COUNT(*) FROM `model_race_roles` WHERE `id` = 1 AND `name` = '{preservedValue}';",
+            cancellationToken: CancellationToken.None);
+
+        // Assert
+        AssertOwnedGuardFailure(failure);
         Assert.Equal(
             SafeMigrationObservedState.TransitionReady,
             Assert.Single(preflight.Assessments)
                 .ObservedState);
 
-        Assert.Equal(
-            1,
-            await ScalarIntAsync(
-                connectionString,
-                "SELECT COUNT(*) FROM `model_race_roles` WHERE `id` = 1 AND `name` = 'source';",
-                cancellationToken: CancellationToken.None));
+        Assert.Equal(1, preservedRows);
     }
 
+    /// <summary>Rechecks a late dependent row before applying any declared foreign-key action.</summary>
+    /// <param name="referentialAction">The native foreign-key action challenged by a late dependent row.</param>
     [Theory]
     [InlineData("CASCADE")]
     [InlineData("NO ACTION")]
@@ -87,6 +90,7 @@ public sealed class MySqlModelManagedDataConcurrencyIntegrationTests : MySqlSafe
         string referentialAction
     )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -107,6 +111,7 @@ public sealed class MySqlModelManagedDataConcurrencyIntegrationTests : MySqlSafe
         var deletion = ModelManagedRoleDeletion(context.Database.ProviderName!);
         var runner = context.GetService<ISafeMigrationRunner>();
 
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             deletion.Operations,
@@ -123,6 +128,7 @@ public sealed class MySqlModelManagedDataConcurrencyIntegrationTests : MySqlSafe
                 ExecuteOperationsAsync(context, deletion.Operations, operationToken),
             cancellationToken: CancellationToken.None);
 
+        // Assert
         Assert.Equal(
             SafeMigrationObservedState.TransitionReady,
             Assert.Single(preflight.Assessments)
@@ -143,9 +149,13 @@ public sealed class MySqlModelManagedDataConcurrencyIntegrationTests : MySqlSafe
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>
+    /// Cancels only after the managed write reaches its native statement and preserves the original row.
+    /// </summary>
     [Fact]
     public async Task ModelManagedMutationHonorsCancellationDuringExecution()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -153,18 +163,36 @@ public sealed class MySqlModelManagedDataConcurrencyIntegrationTests : MySqlSafe
             CREATE TABLE `model_cancel_roles` (`id` int NOT NULL, `name` varchar(64)
             NOT NULL,
             PRIMARY KEY (`id`)) ENGINE=InnoDB;INSERT INTO `model_cancel_roles` (`id`,
-            `name`) VALUES (1, 'source');CREATE TRIGGER `trg_model_cancel_roles_wait`
-            BEFORE UPDATE ON `model_cancel_roles` FOR EACH ROW DO SLEEP(10);
+            `name`) VALUES (1, 'source');
             """,
             cancellationToken: CancellationToken.None);
 
+        // WHY: A retained row lock, unlike a timed SLEEP trigger, cannot expire before a
+        // loaded observer sees the actual UPDATE. Scope disposal always releases the owner.
+        await using var blocker = new MySqlConnection(connectionString);
+        await blocker.OpenAsync(CancellationToken.None);
+        await using var transaction = await blocker.BeginTransactionAsync(CancellationToken.None);
+        await using var blockingCommand = blocker.CreateCommand();
+        blockingCommand.Transaction = transaction;
+        blockingCommand.CommandText = "SELECT `id` FROM `model_cancel_roles` WHERE `id` = 1 FOR UPDATE;";
+        await blockingCommand.ExecuteScalarAsync(CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
+        await context.Database.OpenConnectionAsync(CancellationToken.None);
         var update = ModelManagedNameUpdate(context.Database.ProviderName!, "model_cancel_roles");
-        using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(250));
+        using var cancellation = new CancellationTokenSource();
 
-        _ = await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-            ExecuteOperationsAsync(context, update.Operations, cancellation.Token));
+        // Act
+        var exception = await MySqlNativeCancellationCheckpoint.CancelWhenDispatchedAsync(
+            connectionString,
+            ((MySqlConnection)context.Database.GetDbConnection()).ServerThread,
+            "UPDATE `model_cancel_roles`",
+            cancellation,
+            Record.ExceptionAsync(() => ExecuteOperationsAsync(context, update.Operations, cancellation.Token)),
+            CancellationToken.None);
 
+        // Assert
+        Assert.IsType<OperationCanceledException>(exception, exactMatch: false);
         Assert.Equal(
             1,
             await ScalarIntAsync(

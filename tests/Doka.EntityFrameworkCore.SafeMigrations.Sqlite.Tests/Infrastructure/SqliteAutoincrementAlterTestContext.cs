@@ -55,6 +55,8 @@ internal sealed class SqliteAutoincrementAlterTestContext : DbContext
         });
     }
 
+    // WHY: EF binds this fixture entity through writable property metadata.
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class AutoincrementAlterEntity
     {
         public int Id { get; set; }

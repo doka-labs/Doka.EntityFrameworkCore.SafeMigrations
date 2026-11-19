@@ -13,7 +13,9 @@ public sealed class PostgreSqlPerformanceIntegrationTests : PostgreSqlSafeMigrat
         PostgreSqlContainerFixture fixture
     ) : base(fixture) { }
 
-    /// <summary>Checks managed-data deferral in several mixed-stream cycles before costly stress qualification.</summary>
+    /// <summary>
+    /// Checks managed-data deferral in several mixed-stream cycles before costly stress qualification.
+    /// </summary>
     [Fact]
     public async Task Analyzer_BoundedMixedOperationsRetainExactDeferredContracts()
     {
@@ -44,10 +46,12 @@ public sealed class PostgreSqlPerformanceIntegrationTests : PostgreSqlSafeMigrat
         expectation.AssertReport(report);
     }
 
+    /// <summary>Analyzer One Hundred Thousand Mixed Operations Remain Bounded Ordered And Complete.</summary>
     [Fact]
     [Trait("Category", "LargeScale")]
     public async Task Analyzer_OneHundredThousandMixedOperationsRemainBoundedOrderedAndComplete()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -58,6 +62,7 @@ public sealed class PostgreSqlPerformanceIntegrationTests : PostgreSqlSafeMigrat
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         var expectation = LargeMigrationStressContract.Populate(builder, LargeMigrationStressDialect.PostgreSql);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -66,12 +71,15 @@ public sealed class PostgreSqlPerformanceIntegrationTests : PostgreSqlSafeMigrat
                 new SafeMigrationRunOptions("large-mixed-migration"),
                 CancellationToken.None);
 
+        // Assert
         expectation.AssertReport(report);
     }
 
+    /// <summary>Analyzer Applies Configured Command Timeout To Catalog Batches.</summary>
     [Fact]
     public async Task Analyzer_AppliesConfiguredCommandTimeoutToCatalogBatches()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -91,18 +99,34 @@ public sealed class PostgreSqlPerformanceIntegrationTests : PostgreSqlSafeMigrat
                     SafeMigrationSql.Function("pg_sleep", SafeMigrationSql.Literal(5)))),
             SafeMigrationPolicy.ThrowIfDifferent);
 
-        _ = await Assert.ThrowsAsync<NpgsqlException>(() => context
+        // Act
+        var failure = await Record.ExceptionAsync(() => context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
                 context,
                 builder.Operations,
                 new SafeMigrationRunOptions("catalog-timeout"),
                 CancellationToken.None));
+
+        // Assert
+        PostgreSqlCommandTimeoutAssertions.AssertTimeout(failure);
+        Assert.Equal(ConnectionState.Closed,
+            context.Database.GetDbConnection()
+                .State);
+
+        Assert.Equal(
+            0,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM pg_catalog.pg_constraint WHERE conname = 'ck_catalog_timeout';",
+                cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Retains exact managed and foreign catalog contracts with real pooled connections.</summary>
     [Fact]
-    public async Task FullRunner_LiveCatalogP95RemainsBoundedWithForeignObjectsAndPooling()
+    public async Task FullRunner_PooledCatalogPreservesExactScopeWithForeignObjects()
     {
+        // Arrange
         var templateConnectionString = await CreateDatabaseAsync(CancellationToken.None);
         var connectionString = new NpgsqlConnectionStringBuilder(templateConnectionString)
         {
@@ -125,44 +149,41 @@ public sealed class PostgreSqlPerformanceIntegrationTests : PostgreSqlSafeMigrat
         var operations = BuildPostgreSqlPerformanceOperations(context.Database.ProviderName!);
         var runner = context.GetService<ISafeMigrationRunner>();
         var options = new SafeMigrationRunOptions("live-performance");
-        var clean = await LivePerformanceEvidence.MeasureAsync(
-            token => runner.AnalyzeAsync(context, operations, options, token),
-            CancellationToken.None);
+
+        // Act
+        var clean = await runner.AnalyzeAsync(context, operations, options, CancellationToken.None);
 
         await ExecuteSqlAsync(
             fixtureConnectionString,
             BuildPostgreSqlPerformanceTables("foreign_perf_", ForeignPerformanceTableCount, includeIndex: true),
             cancellationToken: CancellationToken.None);
 
-        var noisy = await LivePerformanceEvidence.MeasureAsync(
-            token => runner.AnalyzeAsync(context, operations, options, token),
-            CancellationToken.None);
+        var noisy = await runner.AnalyzeAsync(context, operations, options, CancellationToken.None);
 
-        LivePerformanceEvidence.Write(
-            "postgresql",
-            Fixture.ServerVersion.ToString(),
-            clean,
-            noisy,
+        // Assert
+        MatchingTableAssessmentAssertions.AssertComplete(
+            clean.Assessments,
             ExpectedPerformanceTableCount,
-            ForeignPerformanceTableCount);
+            "expected_perf_");
 
-        Assert.All(
-            clean.LastReport.Assessments,
-            static assessment => Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState));
+        MatchingTableAssessmentAssertions.AssertComplete(
+            noisy.Assessments,
+            ExpectedPerformanceTableCount,
+            "expected_perf_");
 
-        Assert.Empty(clean.LastReport.UnexpectedObjects);
+        Assert.Empty(clean.UnexpectedObjects);
         Assert.Equal(
             ForeignPerformanceTableCount,
-            noisy.LastReport.UnexpectedObjects.Count(static value =>
+            noisy.UnexpectedObjects.Count(static value =>
                 value.ObjectKind == SafeMigrationDatabaseObjectKind.Table));
 
         Assert.DoesNotContain(
-            noisy.LastReport.UnexpectedObjects,
+            noisy.UnexpectedObjects,
             static value => value.ObjectKind != SafeMigrationDatabaseObjectKind.Table);
 
         Assert.Equal(
-            clean.LastReport.Assessments.Select(static value => value.Code),
-            noisy.LastReport.Assessments.Select(static value => value.Code));
+            clean.Assessments.Select(static value => value.Code),
+            noisy.Assessments.Select(static value => value.Code));
     }
 
     private static List<MigrationOperation> BuildPostgreSqlPerformanceOperations(
@@ -181,6 +202,8 @@ public sealed class PostgreSqlPerformanceIntegrationTests : PostgreSqlSafeMigrat
                 SafeMigrationPolicy.ThrowIfDifferent);
         }
 
+        // WHY: Snapshot framework operation ordering in an independently owned list.
+        // ReSharper disable once UseCollectionExpression
         return builder.Operations.ToList();
     }
 

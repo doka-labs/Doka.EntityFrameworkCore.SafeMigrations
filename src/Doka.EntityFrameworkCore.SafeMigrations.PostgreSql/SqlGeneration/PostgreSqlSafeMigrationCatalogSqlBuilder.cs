@@ -28,12 +28,12 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         _valueLiteral = valueLiteral ?? RenderValueLiteral;
     }
 
-    /// <summary>Builds the exact provider plan, separating native runtime barriers from captured analysis evidence.</summary>
+    /// <summary>Separates native runtime barriers from captured analysis evidence in the exact provider plan.</summary>
     /// <param name="operation">The immutable safe operation.</param>
     /// <param name="expectedTableConstraints">The ordered table constraint contract when required.</param>
     /// <param name="includeAnalysisEvidence">Whether to retain analysis-only diagnostic facts.</param>
     /// <param name="includeTransitionEvidence">Whether to retain analysis-only column-transition facts.</param>
-    /// <param name="includeRuntimeIndexInputGuard">Whether native execution must fence index input/data planning.</param>
+    /// <param name="includeRuntimeIndexInputGuard">Whether native execution fences index input/data planning.</param>
     /// <param name="includeIndexDropColumnProof">
     /// Whether visible optional catalogs may certify index-only effects.
     /// </param>
@@ -207,12 +207,10 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     )
     {
         var tableExists = TableExists(table, schema);
-        if (columns.Count == 0)
-        {
-            return tableExists;
-        }
 
-        return $"""
+        return columns.Count == 0
+            ? tableExists
+            : $"""
             ({tableExists}) AND ((SELECT COUNT(DISTINCT a.attname) FROM pg_catalog.pg_attribute a
             WHERE a.attrelid = {QualifiedRegclass(table, schema)} AND a.attnum > 0 AND NOT a.attisdropped
             AND a.attname IN ({string.Join(", ", columns.Select(Literal))}))
@@ -322,8 +320,12 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             yield return definition.StructuredFilter;
         }
 
-        foreach (var key in definition.Keys)
+        // WHY: This pass only reads the stable ordered collection by ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var keyIndex = 0; keyIndex < definition.Keys.Count; keyIndex++)
         {
+            var key = definition.Keys[keyIndex];
             if (key.Expression is not null)
             {
                 yield return SafeMigrationSql.Opaque(key.Expression);

@@ -22,7 +22,7 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
             .Where(static table => table.Schema is null)
             .ToDictionary(static table => table.Table, s_identifierComparer);
 
-        var result = new List<SafeMigrationUnexpectedObject>();
+        List<SafeMigrationUnexpectedObject> result = [];
 
         foreach (var table in snapshot.Tables.Values.OrderBy(static value => value.Name, s_identifierComparer))
         {
@@ -39,6 +39,7 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
                 continue;
             }
 
+            // WHY: Publish findings directly from the filtered catalog view without another collection.
             // ReSharper disable once LoopCanBeConvertedToQuery
             foreach (var column in table.Columns.Values.Where(column => !Contains(expectedTable.Columns, column.Name)))
             {
@@ -51,6 +52,7 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
                         "unexpected_column"));
             }
 
+            // WHY: Publish findings directly from the filtered catalog view without another collection.
             // ReSharper disable once LoopCanBeConvertedToQuery
             foreach (var index in table.Indexes.Where(index => index.Origin == "c"
                 && !Contains(expectedTable.Indexes, index.Name)))
@@ -74,8 +76,12 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
                     SafeMigrationDatabaseObjectKind.PrimaryKey);
             }
 
-            foreach (var unique in table.UniqueConstraints)
+            // WHY: Traverse the stable ordered source by ordinal without materializing another collection.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var uniqueIndex = 0; uniqueIndex < table.UniqueConstraints.Count; uniqueIndex++)
             {
+                var unique = table.UniqueConstraints[uniqueIndex];
                 AddUnexpectedConstraint(
                     result,
                     expectedTable,
@@ -97,8 +103,12 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
                     SafeMigrationDatabaseObjectKind.CheckConstraint);
             }
 
-            foreach (var foreignKey in table.ForeignKeys)
+            // WHY: Traverse the stable ordered source by ordinal without materializing another collection.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var foreignKeyIndex = 0; foreignKeyIndex < table.ForeignKeys.Count; foreignKeyIndex++)
             {
+                var foreignKey = table.ForeignKeys[foreignKeyIndex];
                 AddUnexpectedConstraint(
                     result,
                     expectedTable,
@@ -125,7 +135,7 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
             return findings.AsReadOnly();
         }
 
-        var semanticAliases = new HashSet<int>();
+        HashSet<int> semanticAliases = [];
         foreach (var candidates in SafeMigrationSemanticCandidateFactory
             .Create(operations, findings, projectUniqueIndexesAsUniqueConstraints: true)
             .Chunk(SafeMigrationCatalogQueryLimits.MaximumOperationsPerPlanCapture))
@@ -137,7 +147,10 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
             var analyses = Analyze(
                 context,
                 candidates
-                    .Select(static candidate => (MigrationOperation)candidate.Operation)
+                    .Select(static MigrationOperation (candidate) => candidate.Operation)
+
+                    // WHY: Preserve explicit fluent materialization for the ordered snapshot.
+                    // ReSharper disable once UseCollectionExpression
                     .ToArray(),
                 targetModels: null,
                 snapshot,
@@ -162,6 +175,9 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
 
         return findings
             .Where((_, index) => !semanticAliases.Contains(index))
+
+            // WHY: Preserve explicit fluent materialization for the ordered snapshot.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
     }
 

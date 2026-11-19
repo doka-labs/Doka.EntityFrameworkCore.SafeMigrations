@@ -1,41 +1,51 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
+/// <summary>Protects projected physical key budgets and fail-closed width evidence.</summary>
 public sealed class MySqlProjectedIndexPhysicalShapeTests : IDisposable
 {
     private readonly DbContext _context = CreateContext();
     private ServiceProvider? _nativeServices;
 
+    /// <inheritdoc />
     public void Dispose()
     {
         _context.Dispose();
         _nativeServices?.Dispose();
     }
 
+    /// <summary>Accepts a target prefix within the accepted widened character-column domain.</summary>
     [Fact]
     public void WidenedCharacterColumnAcceptsAValidTargetPrefix()
     {
+        // Arrange
         var columns = ProjectedColumns.Create(
             CharacterColumn("property", length: 800));
 
         var index = Index(
             new ExpectedIndexKeyDefinition(column: "property", prefixLength: 768));
 
+        // Act
         var result = Validate(index, columns, maximumKeyBytes: 3072);
 
+        // Assert
         Assert.Equal(MySqlProjectedIndexPhysicalShapeResult.Feasible, result);
     }
 
+    /// <summary>Distinguishes a prefix beyond the projected column from a representable physical key.</summary>
     [Fact]
     public void PrefixLongerThanTheProjectedColumnIsRejected()
     {
+        // Arrange
         var columns = ProjectedColumns.Create(
             CharacterColumn("property", length: 767));
 
         var index = Index(
             new ExpectedIndexKeyDefinition(column: "property", prefixLength: 768));
 
+        // Act
         var result = Validate(index, columns, maximumKeyBytes: 3072);
 
+        // Assert
         Assert.Equal(MySqlProjectedIndexPhysicalShapeResult.PrefixExceedsTargetColumn, result);
     }
 
@@ -56,19 +66,29 @@ public sealed class MySqlProjectedIndexPhysicalShapeTests : IDisposable
         Assert.Equal(MySqlProjectedIndexPhysicalShapeResult.Feasible, result);
     }
 
+    /// <summary>
+    /// Requires an explicit prefix when the full projected character domain exceeds the native key budget.
+    /// </summary>
     [Fact]
     public void OverlongUnprefixedProjectedColumnRequiresAnExplicitPrefix()
     {
+        // Arrange
         var columns = ProjectedColumns.Create(
             CharacterColumn("property", length: 800));
 
         var index = Index(new ExpectedIndexKeyDefinition(column: "property"));
 
+        // Act
         var result = Validate(index, columns, maximumKeyBytes: 3072);
 
+        // Assert
         Assert.Equal(MySqlProjectedIndexPhysicalShapeResult.MissingRequiredPrefix, result);
     }
 
+    /// <summary>Applies the captured page-size and row-format budgets to the projected key width.</summary>
+    /// <param name="maximumKeyBytes">The captured native byte budget for the complete ordered key.</param>
+    /// <param name="prefixLength">The explicit native key-part prefix length.</param>
+    /// <param name="isFeasible">Whether the exact native key shape is physically representable.</param>
     [Theory]
     [InlineData(768, 192, true)]
     [InlineData(768, 193, false)]
@@ -80,14 +100,17 @@ public sealed class MySqlProjectedIndexPhysicalShapeTests : IDisposable
         bool isFeasible
     )
     {
+        // Arrange
         var columns = ProjectedColumns.Create(
             CharacterColumn("property", length: 800));
 
         var index = Index(
             new ExpectedIndexKeyDefinition(column: "property", prefixLength: prefixLength));
 
+        // Act
         var result = Validate(index, columns, maximumKeyBytes);
 
+        // Assert
         Assert.Equal(
             isFeasible
                 ? MySqlProjectedIndexPhysicalShapeResult.Feasible
@@ -95,9 +118,11 @@ public sealed class MySqlProjectedIndexPhysicalShapeTests : IDisposable
             result);
     }
 
+    /// <summary>Includes every ordered composite member when calculating the projected key budget.</summary>
     [Fact]
     public void CompositeProjectedKeyUsesEveryOrderedColumnWidth()
     {
+        // Arrange
         var columns = ProjectedColumns.Create(
             CharacterColumn("left_value", length: 500),
             CharacterColumn("right_value", length: 500));
@@ -106,11 +131,17 @@ public sealed class MySqlProjectedIndexPhysicalShapeTests : IDisposable
             new ExpectedIndexKeyDefinition(column: "left_value", prefixLength: 384),
             new ExpectedIndexKeyDefinition(column: "right_value", prefixLength: 385));
 
+        // Act
         var result = Validate(index, columns, maximumKeyBytes: 3072);
 
+        // Assert
         Assert.Equal(MySqlProjectedIndexPhysicalShapeResult.KeyExceedsPhysicalLimit, result);
     }
 
+    /// <summary>Measures a binary prefix in bytes rather than applying a character-set multiplier.</summary>
+    /// <param name="columnLength">The declared character or byte length used by the physical-width proof.</param>
+    /// <param name="prefixLength">The explicit native key-part prefix length.</param>
+    /// <param name="expected">The independently specified result for this exact input case.</param>
     [Theory]
     [InlineData(768, 768, (int)MySqlProjectedIndexPhysicalShapeResult.Feasible)]
     [InlineData(767, 768, (int)MySqlProjectedIndexPhysicalShapeResult.PrefixExceedsTargetColumn)]
@@ -121,6 +152,7 @@ public sealed class MySqlProjectedIndexPhysicalShapeTests : IDisposable
         int expected
     )
     {
+        // Arrange
         var columns = ProjectedColumns.Create(
             new ExpectedColumnDefinition(
                 "payload",
@@ -132,14 +164,18 @@ public sealed class MySqlProjectedIndexPhysicalShapeTests : IDisposable
         var index = Index(
             new ExpectedIndexKeyDefinition(column: "payload", prefixLength: prefixLength));
 
+        // Act
         var result = Validate(index, columns, maximumKeyBytes: 768);
 
+        // Assert
         Assert.Equal((MySqlProjectedIndexPhysicalShapeResult)expected, result);
     }
 
+    /// <summary>Includes scalar key members when checking the total composite budget.</summary>
     [Fact]
     public void ProjectedScalarWidthParticipatesInTheCompositeLimit()
     {
+        // Arrange
         var columns = ProjectedColumns.Create(
             CharacterColumn("property", length: 800),
             new ExpectedColumnDefinition("sequence", typeof(int), isNullable: false, storeType: "int"));
@@ -148,45 +184,61 @@ public sealed class MySqlProjectedIndexPhysicalShapeTests : IDisposable
             new ExpectedIndexKeyDefinition(column: "property", prefixLength: 191),
             new ExpectedIndexKeyDefinition(column: "sequence"));
 
+        // Act
         var result = Validate(index, columns, maximumKeyBytes: 767);
 
+        // Assert
         Assert.Equal(MySqlProjectedIndexPhysicalShapeResult.KeyExceedsPhysicalLimit, result);
     }
 
-    [Fact]
-    public void ScalarPrefixAndUnknownColumnRemainUnverifiable()
+    /// <summary>
+    /// Keeps scalar prefixes and unavailable source columns unprovable instead of guessing their width.
+    /// </summary>
+    /// <param name="column">The existing scalar or unavailable column whose prefix is not provable.</param>
+    /// <param name="prefixLength">The invalid scalar prefix or absent-column unprefixed request.</param>
+    [Theory]
+    [InlineData("sequence", 1)]
+    [InlineData("missing", null)]
+    public void ScalarPrefixAndUnknownColumnRemainUnverifiable(
+        string column,
+        int? prefixLength
+    )
     {
+        // Arrange
         var columns = ProjectedColumns.Create(
             new ExpectedColumnDefinition("sequence", typeof(int), isNullable: false, storeType: "int"));
 
-        var scalarPrefix = Index(
-            new ExpectedIndexKeyDefinition(column: "sequence", prefixLength: 1));
+        var index = Index(new ExpectedIndexKeyDefinition(column: column, prefixLength: prefixLength));
 
-        var missingColumn = Index(new ExpectedIndexKeyDefinition(column: "missing"));
+        // Act
+        var result = Validate(index, columns, maximumKeyBytes: 3072);
 
-        var scalarResult = Validate(scalarPrefix, columns, maximumKeyBytes: 3072);
-        var missingResult = Validate(missingColumn, columns, maximumKeyBytes: 3072);
-
-        Assert.Equal(MySqlProjectedIndexPhysicalShapeResult.Unverifiable, scalarResult);
-        Assert.Equal(MySqlProjectedIndexPhysicalShapeResult.Unverifiable, missingResult);
+        // Assert
+        Assert.Equal(MySqlProjectedIndexPhysicalShapeResult.Unverifiable, result);
     }
 
+    /// <summary>Rejects a projected key on an unsupported storage engine.</summary>
     [Fact]
     public void UnsupportedStorageEngineRemainsFailClosed()
     {
+        // Arrange
         var columns = ProjectedColumns.Create(
             CharacterColumn("property", length: 80));
 
         var index = Index(new ExpectedIndexKeyDefinition(column: "property"));
 
+        // Act
         var result = Validate(index, columns, maximumKeyBytes: 0);
 
+        // Assert
         Assert.Equal(MySqlProjectedIndexPhysicalShapeResult.UnsupportedStorageEngine, result);
     }
 
+    /// <summary>Checks the full projected primary-key domain rather than assuming a truncated prefix.</summary>
     [Fact]
     public void PrimaryKeyUsesTheFullProjectedColumnWidth()
     {
+        // Arrange
         var columns = ProjectedColumns.Create(
             CharacterColumn("external_id", length: 192));
 
@@ -195,18 +247,22 @@ public sealed class MySqlProjectedIndexPhysicalShapeTests : IDisposable
             "records",
             ["external_id"]);
 
+        // Act
         var result = MySqlProjectedIndexPhysicalShape.Validate(
             primaryKey,
             columns,
             new SafeMigrationIndexPhysicalEnvironment(MaximumKeyBytes: 767),
             _context.GetService<IRelationalTypeMappingSource>());
 
+        // Assert
         Assert.Equal(MySqlProjectedIndexPhysicalShapeResult.KeyExceedsPhysicalLimit, result);
     }
 
+    /// <summary>Includes every unique-constraint member in its projected physical key width.</summary>
     [Fact]
     public void UniqueConstraintUsesEveryCompositeColumnWidth()
     {
+        // Arrange
         var columns = ProjectedColumns.Create(
             CharacterColumn("left_value", length: 96),
             CharacterColumn("right_value", length: 96));
@@ -216,12 +272,14 @@ public sealed class MySqlProjectedIndexPhysicalShapeTests : IDisposable
             "records",
             ["left_value", "right_value"]);
 
+        // Act
         var result = MySqlProjectedIndexPhysicalShape.Validate(
             uniqueConstraint,
             columns,
             new SafeMigrationIndexPhysicalEnvironment(MaximumKeyBytes: 767),
             _context.GetService<IRelationalTypeMappingSource>());
 
+        // Assert
         Assert.Equal(MySqlProjectedIndexPhysicalShapeResult.KeyExceedsPhysicalLimit, result);
     }
 
@@ -389,12 +447,17 @@ public sealed class MySqlProjectedIndexPhysicalShapeTests : IDisposable
         Assert.False(shape.SupportsPrefix);
     }
 
+    /// <summary>Rejects excess key parts consistently for indexes, primary keys, and unique constraints.</summary>
     [Fact]
     public void EveryProjectedPhysicalKeyRejectsMoreThanSixteenParts()
     {
+        // Arrange
         var columnNames = Enumerable
             .Range(0, 17)
             .Select(index => $"value_{index.ToString(CultureInfo.InvariantCulture)}")
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var columns = ProjectedColumns.Create(
@@ -405,6 +468,9 @@ public sealed class MySqlProjectedIndexPhysicalShapeTests : IDisposable
         var index = Index(
             columnNames
                 .Select(static name => new ExpectedIndexKeyDefinition(column: name))
+
+                // WHY: Retain this explicit materialization/copy path and its collection lowering.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray());
 
         var primaryKey = new ExpectedPrimaryKeyDefinition("pk_records", "records", columnNames);
@@ -412,6 +478,7 @@ public sealed class MySqlProjectedIndexPhysicalShapeTests : IDisposable
         var environment = new SafeMigrationIndexPhysicalEnvironment(MaximumKeyBytes: 3072);
         var typeMappingSource = _context.GetService<IRelationalTypeMappingSource>();
 
+        // Act
         var indexResult = MySqlProjectedIndexPhysicalShape.Validate(
             index,
             columns,
@@ -430,6 +497,7 @@ public sealed class MySqlProjectedIndexPhysicalShapeTests : IDisposable
             environment,
             typeMappingSource);
 
+        // Assert
         Assert.Equal(MySqlProjectedIndexPhysicalShapeResult.TooManyKeyParts, indexResult);
         Assert.Equal(MySqlProjectedIndexPhysicalShapeResult.TooManyKeyParts, primaryKeyResult);
         Assert.Equal(MySqlProjectedIndexPhysicalShapeResult.TooManyKeyParts, uniqueConstraintResult);

@@ -1,6 +1,9 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
 // WHY: Readiness and cancellation share the same class fixture rather than starting another server container.
+/// <summary>
+/// Holds the SqlServerModelManagedDataCancellationTests test contracts for this focused fixture topic.
+/// </summary>
 public sealed partial class SqlServerModelManagedDataCancellationTests
 {
     /// <summary>

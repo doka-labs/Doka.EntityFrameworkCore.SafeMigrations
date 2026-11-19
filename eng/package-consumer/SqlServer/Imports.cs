@@ -1,6 +1,9 @@
 global using System;
+global using System.IO;
 global using System.Linq;
 global using System.Reflection;
+global using System.Reflection.Metadata;
+global using System.Reflection.PortableExecutable;
 global using Doka.EntityFrameworkCore.SafeMigrations;
 global using Doka.EntityFrameworkCore.SafeMigrations.SqlServer;
 global using Microsoft.EntityFrameworkCore;

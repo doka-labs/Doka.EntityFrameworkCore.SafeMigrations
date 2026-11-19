@@ -66,8 +66,12 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                     OccupySymbol(tablePrimary.Name, tablePrimary.Schema);
                 }
 
-                foreach (var unique in table.Definition.UniqueConstraints)
+                // WHY: This pass only reads the stable ordered collection by ordinal.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
+                for (var uniqueIndex = 0; uniqueIndex < table.Definition.UniqueConstraints.Count; uniqueIndex++)
                 {
+                    var unique = table.Definition.UniqueConstraints[uniqueIndex];
                     OccupySymbol(unique.Name, unique.Schema);
                 }
 
@@ -95,6 +99,8 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                 OccupySymbol(index.NewName, index.Schema);
                 break;
         }
+
+        return;
 
         void ExpireColumn(
             string table,
@@ -202,8 +208,13 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         }
 
         var hasNewCase = false;
-        foreach (var key in definition.Keys)
+
+        // WHY: This pass only reads the stable ordered collection by ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var keyIndex = 0; keyIndex < definition.Keys.Count; keyIndex++)
         {
+            var key = definition.Keys[keyIndex];
             if (PostgreSqlSafeMigrationCatalogSqlBuilder.IndexPhysicalMember(key) is not { } member
                 || !IndexMemberTableMatches(definition, member)
                 || !TryGetCurrentForeignKeyStorage(
@@ -255,8 +266,12 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             hasNewCase = true;
         }
 
-        foreach (var included in definition.IncludedColumns)
+        // WHY: This pass only reads the stable ordered collection by ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var includedIndex = 0; includedIndex < definition.IncludedColumns.Count; includedIndex++)
         {
+            var included = definition.IncludedColumns[includedIndex];
             if (!TryGetCurrentForeignKeyStorage(definition.Table, definition.Schema, included, columns, out _))
             {
                 return null;

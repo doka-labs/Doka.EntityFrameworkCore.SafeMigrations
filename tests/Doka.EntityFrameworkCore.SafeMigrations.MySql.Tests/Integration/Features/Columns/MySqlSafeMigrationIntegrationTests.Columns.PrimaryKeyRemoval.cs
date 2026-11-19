@@ -133,6 +133,9 @@ public sealed class MySqlColumnsPrimaryKeyRemovalIntegrationTests : MySqlSafeMig
         await ExecuteOperationsAsync(context,
             operations
                 .Take(3)
+
+                // WHY: Retain this explicit materialization/copy path and its collection lowering.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray(),
             CancellationToken.None);
 

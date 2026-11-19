@@ -203,6 +203,7 @@ public sealed class PostgreSqlEventTriggerProjectionTests
     }
 
     /// <summary>Represents only the identity column consumed by Npgsql's sequence-bump generation.</summary>
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class IdentitySeedValue
     {
         /// <summary>Gets or sets the generated identity key.</summary>

@@ -1,30 +1,45 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
+/// <summary>Protects excluded-table seed ownership, transition boundaries, and stable retained order.</summary>
 public sealed class MySqlModelManagedDataOwnershipTests
 {
+    /// <summary>
+    /// Filters only model-managed data owned by excluded tables, retaining unrelated provider operations.
+    /// </summary>
     [Fact]
     public void EnabledOwnership_FiltersOnlyExcludedModelManagedData()
     {
+        // Arrange
         using var context = new EnabledMixedOwnershipContext();
         var model = RelationalModel(context);
         var differ = context.GetService<IMigrationsModelDiffer>();
 
+        // Act
         var operations = differ.GetDifferences(source: null, model);
 
+        var hasDifferences = differ.HasDifferences(source: null, model);
+
+        // Assert
         Assert.DoesNotContain(operations, operation => Table(operation) == "core_roles");
         Assert.Contains(operations, operation => Table(operation) == "custom_profiles");
-        Assert.True(differ.HasDifferences(source: null, model));
+        Assert.True(hasDifferences);
     }
 
+    /// <summary>
+    /// Preserves provider-generated core seed differences when excluded-table ownership filtering is disabled.
+    /// </summary>
     [Fact]
     public void DisabledOwnership_PreservesProviderGeneratedCoreDataDifference()
     {
+        // Arrange
         using var context = new DisabledMixedOwnershipContext();
         var model = RelationalModel(context);
         var differ = context.GetService<IMigrationsModelDiffer>();
 
+        // Act
         var operations = differ.GetDifferences(source: null, model);
 
+        // Assert
         Assert.Contains(
             operations,
             operation => operation is InsertDataOperation { Table: "core_roles" });
@@ -34,22 +49,30 @@ public sealed class MySqlModelManagedDataOwnershipTests
             operation => operation is InsertDataOperation { Table: "custom_profiles" });
     }
 
+    /// <summary>Treats an externally owned model-only seed difference as an empty managed migration.</summary>
     [Fact]
     public void EnabledOwnership_MakesExternalOnlyModelDifferenceEmpty()
     {
+        // Arrange
         using var context = new EnabledExternalOnlyOwnershipContext();
         var model = RelationalModel(context);
         var differ = context.GetService<IMigrationsModelDiffer>();
 
+        // Act
         var operations = differ.GetDifferences(source: null, model);
 
+        var hasDifferences = differ.HasDifferences(source: null, model);
+
+        // Assert
         Assert.Empty(operations);
-        Assert.False(differ.HasDifferences(source: null, model));
+        Assert.False(hasDifferences);
     }
 
+    /// <summary>Preserves the original list and operation instances when ownership filtering removes nothing.</summary>
     [Fact]
     public void OwnershipFilter_PreservesOriginalListWhenNothingIsRemoved()
     {
+        // Arrange
         using var context = new IncludedCoreOwnershipContext();
         var model = RelationalModel(context);
         IReadOnlyList<MigrationOperation> operations =
@@ -63,19 +86,23 @@ public sealed class MySqlModelManagedDataOwnershipTests
             new SqlOperation { Sql = "SELECT 1;" },
         ];
 
+        // Act
         var filtered = SafeMigrationModelManagedDataOwnershipFilter.Filter(
             operations,
             source: null,
             model);
 
+        // Assert
         Assert.Same(operations, filtered);
         Assert.Same(operations[0], filtered[0]);
         Assert.Same(operations[1], filtered[1]);
     }
 
+    /// <summary>Rejects contradictory source and target ownership without disclosing managed row values.</summary>
     [Fact]
     public void OwnershipFilter_RejectsContradictoryUpdateOwnershipWithoutValues()
     {
+        // Arrange
         using var sourceContext = new EnabledExternalOnlyOwnershipContext();
         using var targetContext = new IncludedCoreOwnershipContext();
         var operation = new UpdateDataOperation
@@ -87,17 +114,22 @@ public sealed class MySqlModelManagedDataOwnershipTests
             Values = new object[,] { { "sensitive-value" } },
         };
 
-        var exception = Assert.Throws<InvalidOperationException>(() =>
+        // Act
+        var capturedException = Record.Exception(() =>
             SafeMigrationModelManagedDataOwnershipFilter.Filter(
                 [operation],
                 RelationalModel(sourceContext),
                 RelationalModel(targetContext)));
 
+        // Assert
+        var exception = Assert.IsType<InvalidOperationException>(capturedException);
         Assert.Contains("model_managed_data_ownership_transition", exception.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("42", exception.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("sensitive-value", exception.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>Rejects contradictory insert or delete ownership without disclosing managed row values.</summary>
+    /// <param name="insert">Whether the seed transition inserts rather than removes the selected row.</param>
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
@@ -105,10 +137,11 @@ public sealed class MySqlModelManagedDataOwnershipTests
         bool insert
     )
     {
+        // Arrange
         using var excludedContext = new EnabledExternalOnlyOwnershipContext();
         using var includedContext = new IncludedCoreOwnershipContext();
-        var operation = insert
-            ? (MigrationOperation)new InsertDataOperation
+        MigrationOperation operation = insert
+            ? new InsertDataOperation
             {
                 Table = "core_roles",
                 Columns = ["Id", "Name"],
@@ -121,20 +154,27 @@ public sealed class MySqlModelManagedDataOwnershipTests
                 KeyValues = new object[,] { { 42 } },
             };
 
-        var exception = Assert.Throws<InvalidOperationException>(() =>
+        // Act
+        var capturedException = Record.Exception(() =>
             SafeMigrationModelManagedDataOwnershipFilter.Filter(
                 [operation],
                 RelationalModel(excludedContext),
                 RelationalModel(includedContext)));
 
+        // Assert
+        var exception = Assert.IsType<InvalidOperationException>(capturedException);
         Assert.Contains("model_managed_data_ownership_transition", exception.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("42", exception.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("sensitive-value", exception.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Removes every externally owned seed shape while retaining the relative order of surviving operations.
+    /// </summary>
     [Fact]
     public void OwnershipFilter_SuppressesEveryExcludedDataShapeAndPreservesRetainedOrder()
     {
+        // Arrange
         using var context = new EnabledMixedOwnershipContext();
         var model = RelationalModel(context);
         IReadOnlyList<MigrationOperation> operations =
@@ -148,11 +188,13 @@ public sealed class MySqlModelManagedDataOwnershipTests
             Delete("custom_profiles", 7),
         ];
 
+        // Act
         var filtered = SafeMigrationModelManagedDataOwnershipFilter.Filter(
             operations,
             model,
             model);
 
+        // Assert
         Assert.Collection(
             filtered,
             operation => Assert.Same(operations[1], operation),
@@ -161,84 +203,104 @@ public sealed class MySqlModelManagedDataOwnershipTests
             operation => Assert.Same(operations[6], operation));
     }
 
-    [Fact]
-    public void OwnershipFilter_FailsClosedForEveryUnresolvedRelevantModel()
+    /// <summary>
+    /// Rejects the specific missing source or target instead of accidentally borrowing another model.
+    /// </summary>
+    /// <param name="operationKind">The seed transition whose relevant model is unavailable.</param>
+    /// <param name="missingSource">Whether the unresolved model supplies the old rather than new row contract.</param>
+    /// <param name="expectedReason">The transition role that the failure must identify.</param>
+    [Theory]
+    [InlineData("insert", false, "insert target")]
+    [InlineData("delete", true, "delete source")]
+    [InlineData("update", true, "update source")]
+    [InlineData("update", false, "update target")]
+    public void OwnershipFilter_FailsClosedForEveryUnresolvedRelevantModel(
+        string operationKind,
+        bool missingSource,
+        string expectedReason
+    )
     {
+        // Arrange
         using var context = new EnabledExternalOnlyOwnershipContext();
         var model = RelationalModel(context);
-        MigrationOperation[] operations =
-        [
-            Insert("missing_table", 1),
-            Delete("missing_table", 2),
-            Update("core_roles", 3),
-        ];
+        var operation = operationKind switch
+        {
+            "insert" => (MigrationOperation)Insert("missing_table", 1),
+            "delete" => Delete("missing_table", 2),
+            "update" => Update("core_roles", 3),
+            _ => throw new ArgumentOutOfRangeException(nameof(operationKind)),
+        };
 
-        var insertException = Assert.Throws<InvalidOperationException>(() =>
+        // Act
+        var exception = Record.Exception(() =>
             SafeMigrationModelManagedDataOwnershipFilter.Filter(
-                [operations[0]],
-                source: null,
-                model));
+                [operation],
+                source: missingSource
+                    ? null
+                    : model,
+                target: missingSource
+                    ? model
+                    : null));
 
-        var deleteException = Assert.Throws<InvalidOperationException>(() =>
-            SafeMigrationModelManagedDataOwnershipFilter.Filter(
-                [operations[1]],
-                model,
-                target: null));
-
-        var updateSourceException = Assert.Throws<InvalidOperationException>(() =>
-            SafeMigrationModelManagedDataOwnershipFilter.Filter(
-                [operations[2]],
-                source: null,
-                model));
-
-        var updateTargetException = Assert.Throws<InvalidOperationException>(() =>
-            SafeMigrationModelManagedDataOwnershipFilter.Filter(
-                [operations[2]],
-                model,
-                target: null));
-
-        Assert.Contains("insert target", insertException.Message, StringComparison.Ordinal);
-        Assert.Contains("delete source", deleteException.Message, StringComparison.Ordinal);
-        Assert.Contains("update source", updateSourceException.Message, StringComparison.Ordinal);
-        Assert.Contains("update target", updateTargetException.Message, StringComparison.Ordinal);
+        // Assert
+        Assert.Contains(expectedReason,
+            Assert.IsType<InvalidOperationException>(exception)
+                .Message,
+            StringComparison.Ordinal);
     }
 
+    /// <summary>Filters excluded core seed transitions while retaining application-owned custom transitions.</summary>
     [Fact]
     public void EnabledOwnership_FiltersCoreDataTransitionsAndRetainsCustomTransitions()
     {
+        // Arrange
         using var sourceContext = new SourceTransitionOwnershipContext();
         using var targetContext = new TargetTransitionOwnershipContext();
         var source = RelationalModel(sourceContext);
         var target = RelationalModel(targetContext);
         var differ = targetContext.GetService<IMigrationsModelDiffer>();
 
+        // Act
         var operations = differ.GetDifferences(source, target);
 
+        var hasDifferences = differ.HasDifferences(source, target);
+
+        // Assert
         Assert.DoesNotContain(operations, operation => IsDataOperation(operation, "core_roles"));
         Assert.Contains(operations, operation => operation is InsertDataOperation { Table: "custom_profiles" });
         Assert.Contains(operations, operation => operation is UpdateDataOperation { Table: "custom_profiles" });
         Assert.Contains(operations, operation => operation is DeleteDataOperation { Table: "custom_profiles" });
-        Assert.True(differ.HasDifferences(source, target));
+        Assert.True(hasDifferences);
     }
 
+    /// <summary>Reports no pending migration when only externally owned seed data changed.</summary>
     [Fact]
     public void EnabledOwnership_ReportsNoPendingDifferenceForCoreDataTransitionsOnly()
     {
+        // Arrange
         using var sourceContext = new SourceExternalTransitionOwnershipContext();
         using var targetContext = new TargetExternalTransitionOwnershipContext();
         var source = RelationalModel(sourceContext);
         var target = RelationalModel(targetContext);
         var differ = targetContext.GetService<IMigrationsModelDiffer>();
 
+        // Act
         var operations = differ.GetDifferences(source, target);
 
+        var hasDifferences = differ.HasDifferences(source, target);
+
+        // Assert
         Assert.Empty(operations);
-        Assert.False(differ.HasDifferences(source, target));
+        Assert.False(hasDifferences);
     }
 
+    /// <summary>
+    /// Leaves previously compiled migration SQL unchanged when the current ownership option is enabled.
+    /// </summary>
     [Fact]
     public void EnabledOwnership_DoesNotReinterpretAnExistingCompiledMigration()
     {
+        // Arrange
         const string connectionString = "Server=127.0.0.1;Port=1;Database=test;User ID=test;Password=test";
 
         var serverVersion = MySqlServerVersion.MySql(new Version(8, 4, 11));
@@ -248,18 +310,22 @@ public sealed class MySqlModelManagedDataOwnershipTests
             serverVersion,
             excludeModelManagedDataForExcludedTables: true);
 
+        // Act
         var defaultSql = GenerateCompiledMigrationSql(defaultContext);
         var ownershipSql = GenerateCompiledMigrationSql(ownershipContext);
 
+        // Assert
         Assert.NotEmpty(defaultSql);
         Assert.Equal(
             defaultSql.Select(MySqlRuntimeSqlCanonicalizer.NormalizeOwnedCorrelation),
             ownershipSql.Select(MySqlRuntimeSqlCanonicalizer.NormalizeOwnedCorrelation));
     }
 
+    /// <summary>Preserves reference identity and order while filtering a hundred thousand mixed operations.</summary>
     [Fact]
     public void OwnershipFilter_HandlesOneHundredThousandMixedOperationsInOrder()
     {
+        // Arrange
         using var context = new EnabledExternalOnlyOwnershipContext();
         var model = RelationalModel(context);
         var operations = new MigrationOperation[100_000];
@@ -275,11 +341,13 @@ public sealed class MySqlModelManagedDataOwnershipTests
                 : new SqlOperation { Sql = $"SELECT {ordinal};" };
         }
 
+        // Act
         var filtered = SafeMigrationModelManagedDataOwnershipFilter.Filter(
             operations,
             source: null,
             model);
 
+        // Assert
         Assert.Equal(50_000, filtered.Count);
         for (var ordinal = 0; ordinal < filtered.Count; ordinal++)
         {
@@ -287,9 +355,13 @@ public sealed class MySqlModelManagedDataOwnershipTests
         }
     }
 
+    /// <summary>
+    /// Returns an empty result when every large-workload seed operation belongs to an external owner.
+    /// </summary>
     [Fact]
     public void OwnershipFilter_RemovesOneHundredThousandExternallyOwnedOperations()
     {
+        // Arrange
         using var context = new EnabledExternalOnlyOwnershipContext();
         var model = RelationalModel(context);
         var values = new object[,] { { 1, "external" } };
@@ -304,11 +376,13 @@ public sealed class MySqlModelManagedDataOwnershipTests
             };
         }
 
+        // Act
         var filtered = SafeMigrationModelManagedDataOwnershipFilter.Filter(
             operations,
             source: null,
             model);
 
+        // Assert
         Assert.Empty(filtered);
     }
 
@@ -331,6 +405,9 @@ public sealed class MySqlModelManagedDataOwnershipTests
             .GetService<IMigrationsSqlGenerator>()
             .Generate(migration.UpOperations, context.Model)
             .Select(static command => command.CommandText)
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
     }
 
@@ -559,10 +636,19 @@ public sealed class MySqlModelManagedDataOwnershipTests
         protected override OwnershipSeedState SeedState => OwnershipSeedState.Target;
     }
 
-    private sealed class TransitionCoreRoleConfiguration(
-        OwnershipSeedState state
-    ) : IEntityTypeConfiguration<CoreRole>
+    private sealed class TransitionCoreRoleConfiguration : IEntityTypeConfiguration<CoreRole>
     {
+        private readonly OwnershipSeedState _state;
+
+        /// <summary>Initializes the explicit dependencies of this isolated test helper.</summary>
+        /// <param name="state">The source or target seed state configured for this model.</param>
+        public TransitionCoreRoleConfiguration(
+            OwnershipSeedState state
+        )
+        {
+            _state = state;
+        }
+
         public void Configure(
             EntityTypeBuilder<CoreRole> builder
         )
@@ -575,7 +661,7 @@ public sealed class MySqlModelManagedDataOwnershipTests
                 .IsRequired();
 
             builder.HasData(
-                state == OwnershipSeedState.Source
+                _state == OwnershipSeedState.Source
                     ?
                     [
                         new CoreRole
@@ -605,10 +691,19 @@ public sealed class MySqlModelManagedDataOwnershipTests
         }
     }
 
-    private sealed class TransitionCustomProfileConfiguration(
-        OwnershipSeedState state
-    ) : IEntityTypeConfiguration<CustomProfile>
+    private sealed class TransitionCustomProfileConfiguration : IEntityTypeConfiguration<CustomProfile>
     {
+        private readonly OwnershipSeedState _state;
+
+        /// <summary>Initializes the explicit dependencies of this isolated test helper.</summary>
+        /// <param name="state">The source or target seed state configured for this model.</param>
+        public TransitionCustomProfileConfiguration(
+            OwnershipSeedState state
+        )
+        {
+            _state = state;
+        }
+
         public void Configure(
             EntityTypeBuilder<CustomProfile> builder
         )
@@ -621,7 +716,7 @@ public sealed class MySqlModelManagedDataOwnershipTests
                 .IsRequired();
 
             builder.HasData(
-                state == OwnershipSeedState.Source
+                _state == OwnershipSeedState.Source
                     ?
                     [
                         new CustomProfile
@@ -657,6 +752,7 @@ public sealed class MySqlModelManagedDataOwnershipTests
         Target,
     }
 
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class CoreRole
     {
         public int Id { get; set; }
@@ -664,6 +760,7 @@ public sealed class MySqlModelManagedDataOwnershipTests
         public string Name { get; set; } = string.Empty;
     }
 
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class CustomProfile
     {
         public int Id { get; set; }

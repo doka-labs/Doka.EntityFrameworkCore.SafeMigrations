@@ -63,16 +63,17 @@ CI and release call the same reusable quality workflow. It enforces:
   isolated package-only consumers; and
 - SPDX 2.2 SBOM generation and validation.
 
-It also runs Core, MySQL/MariaDB, PostgreSQL, SQLite, and SQL Server through
-BenchmarkDotNet 0.15.8 with `--filter '*' --job Dry`. This smoke checks all
-default cases and native full JSON export, not statistical performance.
-Duration and managed allocation values never determine qualification success.
-Invalid configuration, generated-build or execution failures, missing/failed
-selected cases and missing/invalid evidence remain blocking. Retain each
-suite's complete `artifacts/performance` directory. Build, tests, coverage,
-tooling, package and SBOM gates are unchanged. See the
-[measurement boundaries](support-and-qualification.md#performance-and-memory)
-before comparing full measurement runs or historical allocation reports.
+BenchmarkDotNet is explicitly opt-in, including Dry. Default CI and release
+qualification execute deterministic workload/configuration controls without
+starting statistical benchmarking. `capture-benchmark-evidence` requests the
+default workload families of all five executables, not their advanced native
+modes. Native `--live-*` modes require a separate explicit invocation and a
+private dedicated-engine connection as documented in CONTRIBUTING.
+`capture-sqlserver-baseline` requests the separate SQL Server Short measurement.
+For requested measurement, execution/export failures and invalid evidence remain
+blocking, while numeric timing/allocation values stay informational. Required
+native, coverage, tooling, package and SBOM gates do not depend on this opt-in.
+See [measurement boundaries](support-and-qualification.md#performance-and-memory).
 
 The PostgreSQL EF tooling probe waits for the final TCP listener, never the
 image's temporary socket-only initialization server. Large live performance
@@ -80,9 +81,10 @@ fixtures receive a fixture-only command timeout; production SafeMigrations
 continues to use its normal configured timeout.
 
 The qualified workflow artifact contains the ten package archives,
-`SHA256SUMS`, performance evidence, and the SPDX manifest. GitHub creates build
-provenance and SBOM attestations for those exact bytes. The attestation job
-validates the build-provenance Sigstore bundle against all ten packages,
+`SHA256SUMS`, required qualification evidence, and the SPDX manifest. Explicitly
+requested benchmark output is retained separately, not fabricated when omitted.
+GitHub creates build provenance and SBOM attestations for those exact bytes.
+The attestation job validates the build-provenance Sigstore bundle against all ten packages,
 `SHA256SUMS`, and `manifest.spdx.json`, materializes exactly one canonical
 `release-provenance.intoto.jsonl` record, and uploads it under a run- and
 attempt-qualified artifact name before publication can reach the protected

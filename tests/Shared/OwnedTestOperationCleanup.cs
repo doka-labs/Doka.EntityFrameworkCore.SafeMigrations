@@ -1,5 +1,3 @@
-using System.Runtime.ExceptionServices;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.Testing;
 
 /// <summary>Finishes borrowed asynchronous test work before its caller releases the work's owners.</summary>

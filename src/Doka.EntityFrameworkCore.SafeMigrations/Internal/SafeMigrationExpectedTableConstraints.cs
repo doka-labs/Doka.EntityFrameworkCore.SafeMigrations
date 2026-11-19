@@ -98,7 +98,7 @@ internal sealed partial class SafeMigrationExpectedTableConstraints
     /// <param name="normalizeSchema">The provider qualifier normalizer.</param>
     /// <param name="tableComparer">The provider's physical table-name comparer.</param>
     /// <returns>Constraint contracts keyed by normalized physical table identity.</returns>
-    public static IReadOnlyDictionary<(string? Schema, string Table), SafeMigrationExpectedTableConstraints>
+    private static IReadOnlyDictionary<(string? Schema, string Table), SafeMigrationExpectedTableConstraints>
         FromOperations(
             IReadOnlyList<MigrationOperation> operations,
             Func<string?, string?> normalizeSchema,
@@ -182,22 +182,34 @@ internal sealed partial class SafeMigrationExpectedTableConstraints
         return result;
     }
 
-    private sealed class TableIdentityComparer(
-        Func<string?, string?> normalizeSchema,
-        StringComparer tableComparer
-    ) : IEqualityComparer<(string? Schema, string Table)>
+    private sealed class TableIdentityComparer : IEqualityComparer<(string? Schema, string Table)>
     {
+        private readonly Func<string?, string?> _normalizeSchema;
+        private readonly StringComparer _tableComparer;
+
+        /// <summary>Initializes table identity with the caller's verified provider rules.</summary>
+        /// <param name="normalizeSchema">The schema identity normalization function.</param>
+        /// <param name="tableComparer">The physical table identifier comparer.</param>
+        public TableIdentityComparer(
+            Func<string?, string?> normalizeSchema,
+            StringComparer tableComparer
+        )
+        {
+            _normalizeSchema = normalizeSchema;
+            _tableComparer = tableComparer;
+        }
+
         public bool Equals(
             (string? Schema, string Table) left,
             (string? Schema, string Table) right
-        ) => tableComparer.Equals(left.Table, right.Table)
-            && StringComparer.Ordinal.Equals(normalizeSchema(left.Schema), normalizeSchema(right.Schema));
+        ) => _tableComparer.Equals(left.Table, right.Table)
+            && StringComparer.Ordinal.Equals(_normalizeSchema(left.Schema), _normalizeSchema(right.Schema));
 
         public int GetHashCode(
             (string? Schema, string Table) value
         ) => HashCode.Combine(
-            tableComparer.GetHashCode(value.Table),
-            normalizeSchema(value.Schema) is { } schema
+            _tableComparer.GetHashCode(value.Table),
+            _normalizeSchema(value.Schema) is { } schema
                 ? StringComparer.Ordinal.GetHashCode(schema)
                 : 0);
     }

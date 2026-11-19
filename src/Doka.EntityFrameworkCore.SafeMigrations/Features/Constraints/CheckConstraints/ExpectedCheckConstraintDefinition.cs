@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations;
 
 /// <summary>Describes a complete expected check-constraint definition.</summary>
+[PublicAPI]
 public sealed class ExpectedCheckConstraintDefinition
 {
     /// <summary>Initializes an expected check constraint.</summary>

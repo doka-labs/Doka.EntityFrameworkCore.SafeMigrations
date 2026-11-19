@@ -1,11 +1,20 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 
+/// <summary>
+/// Provides the SQLite core convergence migration fixture contract.
+/// </summary>
 [DbContext(typeof(SqliteSafeMigrationTestContext))]
 [Migration(MigrationIdentifier)]
+// WHY: EF migration discovery constructs this fixture from its attributed migration identity.
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public sealed class SqliteCoreConvergenceMigration : Migration
 {
+    /// <summary>
+    /// Identifies this fixture migration for EF discovery and migration-history assertions.
+    /// </summary>
     public const string MigrationIdentifier = "20260918000100_SqliteCoreConvergence";
 
+    /// <inheritdoc />
     protected override void Up(
         MigrationBuilder migrationBuilder
     )
@@ -35,6 +44,7 @@ public sealed class SqliteCoreConvergenceMigration : Migration
             nullable: true);
     }
 
+    /// <inheritdoc />
     protected override void Down(
         MigrationBuilder migrationBuilder
     ) => throw new NotSupportedException(

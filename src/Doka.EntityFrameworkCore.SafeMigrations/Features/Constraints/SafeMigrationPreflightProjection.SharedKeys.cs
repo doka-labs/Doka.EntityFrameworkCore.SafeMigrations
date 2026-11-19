@@ -16,8 +16,15 @@ internal sealed partial class SafeMigrationPreflightProjection
             return;
         }
 
-        foreach (var uniqueConstraint in definition.UniqueConstraints)
+        // WHY: This immutable definition snapshot is indexed; retain its authored order without interface enumeration.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var uniqueConstraintIndex = 0;
+            uniqueConstraintIndex < definition.UniqueConstraints.Count;
+            uniqueConstraintIndex++)
         {
+            var uniqueConstraint = definition.UniqueConstraints[uniqueConstraintIndex];
+
             CaptureTableMember(
                 prerequisites.Indexes,
                 uniqueConstraint.Name,
@@ -38,8 +45,15 @@ internal sealed partial class SafeMigrationPreflightProjection
             return;
         }
 
-        foreach (var uniqueConstraint in definition.UniqueConstraints)
+        // WHY: This immutable definition snapshot is indexed; retain its authored order without interface enumeration.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var uniqueConstraintIndex1 = 0;
+            uniqueConstraintIndex1 < definition.UniqueConstraints.Count;
+            uniqueConstraintIndex1++)
         {
+            var uniqueConstraint = definition.UniqueConstraints[uniqueConstraintIndex1];
+
             table.Indexes[uniqueConstraint.Name] = AsUniqueIndex(uniqueConstraint);
         }
     }
@@ -132,15 +146,7 @@ internal sealed partial class SafeMigrationPreflightProjection
     private bool DropSharedUniqueIndex(
         ProjectedTable table,
         string physicalName
-    )
-    {
-        if (!SharesUniqueConstraintAndIndexIdentity)
-        {
-            return false;
-        }
-
-        return table.UniqueConstraints.Remove(physicalName);
-    }
+    ) => SharesUniqueConstraintAndIndexIdentity && table.UniqueConstraints.Remove(physicalName);
 
     private void DropSharedUniqueConstraint(
         ProjectedPrerequisites prerequisites,
@@ -253,11 +259,7 @@ internal sealed partial class SafeMigrationPreflightProjection
             return true;
         }
 
-        if (!_projectedChangedColumns.TryGetValue(key, out var changedColumns))
-        {
-            return false;
-        }
-
-        return columns.Any(changedColumns.Contains);
+        return _projectedChangedColumns.TryGetValue(key, out var changedColumns)
+            && columns.Any(changedColumns.Contains);
     }
 }

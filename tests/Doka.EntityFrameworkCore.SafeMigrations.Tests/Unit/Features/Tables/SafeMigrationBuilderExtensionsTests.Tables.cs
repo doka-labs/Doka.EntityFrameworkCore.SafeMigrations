@@ -2,10 +2,17 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
 public sealed partial class SafeMigrationBuilderExtensionsTests
 {
+    /// <summary>
+    /// Captures every table member and explicit FK endpoint/action through the familiar EF authoring callback
+    /// shape.
+    /// </summary>
     [Fact]
     public void FamiliarCreateTableApiCapturesCompleteImmutableDefinition()
     {
+        // Arrange
         var builder = new MigrationBuilder("test");
+
+        // Act
         builder.CreateTableIfNotExists(
             "orders",
             table => new
@@ -34,6 +41,7 @@ public sealed partial class SafeMigrationBuilderExtensionsTests
             },
             comment: "orders");
 
+        // Assert
         var operation = Assert.IsType<SafeMigrationOperation>(Assert.Single(builder.Operations));
         var intent = Assert.IsType<EnsureTableIntent>(operation.Intent);
         var foreignKey = Assert.Single(intent.Definition.ForeignKeys);
@@ -52,9 +60,13 @@ public sealed partial class SafeMigrationBuilderExtensionsTests
         Assert.Equal(SafeMigrationDefaultValueKind.Literal, intent.Definition.Columns[2].DefaultValue.Kind);
     }
 
+    /// <summary>
+    /// Rejects a table FK whose captured provider operation omitted the principal member contract.
+    /// </summary>
     [Fact]
     public void TableDefinitionFactoryRequiresExplicitForeignKeyPrincipalColumns()
     {
+        // Arrange
         var operation = new CreateTableOperation
         {
             Name = "orders",
@@ -78,8 +90,12 @@ public sealed partial class SafeMigrationBuilderExtensionsTests
                 PrincipalTable = "customers",
             });
 
-        var exception = Assert.Throws<InvalidOperationException>(() =>
+        // Act
+        var failure = Record.Exception(() =>
             SafeMigrationExpectedDefinitionFactory.From(operation));
+
+        // Assert
+        var exception = Assert.IsType<InvalidOperationException>(failure);
 
         Assert.Contains("explicit principal columns", exception.Message, StringComparison.Ordinal);
     }

@@ -1,5 +1,8 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
+/// <summary>
+/// Exercises ordered physical lifetimes, identity aliases and data-proof invalidation without executing database DDL.
+/// </summary>
 public sealed partial class SafeMigrationPreflightProjectionTests
 {
     private static void Apply(
@@ -27,17 +30,6 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             });
 
         projection.Observe(operation, liveAnalysis, analysis, decision);
-    }
-
-    private static void AssertMatching(
-        SafeMigrationPreflightProjection projection,
-        SafeMigrationIntent intent
-    )
-    {
-        var operation = new SafeMigrationOperation(intent, SafeMigrationPolicy.ThrowIfDifferent);
-        var analysis = projection.Project(operation, Live(SafeMigrationObservedState.Missing));
-
-        Assert.Equal(SafeMigrationObservedState.Matching, analysis.ObservedState);
     }
 
     private static void ObserveAccepted(

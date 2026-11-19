@@ -15,19 +15,25 @@ internal static class SqlServerGuardedSqlTestContract
         var reader = new SqlServerTestSqlReader(commandText);
 
         if (!reader.TryReadSequence("EXEC sys.sp_executesql N")
-            || !reader.ReadSignificant() || reader.Token[0] != '\'')
+            || !reader.ReadSignificant()
+            || reader.Token[0] != '\'')
         {
             throw new InvalidOperationException("The guarded command has no isolated dynamic scope.");
         }
 
         // WHY: Read only one literal and require the original closed terminator;
         // nested SQL and trailing executable text must never be silently flattened.
-        if (commandText.AsSpan(reader.Position).Trim() is not ";")
+        if (commandText
+            .AsSpan(reader.Position)
+            .Trim() is not ";")
         {
             throw new InvalidOperationException("The guarded command has content outside its dynamic scope.");
         }
 
-        return reader.Token[1..^1].ToString().Replace("''", "'", StringComparison.Ordinal);
+        return reader
+            .Token[1..^1]
+            .ToString()
+            .Replace("''", "'", StringComparison.Ordinal);
     }
 
     /// <summary>Quotes a test batch using the generator's parameter-free dynamic-scope shape.</summary>
@@ -56,7 +62,8 @@ internal static class SqlServerGuardedSqlTestContract
 
         while (reader.Read())
         {
-            if (!reader.IsComment && reader.Token.Equals("DECLARE", StringComparison.OrdinalIgnoreCase))
+            if (!reader.IsComment
+                && reader.Token.Equals("DECLARE", StringComparison.OrdinalIgnoreCase))
             {
                 var declaration = reader;
 
@@ -96,9 +103,14 @@ internal static class SqlServerGuardedSqlTestContract
 
         while (reader.TryRead("+"))
         {
-            if (reader.TryRead("N") && reader.ReadSignificant() && reader.Token[0] == '\'')
+            if (reader.TryRead("N")
+                && reader.ReadSignificant()
+                && reader.Token[0] == '\'')
             {
-                payload.Append(reader.Token[1..^1].ToString().Replace("''", "'", StringComparison.Ordinal));
+                payload.Append(reader
+                    .Token[1..^1]
+                    .ToString()
+                    .Replace("''", "'", StringComparison.Ordinal));
             }
             else if (reader.TryReadSequence("NCHAR(10)"))
             {
@@ -114,7 +126,8 @@ internal static class SqlServerGuardedSqlTestContract
             }
         }
 
-        if (!reader.TryReadSequence("; EXEC sys.sp_executesql @doka_script_payload;") || reader.ReadSignificant())
+        if (!reader.TryReadSequence("; EXEC sys.sp_executesql @doka_script_payload;")
+            || reader.ReadSignificant())
         {
             throw new InvalidOperationException("The protected test payload has an unexpected execution suffix.");
         }

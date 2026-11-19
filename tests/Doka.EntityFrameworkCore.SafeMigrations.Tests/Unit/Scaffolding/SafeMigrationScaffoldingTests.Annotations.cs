@@ -1,5 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
 public sealed partial class SafeMigrationScaffoldingTests
@@ -427,10 +425,9 @@ public sealed partial class SafeMigrationScaffoldingTests
             ClrType = typeof(int),
             ColumnType = "integer",
             IsNullable = false,
+            ["Test:ValueGenerationStrategy"] = TestValueGenerationStrategy.Identity,
+            ["Test:PrefixLengths"] = prefixLengths,
         };
-
-        operation["Test:ValueGenerationStrategy"] = TestValueGenerationStrategy.Identity;
-        operation["Test:PrefixLengths"] = prefixLengths;
 
         // Act
         var definition = SafeMigrationExpectedDefinitionFactory.From(operation);
@@ -469,9 +466,8 @@ public sealed partial class SafeMigrationScaffoldingTests
             ClrType = typeof(int),
             ColumnType = "integer",
             IsNullable = false,
+            ["Test:Mutable"] = new List<int> { 1 },
         };
-
-        operation["Test:Mutable"] = new List<int> { 1 };
 
         // Act
         var exception = Assert.Throws<NotSupportedException>(() =>
@@ -520,9 +516,8 @@ public sealed partial class SafeMigrationScaffoldingTests
             ClrType = typeof(int),
             ColumnType = "integer",
             IsNullable = false,
+            ["Test:Value"] = CreateAnnotationValue(valueCase),
         };
-
-        operation["Test:Value"] = CreateAnnotationValue(valueCase);
 
         // Act
         var firstCapture = SafeMigrationProviderAnnotation.Capture(operation);
@@ -557,9 +552,8 @@ public sealed partial class SafeMigrationScaffoldingTests
             ClrType = typeof(int),
             ColumnType = "integer",
             IsNullable = false,
+            ["Test:Array"] = value,
         };
-
-        operation["Test:Array"] = value;
 
         // Act
         var exception = Record.Exception(() => SafeMigrationProviderAnnotation.Capture(operation));

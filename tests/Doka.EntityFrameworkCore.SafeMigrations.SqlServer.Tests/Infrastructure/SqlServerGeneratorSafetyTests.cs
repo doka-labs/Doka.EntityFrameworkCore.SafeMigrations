@@ -524,7 +524,7 @@ public sealed class SqlServerGeneratorSafetyTests
         // Arrange
         await using var context = new SafeMigrationDbContext(ConnectionString);
         using var cancellation = new CancellationTokenSource();
-        cancellation.Cancel();
+        await cancellation.CancelAsync();
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.Sql("SELECT 7;");
         builder.AddColumnIfNotExists<int>("Amount", "items", type: "int", nullable: true);
@@ -617,6 +617,8 @@ public sealed class SqlServerGeneratorSafetyTests
         Assert.Equal(ConnectionState.Closed, connection.DbConnection.State);
     }
 
+    // WHY: EF dependency injection constructs this baseline through its registered implementation type.
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class RecordingBaselineGenerator : IMigrationsSqlGenerator
     {
         private readonly MigrationsSqlGeneratorDependencies _dependencies;

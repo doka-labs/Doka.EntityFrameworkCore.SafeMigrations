@@ -3,6 +3,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer;
 /// <summary>
 /// Provides service-registration helpers for SQL Server safe migrations.
 /// </summary>
+[PublicAPI]
 public static class SqlServerServiceCollectionExtensions
 {
     /// <summary>
@@ -10,6 +11,9 @@ public static class SqlServerServiceCollectionExtensions
     /// </summary>
     /// <param name="services">The service collection to configure.</param>
     /// <returns>The same service collection so additional registrations can be chained.</returns>
+
+    // WHY: PublicApiAnalyzers 5.6.0 treats extension blocks as new APIs; preserve the shipped surface.
+    // ReSharper disable once ConvertToExtensionBlock
     public static IServiceCollection AddSqlServerSafeMigrations(
         this IServiceCollection services
     ) => services.AddSqlServerSafeMigrations(typeof(SqlServerMigrationsSqlGenerator), canonicalContextType: null);
@@ -21,6 +25,9 @@ public static class SqlServerServiceCollectionExtensions
     /// <typeparam name="TBaselineGenerator">The generator used for ordinary SQL Server operations.</typeparam>
     /// <typeparam name="TCanonicalMigrationContext">The context that owns migration discovery and history.</typeparam>
     /// <returns>The same service collection so additional registrations can be chained.</returns>
+
+    // WHY: PublicApiAnalyzers 5.6.0 treats extension blocks as new APIs; preserve the shipped surface.
+    // ReSharper disable once ConvertToExtensionBlock
     public static IServiceCollection AddSqlServerSafeMigrations<TBaselineGenerator, TCanonicalMigrationContext>(
         this IServiceCollection services
     )

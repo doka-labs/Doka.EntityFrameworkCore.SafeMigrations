@@ -9,9 +9,13 @@ public sealed class MySqlIdentifiersIntegrationTests : MySqlSafeMigrationIntegra
         MySqlEngineContainerFixture fixture
     ) : base(fixture) { }
 
+    /// <summary>
+    /// Preserves native object identity for maximum-length quoted, mixed-case, and Unicode identifiers.
+    /// </summary>
     [Fact]
     public async Task MaximumQuotedMixedCaseUnicodeIdentifiers_ConvergeAcrossOwnedObjects()
     {
+        // Arrange
         var table = MySqlMaximumIdentifier("Ta`b\\le'_\u00fc_");
         var id = MySqlMaximumIdentifier("I`D\\'_\u00fc_");
         var code = MySqlMaximumIdentifier("Co`de\\'_\u00fc_");
@@ -52,6 +56,7 @@ public sealed class MySqlIdentifiersIntegrationTests : MySqlSafeMigrationIntegra
             definition,
             [new ExpectedIndexDefinition(index, table, [new ExpectedIndexKeyDefinition(column: parent)])]);
 
+        // Act
         try
         {
             await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
@@ -91,6 +96,7 @@ public sealed class MySqlIdentifiersIntegrationTests : MySqlSafeMigrationIntegra
                 new SafeMigrationRunOptions("identifier-instance"),
                 CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
         Assert.All(
             report.Assessments,

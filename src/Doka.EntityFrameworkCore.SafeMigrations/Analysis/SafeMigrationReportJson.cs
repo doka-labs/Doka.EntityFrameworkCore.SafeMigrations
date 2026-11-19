@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations;
 
 /// <summary>Writes the versioned SafeMigrations report JSON contract.</summary>
+[PublicAPI]
 public static class SafeMigrationReportJson
 {
     private const int CurrentReportViewSchemaVersion = 3;
@@ -42,6 +43,8 @@ public static class SafeMigrationReportJson
         Write(writer, report);
         writer.Flush();
 
+        // WHY: Copy the selected span into its owned array without changing the existing copy boundary.
+        // ReSharper disable once UseCollectionExpression
         return buffer.WrittenSpan.ToArray();
     }
 
@@ -82,6 +85,8 @@ public static class SafeMigrationReportJson
         WriteReportView(writer, report, selection, selectionCode, counts);
         writer.Flush();
 
+        // WHY: Copy the selected span into its owned array without changing the existing copy boundary.
+        // ReSharper disable once UseCollectionExpression
         return buffer.WrittenSpan.ToArray();
     }
 
@@ -111,16 +116,28 @@ public static class SafeMigrationReportJson
         writer.WriteString("contractFingerprint", report.ContractFingerprint);
         writer.WriteStartArray("assessments");
 
-        foreach (var assessment in report.Assessments)
+        // WHY: This immutable definition snapshot is indexed; retain its authored order without interface enumeration.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var assessmentIndex = 0; assessmentIndex < report.Assessments.Count; assessmentIndex++)
         {
+            var assessment = report.Assessments[assessmentIndex];
+
             WriteAssessment(writer, assessment);
         }
 
         writer.WriteEndArray();
         writer.WriteStartArray("unexpectedObjects");
 
-        foreach (var unexpectedObject in report.UnexpectedObjects)
+        // WHY: This immutable definition snapshot is indexed; retain its authored order without interface enumeration.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var unexpectedObjectIndex = 0;
+            unexpectedObjectIndex < report.UnexpectedObjects.Count;
+            unexpectedObjectIndex++)
         {
+            var unexpectedObject = report.UnexpectedObjects[unexpectedObjectIndex];
+
             WriteUnexpectedObject(writer, unexpectedObject);
         }
 
@@ -186,8 +203,13 @@ public static class SafeMigrationReportJson
         writer.WriteNumber("includedUnexpectedObjectCount", counts.UnexpectedObjectCount);
         writer.WriteStartArray("assessments");
 
-        foreach (var assessment in report.Assessments)
+        // WHY: This immutable definition snapshot is indexed; retain its authored order without interface enumeration.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var assessmentIndex1 = 0; assessmentIndex1 < report.Assessments.Count; assessmentIndex1++)
         {
+            var assessment = report.Assessments[assessmentIndex1];
+
             if (ShouldIncludeAssessment(report.Mode, assessment, selection))
             {
                 WriteAssessment(writer, assessment);
@@ -199,8 +221,16 @@ public static class SafeMigrationReportJson
 
         if (selection is SafeMigrationReportSelection.Complete or SafeMigrationReportSelection.NonMatching)
         {
-            foreach (var unexpectedObject in report.UnexpectedObjects)
+            // WHY: This immutable definition snapshot is indexed; retain its authored order without interface
+            // enumeration.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var unexpectedObjectIndex1 = 0;
+                unexpectedObjectIndex1 < report.UnexpectedObjects.Count;
+                unexpectedObjectIndex1++)
             {
+                var unexpectedObject = report.UnexpectedObjects[unexpectedObjectIndex1];
+
                 WriteUnexpectedObject(writer, unexpectedObject);
             }
         }
@@ -215,8 +245,14 @@ public static class SafeMigrationReportJson
     )
     {
         var assessmentCount = 0;
-        foreach (var assessment in report.Assessments)
+
+        // WHY: This immutable definition snapshot is indexed; retain its authored order without interface enumeration.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var assessmentIndex2 = 0; assessmentIndex2 < report.Assessments.Count; assessmentIndex2++)
         {
+            var assessment = report.Assessments[assessmentIndex2];
+
             if (ShouldIncludeAssessment(report.Mode, assessment, selection))
             {
                 assessmentCount++;
@@ -347,8 +383,13 @@ public static class SafeMigrationReportJson
         writer.WriteString("operationalImpact", OperationalImpactCode(assessment.OperationalImpact));
         writer.WriteStartArray("differences");
 
-        foreach (var difference in assessment.Differences)
+        // WHY: This immutable definition snapshot is indexed; retain its authored order without interface enumeration.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var differenceIndex = 0; differenceIndex < assessment.Differences.Count; differenceIndex++)
         {
+            var difference = assessment.Differences[differenceIndex];
+
             writer.WriteStartObject();
             writer.WriteString("facet", difference.Facet);
             writer.WriteString("expected", difference.Expected);

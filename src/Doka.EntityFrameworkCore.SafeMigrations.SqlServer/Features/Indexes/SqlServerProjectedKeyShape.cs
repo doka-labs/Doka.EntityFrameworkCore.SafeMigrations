@@ -230,6 +230,9 @@ internal static class SqlServerProjectedKeyShape
             }
 
             bytes += physical.DeclaredBytes;
+
+            // WHY: Added-column bookkeeping and existing-value comparison have distinct state updates.
+            // ReSharper disable once ConvertIfStatementToSwitchStatement
             if (hasProjected && original is null)
             {
                 valuesPreserved = false;
@@ -247,8 +250,13 @@ internal static class SqlServerProjectedKeyShape
             }
         }
 
-        foreach (var name in request.IncludedColumns)
+        // WHY: Immutable indexed slots retain their authored order without mutating the source.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var includedIndex = 0; includedIndex < request.IncludedColumns.Count; includedIndex++)
         {
+            var name = request.IncludedColumns[includedIndex];
+
             SqlServerProjectedKeyColumn? original = null;
             _ = snapshot?.Columns.TryGetValue(name, out original);
             var physical = source.TryGetProjectedColumn(request.Table, request.Schema, name, out var definition)
@@ -468,11 +476,7 @@ internal static class SqlServerProjectedKeyShape
 
     private static int TemporalBytes(
         int scale
-    ) => scale <= 2
-        ? 3
-        : scale <= 4
-            ? 4
-            : 5;
+    ) => scale switch { <= 2 => 3, <= 4 => 4, _ => 5 };
 
     private static bool ValuesArePreserved(
         SqlServerProjectedKeyColumn original,
@@ -495,6 +499,8 @@ internal static class SqlServerProjectedKeyShape
         {
             do
             {
+                // WHY: Advance conjunction continuations before evaluating leaf NULL rejection.
+                // ReSharper disable once ConvertIfStatementToSwitchStatement
                 if (filter is SafeMigrationSqlBinaryExpression { Operator: SafeMigrationSqlBinaryOperator.And } binary)
                 {
                     pending.Push(binary.Right);

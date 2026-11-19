@@ -206,6 +206,8 @@ public sealed class SqliteRetainedColumnOrderTests : SqliteIntegrationTestBase,
             columns.Add(reader.GetString(0));
         }
 
+        // WHY: Retain explicit fluent materialization and invocation-owned snapshot semantics.
+        // ReSharper disable once UseCollectionExpression
         return columns.ToArray();
     }
 

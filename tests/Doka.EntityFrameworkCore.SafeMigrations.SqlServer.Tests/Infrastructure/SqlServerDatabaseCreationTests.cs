@@ -19,10 +19,10 @@ public sealed class SqlServerDatabaseCreationTests
     {
         // Arrange
         using var cancellation = new CancellationTokenSource();
-        using var connection = new SqlConnection();
+        await using var connection = new SqlConnection();
         if (preCanceled)
         {
-            cancellation.Cancel();
+            await cancellation.CancelAsync();
         }
 
         var creation = typeof(SqlServerLocalCatalogDiagnostics).GetMethod(
@@ -37,7 +37,7 @@ public sealed class SqlServerDatabaseCreationTests
         // Assert
         if (preCanceled)
         {
-            var canceled = Assert.IsAssignableFrom<OperationCanceledException>(exception);
+            var canceled = Assert.IsType<OperationCanceledException>(exception, exactMatch: false);
             Assert.Equal(cancellation.Token, canceled.CancellationToken);
         }
         else
@@ -71,6 +71,9 @@ public sealed class SqlServerDatabaseCreationTests
         var droppedNames = new List<string>();
         var cleanupTokens = new List<CancellationToken>();
         var containerDisposals = 0;
+
+        // WHY: Act owns async fixture teardown; this using only releases its synchronizer on early exit.
+        // ReSharper disable once UseAwaitUsing
         using var fixture = new SqlServerContainerFixture(
             RootConnectionString,
             (database, token) =>
@@ -116,7 +119,7 @@ public sealed class SqlServerDatabaseCreationTests
         {
             Assert.Equal(
                 cancellation.Token,
-                Assert.IsAssignableFrom<OperationCanceledException>(observed)
+                Assert.IsType<OperationCanceledException>(observed, exactMatch: false)
                     .CancellationToken);
         }
         else
@@ -147,6 +150,9 @@ public sealed class SqlServerDatabaseCreationTests
         // Arrange
         var createdNames = new List<string>();
         var droppedNames = new List<string>();
+
+        // WHY: Act owns async fixture teardown; this using only releases its synchronizer on early exit.
+        // ReSharper disable once UseAwaitUsing
         using var fixture = new SqlServerContainerFixture(
             RootConnectionString,
             (database, _) =>
@@ -192,6 +198,9 @@ public sealed class SqlServerDatabaseCreationTests
         var createAttempts = 0;
         var dropAttempts = 0;
         var containerDisposals = 0;
+
+        // WHY: Act owns async fixture teardown; this using only releases its synchronizer on early exit.
+        // ReSharper disable once UseAwaitUsing
         using var fixture = new SqlServerContainerFixture(
             "unsupported_fixture_setting=true",
             (_, _) =>
@@ -232,9 +241,12 @@ public sealed class SqlServerDatabaseCreationTests
     {
         // Arrange
         using var cancellation = new CancellationTokenSource();
-        cancellation.Cancel();
+        await cancellation.CancelAsync();
         var createAttempts = 0;
         var dropAttempts = 0;
+
+        // WHY: Act owns async fixture teardown; this using only releases its synchronizer on early exit.
+        // ReSharper disable once UseAwaitUsing
         using var fixture = new SqlServerContainerFixture(
             RootConnectionString,
             (_, _) =>
@@ -258,7 +270,7 @@ public sealed class SqlServerDatabaseCreationTests
         // Assert
         Assert.Equal(
             cancellation.Token,
-            Assert.IsAssignableFrom<OperationCanceledException>(observed)
+            Assert.IsType<OperationCanceledException>(observed, exactMatch: false)
                 .CancellationToken);
 
         Assert.Equal(0, createAttempts);
@@ -275,6 +287,9 @@ public sealed class SqlServerDatabaseCreationTests
         var finishFirst = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var createdNames = new List<string>();
         var droppedNames = new List<string>();
+
+        // WHY: Act owns async fixture teardown; this using only releases its synchronizer on early exit.
+        // ReSharper disable once UseAwaitUsing
         using var fixture = new SqlServerContainerFixture(
             RootConnectionString,
             (database, _) =>
@@ -297,7 +312,7 @@ public sealed class SqlServerDatabaseCreationTests
         await firstEntered.Task;
         var waitingCreation = fixture.CreateDatabaseAsync(cancellation.Token);
         var waitedForLock = !waitingCreation.IsCompleted;
-        cancellation.Cancel();
+        await cancellation.CancelAsync();
         var observed = await Record.ExceptionAsync(() => waitingCreation);
         var attemptsBeforeFirstCompleted = createdNames.Count;
         finishFirst.SetResult();
@@ -308,7 +323,7 @@ public sealed class SqlServerDatabaseCreationTests
         Assert.True(waitedForLock);
         Assert.Equal(
             cancellation.Token,
-            Assert.IsAssignableFrom<OperationCanceledException>(observed)
+            Assert.IsType<OperationCanceledException>(observed, exactMatch: false)
                 .CancellationToken);
 
         Assert.Equal(1, attemptsBeforeFirstCompleted);

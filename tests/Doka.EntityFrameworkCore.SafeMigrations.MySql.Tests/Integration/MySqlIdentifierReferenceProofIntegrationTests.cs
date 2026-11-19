@@ -30,24 +30,27 @@ public sealed class MySqlIdentifierReferenceProofIntegrationTests : MySqlIntegra
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var connection = new MySqlConnection(connectionString);
-        await connection.OpenAsync();
+        await connection.OpenAsync(CancellationToken.None);
         var proof = CreateProof(head);
 
         // Act
         await ExecuteAsync(
             connection,
             MySqlSafeMigrationIdentifierReferenceProof.BuildEvaluationSql(proof, "TRUE", "TRUE"),
-            cancellationToken: CancellationToken.None);
+            null,
+            CancellationToken.None);
 
         var result = await ScalarAsync(
             connection,
             "SELECT " + proof.ResultVariable + ";",
-            cancellationToken: CancellationToken.None);
+            null,
+            CancellationToken.None);
 
         await ExecuteAsync(
             connection,
             MySqlSafeMigrationIdentifierReferenceProof.BuildCleanupSql(proof),
-            cancellationToken: CancellationToken.None);
+            null,
+            CancellationToken.None);
 
         // Assert
         Assert.Equal(expected, Convert.ToInt32(result, CultureInfo.InvariantCulture));
@@ -60,19 +63,16 @@ public sealed class MySqlIdentifierReferenceProofIntegrationTests : MySqlIntegra
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var connection = new MySqlConnection(connectionString);
-        await connection.OpenAsync();
-        await ExecuteAsync(
-            connection,
-            "CREATE TABLE rollback_probe(id int NOT NULL);",
-            cancellationToken: CancellationToken.None);
+        await connection.OpenAsync(CancellationToken.None);
+        await ExecuteAsync(connection, "CREATE TABLE rollback_probe(id int NOT NULL);", null, CancellationToken.None);
 
-        await using var transaction = await connection.BeginTransactionAsync();
-        await ExecuteAsync(connection, "INSERT INTO rollback_probe VALUES (1);", CancellationToken.None, transaction);
+        await using var transaction = await connection.BeginTransactionAsync(CancellationToken.None);
+        await ExecuteAsync(connection, "INSERT INTO rollback_probe VALUES (1);", transaction, CancellationToken.None);
         var before = await ScalarAsync(
             connection,
             "SELECT COUNT(*) FROM rollback_probe;",
-            CancellationToken.None,
-            transaction);
+            transaction,
+            CancellationToken.None);
 
         var proof = CreateProof("value");
 
@@ -80,26 +80,23 @@ public sealed class MySqlIdentifierReferenceProofIntegrationTests : MySqlIntegra
         await ExecuteAsync(
             connection,
             MySqlSafeMigrationIdentifierReferenceProof.BuildEvaluationSql(proof, "TRUE", "TRUE"),
-            CancellationToken.None,
-            transaction);
+            transaction,
+            CancellationToken.None);
 
         var result = await ScalarAsync(
             connection,
             "SELECT " + proof.ResultVariable + ";",
-            CancellationToken.None,
-            transaction);
+            transaction,
+            CancellationToken.None);
 
         await ExecuteAsync(
             connection,
             MySqlSafeMigrationIdentifierReferenceProof.BuildCleanupSql(proof),
-            CancellationToken.None,
-            transaction);
+            transaction,
+            CancellationToken.None);
 
-        await transaction.RollbackAsync();
-        var after = await ScalarAsync(
-            connection,
-            "SELECT COUNT(*) FROM rollback_probe;",
-            cancellationToken: CancellationToken.None);
+        await transaction.RollbackAsync(CancellationToken.None);
+        var after = await ScalarAsync(connection, "SELECT COUNT(*) FROM rollback_probe;", null, CancellationToken.None);
 
         // Assert
         Assert.Equal(1, Convert.ToInt32(before, CultureInfo.InvariantCulture));
@@ -114,11 +111,8 @@ public sealed class MySqlIdentifierReferenceProofIntegrationTests : MySqlIntegra
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var connection = new MySqlConnection(connectionString);
-        await connection.OpenAsync();
-        await ExecuteAsync(
-            connection,
-            "PREPARE doka_sm_stmt FROM 'SELECT 42';",
-            cancellationToken: CancellationToken.None);
+        await connection.OpenAsync(CancellationToken.None);
+        await ExecuteAsync(connection, "PREPARE doka_sm_stmt FROM 'SELECT 42';", null, CancellationToken.None);
 
         var proof = CreateProof("select");
 
@@ -126,30 +120,35 @@ public sealed class MySqlIdentifierReferenceProofIntegrationTests : MySqlIntegra
         await ExecuteAsync(
             connection,
             MySqlSafeMigrationIdentifierReferenceProof.BuildEvaluationSql(proof, "TRUE", "TRUE"),
-            cancellationToken: CancellationToken.None);
+            null,
+            CancellationToken.None);
 
         var result = await ScalarAsync(
             connection,
             "SELECT " + proof.ResultVariable + ";",
-            cancellationToken: CancellationToken.None);
+            null,
+            CancellationToken.None);
 
         await ExecuteAsync(
             connection,
             MySqlSafeMigrationIdentifierReferenceProof.BuildCleanupSql(proof),
-            cancellationToken: CancellationToken.None);
+            null,
+            CancellationToken.None);
 
         await ExecuteAsync(
             connection,
             MySqlSafeMigrationIdentifierReferenceProof.BuildCleanupSql(proof),
-            cancellationToken: CancellationToken.None);
+            null,
+            CancellationToken.None);
 
-        var caller = await ScalarAsync(connection, "EXECUTE doka_sm_stmt;", cancellationToken: CancellationToken.None);
+        var caller = await ScalarAsync(connection, "EXECUTE doka_sm_stmt;", null, CancellationToken.None);
         var cleared = await ScalarAsync(
             connection,
             "SELECT " + proof.ResultVariable + " IS NULL;",
-            cancellationToken: CancellationToken.None);
+            null,
+            CancellationToken.None);
 
-        await ExecuteAsync(connection, "DEALLOCATE PREPARE doka_sm_stmt;", cancellationToken: CancellationToken.None);
+        await ExecuteAsync(connection, "DEALLOCATE PREPARE doka_sm_stmt;", null, CancellationToken.None);
 
         // Assert
         Assert.Equal(0, Convert.ToInt32(result, CultureInfo.InvariantCulture));
@@ -165,7 +164,7 @@ public sealed class MySqlIdentifierReferenceProofIntegrationTests : MySqlIntegra
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var first = new MySqlConnection(connectionString);
         await using var second = new MySqlConnection(connectionString);
-        await Task.WhenAll(first.OpenAsync(), second.OpenAsync());
+        await Task.WhenAll(first.OpenAsync(CancellationToken.None), second.OpenAsync(CancellationToken.None));
         var scope = Guid
             .NewGuid()
             .ToString("N");
@@ -178,25 +177,29 @@ public sealed class MySqlIdentifierReferenceProofIntegrationTests : MySqlIntegra
             ExecuteAsync(
                 first,
                 MySqlSafeMigrationIdentifierReferenceProof.BuildEvaluationSql(valid, "TRUE", "TRUE"),
-                cancellationToken: CancellationToken.None),
+                null,
+                CancellationToken.None),
             ExecuteAsync(
                 second,
                 MySqlSafeMigrationIdentifierReferenceProof.BuildEvaluationSql(invalid, "TRUE", "TRUE"),
-                cancellationToken: CancellationToken.None));
+                null,
+                CancellationToken.None));
 
         var results = await Task.WhenAll(
-            ScalarAsync(first, "SELECT " + valid.ResultVariable + ";", cancellationToken: CancellationToken.None),
-            ScalarAsync(second, "SELECT " + invalid.ResultVariable + ";", cancellationToken: CancellationToken.None));
+            ScalarAsync(first, "SELECT " + valid.ResultVariable + ";", null, CancellationToken.None),
+            ScalarAsync(second, "SELECT " + invalid.ResultVariable + ";", null, CancellationToken.None));
 
         await Task.WhenAll(
             ExecuteAsync(
                 first,
                 MySqlSafeMigrationIdentifierReferenceProof.BuildCleanupSql(valid),
-                cancellationToken: CancellationToken.None),
+                null,
+                CancellationToken.None),
             ExecuteAsync(
                 second,
                 MySqlSafeMigrationIdentifierReferenceProof.BuildCleanupSql(invalid),
-                cancellationToken: CancellationToken.None));
+                null,
+                CancellationToken.None));
 
         // Assert
         Assert.Equal(valid.ResultVariable, invalid.ResultVariable);
@@ -211,7 +214,7 @@ public sealed class MySqlIdentifierReferenceProofIntegrationTests : MySqlIntegra
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var connection = new MySqlConnection(connectionString);
-        await connection.OpenAsync();
+        await connection.OpenAsync(CancellationToken.None);
         var valid = CreateProof("value");
         var invalid = CreateProof("select");
 
@@ -220,27 +223,32 @@ public sealed class MySqlIdentifierReferenceProofIntegrationTests : MySqlIntegra
             connection,
             MySqlSafeMigrationIdentifierReferenceProof.BuildEvaluationSql(valid, "TRUE", "TRUE")
             + MySqlSafeMigrationIdentifierReferenceProof.BuildEvaluationSql(invalid, "TRUE", "TRUE"),
-            cancellationToken: CancellationToken.None);
+            null,
+            CancellationToken.None);
 
         await ExecuteAsync(
             connection,
             MySqlSafeMigrationIdentifierReferenceProof.BuildCleanupSql(invalid),
-            cancellationToken: CancellationToken.None);
+            null,
+            CancellationToken.None);
 
         var retained = await ScalarAsync(
             connection,
             "SELECT " + valid.ResultVariable + ";",
-            cancellationToken: CancellationToken.None);
+            null,
+            CancellationToken.None);
 
         var cleared = await ScalarAsync(
             connection,
             "SELECT " + invalid.ResultVariable + " IS NULL;",
-            cancellationToken: CancellationToken.None);
+            null,
+            CancellationToken.None);
 
         await ExecuteAsync(
             connection,
             MySqlSafeMigrationIdentifierReferenceProof.BuildCleanupSql(valid),
-            cancellationToken: CancellationToken.None);
+            null,
+            CancellationToken.None);
 
         // Assert
         Assert.NotEqual(valid.ResultVariable, invalid.ResultVariable);
@@ -255,7 +263,7 @@ public sealed class MySqlIdentifierReferenceProofIntegrationTests : MySqlIntegra
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var connection = new MySqlConnection(connectionString);
-        await connection.OpenAsync();
+        await connection.OpenAsync(CancellationToken.None);
         var proof = CreateProof("id");
         await ExecuteAsync(
             connection,
@@ -264,30 +272,27 @@ public sealed class MySqlIdentifierReferenceProofIntegrationTests : MySqlIntegra
             + " FROM 'SELECT 1';PREPARE "
             + proof.OuterStatementName
             + " FROM 'SELECT 2';",
-            cancellationToken: CancellationToken.None);
+            null,
+            CancellationToken.None);
 
         // Act
         await ExecuteAsync(
             connection,
             MySqlSafeMigrationIdentifierReferenceProof.BuildCleanupSql(proof),
-            cancellationToken: CancellationToken.None);
+            null,
+            CancellationToken.None);
 
         await ExecuteAsync(
             connection,
             MySqlSafeMigrationIdentifierReferenceProof.BuildCleanupSql(proof),
-            cancellationToken: CancellationToken.None);
+            null,
+            CancellationToken.None);
 
         var innerFailure = await Record.ExceptionAsync(() =>
-            ExecuteAsync(
-                connection,
-                "EXECUTE " + proof.InnerStatementName + ";",
-                cancellationToken: CancellationToken.None));
+            ExecuteAsync(connection, "EXECUTE " + proof.InnerStatementName + ";", null, CancellationToken.None));
 
         var outerFailure = await Record.ExceptionAsync(() =>
-            ExecuteAsync(
-                connection,
-                "EXECUTE " + proof.OuterStatementName + ";",
-                cancellationToken: CancellationToken.None));
+            ExecuteAsync(connection, "EXECUTE " + proof.OuterStatementName + ";", null, CancellationToken.None));
 
         // Assert
         Assert.Equal(1243,
@@ -315,24 +320,27 @@ public sealed class MySqlIdentifierReferenceProofIntegrationTests : MySqlIntegra
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var connection = new MySqlConnection(connectionString);
-        await connection.OpenAsync();
+        await connection.OpenAsync(CancellationToken.None);
         var proof = CreateProof("id");
 
         // Act
         await ExecuteAsync(
             connection,
             MySqlSafeMigrationIdentifierReferenceProof.BuildEvaluationSql(proof, executionGuard, eligibility),
-            cancellationToken: CancellationToken.None);
+            null,
+            CancellationToken.None);
 
         var result = await ScalarAsync(
             connection,
             "SELECT " + proof.ResultVariable + ";",
-            cancellationToken: CancellationToken.None);
+            null,
+            CancellationToken.None);
 
         await ExecuteAsync(
             connection,
             MySqlSafeMigrationIdentifierReferenceProof.BuildCleanupSql(proof),
-            cancellationToken: CancellationToken.None);
+            null,
+            CancellationToken.None);
 
         // Assert
         Assert.Equal(0, Convert.ToInt32(result, CultureInfo.InvariantCulture));
@@ -357,8 +365,8 @@ public sealed class MySqlIdentifierReferenceProofIntegrationTests : MySqlIntegra
     private static async Task ExecuteAsync(
         MySqlConnection connection,
         string sql,
-        CancellationToken cancellationToken,
-        MySqlTransaction? transaction = null
+        MySqlTransaction? transaction,
+        CancellationToken cancellationToken
     )
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -376,8 +384,8 @@ public sealed class MySqlIdentifierReferenceProofIntegrationTests : MySqlIntegra
     private static async Task<object?> ScalarAsync(
         MySqlConnection connection,
         string sql,
-        CancellationToken cancellationToken,
-        MySqlTransaction? transaction = null
+        MySqlTransaction? transaction,
+        CancellationToken cancellationToken
     )
     {
         cancellationToken.ThrowIfCancellationRequested();

@@ -1,21 +1,35 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql;
 
 /// <summary>Retains bounded catalog shapes for cumulative ordered column transitions.</summary>
-/// <param name="columns">The original physical column shapes, keyed by native case-insensitive member identity.</param>
-/// <param name="indexes">The original ordered physical index parts.</param>
-/// <param name="environment">The captured storage limits for the original table.</param>
-internal sealed partial class MySqlProjectedAlterPhysicalSnapshot(
-    IReadOnlyDictionary<string, MySqlAlterColumnPhysicalShape> columns,
-    IReadOnlyList<MySqlAlterIndexPhysicalShape> indexes,
-    SafeMigrationIndexPhysicalEnvironment environment
-)
+internal sealed partial class MySqlProjectedAlterPhysicalSnapshot
 {
+    private readonly IReadOnlyDictionary<string, MySqlAlterColumnPhysicalShape> _columns;
+    private readonly SafeMigrationIndexPhysicalEnvironment _environment;
+    private readonly IReadOnlyList<MySqlAlterIndexPhysicalShape> _indexes;
+
+    /// <summary>
+    /// Retains capture-owned shapes and limits for ordered transitions without copying their storage.
+    /// </summary>
+    /// <param name="columns">Original column shapes, keyed by native case-insensitive member identity.</param>
+    /// <param name="indexes">The original ordered physical index parts.</param>
+    /// <param name="environment">The captured storage limits for the original table.</param>
+    internal MySqlProjectedAlterPhysicalSnapshot(
+        IReadOnlyDictionary<string, MySqlAlterColumnPhysicalShape> columns,
+        IReadOnlyList<MySqlAlterIndexPhysicalShape> indexes,
+        SafeMigrationIndexPhysicalEnvironment environment
+    )
+    {
+        _columns = columns;
+        _indexes = indexes;
+        _environment = environment;
+    }
+
     /// <summary>Certifies captured ordinary owned indexes, never functional or special forms.</summary>
     /// <param name="name">The native index member requested for removal.</param>
     /// <returns>Whether the exact captured index has ordinary BTREE column parts.</returns>
     internal bool HasOrdinaryIndex(
         string name
-    ) => indexes.Any(index => StringComparer.OrdinalIgnoreCase.Equals(index.Name, name)
+    ) => _indexes.Any(index => StringComparer.OrdinalIgnoreCase.Equals(index.Name, name)
         && index is { IsOrdinaryBtree: true, IsPrimary: false, IsFullText: false, Parts.Count: > 0 }
         && index.Parts.All(static part => part.Column is not null));
 
@@ -28,7 +42,7 @@ internal sealed partial class MySqlProjectedAlterPhysicalSnapshot(
         AlterColumnIntent intent,
         ISafeMigrationProjectedColumnSource source,
         IRelationalTypeMappingSource mappings
-    ) => columns.TryGetValue(intent.Definition.Name, out var original)
+    ) => _columns.TryGetValue(intent.Definition.Name, out var original)
         && !original.HasForeignKey
         && IsSafe(intent, new IndexDropColumnView(source), mappings);
 
@@ -43,8 +57,8 @@ internal sealed partial class MySqlProjectedAlterPhysicalSnapshot(
         IRelationalTypeMappingSource mappings
     )
     {
-        if (environment.MaximumKeyBytes <= 0
-            || !columns.ContainsKey(intent.Definition.Name))
+        if (_environment.MaximumKeyBytes <= 0
+            || !_columns.ContainsKey(intent.Definition.Name))
         {
             return false;
         }
@@ -52,7 +66,7 @@ internal sealed partial class MySqlProjectedAlterPhysicalSnapshot(
         var rowBytes = 0L;
         var inlineBytes = 0L;
         var nullableColumns = 0;
-        foreach (var name in columns.Keys)
+        foreach (var name in _columns.Keys)
         {
             if (!TryGetColumn(name, intent, table, mappings, out var shape))
             {
@@ -63,7 +77,7 @@ internal sealed partial class MySqlProjectedAlterPhysicalSnapshot(
             if (!TryGetInlineBytes(
                 shape,
                 IsClusteredKeyColumn(name, intent, table, mappings),
-                environment,
+                _environment,
                 out var inline))
             {
                 return false;
@@ -80,7 +94,7 @@ internal sealed partial class MySqlProjectedAlterPhysicalSnapshot(
         // because this transition's exact source column existed beforehand.
         foreach (var definition in table.Columns)
         {
-            if (columns.ContainsKey(definition.Name))
+            if (_columns.ContainsKey(definition.Name))
             {
                 continue;
             }
@@ -94,7 +108,7 @@ internal sealed partial class MySqlProjectedAlterPhysicalSnapshot(
             if (!TryGetInlineBytes(
                 shape,
                 IsClusteredKeyColumn(definition.Name, intent, table, mappings),
-                environment,
+                _environment,
                 out var inline))
             {
                 return false;
@@ -107,13 +121,18 @@ internal sealed partial class MySqlProjectedAlterPhysicalSnapshot(
         }
 
         if (rowBytes + (nullableColumns + 7L) / 8 > 65535
-            || !InlineRowFits(inlineBytes, nullableColumns, environment))
+            || !InlineRowFits(inlineBytes, nullableColumns, _environment))
         {
             return false;
         }
 
-        foreach (var index in indexes)
+        // WHY: Index this stable list while preserving its order and ownership.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var indexIndex = 0; indexIndex < _indexes.Count; indexIndex++)
         {
+            var index = _indexes[indexIndex];
+
             // FULLTEXT retains its physical representation across the supported
             // text families; it does not use the ordinary InnoDB key-byte cap.
             if (index.IsFullText)
@@ -122,8 +141,14 @@ internal sealed partial class MySqlProjectedAlterPhysicalSnapshot(
             }
 
             var keyBytes = 0L;
-            foreach (var part in index.Parts)
+
+            // WHY: Index this stable list while preserving its order and ownership.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var partIndex = 0; partIndex < index.Parts.Count; partIndex++)
             {
+                var part = index.Parts[partIndex];
+
                 if (!TryGetKeyBytes(part.Column, part.PrefixLength, intent, table, mappings, out var bytes))
                 {
                     return false;
@@ -133,7 +158,7 @@ internal sealed partial class MySqlProjectedAlterPhysicalSnapshot(
             }
 
             if (index.Parts.Count > MySqlProjectedIndexPhysicalShape.MaximumKeyParts
-                || keyBytes > environment.MaximumKeyBytes)
+                || keyBytes > _environment.MaximumKeyBytes)
             {
                 return false;
             }
@@ -145,6 +170,8 @@ internal sealed partial class MySqlProjectedAlterPhysicalSnapshot(
             return false;
         }
 
+        // WHY: Keep early-exit physical qualification on the current projected constraint sequence.
+        // ReSharper disable once LoopCanBeConvertedToQuery
         foreach (var key in table.UniqueConstraints)
         {
             if (!UnprefixedKeyFits(key.Columns, intent, table, mappings))
@@ -156,8 +183,14 @@ internal sealed partial class MySqlProjectedAlterPhysicalSnapshot(
         foreach (var index in table.Indexes)
         {
             var keyBytes = 0L;
-            foreach (var part in index.Keys)
+
+            // WHY: Index this stable list while preserving its order and ownership.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var partIndex = 0; partIndex < index.Keys.Count; partIndex++)
             {
+                var part = index.Keys[partIndex];
+
                 if (!TryGetKeyBytes(part.Column, part.PrefixLength, intent, table, mappings, out var bytes))
                 {
                     return false;
@@ -167,7 +200,7 @@ internal sealed partial class MySqlProjectedAlterPhysicalSnapshot(
             }
 
             if (index.Keys.Count > MySqlProjectedIndexPhysicalShape.MaximumKeyParts
-                || keyBytes > environment.MaximumKeyBytes)
+                || keyBytes > _environment.MaximumKeyBytes)
             {
                 return false;
             }
@@ -432,8 +465,14 @@ internal sealed partial class MySqlProjectedAlterPhysicalSnapshot(
     )
     {
         var total = 0L;
-        foreach (var column in keyColumns)
+
+        // WHY: Index this stable list while preserving its order and ownership.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var columnIndex = 0; columnIndex < keyColumns.Count; columnIndex++)
         {
+            var column = keyColumns[columnIndex];
+
             if (!TryGetKeyBytes(column, null, intent, table, mappings, out var bytes))
             {
                 return false;
@@ -443,7 +482,7 @@ internal sealed partial class MySqlProjectedAlterPhysicalSnapshot(
         }
 
         return keyColumns.Count <= MySqlProjectedIndexPhysicalShape.MaximumKeyParts
-            && total <= environment.MaximumKeyBytes;
+            && total <= _environment.MaximumKeyBytes;
     }
 
     /// <summary>Bounds one in-page field including its directory entry under the captured row format.</summary>
@@ -479,11 +518,12 @@ internal sealed partial class MySqlProjectedAlterPhysicalSnapshot(
         // short values below the overflow threshold still need their full
         // bytes. Two directory bytes per field cover both compact and legacy
         // formats without relying on actual row contents.
-        bytes = (primaryKey
-                ? shape.DeclaredRowBytes
-                : dynamic
-                    ? shape.DynamicInlineBytes
-                    : shape.CompactInlineBytes)
+        bytes = primaryKey switch
+            {
+                true => shape.DeclaredRowBytes,
+                _ when dynamic => shape.DynamicInlineBytes,
+                _ => shape.CompactInlineBytes,
+            }
             + 2;
 
         return true;
@@ -527,8 +567,13 @@ internal sealed partial class MySqlProjectedAlterPhysicalSnapshot(
             return true;
         }
 
-        foreach (var index in indexes)
+        // WHY: Index this stable list while preserving its order and ownership.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var indexIndex = 0; indexIndex < _indexes.Count; indexIndex++)
         {
+            var index = _indexes[indexIndex];
+
             if (index.IsPrimary
                 && index.Parts.Any(part => StringComparer.OrdinalIgnoreCase.Equals(part.Column, name)))
             {
@@ -541,8 +586,13 @@ internal sealed partial class MySqlProjectedAlterPhysicalSnapshot(
         // physical creation order after ordered key/column changes. A retained
         // snapshot PRIMARY may have been dropped, so it cannot suppress these
         // alternative clustered candidates in the projected stream.
-        foreach (var index in indexes)
+        // WHY: Index this stable list while preserving its order and ownership.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var indexIndex = 0; indexIndex < _indexes.Count; indexIndex++)
         {
+            var index = _indexes[indexIndex];
+
             if (index.IsUnique
                 && index.Parts.Any(part => StringComparer.OrdinalIgnoreCase.Equals(part.Column, name))
                 && index.Parts.All(part => part.Column is not null
@@ -573,6 +623,8 @@ internal sealed partial class MySqlProjectedAlterPhysicalSnapshot(
             return true;
         }
 
+        // WHY: This certificate requires both exact membership and current required-column evidence.
+        // ReSharper disable once LoopCanBeConvertedToQuery
         foreach (var key in table.UniqueConstraints)
         {
             if (key.Columns.Contains(name, StringComparer.OrdinalIgnoreCase)
@@ -582,6 +634,8 @@ internal sealed partial class MySqlProjectedAlterPhysicalSnapshot(
             }
         }
 
+        // WHY: Preserve the current projected-index walk and its short-circuiting nested member checks.
+        // ReSharper disable once LoopCanBeConvertedToQuery
         foreach (var key in table.Indexes)
         {
             if (key.Unique
@@ -652,12 +706,13 @@ internal sealed partial class MySqlProjectedAlterPhysicalSnapshot(
         out MySqlAlterColumnPhysicalShape shape
     )
     {
-        var exists = columns.TryGetValue(name, out shape);
-        var definition = StringComparer.OrdinalIgnoreCase.Equals(name, intent.Definition.Name)
-            ? intent.Definition
-            : table.TryGetProjectedColumn(intent.Table, intent.Schema, name, out var accepted)
-                ? accepted
-                : null;
+        var exists = _columns.TryGetValue(name, out shape);
+        var definition = StringComparer.OrdinalIgnoreCase.Equals(name, intent.Definition.Name) switch
+        {
+            true => intent.Definition,
+            _ when table.TryGetProjectedColumn(intent.Table, intent.Schema, name, out var accepted) => accepted,
+            _ => null,
+        };
 
         if (definition is null)
         {
@@ -684,10 +739,20 @@ internal sealed partial class MySqlProjectedAlterPhysicalSnapshot(
     }
 
     /// <summary>Exposes no fabricated key or newly added-column authority for a narrow index-only lifetime.</summary>
-    /// <param name="source">The callback-scoped Core view with accepted sibling target definitions.</param>
-    private sealed class IndexDropColumnView(ISafeMigrationProjectedColumnSource source)
+    private sealed class IndexDropColumnView
         : ISafeMigrationProjectedAlterTable
     {
+        private readonly ISafeMigrationProjectedColumnSource _source;
+
+        /// <summary>Retains the accepted sibling view without inventing table or key authority.</summary>
+        /// <param name="source">The callback-scoped Core view with accepted sibling target definitions.</param>
+        internal IndexDropColumnView(
+            ISafeMigrationProjectedColumnSource source
+        )
+        {
+            _source = source;
+        }
+
         /// <inheritdoc />
         public IEnumerable<ExpectedColumnDefinition> Columns => [];
 
@@ -706,7 +771,7 @@ internal sealed partial class MySqlProjectedAlterPhysicalSnapshot(
             string? schema,
             string column,
             [NotNullWhen(true)] out ExpectedColumnDefinition? definition
-        ) => source.TryGetProjectedColumn(table, schema, column, out definition);
+        ) => _source.TryGetProjectedColumn(table, schema, column, out definition);
     }
 }
 

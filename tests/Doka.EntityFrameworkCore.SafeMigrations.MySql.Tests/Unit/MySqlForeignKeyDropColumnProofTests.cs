@@ -1261,10 +1261,10 @@ public sealed class MySqlForeignKeyDropColumnProofTests
             ColumnType = "char(36)",
             IsNullable = nullable,
             Comment = comment,
+            ["Doka:MySql:GuidFormat"] = guidFormat,
+            ["Doka:MySql:ValueGenerationStrategy"] = generation,
         };
 
-        operation["Doka:MySql:GuidFormat"] = guidFormat;
-        operation["Doka:MySql:ValueGenerationStrategy"] = generation;
         if (includeMarker)
         {
             operation.AddAnnotation(MySqlSafeMigrationColumnMetadata.ExplicitBackfillAnnotation, marker);

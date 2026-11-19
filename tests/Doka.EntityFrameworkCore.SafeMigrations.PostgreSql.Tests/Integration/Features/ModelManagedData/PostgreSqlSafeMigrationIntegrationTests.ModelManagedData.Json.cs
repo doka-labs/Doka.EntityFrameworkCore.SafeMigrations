@@ -9,9 +9,11 @@ public sealed class PostgreSqlModelManagedDataJsonIntegrationTests : PostgreSqlS
         PostgreSqlContainerFixture fixture
     ) : base(fixture) { }
 
+    /// <summary>Model Managed Json And Jsonb Converge Update Delete Postflight And Replay.</summary>
     [Fact]
     public async Task ModelManagedJsonAndJsonbConvergeUpdateDeletePostflightAndReplay()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -86,12 +88,6 @@ public sealed class PostgreSqlModelManagedDataJsonIntegrationTests : PostgreSqlS
             });
 
         var runner = context.GetService<ISafeMigrationRunner>();
-        var ensurePreflight = await runner.AnalyzeAsync(
-            context,
-            ensure.Operations,
-            new SafeMigrationRunOptions("postgresql-json-ensure"),
-            CancellationToken.None);
-
         var update = new MigrationBuilder(context.Database.ProviderName!);
         _ = update.UpdateModelManagedDataFromModel(
             "json_model_rows",
@@ -102,6 +98,33 @@ public sealed class PostgreSqlModelManagedDataJsonIntegrationTests : PostgreSqlS
             columnTypes,
             oldValues,
             newValues);
+
+        var delete = new MigrationBuilder(context.Database.ProviderName!);
+        _ = delete.DeleteModelManagedDataFromModel(
+            "json_model_rows",
+            ["id"],
+            ["integer"],
+            new object?[,] { { 1 } },
+            ["id", .. columns],
+            ["integer", .. columnTypes],
+            new object?[,]
+            {
+                {
+                    1,
+                    "{\"a\":3,\"b\":4}",
+                    "{\"a\":3,\"b\":4}",
+                    "null",
+                    null,
+                    "{\"a\":3,\"b\":4}",
+                },
+            });
+
+        // Act
+        var ensurePreflight = await runner.AnalyzeAsync(
+            context,
+            ensure.Operations,
+            new SafeMigrationRunOptions("postgresql-json-ensure"),
+            CancellationToken.None);
 
         var updatePreflight = await runner.AnalyzeAsync(
             context,
@@ -129,26 +152,6 @@ public sealed class PostgreSqlModelManagedDataJsonIntegrationTests : PostgreSqlS
             new SafeMigrationRunOptions("postgresql-json-update-postflight"),
             CancellationToken.None);
 
-        var delete = new MigrationBuilder(context.Database.ProviderName!);
-        _ = delete.DeleteModelManagedDataFromModel(
-            "json_model_rows",
-            ["id"],
-            ["integer"],
-            new object?[,] { { 1 } },
-            ["id", .. columns],
-            ["integer", .. columnTypes],
-            new object?[,]
-            {
-                {
-                    1,
-                    "{\"a\":3,\"b\":4}",
-                    "{\"a\":3,\"b\":4}",
-                    "null",
-                    null,
-                    "{\"a\":3,\"b\":4}",
-                },
-            });
-
         var deletePreflight = await runner.AnalyzeAsync(
             context,
             delete.Operations,
@@ -169,6 +172,7 @@ public sealed class PostgreSqlModelManagedDataJsonIntegrationTests : PostgreSqlS
             new SafeMigrationRunOptions("postgresql-json-delete-postflight"),
             CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationObservedState.Matching,
             Assert.Single(ensurePreflight.Assessments)
                 .ObservedState);
@@ -205,9 +209,23 @@ public sealed class PostgreSqlModelManagedDataJsonIntegrationTests : PostgreSqlS
                 cancellationToken: CancellationToken.None));
     }
 
-    [Fact]
-    public async Task ModelManagedJsonAndJsonbRejectSemanticAndStorageBoundaries()
+    /// <summary>Model Managed Json And Jsonb Reject Semantic And Storage Boundaries.</summary>
+    /// <param name="mutationIndex">The independently discovered semantic or storage boundary.</param>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    [InlineData(5)]
+    [InlineData(6)]
+    [InlineData(7)]
+    [InlineData(8)]
+    public async Task ModelManagedJsonAndJsonbRejectSemanticAndStorageBoundaries(
+        int mutationIndex
+    )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -256,12 +274,6 @@ public sealed class PostgreSqlModelManagedDataJsonIntegrationTests : PostgreSqlS
             });
 
         var runner = context.GetService<ISafeMigrationRunner>();
-        var matching = await runner.AnalyzeAsync(
-            context,
-            ensure.Operations,
-            new SafeMigrationRunOptions("postgresql-json-boundaries-matching"),
-            CancellationToken.None);
-
         var mutations = new[]
         {
             "scalar_payload = '2'",
@@ -275,42 +287,28 @@ public sealed class PostgreSqlModelManagedDataJsonIntegrationTests : PostgreSqlS
             "json_like_text = '{ \"a\": 1, \"b\": 2 }'",
         };
 
-        var resets = new[]
-        {
-            "scalar_payload = '1'",
-            "object_payload = '{\"a\":1,\"b\":2}'",
-            "object_payload = '{\"a\":1,\"b\":2}'",
-            "jsonb_object_payload = '{\"a\":1,\"b\":2}'",
-            "array_payload = '[1,2]'",
-            "duplicate_array_payload = '[1,1]'",
-            "json_null_payload = 'null'",
-            "sql_null_payload = NULL",
-            "json_like_text = '{\"a\":1,\"b\":2}'",
-        };
+        // Act
+        var matching = await runner.AnalyzeAsync(
+            context,
+            ensure.Operations,
+            new SafeMigrationRunOptions("postgresql-json-boundaries-matching"),
+            CancellationToken.None);
 
-        for (var index = 0; index < mutations.Length; index++)
-        {
-            await ExecuteSqlAsync(
-                connectionString,
-                $"UPDATE json_comparison_boundaries SET {mutations[index]} WHERE id = 1;",
-                cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            $"UPDATE json_comparison_boundaries SET {mutations[mutationIndex]} WHERE id = 1;",
+            cancellationToken: CancellationToken.None);
 
-            var different = await runner.AnalyzeAsync(
-                context,
-                ensure.Operations,
-                new SafeMigrationRunOptions($"postgresql-json-boundary-{index}"),
-                CancellationToken.None);
+        var different = await runner.AnalyzeAsync(
+            context,
+            ensure.Operations,
+            new SafeMigrationRunOptions($"postgresql-json-boundary-{mutationIndex}"),
+            CancellationToken.None);
 
-            Assert.Equal(
-                SafeMigrationObservedState.Different,
-                Assert.Single(different.Assessments)
-                    .ObservedState);
-
-            await ExecuteSqlAsync(
-                connectionString,
-                $"UPDATE json_comparison_boundaries SET {resets[index]} WHERE id = 1;",
-                cancellationToken: CancellationToken.None);
-        }
+        // Assert
+        Assert.Equal(SafeMigrationObservedState.Different,
+            Assert.Single(different.Assessments)
+                .ObservedState);
 
         Assert.Equal(SafeMigrationObservedState.Matching,
             Assert.Single(matching.Assessments)

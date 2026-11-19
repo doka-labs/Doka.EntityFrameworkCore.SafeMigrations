@@ -4,6 +4,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// Describes the provider-neutral classification of an observed database
 /// object or operation precondition.
 /// </summary>
+[PublicAPI]
 public enum SafeMigrationObservedState
 {
     /// <summary>The expected object is absent.</summary>

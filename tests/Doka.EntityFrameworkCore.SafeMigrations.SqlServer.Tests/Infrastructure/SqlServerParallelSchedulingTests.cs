@@ -135,7 +135,9 @@ public sealed class SqlServerParallelSchedulingTests
     }
 
     /// <summary>Never even constructs SQL Server's container for offline or all-skipped selections.</summary>
-    /// <param name="allSkippedLiveCases">Whether selection contains only skipped live cases or only offline cases.</param>
+    /// <param name="allSkippedLiveCases">
+    /// Whether selection contains only skipped live cases or only offline cases.
+    /// </param>
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

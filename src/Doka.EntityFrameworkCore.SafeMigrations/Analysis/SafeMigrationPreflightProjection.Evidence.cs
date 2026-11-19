@@ -416,8 +416,14 @@ internal sealed partial class SafeMigrationPreflightProjection
         }
 
         var expectedChangedColumnCount = 0;
-        foreach (var expectedColumn in definition.Columns)
+
+        // WHY: This immutable definition snapshot is indexed; retain its authored order without interface enumeration.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var expectedColumnIndex = 0; expectedColumnIndex < definition.Columns.Count; expectedColumnIndex++)
         {
+            var expectedColumn = definition.Columns[expectedColumnIndex];
+
             if (!changedColumns.Contains(expectedColumn.Name))
             {
                 continue;
@@ -710,6 +716,9 @@ internal sealed partial class SafeMigrationPreflightProjection
         var columns = definition
             .Keys
             .Select(static key => key.Column!)
+
+            // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         return uniqueKeys.Contains(ModelManagedUniqueKeyFingerprint(columns));

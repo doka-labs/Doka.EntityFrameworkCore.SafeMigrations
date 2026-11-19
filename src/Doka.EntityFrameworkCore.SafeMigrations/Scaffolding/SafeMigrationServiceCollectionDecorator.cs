@@ -56,14 +56,23 @@ internal static class SafeMigrationServiceCollectionDecorator
         return (IMigrationsModelDiffer)ActivatorUtilities.CreateInstance(provider, implementationType);
     }
 
-    private sealed class SafeMigrationMigrationsModelDifferFactory(
-        ServiceDescriptor providerDescriptor
-    )
+    private sealed class SafeMigrationMigrationsModelDifferFactory
     {
+        private readonly ServiceDescriptor _providerDescriptor;
+
+        /// <summary>Initializes the decorator factory without resolving the original service early.</summary>
+        /// <param name="providerDescriptor">The existing provider model-differ registration.</param>
+        public SafeMigrationMigrationsModelDifferFactory(
+            ServiceDescriptor providerDescriptor
+        )
+        {
+            _providerDescriptor = providerDescriptor;
+        }
+
         public SafeMigrationMigrationsModelDiffer Create(
             IServiceProvider provider
         ) => new(
-            CreateProviderDiffer(provider, providerDescriptor),
+            CreateProviderDiffer(provider, _providerDescriptor),
             ResolveConfiguration(provider));
     }
 }

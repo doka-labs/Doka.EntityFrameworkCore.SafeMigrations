@@ -20,7 +20,7 @@ internal sealed class PostgreSqlSafeMigrationGenerationIdentityContract
     )
     {
         var segments = new Segment?[operations.Count];
-        var pending = new List<(int Ordinal, SafeMigrationOperation Operation)>();
+        List<(int Ordinal, SafeMigrationOperation Operation)> pending = [];
 
         // WHY: Retain original operation ordinals when forming identity segments.
         // ReSharper disable once ForCanBeConvertedToForeach
@@ -87,10 +87,10 @@ internal sealed class PostgreSqlSafeMigrationGenerationIdentityContract
             return builder.Build(operation, exact, includeAnalysisEvidence: false, includeTransitionEvidence: true);
         }
 
-        var alternatives = new List<(string Schema, SafeMigrationExpectedTableConstraints? Contract)>();
-        var rejected = new List<string>();
-        var guards = new List<string>();
-        var postExecutionGuards = new List<string>();
+        List<(string Schema, SafeMigrationExpectedTableConstraints? Contract)> alternatives = [];
+        List<string> rejected = [];
+        List<string> guards = [];
+        List<string> postExecutionGuards = [];
         if (family is { HasUnqualifiedOwner: true })
         {
             foreach (var schema in family.QualifiedSchemas.Order(StringComparer.Ordinal))
@@ -185,10 +185,18 @@ internal sealed class PostgreSqlSafeMigrationGenerationIdentityContract
 
         var segment = new Segment(pending
             .Select(static entry => entry.Operation)
+
+            // WHY: Keep explicit fluent materialization and its existing
+            // ownership/evaluation boundary instead of an implicit spread.
+            // ReSharper disable once UseCollectionExpression
             .ToArray());
 
-        foreach (var entry in pending)
+        // WHY: This pass only reads the stable ordered collection by ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var entryIndex = 0; entryIndex < pending.Count; entryIndex++)
         {
+            var entry = pending[entryIndex];
             segments[entry.Ordinal] = segment;
         }
 
@@ -221,22 +229,27 @@ internal sealed class PostgreSqlSafeMigrationGenerationIdentityContract
                 }
 
                 _ = GetFamily(owner.Table);
-                if (operation.Intent is RenameTableIntent rename)
+                switch (operation.Intent)
                 {
-                    Join(owner.Table, rename.NewName ?? rename.Name);
-                }
+                    case RenameTableIntent rename:
+                        Join(owner.Table, rename.NewName ?? rename.Name);
+                        break;
+                    case EnsureForeignKeyIntent foreignKey:
+                        Join(owner.Table, foreignKey.Definition.PrincipalTable);
+                        break;
+                    case EnsureTableIntent table:
+                        // WHY: Read every declared foreign key once while joining its stable owner family.
+                        // ReSharper disable once ForCanBeConvertedToForeach
+                        // ReSharper disable once LoopCanBeConvertedToQuery
+                        for (var foreignKeyIndex = 0;
+                            foreignKeyIndex < table.Definition.ForeignKeys.Count;
+                            foreignKeyIndex++)
+                        {
+                            var foreignKeyDefinition = table.Definition.ForeignKeys[foreignKeyIndex];
+                            Join(owner.Table, foreignKeyDefinition.PrincipalTable);
+                        }
 
-                if (operation.Intent is EnsureForeignKeyIntent foreignKey)
-                {
-                    Join(owner.Table, foreignKey.Definition.PrincipalTable);
-                }
-
-                if (operation.Intent is EnsureTableIntent table)
-                {
-                    foreach (var foreignKeyDefinition in table.Definition.ForeignKeys)
-                    {
-                        Join(owner.Table, foreignKeyDefinition.PrincipalTable);
-                    }
+                        break;
                 }
             }
 
@@ -356,10 +369,6 @@ internal sealed class PostgreSqlSafeMigrationGenerationIdentityContract
                 return result;
             }
 
-            string? Normalize(
-                string? value
-            ) => PostgreSqlSafeMigrationSchemaIdentity.Normalize(value, schema);
-
             try
             {
                 SafeMigrationExpectedIndexTransitions.Validate(Operations, Normalize);
@@ -381,6 +390,10 @@ internal sealed class PostgreSqlSafeMigrationGenerationIdentityContract
             _resolved.Add(schema, result);
 
             return result;
+
+            string? Normalize(
+                string? value
+            ) => PostgreSqlSafeMigrationSchemaIdentity.Normalize(value, schema);
         }
 
         public string BuildIdentityGuard(

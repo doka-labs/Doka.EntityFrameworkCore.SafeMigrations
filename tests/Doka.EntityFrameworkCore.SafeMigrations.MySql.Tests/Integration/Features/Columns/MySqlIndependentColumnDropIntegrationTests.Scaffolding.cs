@@ -24,7 +24,7 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests
             ExistingKeyFixture("(1, 'a', 10), (2, 'b', 20)"),
             cancellationToken: CancellationToken.None);
 
-        using var services = CreateScaffoldingServices();
+        await using var services = CreateScaffoldingServices();
         await using var source = new ReplacementSourceContext(ScaffoldingOptions(connectionString, services, mode));
         await using var target = new ReplacementExistingContext(ScaffoldingOptions(connectionString, services, mode));
         var generated = ScaffoldReplacement(source, target);
@@ -99,7 +99,7 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, ExistingKeyFixture(rows), cancellationToken: CancellationToken.None);
-        using var services = CreateScaffoldingServices();
+        await using var services = CreateScaffoldingServices();
         await using var source = new ReplacementSourceContext(ScaffoldingOptions(connectionString, services, mode));
         await using var target = new ReplacementExistingContext(ScaffoldingOptions(connectionString, services, mode));
         var generated = ScaffoldReplacement(source, target);
@@ -146,7 +146,7 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests
             ExistingKeyFixture("(1, 'a', 10), (2, 'b', 20)"),
             cancellationToken: CancellationToken.None);
 
-        using var services = CreateScaffoldingServices();
+        await using var services = CreateScaffoldingServices();
         await using var source = new ReplacementSourceContext(ScaffoldingOptions(connectionString, services, mode));
         await using var target = new ReplacementUuidContext(ScaffoldingOptions(connectionString, services, mode));
         var generated = ScaffoldReplacement(source, target);
@@ -289,7 +289,7 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, ExistingKeyFixture(rows), cancellationToken: CancellationToken.None);
-        using var services = CreateScaffoldingServices();
+        await using var services = CreateScaffoldingServices();
         await using var source = new ReplacementSourceContext(ScaffoldingOptions(connectionString, services, mode));
         await using var target = new ReplacementExistingContext(ScaffoldingOptions(connectionString, services, mode));
         var generated = ScaffoldReplacement(source, target);
@@ -304,6 +304,9 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests
                         new EnsureColumnIntent(alter.Table, alter.Definition, alter.Schema),
                         SafeMigrationPolicy.RepairIfSafe)
                     : operation)
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var dropOrdinal = Array.FindIndex(
@@ -314,6 +317,9 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests
         await ExecuteOperationsAsync(target,
             operations
                 .Take(dropOrdinal + 1)
+
+                // WHY: Retain this explicit materialization/copy path and its collection lowering.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray(),
             CancellationToken.None);
 
@@ -554,9 +560,14 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests
     );
 
     /// <summary>Defines the old two-member key without injecting provider migration annotations.</summary>
-    /// <param name="options">The owned service root and active native engine.</param>
-    public sealed class ReplacementSourceContext(DbContextOptions options) : DbContext(options)
+    public sealed class ReplacementSourceContext : DbContext
     {
+        /// <summary>Initializes the explicit dependencies of this isolated test helper.</summary>
+        /// <param name="options">The owned service root and active native engine.</param>
+        public ReplacementSourceContext(
+            DbContextOptions options
+        ) : base(options) { }
+
         /// <inheritdoc />
         protected override void OnModelCreating(
             ModelBuilder modelBuilder
@@ -567,9 +578,14 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests
     }
 
     /// <summary>Requests the surviving existing-member replacement key through ordinary fluent configuration.</summary>
-    /// <param name="options">The owned service root and active native engine.</param>
-    public sealed class ReplacementExistingContext(DbContextOptions options) : DbContext(options)
+    public sealed class ReplacementExistingContext : DbContext
     {
+        /// <summary>Initializes the explicit dependencies of this isolated test helper.</summary>
+        /// <param name="options">The owned service root and active native engine.</param>
+        public ReplacementExistingContext(
+            DbContextOptions options
+        ) : base(options) { }
+
         /// <inheritdoc />
         protected override void OnModelCreating(
             ModelBuilder modelBuilder
@@ -580,9 +596,14 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests
     }
 
     /// <summary>Requests a new server-default GUID key through ordinary fluent configuration.</summary>
-    /// <param name="options">The owned service root and active native engine.</param>
-    public sealed class ReplacementUuidContext(DbContextOptions options) : DbContext(options)
+    public sealed class ReplacementUuidContext : DbContext
     {
+        /// <summary>Initializes the explicit dependencies of this isolated test helper.</summary>
+        /// <param name="options">The owned service root and active native engine.</param>
+        public ReplacementUuidContext(
+            DbContextOptions options
+        ) : base(options) { }
+
         /// <inheritdoc />
         protected override void OnModelCreating(
             ModelBuilder modelBuilder

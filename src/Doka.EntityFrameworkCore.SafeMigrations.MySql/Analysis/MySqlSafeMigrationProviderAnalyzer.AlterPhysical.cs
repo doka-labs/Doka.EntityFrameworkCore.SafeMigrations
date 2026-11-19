@@ -39,24 +39,24 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < operations.Count; index++)
         {
-            if (operations[index].Intent is AlterColumnIntent intent
-                && snapshots.TryGetValue(intent.Table, out var snapshot))
+            switch (operations[index].Intent)
             {
-                _projectedAlterPhysicalSnapshots[analyses[index]] = snapshot;
-            }
-            else if (operations[index].Intent is DropIndexIntent drop
-                && snapshots.TryGetValue(drop.Table, out var dropSnapshot))
-            {
-                // WHY: A proof is tied to the captured physical owner and member,
-                // not merely to a caller-supplied index name on another table.
-                (_indexDropPhysicalSnapshots ??=
-                        new Dictionary<SafeMigrationProviderAnalysis, IndexDropColumnSourceProof>(
-                            ReferenceEqualityComparer.Instance))[analyses[index]] =
-                    new IndexDropColumnSourceProof(
-                        drop.Table,
-                        NormalizeProofSchema(drop.Schema),
-                        drop.Name,
-                        dropSnapshot);
+                case AlterColumnIntent intent when snapshots.TryGetValue(intent.Table, out var snapshot):
+                    _projectedAlterPhysicalSnapshots[analyses[index]] = snapshot;
+                    break;
+                case DropIndexIntent drop when snapshots.TryGetValue(drop.Table, out var dropSnapshot):
+                    // WHY: A proof is tied to the captured physical owner and member,
+                    // not merely to a caller-supplied index name on another table.
+                    (_indexDropPhysicalSnapshots ??=
+                            new Dictionary<SafeMigrationProviderAnalysis, IndexDropColumnSourceProof>(
+                                ReferenceEqualityComparer.Instance))[analyses[index]] =
+                        new IndexDropColumnSourceProof(
+                            drop.Table,
+                            NormalizeProofSchema(drop.Schema),
+                            drop.Name,
+                            dropSnapshot);
+
+                    break;
             }
         }
     }
@@ -87,6 +87,10 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             .Select(static operation => ((AlterColumnIntent)operation.Intent).Table)
             .Distinct(StringComparer.Ordinal)
             .OrderBy(static table => table, StringComparer.Ordinal)
+
+            // WHY: Retain fluent materialization and its existing snapshot
+            // ownership rather than replacing this boundary with a spread.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         if (tables.Length == 0)
@@ -171,11 +175,11 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
 
                 return new SafeMigrationCatalogProbeStatement(1, valueBytes, slot);
             },
-            async (reader, slot, _, token) =>
+            async (reader, slot, _, callbackCancellationToken) =>
             {
                 var offset = slot / 2 * SafeMigrationCatalogQueryLimits.MaximumInventoryValues;
                 var count = Math.Min(SafeMigrationCatalogQueryLimits.MaximumInventoryValues, tables.Length - offset);
-                while (await reader.ReadAsync(token))
+                while (await reader.ReadAsync(callbackCancellationToken))
                 {
                     var table = reader.GetString(0);
                     if (Array.BinarySearch(tables, offset, count, table, StringComparer.Ordinal) < 0)
@@ -243,6 +247,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                             ReadNullableInt32(reader, 5)));
                 }
             },
+            transaction: null,
+            SafeMigrationCatalogQueryLimits.MaximumParameters,
             cancellationToken);
 
         var result = new Dictionary<string, MySqlProjectedAlterPhysicalSnapshot>(StringComparer.Ordinal);
@@ -268,6 +274,10 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                             index.Value.IsUnique,
                             index.Key,
                             index.Value.IsOrdinaryBtree))
+
+                        // WHY: Retain fluent materialization and its existing snapshot
+                        // ownership rather than replacing this boundary with a spread.
+                        // ReSharper disable once UseCollectionExpression
                         .ToArray(),
                     environment));
         }
@@ -283,17 +293,28 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         MySqlProjectedAlterPhysicalSnapshot Snapshot
     );
 
-    private sealed class AlterPhysicalIndexBuilder(
-        bool isFullText,
-        bool isUnique,
-        bool isOrdinaryBtree
-    )
+    private sealed class AlterPhysicalIndexBuilder
     {
-        internal bool IsFullText { get; } = isFullText;
+        /// <summary>Retains native index traits while ordered column parts are read.</summary>
+        /// <param name="isFullText">Whether the physical index uses FULLTEXT storage.</param>
+        /// <param name="isUnique">Whether the physical index enforces uniqueness.</param>
+        /// <param name="isOrdinaryBtree">Whether the physical method is ordinary BTREE.</param>
+        internal AlterPhysicalIndexBuilder(
+            bool isFullText,
+            bool isUnique,
+            bool isOrdinaryBtree
+        )
+        {
+            IsFullText = isFullText;
+            IsUnique = isUnique;
+            IsOrdinaryBtree = isOrdinaryBtree;
+        }
 
-        internal bool IsUnique { get; } = isUnique;
+        internal bool IsFullText { get; }
 
-        internal bool IsOrdinaryBtree { get; } = isOrdinaryBtree;
+        internal bool IsUnique { get; }
+
+        internal bool IsOrdinaryBtree { get; }
 
         internal List<MySqlAlterIndexPart> Parts { get; } = [];
     }

@@ -47,7 +47,9 @@ public sealed class MySqlKeyChangeColumnProofTests
         Assert.Equal(expected, result);
     }
 
-    /// <summary>Ensure requires to be satisfied matching or complete nullability-only non-data repair diagnostics.</summary>
+    /// <summary>
+    /// Ensure requires to be satisfied matching or complete nullability-only non-data repair diagnostics.
+    /// </summary>
     /// <param name="evidence">The captured provider state, facets or independent blocker.</param>
     /// <param name="expected">Whether the exact captured Ensure certificate is reusable.</param>
     [Theory]
@@ -175,7 +177,7 @@ public sealed class MySqlKeyChangeColumnProofTests
                     ? "default"
                     : "none"));
 
-        var differences = new List<SafeMigrationFacetDifference>();
+        List<SafeMigrationFacetDifference> differences = [];
         if (boundary != "missing-nullability")
         {
             differences.Add(

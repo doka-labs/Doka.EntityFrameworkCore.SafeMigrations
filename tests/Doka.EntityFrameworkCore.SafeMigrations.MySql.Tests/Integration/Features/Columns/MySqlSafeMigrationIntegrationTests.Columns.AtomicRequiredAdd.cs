@@ -56,10 +56,7 @@ public sealed class MySqlColumnsAtomicRequiredAddIntegrationTests : MySqlSafeMig
 
         rerun.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
-        var state = await ReadAtomicRequiredAddStateAsync(
-            connectionString,
-            operation,
-            cancellationToken: CancellationToken.None);
+        var state = await ReadAtomicRequiredAddStateAsync(connectionString, operation, null, CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationAction.Apply,
@@ -125,10 +122,7 @@ public sealed class MySqlColumnsAtomicRequiredAddIntegrationTests : MySqlSafeMig
         var interrupted = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, [operation], CancellationToken.None));
 
-        var staged = await ReadAtomicRequiredAddStateAsync(
-            connectionString,
-            operation,
-            cancellationToken: CancellationToken.None);
+        var staged = await ReadAtomicRequiredAddStateAsync(connectionString, operation, null, CancellationToken.None);
 
         var resume = await runner.AnalyzeAsync(
             context,
@@ -138,10 +132,7 @@ public sealed class MySqlColumnsAtomicRequiredAddIntegrationTests : MySqlSafeMig
 
         resume.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
-        var final = await ReadAtomicRequiredAddStateAsync(
-            connectionString,
-            operation,
-            cancellationToken: CancellationToken.None);
+        var final = await ReadAtomicRequiredAddStateAsync(connectionString, operation, null, CancellationToken.None);
 
         var postflight = await runner.VerifyAsync(
             context,
@@ -197,10 +188,7 @@ public sealed class MySqlColumnsAtomicRequiredAddIntegrationTests : MySqlSafeMig
         var exception = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, [operation], CancellationToken.None));
 
-        var state = await ReadAtomicRequiredAddStateAsync(
-            connectionString,
-            operation,
-            cancellationToken: CancellationToken.None);
+        var state = await ReadAtomicRequiredAddStateAsync(connectionString, operation, null, CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationAction.RejectUnsupported,
@@ -242,10 +230,7 @@ public sealed class MySqlColumnsAtomicRequiredAddIntegrationTests : MySqlSafeMig
         var exception = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, [operation], CancellationToken.None));
 
-        var state = await ReadAtomicRequiredAddStateAsync(
-            connectionString,
-            operation,
-            cancellationToken: CancellationToken.None);
+        var state = await ReadAtomicRequiredAddStateAsync(connectionString, operation, null, CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationAction.RejectUnsupported,
@@ -302,10 +287,7 @@ public sealed class MySqlColumnsAtomicRequiredAddIntegrationTests : MySqlSafeMig
         var exception = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, [operation], CancellationToken.None));
 
-        var state = await ReadAtomicRequiredAddStateAsync(
-            connectionString,
-            operation,
-            cancellationToken: CancellationToken.None);
+        var state = await ReadAtomicRequiredAddStateAsync(connectionString, operation, null, CancellationToken.None);
 
         // Assert
         Assert.Equal(
@@ -385,8 +367,8 @@ public sealed class MySqlColumnsAtomicRequiredAddIntegrationTests : MySqlSafeMig
         var before = await ReadAtomicRequiredAddStateAsync(
             connectionString,
             operation,
-            CancellationToken.None,
-            actualGuardName);
+            actualGuardName,
+            CancellationToken.None);
 
         // Act
         var report = await context
@@ -403,8 +385,8 @@ public sealed class MySqlColumnsAtomicRequiredAddIntegrationTests : MySqlSafeMig
         var after = await ReadAtomicRequiredAddStateAsync(
             connectionString,
             operation,
-            CancellationToken.None,
-            actualGuardName);
+            actualGuardName,
+            CancellationToken.None);
 
         // Assert
         Assert.Equal(
@@ -468,10 +450,7 @@ public sealed class MySqlColumnsAtomicRequiredAddIntegrationTests : MySqlSafeMig
         var exception = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, [operation], CancellationToken.None));
 
-        var state = await ReadAtomicRequiredAddStateAsync(
-            connectionString,
-            operation,
-            cancellationToken: CancellationToken.None);
+        var state = await ReadAtomicRequiredAddStateAsync(connectionString, operation, null, CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationAction.RejectDifferent,
@@ -539,10 +518,7 @@ public sealed class MySqlColumnsAtomicRequiredAddIntegrationTests : MySqlSafeMig
 
         report.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
-        var state = await ReadAtomicRequiredAddStateAsync(
-            connectionString,
-            operation,
-            cancellationToken: CancellationToken.None);
+        var state = await ReadAtomicRequiredAddStateAsync(connectionString, operation, null, CancellationToken.None);
 
         var actualOwnerHex = await ScalarStringAsync(
             connectionString,
@@ -622,8 +598,8 @@ public sealed class MySqlColumnsAtomicRequiredAddIntegrationTests : MySqlSafeMig
         var state = await ReadAtomicRequiredAddStateAsync(
             connectionString,
             operation,
-            CancellationToken.None,
-            actualGuardName);
+            actualGuardName,
+            CancellationToken.None);
 
         // Assert
         if (ownership == "owned")
@@ -680,10 +656,7 @@ public sealed class MySqlColumnsAtomicRequiredAddIntegrationTests : MySqlSafeMig
                 new SafeMigrationRunOptions("atomic-required-add-duplicate-key"),
                 CancellationToken.None);
 
-        var state = await ReadAtomicRequiredAddStateAsync(
-            connectionString,
-            operation,
-            cancellationToken: CancellationToken.None);
+        var state = await ReadAtomicRequiredAddStateAsync(connectionString, operation, null, CancellationToken.None);
 
         var originalKeys = await ScalarIntAsync(
             connectionString,
@@ -743,10 +716,7 @@ public sealed class MySqlColumnsAtomicRequiredAddIntegrationTests : MySqlSafeMig
 
         report.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var state = await ReadAtomicRequiredAddStateAsync(
-            connectionString,
-            operation,
-            cancellationToken: CancellationToken.None);
+        var state = await ReadAtomicRequiredAddStateAsync(connectionString, operation, null, CancellationToken.None);
 
         var targetKeys = await ScalarIntAsync(
             connectionString,
@@ -893,8 +863,8 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
     private protected static async Task<AtomicRequiredAddState> ReadAtomicRequiredAddStateAsync(
         string connectionString,
         SafeMigrationOperation operation,
-        CancellationToken cancellationToken,
-        string? actualGuardName = null
+        string? actualGuardName,
+        CancellationToken cancellationToken
     )
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -975,7 +945,7 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
     {
         const string prefix = "CONVERT(0x";
         const string suffix = " USING utf8mb4)";
-        var result = new List<string>();
+        List<string> result = [];
         var offset = 0;
         while ((offset = sql.IndexOf(prefix, offset, StringComparison.Ordinal)) >= 0)
         {
@@ -1072,6 +1042,9 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
             var stages = AtomicRequiredAddDecodedPayloads(command.CommandText)
                 .Where(sql => sql.StartsWith("ALTER TABLE ", StringComparison.Ordinal)
                     && sql.Contains(_guardName, StringComparison.Ordinal))
+
+                // WHY: Retain this explicit materialization/copy path and its collection lowering.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray();
 
             if (stages.Length != 2

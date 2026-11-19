@@ -115,8 +115,8 @@ public sealed class SqlServerSafeMigrationForeignKeyWidthsIntegrationTests : Sql
         Assert.Equal(
             SafeMigrationObservedState.Matching,
             Assert.Single(
-                    Assert.IsAssignableFrom<
-                        IReadOnlyList<SafeMigrationProviderAnalysis>>(matching))
+                    Assert.IsType<
+                        IReadOnlyList<SafeMigrationProviderAnalysis>>(matching, exactMatch: false))
                 .ObservedState);
 
         Assert.Equal(ddlEvents, replayDdlEvents);
@@ -217,8 +217,8 @@ public sealed class SqlServerSafeMigrationForeignKeyWidthsIntegrationTests : Sql
         Assert.Equal(
             SafeMigrationObservedState.Matching,
             Assert.Single(
-                    Assert.IsAssignableFrom<
-                        IReadOnlyList<SafeMigrationProviderAnalysis>>(matching))
+                    Assert.IsType<
+                        IReadOnlyList<SafeMigrationProviderAnalysis>>(matching, exactMatch: false))
                 .ObservedState);
     }
 
@@ -324,8 +324,8 @@ public sealed class SqlServerSafeMigrationForeignKeyWidthsIntegrationTests : Sql
         Assert.Equal(
             SafeMigrationObservedState.Matching,
             Assert.Single(
-                    Assert.IsAssignableFrom<
-                        IReadOnlyList<SafeMigrationProviderAnalysis>>(matching))
+                    Assert.IsType<
+                        IReadOnlyList<SafeMigrationProviderAnalysis>>(matching, exactMatch: false))
                 .ObservedState);
     }
 
@@ -334,6 +334,8 @@ public sealed class SqlServerSafeMigrationForeignKeyWidthsIntegrationTests : Sql
     ) => Enumerable
         .Range(0, count)
         .Select(static ordinal => "K" + ordinal.ToString(CultureInfo.InvariantCulture))
+        // WHY: Fluent terminal materialization preserves the existing snapshot and enumeration contract.
+        // ReSharper disable once UseCollectionExpression
         .ToArray();
 
     private static Task CreateForeignKeyWidthAuditAsync(

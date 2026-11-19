@@ -1,3 +1,8 @@
+if (args is ["--live-catalog", .. var liveCatalogArgs])
+{
+    return BenchmarkProgram.Run(liveCatalogArgs, typeof(SqlServerLiveCatalogBenchmarks));
+}
+
 if (args is ["--maintenance-attribution", .. var maintenanceArgs])
 {
     return BenchmarkProgram.Run(maintenanceArgs, typeof(SqlServerMaintenanceAttribution));
@@ -18,4 +23,6 @@ return BenchmarkProgram.Run(
     typeof(SqlServerRepairBenchmarks),
     typeof(SqlServerModelManagedDataBenchmarks),
     typeof(SqlServerCanonicalModelBenchmarks),
-    typeof(SqlServerCatalogCommandAssemblyBenchmarks));
+    typeof(SqlServerCatalogCommandAssemblyBenchmarks),
+    typeof(SqlServerComputedDropCaptureBenchmarks),
+    typeof(SqlServerMatchingTransitionCaptureBenchmarks));

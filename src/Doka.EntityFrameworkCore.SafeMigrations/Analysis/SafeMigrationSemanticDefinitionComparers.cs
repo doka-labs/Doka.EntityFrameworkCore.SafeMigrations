@@ -101,8 +101,14 @@ internal static class SafeMigrationSemanticDefinitionComparers
         hash.Add(definition.Method, StringComparer.Ordinal);
         hash.Add(definition.NullsDistinct);
         hash.Add(definition.Keys.Count);
-        foreach (var key in definition.Keys)
+
+        // WHY: This immutable definition snapshot is indexed; retain its authored order without interface enumeration.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var keyIndex = 0; keyIndex < definition.Keys.Count; keyIndex++)
         {
+            var key = definition.Keys[keyIndex];
+
             AddIndexKey(ref hash, key, columns);
         }
 
@@ -298,8 +304,19 @@ internal static class SafeMigrationSemanticDefinitionComparers
     }
 
     /// <summary>Preserves O(arity) hashing without normalizing or allocating SQL/expression text.</summary>
-    private sealed class ColumnAwareIndexComparer(StringComparer columns) : IEqualityComparer<ExpectedIndexDefinition>
+    private sealed class ColumnAwareIndexComparer : IEqualityComparer<ExpectedIndexDefinition>
     {
+        private readonly StringComparer _columns;
+
+        /// <summary>Initializes index semantics with the provider's physical column comparer.</summary>
+        /// <param name="columns">The column identity comparer shared by equality and hashing.</param>
+        public ColumnAwareIndexComparer(
+            StringComparer columns
+        )
+        {
+            _columns = columns;
+        }
+
         /// <inheritdoc />
         public bool Equals(
             ExpectedIndexDefinition? left,
@@ -307,18 +324,28 @@ internal static class SafeMigrationSemanticDefinitionComparers
         ) => ReferenceEquals(left, right)
             || (left is not null
                 && right is not null
-                && SafeMigrationDefinitionEquivalence.IndexSemantics(left, right, columns));
+                && SafeMigrationDefinitionEquivalence.IndexSemantics(left, right, _columns));
 
         /// <inheritdoc />
         public int GetHashCode(
             ExpectedIndexDefinition value
-        ) => IndexHash(value, columns);
+        ) => IndexHash(value, _columns);
     }
 
     /// <summary>Shares candidate-key member hashing with the same column comparer used by equality.</summary>
-    private sealed class ColumnAwareUniqueComparer(StringComparer columns)
-        : IEqualityComparer<ExpectedUniqueConstraintDefinition>
+    private sealed class ColumnAwareUniqueComparer : IEqualityComparer<ExpectedUniqueConstraintDefinition>
     {
+        private readonly StringComparer _columns;
+
+        /// <summary>Initializes unique-key semantics with the provider's physical column comparer.</summary>
+        /// <param name="columns">The column identity comparer shared by equality and hashing.</param>
+        public ColumnAwareUniqueComparer(
+            StringComparer columns
+        )
+        {
+            _columns = columns;
+        }
+
         /// <inheritdoc />
         public bool Equals(
             ExpectedUniqueConstraintDefinition? left,
@@ -326,28 +353,40 @@ internal static class SafeMigrationSemanticDefinitionComparers
         ) => ReferenceEquals(left, right)
             || (left is not null
                 && right is not null
-                && SafeMigrationDefinitionEquivalence.UniqueConstraintSemantics(left, right, columns));
+                && SafeMigrationDefinitionEquivalence.UniqueConstraintSemantics(left, right, _columns));
 
         /// <inheritdoc />
         public int GetHashCode(
             ExpectedUniqueConstraintDefinition value
-        ) => UniqueConstraintHash(value, columns);
+        ) => UniqueConstraintHash(value, _columns);
     }
 
-    private sealed class SemanticComparer<T>(
-        Func<T, T, bool> equals,
-        Func<T, int> hash
-    ) : IEqualityComparer<T>
+    private sealed class SemanticComparer<T> : IEqualityComparer<T>
         where T : class
     {
+        private readonly Func<T, T, bool> _equals;
+        private readonly Func<T, int> _hash;
+
+        /// <summary>Initializes semantic equality and its corresponding hash without normalizing definitions.</summary>
+        /// <param name="equals">The semantic equality operation.</param>
+        /// <param name="hash">The corresponding semantic hash operation.</param>
+        public SemanticComparer(
+            Func<T, T, bool> equals,
+            Func<T, int> hash
+        )
+        {
+            _equals = equals;
+            _hash = hash;
+        }
+
         public bool Equals(
             T? left,
             T? right
         ) => ReferenceEquals(left, right)
-            || (left is not null && right is not null && equals(left, right));
+            || (left is not null && right is not null && _equals(left, right));
 
         public int GetHashCode(
             T value
-        ) => hash(value);
+        ) => _hash(value);
     }
 }

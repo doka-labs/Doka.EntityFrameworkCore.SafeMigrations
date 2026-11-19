@@ -1,3 +1,6 @@
+// WHY: Linked provider suites observe different safety-fact counters through their native statement families.
+// ReSharper disable MemberCanBePrivate.Global
+
 namespace Doka.EntityFrameworkCore.SafeMigrations.Testing;
 
 /// <summary>Defines one test-owned malformed classifier result without exposing provider data.</summary>
@@ -24,7 +27,6 @@ internal sealed class CatalogClassificationCountingConnection : DbConnection
 {
     private readonly CatalogClassificationResultFault _fault;
     private readonly DbConnection _inner;
-    private readonly bool _nativeBatch;
     private bool _innerDisposed;
 
     /// <summary>Wraps a test-owned provider connection without retaining its SQL or result values.</summary>
@@ -39,7 +41,7 @@ internal sealed class CatalogClassificationCountingConnection : DbConnection
     {
         _inner = inner;
         _fault = fault;
-        _nativeBatch = nativeBatch;
+        CanCreateBatch = nativeBatch;
     }
 
     /// <summary>Gets the number of dispatched statements returning the nine classifier facets.</summary>
@@ -114,7 +116,7 @@ internal sealed class CatalogClassificationCountingConnection : DbConnection
     public override ConnectionState State => _inner.State;
 
     /// <inheritdoc />
-    public override bool CanCreateBatch => _nativeBatch && _inner.CanCreateBatch;
+    public override bool CanCreateBatch => field && _inner.CanCreateBatch;
 
     /// <inheritdoc />
     public override void ChangeDatabase(
@@ -458,12 +460,17 @@ internal sealed class CatalogClassificationCountingConnection : DbConnection
                 _owner.StateEvaluationGuardStatementCount++;
             }
             else if (reader.FieldCount == 3
-                && (CommandText.AsSpan(CommandText.IndexOf(',') + 1).StartsWith(" COALESCE((", StringComparison.Ordinal)
-                    && (CommandText.Contains("), FALSE), COALESCE((", StringComparison.Ordinal)
-                        || CommandText.Contains("),\nFALSE), COALESCE((", StringComparison.Ordinal))
-                    || CommandText.AsSpan(CommandText.IndexOf(',') + 1).StartsWith(
-                        "\nCOALESCE((", StringComparison.Ordinal)
-                    && CommandText.Contains("),\nFALSE), COALESCE((", StringComparison.Ordinal))
+                && ((CommandText
+                            .AsSpan(CommandText.IndexOf(',') + 1)
+                            .StartsWith(" COALESCE((", StringComparison.Ordinal)
+                        && (CommandText.Contains("), FALSE), COALESCE((", StringComparison.Ordinal)
+                            || CommandText.Contains("),\nFALSE), COALESCE((", StringComparison.Ordinal)))
+                    || (CommandText
+                            .AsSpan(CommandText.IndexOf(',') + 1)
+                            .StartsWith(
+                                "\nCOALESCE((",
+                                StringComparison.Ordinal)
+                        && CommandText.Contains("),\nFALSE), COALESCE((", StringComparison.Ordinal)))
                 && CommandText.Contains(
                     "narrowing_column.CHARACTER_MAXIMUM_LENGTH",
                     StringComparison.OrdinalIgnoreCase)

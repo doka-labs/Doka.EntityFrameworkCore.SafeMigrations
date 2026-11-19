@@ -63,8 +63,9 @@ logging separately and avoid sensitive-data logging in production.
 - Investigate unexpected latency with provider identity, operation count,
   cancellation/timeout status, and protected catalog evidence.
 - Compare live clean/noisy p95 only within the qualified runner/context.
-  BenchmarkDotNet measurement runs are informational; CI `Dry` smoke verifies
-  execution/export only. Neither establishes a universal production SLA.
+  BenchmarkDotNet measurement runs, including explicitly requested Dry smoke,
+  are informational. Default CI/build/test/cleanup do not start statistical benchmarks;
+  requested Dry verifies execution/export, not a universal production SLA.
 - A missing telemetry event requires checking process, cancellation, export,
   and instrumentation boundaries; it is not proof of no migration activity.
 

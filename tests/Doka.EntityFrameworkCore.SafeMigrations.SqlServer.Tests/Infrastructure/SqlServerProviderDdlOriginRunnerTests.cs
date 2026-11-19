@@ -1,11 +1,15 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
-/// <summary>Exercises provider-specific DDL provenance through Core's actual report pipeline without a live engine.</summary>
+/// <summary>
+/// Exercises provider-specific DDL provenance through Core's actual report pipeline without a live engine.
+/// </summary>
 public sealed class SqlServerProviderDdlOriginRunnerTests
 {
     private static readonly int[] s_expectedOrdinals = [0, 1, 2];
 
-    /// <summary>Both ordinary and safe DDL retain complete-stream ordinals and distinct uncertainty diagnostics.</summary>
+    /// <summary>
+    /// Both ordinary and safe DDL retain complete-stream ordinals and distinct uncertainty diagnostics.
+    /// </summary>
     /// <param name="typed">Whether the origin is an ordinary provider operation.</param>
     /// <param name="trigger">Whether a visible trigger rather than filtered metadata causes uncertainty.</param>
     [Theory]
@@ -76,7 +80,10 @@ public sealed class SqlServerProviderDdlOriginRunnerTests
         // Arrange
         await using var connection = new SqlServerCatalogTestConnection();
         await using var context = Context(connection);
-        using var analyzer = new OrderedAnalyzer(context, trigger: false) { OverrideOrigin = invalidOrdinal };
+        using var analyzer = new OrderedAnalyzer(context, trigger: false)
+        {
+            OverrideOrigin = invalidOrdinal,
+        };
         var runner = new SafeMigrationRunner(analyzer);
 
         // Act
@@ -121,7 +128,9 @@ public sealed class SqlServerProviderDdlOriginRunnerTests
             SafeMigrationPolicy.ThrowIfDifferent),
     ];
 
-    /// <summary>Supplies immutable live states while delegating ordered effects to the real SQL Server analyzer.</summary>
+    /// <summary>
+    /// Supplies immutable live states while delegating ordered effects to the real SQL Server analyzer.
+    /// </summary>
     private sealed class OrderedAnalyzer : ISafeMigrationProviderAnalyzer, ISafeMigrationProjectedDependencyAnalyzer,
         IDisposable
     {

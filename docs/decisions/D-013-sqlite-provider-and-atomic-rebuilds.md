@@ -1,8 +1,8 @@
 ---
 id: D-013
 status: implemented
-date: 2026-09-18
-decision-makers: [Dominic Kalkbrenner]
+date: 2026-11-19
+decision-makers: ["Dominic Kalkbrenner"]
 consulted: []
 informed: ["@doka-labs/core-maintainers"]
 scope: "SQLite provider integration and atomic model-owned table rebuilds"
@@ -163,12 +163,13 @@ contracts.
 
 ### Decision History
 
+- 2026-09-18: Decision recorded with status proposed.
 - 2026-09-18: Dominic Kalkbrenner selected a complete additional SQLite NuGet
-  package parallel to the existing adapters; status changed from proposed to
-  accepted.
+  package parallel to the existing adapters.
+- 2026-09-18: Status changed from proposed to accepted.
 - 2026-09-18: Implemented provider composition, live analysis, atomic rebuilds,
-  tooling, package/release integration, tests, and documentation; status changed
-  from accepted to implemented.
+  tooling, package/release integration, tests, and documentation.
+- 2026-09-18: Status changed from accepted to implemented.
 - 2026-09-18: Qualified bundle-neutral provider-core ownership, the SQLite
   3.46.1 engine floor, list-wide official-generator composition, foreign-key-
   safe rebuild transactions, per-migration target models, and the bounded
@@ -188,6 +189,10 @@ contracts.
 - 2026-11-09: Recorded proposed D-020 for exact-window retirement without a
   fabricated rebuild model. Its architectural approval remains distinct from
   implementation and test evidence.
+- 2026-11-19: Aligned last-update metadata, reciprocal amendments, option titles
+  and source/navigation format with the current documentation profile. Retained
+  the recorded status and historical approval evidence; this migration grants no
+  new architectural acceptance or publication authority.
 
 ### Implementation References
 
@@ -199,29 +204,16 @@ contracts.
 
 ### Sources
 
-- [EF Core SQLite provider limitations](https://learn.microsoft.com/en-us/ef/core/providers/sqlite/limitations)
-  (primary source; retrieved 2026-09-18)
-- [EF Core SQLite provider](https://learn.microsoft.com/en-us/ef/core/providers/sqlite/)
-  (primary source; retrieved 2026-09-18)
-- [Microsoft.Data.Sqlite custom SQLite versions](https://learn.microsoft.com/en-us/dotnet/standard/data/sqlite/custom-versions)
-  (primary source; retrieved 2026-09-18)
-- [SQLite ALTER TABLE](https://www.sqlite.org/lang_altertable.html)
-  (primary source; retrieved 2026-09-18)
-- [SQLite generated columns](https://www.sqlite.org/gencol.html)
-  (primary source; retrieved 2026-09-18)
-- [SQLite transactions](https://www.sqlite.org/lang_transaction.html)
-  (primary source; retrieved 2026-09-18)
-- [SQLite foreign keys](https://www.sqlite.org/foreignkeys.html)
-  (primary source; retrieved 2026-09-18)
-- [SQLite DROP TABLE](https://www.sqlite.org/lang_droptable.html)
-  (primary source; retrieved 2026-09-18)
-- [SQLite PRAGMA statements](https://www.sqlite.org/pragma.html)
-  (primary source; retrieved 2026-09-18)
-- [SQLite CREATE INDEX](https://www.sqlite.org/lang_createindex.html)
-  (primary source; retrieved 2026-09-18)
-- [SQLite identifier comparison](https://www.sqlite.org/c3ref/stricmp.html)
-  (primary source; retrieved 2026-09-18)
-- [SQLite comments](https://www.sqlite.org/lang_comment.html)
-  (primary source; retrieved 2026-09-19)
-- [SQLite tokenizer requirements](https://www.sqlite.org/draft/tokenreq.html)
-  (primary source; retrieved 2026-09-19)
+- [EF Core SQLite provider limitations](https://learn.microsoft.com/en-us/ef/core/providers/sqlite/limitations) (primary source; retrieved 2026-09-18)
+- [EF Core SQLite provider](https://learn.microsoft.com/en-us/ef/core/providers/sqlite/) (primary source; retrieved 2026-09-18)
+- [Microsoft.Data.Sqlite custom SQLite versions](https://learn.microsoft.com/en-us/dotnet/standard/data/sqlite/custom-versions) (primary source; retrieved 2026-09-18)
+- [SQLite ALTER TABLE](https://www.sqlite.org/lang_altertable.html) (primary source; retrieved 2026-09-18)
+- [SQLite generated columns](https://www.sqlite.org/gencol.html) (primary source; retrieved 2026-09-18)
+- [SQLite transactions](https://www.sqlite.org/lang_transaction.html) (primary source; retrieved 2026-09-18)
+- [SQLite foreign keys](https://www.sqlite.org/foreignkeys.html) (primary source; retrieved 2026-09-18)
+- [SQLite DROP TABLE](https://www.sqlite.org/lang_droptable.html) (primary source; retrieved 2026-09-18)
+- [SQLite PRAGMA statements](https://www.sqlite.org/pragma.html) (primary source; retrieved 2026-09-18)
+- [SQLite CREATE INDEX](https://www.sqlite.org/lang_createindex.html) (primary source; retrieved 2026-09-18)
+- [SQLite identifier comparison](https://www.sqlite.org/c3ref/stricmp.html) (primary source; retrieved 2026-09-18)
+- [SQLite comments](https://www.sqlite.org/lang_comment.html) (primary source; retrieved 2026-09-19)
+- [SQLite tokenizer requirements](https://www.sqlite.org/draft/tokenreq.html) (primary source; retrieved 2026-09-19)

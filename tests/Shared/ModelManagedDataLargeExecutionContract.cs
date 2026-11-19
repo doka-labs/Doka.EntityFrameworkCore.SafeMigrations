@@ -1,3 +1,9 @@
+// WHY: Linked Core checks validate construction while provider suites consume rows, reports and evidence members.
+// ReSharper disable UnusedMember.Global
+// ReSharper disable MemberCanBePrivate.Global
+// ReSharper disable UnusedAutoPropertyAccessor.Global
+// ReSharper disable NotAccessedPositionalProperty.Global
+
 namespace Doka.EntityFrameworkCore.SafeMigrations.Testing;
 
 internal static class ModelManagedDataLargeExecutionContract
@@ -158,7 +164,7 @@ internal static class ModelManagedDataLargeExecutionContract
     {
         foreach (var operation in operations.Cast<SafeMigrationOperation>())
         {
-            var intent = Assert.IsAssignableFrom<ModelManagedDataIntent>(operation.Intent);
+            var intent = Assert.IsType<ModelManagedDataIntent>(operation.Intent, exactMatch: false);
             var cellCount = intent switch
             {
                 EnsureModelManagedDataIntent ensure =>

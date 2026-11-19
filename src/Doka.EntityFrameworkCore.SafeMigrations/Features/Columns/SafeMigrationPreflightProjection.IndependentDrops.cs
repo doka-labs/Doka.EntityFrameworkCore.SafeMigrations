@@ -171,10 +171,15 @@ internal sealed partial class SafeMigrationPreflightProjection
         IReadOnlyList<string> columns
     )
     {
-        foreach (var t in columns)
+        // WHY: The immutable column snapshot supports indexed access without interface-enumerator boxing.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var ordinal = 0; ordinal < columns.Count; ordinal++)
         {
-            if (IsProjectedColumnMissing(table, schema, t)
-                || IsProjectedColumnUnknown(table, schema, t))
+            var column = columns[ordinal];
+
+            if (IsProjectedColumnMissing(table, schema, column)
+                || IsProjectedColumnUnknown(table, schema, column))
             {
                 return true;
             }

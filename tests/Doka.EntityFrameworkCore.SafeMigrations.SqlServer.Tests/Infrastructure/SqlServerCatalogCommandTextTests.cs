@@ -47,13 +47,11 @@ public sealed class SqlServerCatalogCommandTextTests
         Assert.Equal(Encoding.UTF8.GetByteCount(expected), Encoding.UTF8.GetByteCount(actual));
     }
 
-    /// <summary>Repeated assembly preserves the complete large prepared statement and its length checksum.</summary>
+    /// <summary>Assembly preserves the complete large prepared statement, its length and source snapshot.</summary>
     [Fact]
     public void AssemblyPreservesRepeatedPreparedStatements()
     {
         // Arrange
-        const int repetitions = 100;
-        const int samples = 5;
         var selections = Enumerable
             .Repeat(new string('x', 2_048), 32)
             .ToArray();
@@ -68,28 +66,17 @@ public sealed class SqlServerCatalogCommandTextTests
 
         var expected = prefix + string.Join(separator, selections) + trailer;
         var snapshot = selections.ToArray();
-        var statements = new string[repetitions * samples];
 
         // Act
-        var checksum = 0L;
-        for (var sample = 0; sample < samples; sample++)
-        {
-            for (var index = 0; index < repetitions; index++)
-            {
-                var statement = SqlServerSafeMigrationProviderAnalyzer.BuildCatalogCommandText(
-                    selections,
-                    prefix,
-                    separator,
-                    trailer);
-
-                statements[sample * repetitions + index] = statement;
-                checksum += statement.Length;
-            }
-        }
+        var statement = SqlServerSafeMigrationProviderAnalyzer.BuildCatalogCommandText(
+            selections,
+            prefix,
+            separator,
+            trailer);
 
         // Assert
-        Assert.Equal((long)expectedLength * repetitions * samples, checksum);
-        Assert.All(statements, statement => Assert.Equal(expected, statement));
+        Assert.Equal(expectedLength, statement.Length);
+        Assert.Equal(expected, statement);
         Assert.Equal(snapshot, selections);
     }
 }

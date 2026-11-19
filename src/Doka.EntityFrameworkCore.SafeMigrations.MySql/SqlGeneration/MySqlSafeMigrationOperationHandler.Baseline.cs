@@ -72,8 +72,13 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
         List<string>? cleanupCommands = null;
         string? bodyCommand = null;
 
-        foreach (var fragment in command.Fragments)
+        // WHY: Index this stable list while preserving its order and ownership.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var fragmentIndex = 0; fragmentIndex < command.Fragments.Count; fragmentIndex++)
         {
+            var fragment = command.Fragments[fragmentIndex];
+
             var commandText = fragment.CommandText.ToString();
             switch (fragment.Kind)
             {
@@ -89,6 +94,7 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
                 case MySqlMigrationCommandFragmentKind.Cleanup:
                     (cleanupCommands ??= []).Add(commandText);
                     break;
+                case MySqlMigrationCommandFragmentKind.Unspecified:
                 default:
                     throw new InvalidOperationException(
                         $"A provider-rendered MySQL baseline contains the unsupported fragment kind "
@@ -167,8 +173,14 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
         for (var index = 0; index < baseline.Commands.Count; index++)
         {
             var command = baseline.Commands[index];
-            foreach (var setupCommand in command.SetupCommands)
+
+            // WHY: Index this stable list while preserving its order and ownership.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var setupCommandIndex = 0; setupCommandIndex < command.SetupCommands.Count; setupCommandIndex++)
             {
+                var setupCommand = command.SetupCommands[setupCommandIndex];
+
                 AppendCommand(builder, setupCommand);
             }
 
@@ -234,8 +246,14 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
     )
     {
         var cleanupCommandCount = 0;
-        foreach (var command in baseline.Commands)
+
+        // WHY: Index this stable list while preserving its order and ownership.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var commandIndex = 0; commandIndex < baseline.Commands.Count; commandIndex++)
         {
+            var command = baseline.Commands[commandIndex];
+
             cleanupCommandCount += command.CleanupCommands.Count;
         }
 
@@ -259,8 +277,13 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
 
         if (identifierReferenceProofs is not null)
         {
-            foreach (var proof in identifierReferenceProofs)
+            // WHY: Index this stable list while preserving its order and ownership.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var proofIndex = 0; proofIndex < identifierReferenceProofs.Count; proofIndex++)
             {
+                var proof = identifierReferenceProofs[proofIndex];
+
                 commands.Add(MySqlSafeMigrationIdentifierReferenceProof.BuildCleanupSql(proof));
             }
         }
@@ -268,8 +291,13 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
         // WHY: CreateScoped reverses cleanup input. Add provider cleanup in
         // reverse scope order and reverse execution order so failure in any
         // command unwinds every acquired provider resource before guard state is reset.
-        foreach (var command in baseline.Commands)
+        // WHY: Index this stable list while preserving its order and ownership.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var commandIndex = 0; commandIndex < baseline.Commands.Count; commandIndex++)
         {
+            var command = baseline.Commands[commandIndex];
+
             // WHY: Unwind cleanup commands in reverse setup order.
             // ReSharper disable once ForCanBeConvertedToForeach
             // ReSharper disable once LoopCanBeConvertedToQuery
@@ -351,26 +379,27 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
             return [Command("DO 0;", transactionSuppressed: true)];
         }
 
-        if (operation.Intent is ModelManagedDataIntent)
+        switch (operation.Intent)
         {
-            return
-            [
-                Command(
-                    runtimePlan.RenderPreparedMutationSql(
-                        runtimePlan
-                            .ParameterValues
-                            .Select(RenderParameterLiteral)
-                            .ToArray()),
-                    transactionSuppressed: false),
-            ];
-        }
+            case ModelManagedDataIntent:
+                return
+                [
+                    Command(
+                        runtimePlan.RenderPreparedMutationSql(
+                            runtimePlan
+                                .ParameterValues
+                                .Select(RenderParameterLiteral)
 
-        if (operation.Intent is EnsureIndexIntent index
-            && (index.Definition.Keys.Any(static key =>
+                                // WHY: Retain fluent materialization and its existing snapshot
+                                // ownership rather than replacing this boundary with a spread.
+                                // ReSharper disable once UseCollectionExpression
+                                .ToArray()),
+                        transactionSuppressed: false),
+                ];
+            case EnsureIndexIntent index when index.Definition.Keys.Any(static key =>
                     key.Expression is not null || key.StructuredExpression is not null || key.PrefixLength is not null)
-                || index.Definition.Method is not null))
-        {
-            return [Command(BuildCustomCreateIndexSql(index.Definition), transactionSuppressed: true)];
+                || index.Definition.Method is not null:
+                return [Command(BuildCustomCreateIndexSql(index.Definition), transactionSuppressed: true)];
         }
 
         var standardOperation = SafeMigrationStandardOperationFactory.Create(
@@ -395,8 +424,13 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
                     generated.IsNullable = true;
                     break;
                 case CreateTableOperation table:
-                    foreach (var column in table.Columns)
+                    // WHY: Index this stable list while preserving its order and ownership.
+                    // ReSharper disable once ForCanBeConvertedToForeach
+                    // ReSharper disable once LoopCanBeConvertedToQuery
+                    for (var columnIndex = 0; columnIndex < table.Columns.Count; columnIndex++)
                     {
+                        var column = table.Columns[columnIndex];
+
                         if (column.ComputedColumnSql is not null)
                         {
                             column.IsNullable = true;

@@ -35,8 +35,14 @@ public static partial class SafeMigrationContractFingerprint
         WriteTableIdentity(writer, definition.Table, definition.Schema);
         writer.Add(definition.Comment);
         writer.Add(definition.Columns.Count);
-        foreach (var column in definition.Columns)
+
+        // WHY: This immutable definition snapshot is indexed; retain its authored order without interface enumeration.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var columnIndex = 0; columnIndex < definition.Columns.Count; columnIndex++)
         {
+            var column = definition.Columns[columnIndex];
+
             WriteColumn(writer, column);
         }
 
@@ -47,20 +53,38 @@ public static partial class SafeMigrationContractFingerprint
         }
 
         writer.Add(definition.UniqueConstraints.Count);
-        foreach (var constraint in definition.UniqueConstraints)
+
+        // WHY: This immutable definition snapshot is indexed; retain its authored order without interface enumeration.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var constraintIndex = 0; constraintIndex < definition.UniqueConstraints.Count; constraintIndex++)
         {
+            var constraint = definition.UniqueConstraints[constraintIndex];
+
             WriteUniqueConstraint(writer, constraint);
         }
 
         writer.Add(definition.CheckConstraints.Count);
-        foreach (var constraint in definition.CheckConstraints)
+
+        // WHY: This immutable definition snapshot is indexed; retain its authored order without interface enumeration.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var constraintIndex1 = 0; constraintIndex1 < definition.CheckConstraints.Count; constraintIndex1++)
         {
+            var constraint = definition.CheckConstraints[constraintIndex1];
+
             WriteCheckConstraint(writer, constraint);
         }
 
         writer.Add(definition.ForeignKeys.Count);
-        foreach (var constraint in definition.ForeignKeys)
+
+        // WHY: This immutable definition snapshot is indexed; retain its authored order without interface enumeration.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var constraintIndex2 = 0; constraintIndex2 < definition.ForeignKeys.Count; constraintIndex2++)
         {
+            var constraint = definition.ForeignKeys[constraintIndex2];
+
             WriteForeignKey(writer, constraint);
         }
 

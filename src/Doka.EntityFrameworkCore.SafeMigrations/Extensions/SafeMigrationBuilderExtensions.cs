@@ -4,6 +4,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// Adds fail-closed SafeMigrations operations to an EF Core
 /// <see cref="MigrationBuilder" />.
 /// </summary>
+[PublicAPI]
 public static partial class SafeMigrationBuilderExtensions
 {
     private static OperationBuilder<SafeMigrationOperation> Add(
@@ -16,6 +17,7 @@ public static partial class SafeMigrationBuilderExtensions
 
         var operation = new SafeMigrationOperation(intent, policy);
         migrationBuilder.Operations.Add(operation);
+
         return new OperationBuilder<SafeMigrationOperation>(operation);
     }
 }

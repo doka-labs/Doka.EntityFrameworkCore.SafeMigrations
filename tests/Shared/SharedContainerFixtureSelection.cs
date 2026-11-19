@@ -1,3 +1,6 @@
+// WHY: Linked provider and Core tests exercise concrete-class selection as well as the framework case adapter.
+// ReSharper disable MemberCanBePrivate.Global
+
 namespace Doka.EntityFrameworkCore.SafeMigrations.Testing;
 
 /// <summary>Determines whether selected runnable test cases need the shared fixture.</summary>

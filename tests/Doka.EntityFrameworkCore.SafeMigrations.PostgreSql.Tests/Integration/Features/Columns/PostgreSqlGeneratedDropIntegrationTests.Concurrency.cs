@@ -1,5 +1,6 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
+/// <summary>Verifies PostgreSQL Generated Drop Integration contracts in independently owned test state.</summary>
 public sealed partial class PostgreSqlGeneratedDropIntegrationTests
 {
     /// <summary>
@@ -41,7 +42,7 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
                 dropPid,
                 pending,
                 cancellationToken),
-            cancellationToken => transaction.CommitAsync(cancellationToken),
+            transaction.CommitAsync,
             () => transaction.RollbackAsync(CancellationToken.None),
             cancellation,
             cancellation.Token);

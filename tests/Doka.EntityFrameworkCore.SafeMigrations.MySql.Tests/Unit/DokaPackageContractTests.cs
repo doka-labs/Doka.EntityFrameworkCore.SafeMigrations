@@ -18,19 +18,25 @@ public sealed class DokaPackageContractTests : IDisposable
     /// <summary>Releases the provider after the test's contexts have left their using scopes.</summary>
     public void Dispose() => _services.Dispose();
 
+    /// <summary>
+    /// Preserves application-converted GUID relationships without imposing an unrelated native GUID format.
+    /// </summary>
     [Fact]
     public void ApplicationConvertedGuidRelationship_EmitsCatalogNeutralClientGuidAnnotation()
     {
+        // Arrange
         using var context = CreateApplicationConvertedGuidContext();
         var model = context
             .GetService<IDesignTimeModel>()
             .Model
             .GetRelationalModel();
 
+        // Act
         var operations = context
             .GetService<IMigrationsModelDiffer>()
             .GetDifferences(null, model);
 
+        // Assert
         var root = Assert.Single(
             operations.OfType<CreateTableOperation>(),
             operation => operation.Name == "application_guid_roots");
@@ -64,6 +70,8 @@ public sealed class DokaPackageContractTests : IDisposable
             columns[0]["Doka:MySql:ValueGenerationStrategy"]);
     }
 
+    /// <summary>Uses Doka's shape-preserving native rename for annotated historical column operations.</summary>
+    /// <param name="isMariaDb">Whether the selected physical contract belongs to MariaDB rather than MySQL.</param>
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -78,10 +86,9 @@ public sealed class DokaPackageContractTests : IDisposable
             Name = "old_code",
             NewName = "new_code",
             Table = "users",
+            ["Doka:MySql:CharSet"] = "utf8mb4",
+            ["Relational:Collation"] = "utf8mb4_unicode_ci",
         };
-
-        operation["Doka:MySql:CharSet"] = "utf8mb4";
-        operation["Relational:Collation"] = "utf8mb4_unicode_ci";
 
         // Act
         var compatibility = SafeMigrationOperationCompatibility.Normalize(
@@ -103,17 +110,21 @@ public sealed class DokaPackageContractTests : IDisposable
         Assert.DoesNotContain("CHANGE COLUMN", sql, StringComparison.Ordinal);
     }
 
+    /// <summary>Snapshots command fragments and preserves their declared setup, body, and cleanup order.</summary>
     [Fact]
     public void ScopedCommand_SnapshotsInputsAndExposesExecutionOrder()
     {
+        // Arrange
         string[] setup = ["SET @first = 1;", "SET @second = 2;"];
         string[] cleanup = ["SET @first = NULL;", "SET @second = NULL;"];
 
+        // Act
         var command = MySqlMigrationCommandSpec.CreateScoped(setup, "DO 0;", cleanup, transactionSuppressed: true);
 
         setup[0] = "SELECT 1;";
         cleanup[0] = "SELECT 2;";
 
+        // Assert
         Assert.True(command.TransactionSuppressed);
         Assert.Collection(
             command.Fragments,
@@ -128,6 +139,7 @@ public sealed class DokaPackageContractTests : IDisposable
             string.Concat(command.Fragments.Select(static fragment => fragment.CommandText.ToString())));
     }
 
+    /// <summary>Preserves ordinary provider command boundaries when no scoped cleanup is required.</summary>
     [Fact]
     public void MultiCommandBaselineWithoutCleanup_PreservesProviderBoundaries()
     {
@@ -146,6 +158,9 @@ public sealed class DokaPackageContractTests : IDisposable
         Assert.Null(exception);
     }
 
+    /// <summary>
+    /// Rejects a multi-command cleanup scope before any guarded body could execute without its cleanup contract.
+    /// </summary>
     [Fact]
     public void MultiCommandBaselineWithCleanup_RejectsBeforeGuardedExecution()
     {
@@ -170,6 +185,7 @@ public sealed class DokaPackageContractTests : IDisposable
         Assert.Contains("provider cleanup", invalidOperation.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>Renders the supported MySQL temporal values as invariant executable literals.</summary>
     [Fact]
     public void MySqlTemporalMappings_RenderExecutableInvariantLiterals()
     {
@@ -178,6 +194,7 @@ public sealed class DokaPackageContractTests : IDisposable
         AssertTemporalMappings(context);
     }
 
+    /// <summary>Renders the supported MariaDB temporal values as invariant executable literals.</summary>
     [Fact]
     public void MariaDbTemporalMappings_RenderExecutableInvariantLiterals()
     {
@@ -186,6 +203,8 @@ public sealed class DokaPackageContractTests : IDisposable
         AssertTemporalMappings(context);
     }
 
+    /// <summary>Rejects required-column conversion without an application-authored backfill.</summary>
+    /// <param name="isMariaDb">Whether the selected physical contract belongs to MariaDB rather than MySQL.</param>
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -193,12 +212,16 @@ public sealed class DokaPackageContractTests : IDisposable
         bool isMariaDb
     )
     {
+        // Arrange
         using var context = CreateContext(CreateServerVersion(isMariaDb));
         var generator = context.GetService<IMigrationsSqlGenerator>();
         var operation = CreateNullableTimestampRepair();
 
-        var exception = Assert.Throws<InvalidOperationException>(() => generator.Generate([operation], context.Model));
+        // Act
+        var capturedException = Record.Exception(() => generator.Generate([operation], context.Model));
 
+        // Assert
+        var exception = Assert.IsType<InvalidOperationException>(capturedException);
         Assert.Contains(nameof(AlterColumnOperation), exception.Message, StringComparison.Ordinal);
         Assert.Contains("explicit DefaultValue or DefaultValueSql", exception.Message, StringComparison.Ordinal);
         Assert.Contains("application contract", exception.Message, StringComparison.Ordinal);
@@ -206,6 +229,8 @@ public sealed class DokaPackageContractTests : IDisposable
         Assert.DoesNotContain("OccurredAt", exception.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>Rejects a CLR timestamp backfill where the native contract requires explicit SQL.</summary>
+    /// <param name="isMariaDb">Whether the selected physical contract belongs to MariaDB rather than MySQL.</param>
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -213,6 +238,7 @@ public sealed class DokaPackageContractTests : IDisposable
         bool isMariaDb
     )
     {
+        // Arrange
         using var context = CreateContext(CreateServerVersion(isMariaDb));
         var generator = context.GetService<IMigrationsSqlGenerator>();
         var operation = CreateNullableTimestampRepair();
@@ -225,14 +251,19 @@ public sealed class DokaPackageContractTests : IDisposable
             56,
             DateTimeKind.Unspecified);
 
-        var exception = Assert.Throws<InvalidOperationException>(() => generator.Generate([operation], context.Model));
+        // Act
+        var capturedException = Record.Exception(() => generator.Generate([operation], context.Model));
 
+        // Assert
+        var exception = Assert.IsType<InvalidOperationException>(capturedException);
         Assert.Contains("requires DefaultValueSql", exception.Message, StringComparison.Ordinal);
         Assert.Contains("session time zone", exception.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("Entries", exception.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("OccurredAt", exception.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>Preserves an explicit timestamp SQL backfill before the required-column alteration.</summary>
+    /// <param name="isMariaDb">Whether the selected physical contract belongs to MariaDB rather than MySQL.</param>
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -240,16 +271,19 @@ public sealed class DokaPackageContractTests : IDisposable
         bool isMariaDb
     )
     {
+        // Arrange
         using var context = CreateContext(CreateServerVersion(isMariaDb));
         var generator = context.GetService<IMigrationsSqlGenerator>();
         var operation = CreateNullableTimestampRepair();
         operation.DefaultValueSql = "CURRENT_TIMESTAMP(6)";
 
+        // Act
         var sql = string.Concat(
             generator
                 .Generate([operation], context.Model)
                 .Select(static command => command.CommandText));
 
+        // Assert
         Assert.Contains(
             "UPDATE `Entries` SET `OccurredAt` = CURRENT_TIMESTAMP(6) WHERE `OccurredAt` IS NULL;",
             sql,
@@ -309,6 +343,7 @@ public sealed class DokaPackageContractTests : IDisposable
         DbContext context
     )
     {
+        // Arrange
         var generator = context.GetService<IMigrationsSqlGenerator>();
         MigrationOperation[] operations =
         [
@@ -332,11 +367,13 @@ public sealed class DokaPackageContractTests : IDisposable
             },
         ];
 
+        // Act
         var sql = string.Concat(
             generator
                 .Generate(operations, context.Model)
                 .Select(static command => command.CommandText));
 
+        // Assert
         Assert.Contains("DEFAULT (DATE '2026-08-21')", sql, StringComparison.Ordinal);
         Assert.Contains("DEFAULT (TIME '12:34:56", sql, StringComparison.Ordinal);
         Assert.DoesNotContain("DEFAULT DATE ", sql, StringComparison.OrdinalIgnoreCase);
@@ -353,10 +390,14 @@ public sealed class DokaPackageContractTests : IDisposable
         Assert.Equal(expectedCommandText, fragment.CommandText.ToString());
     }
 
-    private sealed class ApplicationConvertedGuidContext(
-        DbContextOptions<ApplicationConvertedGuidContext> options
-    ) : DbContext(options)
+    private sealed class ApplicationConvertedGuidContext : DbContext
     {
+        /// <summary>Initializes the explicit dependencies of this isolated test helper.</summary>
+        /// <param name="options">The isolated model and provider options.</param>
+        public ApplicationConvertedGuidContext(
+            DbContextOptions<ApplicationConvertedGuidContext> options
+        ) : base(options) { }
+
         protected override void OnModelCreating(
             ModelBuilder modelBuilder
         )
@@ -408,11 +449,13 @@ public sealed class DokaPackageContractTests : IDisposable
         }
     }
 
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class ApplicationGuidRoot
     {
         public Guid Id { get; set; }
     }
 
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class ApplicationGuidBranch
     {
         public Guid Id { get; set; }
@@ -420,6 +463,7 @@ public sealed class DokaPackageContractTests : IDisposable
         public ApplicationGuidRoot Root { get; set; } = null!;
     }
 
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class ApplicationGuidLeaf
     {
         public int Id { get; set; }

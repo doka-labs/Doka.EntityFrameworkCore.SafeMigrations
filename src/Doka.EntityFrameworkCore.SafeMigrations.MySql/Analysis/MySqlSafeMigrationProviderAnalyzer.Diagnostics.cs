@@ -17,7 +17,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         CancellationToken cancellationToken
     )
     {
-        var candidates = new List<MySqlDiagnosticCandidate>();
+        List<MySqlDiagnosticCandidate> candidates = [];
 
         // WHY: Keep bounded diagnostic selections aligned with their original operation ordinals.
         // ReSharper disable once ForCanBeConvertedToForeach
@@ -42,6 +42,10 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         var plans = CapturePlans(
             candidates
                 .Select(static candidate => candidate.Operation)
+
+                // WHY: Retain fluent materialization and its existing snapshot
+                // ownership rather than replacing this boundary with a spread.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray(),
             model,
             expectedUniqueIndexes,
@@ -87,10 +91,10 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                     parameterizer.Utf8PayloadBytes,
                     candidates[offset].Ordinal);
             },
-            async (reader, offset, count, token) =>
+            async (reader, offset, count, callbackCancellationToken) =>
             {
                 var row = 0;
-                while (await reader.ReadAsync(token))
+                while (await reader.ReadAsync(callbackCancellationToken))
                 {
                     if (row >= count
                         || reader.GetInt32(0) != candidates[offset + row].Ordinal)
@@ -117,6 +121,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                         "The MySQL diagnostic query returned an inconsistent row count.");
                 }
             },
+            transaction: null,
+            SafeMigrationCatalogQueryLimits.MaximumParameters,
             cancellationToken);
     }
 

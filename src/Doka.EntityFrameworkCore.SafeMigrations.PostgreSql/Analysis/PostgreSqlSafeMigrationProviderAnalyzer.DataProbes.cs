@@ -157,10 +157,10 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                     ParameterPayloadBytes: 0,
                     candidates[offset].Ordinal);
             },
-            async (reader, offset, count, token) =>
+            async (reader, offset, count, callbackCancellationToken) =>
             {
                 var row = 0;
-                while (await reader.ReadAsync(token))
+                while (await reader.ReadAsync(callbackCancellationToken))
                 {
                     if (row >= count
                         || reader.GetInt32(0) != candidates[offset + row].Ordinal)
@@ -188,7 +188,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                         "The PostgreSQL narrowing prerequisite query returned an inconsistent row count.");
                 }
             },
-            cancellationToken);
+            transaction: null,
+            maximumParameters: SafeMigrationCatalogQueryLimits.MaximumParameters,
+            cancellationToken: cancellationToken);
 
         return results;
     }
@@ -215,6 +217,10 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                 candidate.Identity.Schema,
                 candidate.Identity.Table))
             .SelectMany(static group => group.Chunk(SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement))
+
+            // WHY: Keep explicit fluent materialization and its existing
+            // ownership/evaluation boundary instead of an implicit spread.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         // WHY: Only catalog-qualified relations reach this phase. Packing
@@ -246,6 +252,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                 else
                 {
                     var selections = new List<string>(candidates.Length);
+
+                    // WHY: Fill the capacity-sized SQL buffer directly without a capturing selector or second snapshot.
+                    // ReSharper disable once LoopCanBeConvertedToQuery
                     foreach (var candidate in candidates)
                     {
                         var column = _sqlGenerationHelper.DelimitIdentifier(candidate.Identity.Column);
@@ -260,12 +269,12 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
 
                 return new SafeMigrationCatalogProbeStatement(1, ParameterPayloadBytes: 0, candidates[0].Ordinal);
             },
-            async (reader, offset, _, token) =>
+            async (reader, offset, _, callbackCancellationToken) =>
             {
                 var candidates = statements[offset];
 
                 if (reader.FieldCount != candidates.Length
-                    || !await reader.ReadAsync(token))
+                    || !await reader.ReadAsync(callbackCancellationToken))
                 {
                     throw new InvalidOperationException(
                         "The PostgreSQL narrowing data query returned an invalid result.");
@@ -283,13 +292,15 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                     }
                 }
 
-                if (await reader.ReadAsync(token))
+                if (await reader.ReadAsync(callbackCancellationToken))
                 {
                     throw new InvalidOperationException(
                         "The PostgreSQL narrowing data query returned more than one result row.");
                 }
             },
-            cancellationToken);
+            transaction: null,
+            maximumParameters: SafeMigrationCatalogQueryLimits.MaximumParameters,
+            cancellationToken: cancellationToken);
     }
 
     /// <summary>Owns both physical row coordinates and the exact source/target transition contract.</summary>

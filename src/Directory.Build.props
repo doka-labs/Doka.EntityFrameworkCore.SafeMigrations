@@ -7,12 +7,9 @@
   </PropertyGroup>
 
   <PropertyGroup Label="Dependency restore">
-    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
-    <!-- The committed locks record the platform-neutral graph. EF Migration
-         Bundles publish for the runner RID, which such a lock cannot validate. -->
-    <RestoreLockedMode
-      Condition="'$(ContinuousIntegrationBuild)' == 'true'
-                 And '$(RuntimeIdentifier)' == ''">true</RestoreLockedMode>
+    <!-- WHY: Published floors are explicit references in their owning adapter,
+         not incidental promotion of development-only central versions. -->
+    <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
 
   <PropertyGroup Label="Package metadata">
@@ -48,6 +45,9 @@
   </PropertyGroup>
 
   <ItemGroup Label="Production analyzers">
+    <!-- WHY: Conditional annotation usages are compile-time IDE contracts only.
+         Do not define JETBRAINS_ANNOTATIONS or publish its assembly/assets. -->
+    <PackageReference Include="JetBrains.Annotations" PrivateAssets="all" IncludeAssets="compile" />
     <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" />
   </ItemGroup>
 </Project>

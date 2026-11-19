@@ -40,11 +40,16 @@ internal sealed class SqlServerSafeMigrationCreateIndexScaffoldingProjector
         // identifier collation. Reject case-only collisions so a CI database
         // cannot turn two projected columns into one physical identifier.
         var identifiers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // WHY: Iterate the authored array directly rather than adding a LINQ iterator for ignored Add results.
+        // ReSharper disable once LoopCanBeConvertedToQuery
         foreach (var keyColumn in operation.Columns)
         {
             identifiers.Add(keyColumn);
         }
 
+        // WHY: Validation must stop at the first invalid member and update the shared identity set in order.
+        // ReSharper disable once LoopCanBeConvertedToQuery
         foreach (var includedColumn in includedColumns)
         {
             if (string.IsNullOrWhiteSpace(includedColumn)
@@ -63,7 +68,11 @@ internal sealed class SqlServerSafeMigrationCreateIndexScaffoldingProjector
             Name = operation.Name,
             Table = operation.Table,
             Schema = operation.Schema,
-            Columns = operation.Columns.ToArray(),
+            Columns = operation.Columns
+
+                // WHY: Keep the authored-column ownership snapshot as fluent materialization.
+                // ReSharper disable once UseCollectionExpression
+                .ToArray(),
             IsUnique = operation.IsUnique,
             IsDescending = operation.IsDescending?.ToArray(),
             Filter = operation.Filter,

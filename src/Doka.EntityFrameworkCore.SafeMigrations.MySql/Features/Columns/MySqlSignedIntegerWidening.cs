@@ -86,12 +86,13 @@ internal static class MySqlSignedIntegerWidening
                 : 0;
         }
 
-        return type.Equals("mediumint", StringComparison.OrdinalIgnoreCase)
-            ? 3
-            : type.Equals("int", StringComparison.OrdinalIgnoreCase)
-            || type.Equals("integer", StringComparison.OrdinalIgnoreCase)
-                ? 4
-                : 0;
+        return type.Equals("mediumint", StringComparison.OrdinalIgnoreCase) switch
+        {
+            true => 3,
+            _ when type.Equals("int", StringComparison.OrdinalIgnoreCase)
+                || type.Equals("integer", StringComparison.OrdinalIgnoreCase) => 4,
+            _ => 0,
+        };
     }
 
     /// <summary>Excludes generated, identity, row-version and unknown provider-owned column contracts.</summary>

@@ -9,9 +9,11 @@ public sealed class PostgreSqlIndexesDriftMatrixIntegrationTests : PostgreSqlSaf
         PostgreSqlContainerFixture fixture
     ) : base(fixture) { }
 
+    /// <summary>Equivalent Index With Different Name Is An Idempotent No Op.</summary>
     [Fact]
     public async Task EquivalentIndexWithDifferentName_IsAnIdempotentNoOp()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -40,6 +42,7 @@ public sealed class PostgreSqlIndexesDriftMatrixIntegrationTests : PostgreSqlSaf
             "index_identity",
             ["code", "tenant_id"]);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -51,7 +54,9 @@ public sealed class PostgreSqlIndexesDriftMatrixIntegrationTests : PostgreSqlSaf
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
+        Assert.Equal(2, report.Assessments.Count);
         Assert.All(
             report.Assessments,
             assessment =>
@@ -72,9 +77,11 @@ public sealed class PostgreSqlIndexesDriftMatrixIntegrationTests : PostgreSqlSaf
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Differently Named Index With Different Shape Remains Applicable.</summary>
     [Fact]
     public async Task DifferentlyNamedIndexWithDifferentShape_RemainsApplicable()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -92,6 +99,7 @@ public sealed class PostgreSqlIndexesDriftMatrixIntegrationTests : PostgreSqlSaf
             "index_nonidentity",
             ["alternate_code"]);
 
+        // Act
         var preflight = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -111,6 +119,7 @@ public sealed class PostgreSqlIndexesDriftMatrixIntegrationTests : PostgreSqlSaf
                 new SafeMigrationRunOptions("index-nonidentity-post"),
                 CancellationToken.None);
 
+        // Assert
         var assessment = Assert.Single(preflight.Assessments);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -122,9 +131,11 @@ public sealed class PostgreSqlIndexesDriftMatrixIntegrationTests : PostgreSqlSaf
                 .Action);
     }
 
+    /// <summary>Invalid Index With Expected Name Is Rejected Before Ddl.</summary>
     [Fact]
     public async Task InvalidIndexWithExpectedName_IsRejectedBeforeDdl()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -135,23 +146,21 @@ public sealed class PostgreSqlIndexesDriftMatrixIntegrationTests : PostgreSqlSaf
             """,
             cancellationToken: CancellationToken.None);
 
-        _ = await Assert.ThrowsAsync<PostgresException>(() =>
+        var setupFailure = await Record.ExceptionAsync(() =>
             ExecuteSqlAsync(
                 connectionString,
                 "CREATE UNIQUE INDEX CONCURRENTLY ix_invalid_index_drift ON invalid_index_drift (code);",
                 cancellationToken: CancellationToken.None));
 
-        Assert.Equal(
-            1,
-            await ScalarIntAsync(
-                connectionString,
-                """
-                SELECT COUNT(*) FROM pg_catalog.pg_index i
-                JOIN pg_catalog.pg_class idx ON idx.oid = i.indexrelid
-                WHERE idx.relname = 'ix_invalid_index_drift'
-                AND NOT i.indisvalid;
-                """,
-                cancellationToken: CancellationToken.None));
+        var invalidIndexCount = await ScalarIntAsync(
+            connectionString,
+            """
+            SELECT COUNT(*) FROM pg_catalog.pg_index i
+            JOIN pg_catalog.pg_class idx ON idx.oid = i.indexrelid
+            WHERE idx.relname = 'ix_invalid_index_drift'
+            AND NOT i.indisvalid;
+            """,
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -161,6 +170,7 @@ public sealed class PostgreSqlIndexesDriftMatrixIntegrationTests : PostgreSqlSaf
             ["code"],
             unique: true);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -169,9 +179,13 @@ public sealed class PostgreSqlIndexesDriftMatrixIntegrationTests : PostgreSqlSaf
                 new SafeMigrationRunOptions("invalid-index-drift"),
                 CancellationToken.None);
 
-        var exception = await Assert.ThrowsAsync<PostgresException>(() =>
+        var failure = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
 
+        // Assert
+        _ = Assert.IsType<PostgresException>(setupFailure);
+        Assert.Equal(1, invalidIndexCount);
+        var exception = Assert.IsType<PostgresException>(failure);
         var assessment = Assert.Single(report.Assessments);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -181,9 +195,11 @@ public sealed class PostgreSqlIndexesDriftMatrixIntegrationTests : PostgreSqlSaf
         Assert.StartsWith("doka_sm_different:", exception.MessageText, StringComparison.Ordinal);
     }
 
+    /// <summary>Differently Named Invalid Index Does Not Block Valid Index.</summary>
     [Fact]
     public async Task DifferentlyNamedInvalidIndex_DoesNotBlockValidIndex()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -194,7 +210,7 @@ public sealed class PostgreSqlIndexesDriftMatrixIntegrationTests : PostgreSqlSaf
             """,
             cancellationToken: CancellationToken.None);
 
-        _ = await Assert.ThrowsAsync<PostgresException>(() =>
+        var setupFailure = await Record.ExceptionAsync(() =>
             ExecuteSqlAsync(
                 connectionString,
                 "CREATE UNIQUE INDEX CONCURRENTLY ix_invalid_index_legacy ON invalid_index_identity (code);",
@@ -213,6 +229,7 @@ public sealed class PostgreSqlIndexesDriftMatrixIntegrationTests : PostgreSqlSaf
             ["code"],
             unique: true);
 
+        // Act
         var preflight = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -232,9 +249,11 @@ public sealed class PostgreSqlIndexesDriftMatrixIntegrationTests : PostgreSqlSaf
                 new SafeMigrationRunOptions("invalid-index-post"),
                 CancellationToken.None);
 
+        // Assert
         var preflightAssessment = Assert.Single(preflight.Assessments);
         var postflightAssessment = Assert.Single(postflight.Assessments);
 
+        _ = Assert.IsType<PostgresException>(setupFailure);
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
         Assert.Equal(SafeMigrationObservedState.Missing, preflightAssessment.ObservedState);
         Assert.Equal(SafeMigrationAction.Apply, preflightAssessment.Action);
@@ -243,9 +262,17 @@ public sealed class PostgreSqlIndexesDriftMatrixIntegrationTests : PostgreSqlSaf
         Assert.Equal(SafeMigrationAction.NoOp, postflightAssessment.Action);
     }
 
-    [Fact]
-    public async Task PartitionedParentIndex_IsMatching_WhileAttachedChildOperationsAreRejected()
+    /// <summary>Partitioned Parent Index Is Matching While Attached Child Operations Are Rejected.</summary>
+    /// <param name="operationIndex">The independently rejected attached-index operation.</param>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    public async Task PartitionedParentIndex_IsMatching_WhileAttachedChildOperationsAreRejected(
+        int operationIndex
+    )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -273,6 +300,12 @@ public sealed class PostgreSqlIndexesDriftMatrixIntegrationTests : PostgreSqlSaf
             "partitioned_index_root",
             ["code"]);
 
+        var child = new MigrationBuilder(context.Database.ProviderName!);
+        child.CreateIndexIfNotExists(childIndex, "partitioned_index_leaf", ["code"]);
+        child.DropIndexIfExists(childIndex, "partitioned_index_leaf");
+        child.RenameIndexIfExists(childIndex, "partitioned_index_leaf", "ix_partitioned_index_leaf_renamed");
+
+        // Act
         var parentReport = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -280,16 +313,6 @@ public sealed class PostgreSqlIndexesDriftMatrixIntegrationTests : PostgreSqlSaf
                 parent.Operations,
                 new SafeMigrationRunOptions("partitioned-index-parent"),
                 CancellationToken.None);
-
-        Assert.Equal(SafeMigrationReportStatus.Ready, parentReport.Status);
-        Assert.Equal(SafeMigrationObservedState.Matching,
-            Assert.Single(parentReport.Assessments)
-                .ObservedState);
-
-        var child = new MigrationBuilder(context.Database.ProviderName!);
-        child.CreateIndexIfNotExists(childIndex, "partitioned_index_leaf", ["code"]);
-        child.DropIndexIfExists(childIndex, "partitioned_index_leaf");
-        child.RenameIndexIfExists(childIndex, "partitioned_index_leaf", "ix_partitioned_index_leaf_renamed");
 
         var childReport = await context
             .GetService<ISafeMigrationRunner>()
@@ -299,7 +322,17 @@ public sealed class PostgreSqlIndexesDriftMatrixIntegrationTests : PostgreSqlSaf
                 new SafeMigrationRunOptions("partitioned-index-child"),
                 CancellationToken.None);
 
+        var failure = await Record.ExceptionAsync(() =>
+            ExecuteOperationsAsync(context, [child.Operations[operationIndex]], CancellationToken.None));
+
+        // Assert
+        Assert.Equal(SafeMigrationReportStatus.Ready, parentReport.Status);
+        Assert.Equal(SafeMigrationObservedState.Matching,
+            Assert.Single(parentReport.Assessments)
+                .ObservedState);
+
         Assert.Equal(SafeMigrationReportStatus.Blocked, childReport.Status);
+        Assert.Equal(3, childReport.Assessments.Count);
         Assert.All(
             childReport.Assessments,
             assessment =>
@@ -308,19 +341,23 @@ public sealed class PostgreSqlIndexesDriftMatrixIntegrationTests : PostgreSqlSaf
                 Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
             });
 
-        foreach (var operation in child.Operations)
-        {
-            var exception = await Assert.ThrowsAsync<PostgresException>(() =>
-                ExecuteOperationsAsync(context, [operation], CancellationToken.None));
-
-            Assert.Equal("P1001", exception.SqlState);
-            Assert.StartsWith("doka_sm_different:", exception.MessageText, StringComparison.Ordinal);
-        }
+        var exception = Assert.IsType<PostgresException>(failure);
+        Assert.Equal("P1001", exception.SqlState);
+        Assert.StartsWith("doka_sm_different:", exception.MessageText, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public async Task ConstraintOwnedIndexOperations_AreRejectedBeforeDdl()
+    /// <summary>Constraint Owned Index Operations Are Rejected Before Ddl.</summary>
+    /// <param name="operationIndex">The independently executed member of the full preflight stream.</param>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    public async Task ConstraintOwnedIndexOperations_AreRejectedBeforeDdl(
+        int operationIndex
+    )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -348,6 +385,8 @@ public sealed class PostgreSqlIndexesDriftMatrixIntegrationTests : PostgreSqlSaf
             "constraint_owned_index",
             "ix_constraint_owned_renamed");
 
+        // Act
+        // WHY: Preserve the complete preflight stream; each native rejection owns an isolated test case.
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -356,7 +395,12 @@ public sealed class PostgreSqlIndexesDriftMatrixIntegrationTests : PostgreSqlSaf
                 new SafeMigrationRunOptions("constraint-owned-index"),
                 CancellationToken.None);
 
+        var failure = await Record.ExceptionAsync(() =>
+            ExecuteOperationsAsync(context, [builder.Operations[operationIndex]], CancellationToken.None));
+
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
+        Assert.Equal(4, report.Assessments.Count);
         Assert.All(
             report.Assessments,
             assessment =>
@@ -365,26 +409,37 @@ public sealed class PostgreSqlIndexesDriftMatrixIntegrationTests : PostgreSqlSaf
                 Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
             });
 
-        foreach (var operation in builder.Operations)
-        {
-            var exception = await Assert.ThrowsAsync<PostgresException>(() =>
-                ExecuteOperationsAsync(context, [operation], CancellationToken.None));
-
-            Assert.Equal("P1001", exception.SqlState);
-            Assert.StartsWith("doka_sm_different:", exception.MessageText, StringComparison.Ordinal);
-        }
+        var exception = Assert.IsType<PostgresException>(failure);
+        Assert.Equal("P1001", exception.SqlState);
+        Assert.StartsWith("doka_sm_different:", exception.MessageText, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public async Task ObservableIndexFacetDrift_IsRejectedOneFieldAtATime()
+    /// <summary>Observable Index Facet Drift Is Rejected One Field At A Time.</summary>
+    /// <param name="caseId">The independently discovered single-facet drift fixture.</param>
+    [Theory]
+    [InlineData("uniqueness")]
+    [InlineData("filter")]
+    [InlineData("included-columns")]
+    [InlineData("method")]
+    [InlineData("expression")]
+    [InlineData("direction")]
+    [InlineData("collation")]
+    [InlineData("operator-class")]
+    [InlineData("null-semantics")]
+    public async Task ObservableIndexFacetDrift_IsRejectedOneFieldAtATime(
+        string caseId
+    )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
+
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE index_facets (value text NULL, alternate text NULL, payload text NULL, other text NULL);",
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
+
         var canonical = new ExpectedIndexDefinition(
             "ix_index_facets",
             "index_facets",
@@ -411,15 +466,14 @@ public sealed class PostgreSqlIndexesDriftMatrixIntegrationTests : PostgreSqlSaf
             method: "btree");
 
         var create = new MigrationBuilder(context.Database.ProviderName!);
+
         create.EnsureIndex(canonical, SafeMigrationPolicy.ThrowIfDifferent);
+
         create.EnsureIndex(collated, SafeMigrationPolicy.ThrowIfDifferent);
 
-        await ExecuteOperationsAsync(context, create.Operations, CancellationToken.None);
-        await ExecuteOperationsAsync(context, create.Operations, CancellationToken.None);
-
-        var variants = new[]
+        var variant = caseId switch
         {
-            new ExpectedIndexDefinition(
+            "uniqueness" => new ExpectedIndexDefinition(
                 canonical.Name,
                 canonical.Table,
                 canonical.Keys,
@@ -427,7 +481,7 @@ public sealed class PostgreSqlIndexesDriftMatrixIntegrationTests : PostgreSqlSaf
                 includedColumns: canonical.IncludedColumns,
                 method: canonical.Method,
                 structuredFilter: canonical.StructuredFilter),
-            new ExpectedIndexDefinition(
+            "filter" => new ExpectedIndexDefinition(
                 canonical.Name,
                 canonical.Table,
                 canonical.Keys,
@@ -440,7 +494,7 @@ public sealed class PostgreSqlIndexesDriftMatrixIntegrationTests : PostgreSqlSaf
                     SqlColumn("value"),
                     SafeMigrationSqlBinaryOperator.NotEqual,
                     SafeMigrationSql.Literal(string.Empty, "text"))),
-            new ExpectedIndexDefinition(
+            "included-columns" => new ExpectedIndexDefinition(
                 canonical.Name,
                 canonical.Table,
                 canonical.Keys,
@@ -449,7 +503,7 @@ public sealed class PostgreSqlIndexesDriftMatrixIntegrationTests : PostgreSqlSaf
                 method: canonical.Method,
                 nullsDistinct: true,
                 structuredFilter: canonical.StructuredFilter),
-            new ExpectedIndexDefinition(
+            "method" => new ExpectedIndexDefinition(
                 canonical.Name,
                 canonical.Table,
                 [new ExpectedIndexKeyDefinition(structuredExpression: SqlFunction("lower", "value"))],
@@ -458,7 +512,7 @@ public sealed class PostgreSqlIndexesDriftMatrixIntegrationTests : PostgreSqlSaf
                 method: "hash",
                 nullsDistinct: true,
                 structuredFilter: canonical.StructuredFilter),
-            new ExpectedIndexDefinition(
+            "expression" => new ExpectedIndexDefinition(
                 canonical.Name,
                 canonical.Table,
                 [
@@ -471,7 +525,7 @@ public sealed class PostgreSqlIndexesDriftMatrixIntegrationTests : PostgreSqlSaf
                 method: canonical.Method,
                 nullsDistinct: true,
                 structuredFilter: canonical.StructuredFilter),
-            new ExpectedIndexDefinition(
+            "direction" => new ExpectedIndexDefinition(
                 canonical.Name,
                 canonical.Table,
                 [new ExpectedIndexKeyDefinition(structuredExpression: SqlFunction("lower", "value"))],
@@ -480,7 +534,7 @@ public sealed class PostgreSqlIndexesDriftMatrixIntegrationTests : PostgreSqlSaf
                 method: canonical.Method,
                 nullsDistinct: true,
                 structuredFilter: canonical.StructuredFilter),
-            new ExpectedIndexDefinition(
+            "collation" => new ExpectedIndexDefinition(
                 collated.Name,
                 collated.Table,
                 [
@@ -490,7 +544,7 @@ public sealed class PostgreSqlIndexesDriftMatrixIntegrationTests : PostgreSqlSaf
                         operatorClass: "text_pattern_ops"),
                 ],
                 method: "btree"),
-            new ExpectedIndexDefinition(
+            "operator-class" => new ExpectedIndexDefinition(
                 collated.Name,
                 collated.Table,
                 [
@@ -500,31 +554,7 @@ public sealed class PostgreSqlIndexesDriftMatrixIntegrationTests : PostgreSqlSaf
                         operatorClass: "text_ops"),
                 ],
                 method: "btree"),
-        };
-
-        foreach (var variant in variants)
-        {
-            var drift = new MigrationBuilder(context.Database.ProviderName!);
-            drift.EnsureIndex(variant, SafeMigrationPolicy.ThrowIfDifferent);
-
-            var report = await context
-                .GetService<ISafeMigrationRunner>()
-                .AnalyzeAsync(
-                    context,
-                    drift.Operations,
-                    new SafeMigrationRunOptions("index-facet-drift"),
-                    CancellationToken.None);
-
-            var assessment = Assert.Single(report.Assessments);
-
-            Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-            Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
-            Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
-        }
-
-        var nullSemantics = new MigrationBuilder(context.Database.ProviderName!);
-        nullSemantics.EnsureIndex(
-            new ExpectedIndexDefinition(
+            "null-semantics" => new ExpectedIndexDefinition(
                 canonical.Name,
                 canonical.Table,
                 canonical.Keys,
@@ -533,28 +563,57 @@ public sealed class PostgreSqlIndexesDriftMatrixIntegrationTests : PostgreSqlSaf
                 method: canonical.Method,
                 nullsDistinct: false,
                 structuredFilter: canonical.StructuredFilter),
-            SafeMigrationPolicy.ThrowIfDifferent);
+            _ => throw new ArgumentOutOfRangeException(nameof(caseId), caseId, "Unknown facet fixture."),
+        };
 
-        var nullReport = await context
+        var drift = new MigrationBuilder(context.Database.ProviderName!);
+
+        drift.EnsureIndex(variant, SafeMigrationPolicy.ThrowIfDifferent);
+
+        var expectedState = caseId == "null-semantics"
+            ? Fixture.ServerVersion.Major < 15
+                ? SafeMigrationObservedState.Unsupported
+                : SafeMigrationObservedState.Different
+            : SafeMigrationObservedState.Different;
+
+        // Act
+        await ExecuteOperationsAsync(context, create.Operations, CancellationToken.None);
+
+        await ExecuteOperationsAsync(context, create.Operations, CancellationToken.None);
+
+        var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
                 context,
-                nullSemantics.Operations,
-                new SafeMigrationRunOptions("index-null-semantics"),
+                drift.Operations,
+                new SafeMigrationRunOptions(caseId == "null-semantics"
+                    ? "index-null-semantics"
+                    : "index-facet-drift"),
                 CancellationToken.None);
 
-        Assert.Equal(SafeMigrationReportStatus.Blocked, nullReport.Status);
-        Assert.Equal(
-            Fixture.ServerVersion.Major < 15
-                ? SafeMigrationObservedState.Unsupported
-                : SafeMigrationObservedState.Different,
-            Assert.Single(nullReport.Assessments)
-                .ObservedState);
+        // Assert
+        var assessment = Assert.Single(report.Assessments);
+
+        Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
+
+        Assert.Equal(expectedState, assessment.ObservedState);
+
+        if (caseId != "null-semantics")
+        {
+            Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
+        }
     }
 
-    [Fact]
-    public async Task RelationNamespaceCollisions_AreRejectedBeforeIndexDdl()
+    /// <summary>Relation Namespace Collisions Are Rejected Before Index Ddl.</summary>
+    /// <param name="operationIndex">The independently executed member of the full preflight stream.</param>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public async Task RelationNamespaceCollisions_AreRejectedBeforeIndexDdl(
+        int operationIndex
+    )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -579,6 +638,8 @@ public sealed class PostgreSqlIndexesDriftMatrixIntegrationTests : PostgreSqlSaf
             "rename_index_owner",
             "rename_index_relation_target");
 
+        // Act
+        // WHY: Preserve the complete preflight stream; each native rejection owns an isolated test case.
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -587,7 +648,12 @@ public sealed class PostgreSqlIndexesDriftMatrixIntegrationTests : PostgreSqlSaf
                 new SafeMigrationRunOptions("index-relation-collisions"),
                 CancellationToken.None);
 
+        var failure = await Record.ExceptionAsync(() =>
+            ExecuteOperationsAsync(context, [builder.Operations[operationIndex]], CancellationToken.None));
+
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
+        Assert.Equal(2, report.Assessments.Count);
         Assert.All(
             report.Assessments,
             assessment =>
@@ -596,14 +662,9 @@ public sealed class PostgreSqlIndexesDriftMatrixIntegrationTests : PostgreSqlSaf
                 Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
             });
 
-        foreach (var operation in builder.Operations)
-        {
-            var exception = await Assert.ThrowsAsync<PostgresException>(() =>
-                ExecuteOperationsAsync(context, [operation], CancellationToken.None));
-
-            Assert.Equal("P1001", exception.SqlState);
-            Assert.StartsWith("doka_sm_different:", exception.MessageText, StringComparison.Ordinal);
-        }
+        var exception = Assert.IsType<PostgresException>(failure);
+        Assert.Equal("P1001", exception.SqlState);
+        Assert.StartsWith("doka_sm_different:", exception.MessageText, StringComparison.Ordinal);
 
         Assert.Equal(
             2,
@@ -624,9 +685,11 @@ public sealed class PostgreSqlIndexesDriftMatrixIntegrationTests : PostgreSqlSaf
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Prefix Length Is Rejected As Unsupported Before Target Ddl.</summary>
     [Fact]
     public async Task PrefixLength_IsRejectedAsUnsupportedBeforeTargetDdl()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -642,6 +705,7 @@ public sealed class PostgreSqlIndexesDriftMatrixIntegrationTests : PostgreSqlSaf
                 [new ExpectedIndexKeyDefinition(column: "value", prefixLength: 12)]),
             SafeMigrationPolicy.ThrowIfDifferent);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -650,6 +714,7 @@ public sealed class PostgreSqlIndexesDriftMatrixIntegrationTests : PostgreSqlSaf
                 new SafeMigrationRunOptions("unsupported-prefix"),
                 CancellationToken.None);
 
+        // Assert
         var assessment = Assert.Single(report.Assessments);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);

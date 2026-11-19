@@ -245,7 +245,7 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
             cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.IsAssignableFrom<RuntimeModel>(context.Model);
+        Assert.IsType<RuntimeModel>(context.Model, exactMatch: false);
         Assert.Equal(
             Fixture.IsMariaDb
                 ? SafeMigrationReportStatus.Ready

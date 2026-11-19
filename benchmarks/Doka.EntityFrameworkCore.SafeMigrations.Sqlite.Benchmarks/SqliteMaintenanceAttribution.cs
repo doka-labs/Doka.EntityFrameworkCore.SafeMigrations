@@ -1,18 +1,22 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Benchmarks;
 
 /// <summary>Separates model-owned rebuild capture from complete embedded SQLite structural-window analysis.</summary>
-internal sealed class SqliteMaintenanceAttributionFixture : IDisposable
+internal sealed class SqliteMaintenanceAttributionFixture : IDisposable, IAsyncDisposable
 {
     private const string Table = "maintenance_model_0000";
     private readonly SqliteSafeMigrationProviderAnalyzer _analyzer;
+    private readonly bool _changingModel;
     private readonly SqliteConnection _connection;
     private readonly DbContext _first;
+    private readonly bool _interleaved;
     private readonly IModel[] _modelSequence;
     private readonly IModel?[] _models;
     private readonly MigrationOperation[] _operations;
     private readonly MigrationOperation[][] _prefixes;
     private readonly DbContext _second;
     private readonly MigrationOperation[][] _segments;
+    private readonly int _tableCount;
+    private readonly int _windows;
     private int _captureCount;
 
     /// <summary>Prepares one embedded workload and verifies fresh capture and operation-reference ownership.</summary>
@@ -28,13 +32,10 @@ internal sealed class SqliteMaintenanceAttributionFixture : IDisposable
     )
     {
         _connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
-        _connection.Open();
-        using (var command = _connection.CreateCommand())
-        {
-            command.CommandText = $"CREATE TABLE {Table} (id INTEGER NOT NULL PRIMARY KEY);";
-            _ = command.ExecuteNonQuery();
-        }
-
+        _tableCount = tableCount;
+        _windows = windows;
+        _changingModel = changingModel;
+        _interleaved = interleaved;
         _first = Context(_connection, tableCount, alternate: false);
         _second = Context(_connection, tableCount, alternate: true);
         var firstModel = _first.GetService<IDesignTimeModel>()
@@ -57,6 +58,9 @@ internal sealed class SqliteMaintenanceAttributionFixture : IDisposable
             .Select((_, ordinal) => changingModel && ordinal % 4 >= 2
                 ? secondModel
                 : firstModel)
+
+            // WHY: Retain fluent materialization and the resulting snapshot ownership.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         _prefixes = Enumerable
@@ -68,7 +72,13 @@ internal sealed class SqliteMaintenanceAttributionFixture : IDisposable
                         ? 2
                         : 1)
                     + 1)
+
+                // WHY: Retain fluent materialization and the resulting snapshot ownership.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray())
+
+            // WHY: Retain fluent materialization and the resulting snapshot ownership.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         _segments = Enumerable
@@ -80,6 +90,9 @@ internal sealed class SqliteMaintenanceAttributionFixture : IDisposable
                         ? 2
                         : 1)],
             })
+
+            // WHY: Retain fluent materialization and the resulting snapshot ownership.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         _modelSequence = Enumerable
@@ -87,16 +100,59 @@ internal sealed class SqliteMaintenanceAttributionFixture : IDisposable
             .Select(index => changingModel && index % 2 != 0
                 ? secondModel
                 : firstModel)
+
+            // WHY: Retain fluent materialization and the resulting snapshot ownership.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
+    }
+
+    /// <inheritdoc />
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await _second.DisposeAsync();
+        }
+        finally
+        {
+            try
+            {
+                await _first.DisposeAsync();
+            }
+            finally
+            {
+                await _connection.DisposeAsync();
+            }
+        }
+    }
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        _second.Dispose();
+        _first.Dispose();
+        _connection.Dispose();
+    }
+
+    /// <summary>Initializes the owned embedded database and verifies fresh classification and replay.</summary>
+    /// <param name="cancellationToken">The token controlling setup and optional evidence persistence.</param>
+    /// <returns>The complete asynchronous initialization.</returns>
+    internal async Task InitializeAsync(
+        CancellationToken cancellationToken
+    )
+    {
+        await _connection.OpenAsync(cancellationToken);
+        await using (var command = _connection.CreateCommand())
+        {
+            command.CommandText = $"CREATE TABLE {Table} (id INTEGER NOT NULL PRIMARY KEY);";
+            _ = await command.ExecuteNonQueryAsync(cancellationToken);
+        }
 
         ObserveCaptures(_connection);
-        var observed = _analyzer
-            .AnalyzeAsync(_first, _operations, _models, CancellationToken.None)
-            .GetAwaiter()
-            .GetResult();
+        var observed = await _analyzer.AnalyzeAsync(_first, _operations, _models, cancellationToken);
 
         MaintenanceAttribution.Require(
-            observed.Count == windows
+            observed.Count == _windows
             && observed.All(static result => result.ObservedState == SafeMigrationObservedState.Missing)
             && _captureCount == 1,
             "The SQLite attribution fixture changed classification or recaptured its catalog.");
@@ -109,10 +165,7 @@ internal sealed class SqliteMaintenanceAttributionFixture : IDisposable
                 observed.Select(static result => $"{result.ObservedState}:{result.Code}")));
 
         _captureCount = 0;
-        var replay = _analyzer
-            .AnalyzeAsync(_first, _operations, _models, CancellationToken.None)
-            .GetAwaiter()
-            .GetResult();
+        var replay = await _analyzer.AnalyzeAsync(_first, _operations, _models, cancellationToken);
 
         var replayHash = MaintenanceAttribution.Hash(
             string.Join(
@@ -126,32 +179,25 @@ internal sealed class SqliteMaintenanceAttributionFixture : IDisposable
         var output = Environment.GetEnvironmentVariable("SAFE_MIGRATIONS_ATTRIBUTION_OUTPUT");
         if (!string.IsNullOrWhiteSpace(output))
         {
-            _ = MaintenanceAttribution.Write(
-                Path.Combine(output, $"sqlite-{tableCount}-{windows}-{interleaved}-{changingModel}.json"),
+            await MaintenanceAttribution.WriteAsync(
+                Path.Combine(output, $"sqlite-{_tableCount}-{_windows}-{_interleaved}-{_changingModel}.json"),
                 "Functional/source evidence; SQLite embedded engine and client substrate; not timing evidence",
                 [
                     new
                     {
                         Id = "PERF-05",
-                        Workload = interleaved
+                        Workload = _interleaved
                             ? "interleaved_structural_windows"
                             : "contiguous_structural_window",
-                        ModelTables = tableCount,
-                        Windows = windows,
-                        ChangingModel = changingModel,
+                        ModelTables = _tableCount,
+                        Windows = _windows,
+                        ChangingModel = _changingModel,
                         CatalogCapturesPerInvocation = 1,
                         ExactStateHash = stateHash,
                     },
-                ]);
+                ],
+                cancellationToken);
         }
-    }
-
-    /// <inheritdoc />
-    public void Dispose()
-    {
-        _second.Dispose();
-        _first.Dispose();
-        _connection.Dispose();
     }
 
     /// <summary>Captures one model-owned rebuild contract per prebuilt structural window.</summary>
@@ -176,17 +222,18 @@ internal sealed class SqliteMaintenanceAttributionFixture : IDisposable
     }
 
     /// <summary>Analyzes one complete operation stream without retaining capture counters across invocations.</summary>
+    /// <param name="cancellationToken">The token controlling the measured provider analysis.</param>
     /// <returns>The complete observed operation count consumed by the benchmark.</returns>
-    internal int Analyze()
+    internal async Task<int> AnalyzeAsync(
+        CancellationToken cancellationToken
+    )
     {
         // WHY: BDN owns invocation counts; fixture observations must stay bounded during calibration too.
         _captureCount = 0;
 
-        return _analyzer
-            .AnalyzeAsync(_first, _operations, _models, CancellationToken.None)
-            .GetAwaiter()
-            .GetResult()
-            .Count;
+        var observed = await _analyzer.AnalyzeAsync(_first, _operations, _models, cancellationToken);
+
+        return observed.Count;
     }
 
     /// <summary>Preserves exact operation-reference ownership across opaque and typed-DML boundaries.</summary>
@@ -268,6 +315,8 @@ internal sealed class SqliteMaintenanceAttributionFixture : IDisposable
             }
         }
 
+        // WHY: Retain fluent materialization and the resulting snapshot ownership.
+        // ReSharper disable once UseCollectionExpression
         return operations.ToArray();
     }
 
@@ -314,19 +363,29 @@ internal sealed class SqliteMaintenanceAttributionFixture : IDisposable
 
     /// <summary>Builds relational artifacts outside measurements, without creating a large database seed.</summary>
     /// <typeparam name="TMarker">The independent EF model-cache identity.</typeparam>
-    /// <param name="connection">The owned physical database.</param>
-    /// <param name="count">The number of model-only tables to capture.</param>
-    private sealed class ModelContext<TMarker>(
-        SqliteConnection connection,
-        int count
-    ) : DbContext
+    private sealed class ModelContext<TMarker> : DbContext
     {
+        private readonly SqliteConnection _connection;
+        private readonly int _count;
+
+        /// <summary>Creates one independent EF model-cache identity.</summary>
+        /// <param name="connection">The owned physical database.</param>
+        /// <param name="count">The number of model-only tables to capture.</param>
+        internal ModelContext(
+            SqliteConnection connection,
+            int count
+        )
+        {
+            _connection = connection;
+            _count = count;
+        }
+
         /// <inheritdoc />
         protected override void OnConfiguring(
             DbContextOptionsBuilder optionsBuilder
         )
         {
-            optionsBuilder.UseSqlite(connection);
+            optionsBuilder.UseSqlite(_connection);
             optionsBuilder.UseSqliteSafeMigrations();
         }
 
@@ -335,7 +394,7 @@ internal sealed class SqliteMaintenanceAttributionFixture : IDisposable
             ModelBuilder modelBuilder
         )
         {
-            for (var index = 0; index < count; index++)
+            for (var index = 0; index < _count; index++)
             {
                 var name = $"maintenance_model_{index:D4}";
                 modelBuilder.SharedTypeEntity<Dictionary<string, object>>(
@@ -352,15 +411,27 @@ internal sealed class SqliteMaintenanceAttributionFixture : IDisposable
         }
     }
 
+    // WHY: The generic EF context uses this type as an independent model-cache identity.
+    // ReSharper disable once ClassNeverInstantiated.Local
     private sealed class Ten;
 
+    // WHY: The generic EF context uses this type as an independent model-cache identity.
+    // ReSharper disable once ClassNeverInstantiated.Local
     private sealed class OtherTen;
 
+    // WHY: The generic EF context uses this type as an independent model-cache identity.
+    // ReSharper disable once ClassNeverInstantiated.Local
     private sealed class Hundred;
 
+    // WHY: The generic EF context uses this type as an independent model-cache identity.
+    // ReSharper disable once ClassNeverInstantiated.Local
     private sealed class OtherHundred;
 
+    // WHY: The generic EF context uses this type as an independent model-cache identity.
+    // ReSharper disable once ClassNeverInstantiated.Local
     private sealed class Thousand;
 
+    // WHY: The generic EF context uses this type as an independent model-cache identity.
+    // ReSharper disable once ClassNeverInstantiated.Local
     private sealed class OtherThousand;
 }

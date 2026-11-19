@@ -111,10 +111,10 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                     parameterizer.Utf8PayloadBytes,
                     operationOffset + ordinals[offset]);
             },
-            async (reader, offset, count, token) =>
+            async (reader, offset, count, callbackCancellationToken) =>
             {
                 var row = 0;
-                while (await reader.ReadAsync(token))
+                while (await reader.ReadAsync(callbackCancellationToken))
                 {
                     if (row >= count
                         || reader.GetInt32(0) != ordinals[offset + row]
@@ -140,6 +140,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                         "The MySQL required-add facts query returned an inconsistent row count.");
                 }
             },
+            transaction: null,
+            SafeMigrationCatalogQueryLimits.MaximumParameters,
             cancellationToken);
     }
 

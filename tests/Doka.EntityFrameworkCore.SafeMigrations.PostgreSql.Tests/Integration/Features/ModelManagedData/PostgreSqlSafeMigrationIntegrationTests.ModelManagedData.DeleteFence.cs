@@ -36,6 +36,8 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
         // Arrange
         var connectionString = await CreateModelDeleteFenceFixtureAsync(
             referentialAction,
+            deferred: false,
+            enforced: null,
             cancellationToken: CancellationToken.None);
 
         var nativeDeleteAction = await ScalarStringAsync(
@@ -175,6 +177,8 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
         // Arrange
         var connectionString = await CreateModelDeleteFenceFixtureAsync(
             "CASCADE",
+            deferred: false,
+            enforced: null,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -224,6 +228,8 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
         // Arrange
         var connectionString = await CreateModelDeleteFenceFixtureAsync(
             referentialAction,
+            deferred: false,
+            enforced: null,
             cancellationToken: CancellationToken.None);
 
         await ExecuteSqlAsync(
@@ -274,6 +280,8 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
         // Arrange
         var connectionString = await CreateModelDeleteFenceFixtureAsync(
             "CASCADE",
+            deferred: false,
+            enforced: null,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -343,10 +351,11 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
         var supportsNotEnforced = Fixture.ServerVersion.Major >= 18;
         var connectionString = await CreateModelDeleteFenceFixtureAsync(
             "CASCADE",
-            CancellationToken.None,
+            deferred: false,
             enforced: supportsNotEnforced
                 ? false
-                : null);
+                : null,
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var deletion = ModelDeleteFenceOperation(context.Database.ProviderName!);
@@ -416,10 +425,11 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
             hasConstraint
                 ? "CASCADE"
                 : null,
-            CancellationToken.None,
+            deferred: false,
             enforced: hasConstraint && Fixture.ServerVersion.Major >= 18
                 ? true
-                : null);
+                : null,
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var deletion = ModelDeleteFenceOperation(context.Database.ProviderName!, includeForeignKey: hasConstraint);
@@ -480,6 +490,8 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
         // Arrange
         var connectionString = await CreateModelDeleteFenceFixtureAsync(
             referentialAction: null,
+            deferred: false,
+            enforced: null,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -540,6 +552,8 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
         // Arrange
         var connectionString = await CreateModelDeleteFenceFixtureAsync(
             "CASCADE",
+            deferred: false,
+            enforced: null,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -626,6 +640,8 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
         // Arrange
         var connectionString = await CreateModelDeleteFenceFixtureAsync(
             referentialAction: null,
+            deferred: false,
+            enforced: null,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -714,6 +730,8 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
         // Arrange
         var connectionString = await CreateModelDeleteFenceFixtureAsync(
             "CASCADE",
+            deferred: false,
+            enforced: null,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -798,6 +816,8 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
         // Arrange
         var connectionString = await CreateModelDeleteFenceFixtureAsync(
             "CASCADE",
+            deferred: false,
+            enforced: null,
             cancellationToken: CancellationToken.None);
 
         var rendezvous = Random
@@ -929,8 +949,9 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
         // Arrange
         var connectionString = await CreateModelDeleteFenceFixtureAsync(
             referentialAction,
-            CancellationToken.None,
-            deferred: true);
+            deferred: true,
+            enforced: null,
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync();
@@ -1011,6 +1032,8 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
         // Arrange
         var connectionString = await CreateModelDeleteFenceFixtureAsync(
             "CASCADE",
+            deferred: false,
+            enforced: null,
             cancellationToken: CancellationToken.None);
 
         var role = "model_delete_reader_"
@@ -1080,9 +1103,9 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
     /// <param name="cancellationToken">Cancels the owned operation before and during asynchronous work.</param>
     private async Task<string> CreateModelDeleteFenceFixtureAsync(
         string? referentialAction,
-        CancellationToken cancellationToken,
-        bool deferred = false,
-        bool? enforced = null
+        bool deferred,
+        bool? enforced,
+        CancellationToken cancellationToken
     )
     {
         cancellationToken.ThrowIfCancellationRequested();

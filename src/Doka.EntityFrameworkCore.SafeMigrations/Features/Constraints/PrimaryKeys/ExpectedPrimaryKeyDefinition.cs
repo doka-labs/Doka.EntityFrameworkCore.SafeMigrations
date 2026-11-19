@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations;
 
 /// <summary>Describes the complete expected primary-key definition.</summary>
+[PublicAPI]
 public sealed class ExpectedPrimaryKeyDefinition
 {
     /// <summary>Initializes an expected primary key.</summary>

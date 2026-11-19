@@ -4,67 +4,44 @@
     <Platform Name="x64" />
     <Platform Name="x86" />
   </Configurations>
-  <Folder Name="/Config/">
+  <Folder Name="/config/">
+    <File Path=".editorconfig" />
+    <File Path=".gitattributes" />
+    <File Path=".gitignore" />
     <File Path="Directory.Build.props" />
+    <File Path="Directory.Build.targets" />
     <File Path="Directory.Packages.props" />
+    <File Path="Doka.EntityFrameworkCore.SafeMigrations.sln.DotSettings" />
     <File Path="NuGet.config" />
     <File Path="global.json" />
   </Folder>
-  <Folder Name="/Config/benchmarks/">
+  <Folder Name="/config/benchmarks/">
     <File Path="benchmarks/Directory.Build.props" />
   </Folder>
-  <Folder Name="/Config/eng/">
+  <Folder Name="/config/eng/">
     <File Path="eng/Directory.Build.props" />
+    <File Path="eng/coverage-thresholds.json" />
+    <File Path="eng/release/lines-policy.json" />
   </Folder>
-  <Folder Name="/Config/eng/package-consumer/">
+  <Folder Name="/config/eng/package-consumer/">
     <File Path="eng/package-consumer/Directory.Build.props" />
   </Folder>
-  <Folder Name="/Config/samples/">
+  <Folder Name="/config/samples/">
     <File Path="samples/Directory.Build.props" />
   </Folder>
-  <Folder Name="/Config/src/">
+  <Folder Name="/config/src/">
     <File Path="src/Directory.Build.props" />
   </Folder>
-  <Folder Name="/Config/tests/">
+  <Folder Name="/config/tests/">
+    <File Path="tests/.editorconfig" />
     <File Path="tests/Directory.Build.props" />
+    <File Path="tests/Shared/xunit.runner.json" />
   </Folder>
-  <Folder Name="/eng/package-consumer/MySQL-MariaDB/">
-    <Project Path="eng/package-consumer/MySql/Doka.EntityFrameworkCore.SafeMigrations.MySql.PackageConsumer.csproj" />
-    <Project
-      Path="eng/package-consumer/MySqlSplit/Generator/Doka.EntityFrameworkCore.SafeMigrations.MySql.SplitGenerator.csproj" />
-    <Project
-      Path="eng/package-consumer/MySqlSplit/MigrationsTarget/Doka.EntityFrameworkCore.SafeMigrations.MySql.SplitTarget.csproj" />
+  <Folder Name="/config/tools/">
+    <File Path=".config/dotnet-tools.json" />
   </Folder>
-  <Folder Name="/eng/package-consumer/PostgreSQL/">
-    <Project Path="eng/package-consumer/PostgreSql/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.PackageConsumer.csproj" />
-  </Folder>
-  <Folder Name="/eng/package-consumer/SQLite/">
-    <Project Path="eng/package-consumer/Sqlite/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.PackageConsumer.csproj" />
-  </Folder>
-  <Folder Name="/eng/package-consumer/SQL Server/">
-    <Project Path="eng/package-consumer/SqlServer/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.PackageConsumer.csproj" />
-  </Folder>
-  <Folder Name="/eng/ef-ownership/">
-    <Project Path="eng/ef-ownership/Core/Doka.EntityFrameworkCore.SafeMigrations.EfOwnership.Core.csproj" />
-    <Project Path="eng/ef-ownership/Custom/Doka.EntityFrameworkCore.SafeMigrations.EfOwnership.Custom.csproj" />
-  </Folder>
-  <Folder Name="/benchmarks/Core/">
-    <Project Path="benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Benchmarks.csproj" />
-  </Folder>
-  <Folder Name="/benchmarks/MySQL-MariaDB/">
-    <Project Path="benchmarks/Doka.EntityFrameworkCore.SafeMigrations.MySql.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.MySql.Benchmarks.csproj" />
-  </Folder>
-  <Folder Name="/benchmarks/PostgreSQL/">
-    <Project Path="benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks.csproj" />
-  </Folder>
-  <Folder Name="/benchmarks/SQLite/">
-    <Project Path="benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Benchmarks.csproj" />
-  </Folder>
-  <Folder Name="/benchmarks/SQL Server/">
-    <Project Path="benchmarks/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Benchmarks.csproj" />
-  </Folder>
-  <Folder Name="/samples/CrossProvider/">
-    <Project Path="samples/Doka.EntityFrameworkCore.SafeMigrations.Sample/Doka.EntityFrameworkCore.SafeMigrations.Sample.csproj" />
+  <Folder Name="/config/docker/">
+    <File Path="docker/database-images.Dockerfile" />
   </Folder>
   <Folder Name="/src/Core/">
     <Project Path="src/Doka.EntityFrameworkCore.SafeMigrations/Doka.EntityFrameworkCore.SafeMigrations.csproj" />
@@ -87,5 +64,48 @@
     <Project Path="tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests.csproj" />
     <Project Path="tests/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests.csproj" />
     <Project Path="tests/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests.csproj" />
+  </Folder>
+  <Folder Name="/samples/CrossProvider/">
+    <Project Path="samples/Doka.EntityFrameworkCore.SafeMigrations.Sample/Doka.EntityFrameworkCore.SafeMigrations.Sample.csproj" />
+  </Folder>
+  <Folder Name="/benchmarks/Core/">
+    <Project Path="benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Benchmarks.csproj" />
+  </Folder>
+  <Folder Name="/benchmarks/MySQL-MariaDB/">
+    <Project Path="benchmarks/Doka.EntityFrameworkCore.SafeMigrations.MySql.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.MySql.Benchmarks.csproj" />
+  </Folder>
+  <Folder Name="/benchmarks/PostgreSQL/">
+    <Project Path="benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks.csproj" />
+  </Folder>
+  <Folder Name="/benchmarks/SQLite/">
+    <Project Path="benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Benchmarks.csproj" />
+  </Folder>
+  <Folder Name="/benchmarks/SQL Server/">
+    <Project Path="benchmarks/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Benchmarks.csproj" />
+  </Folder>
+  <Folder Name="/eng/">
+    <File Path="eng/select-database-image.sh" />
+    <File Path="eng/verify-package-contents.sh" />
+    <File Path="eng/verify-package-consumer.sh" />
+  </Folder>
+  <Folder Name="/eng/ef-ownership/">
+    <Project Path="eng/ef-ownership/Core/Doka.EntityFrameworkCore.SafeMigrations.EfOwnership.Core.csproj" />
+    <Project Path="eng/ef-ownership/Custom/Doka.EntityFrameworkCore.SafeMigrations.EfOwnership.Custom.csproj" />
+  </Folder>
+  <Folder Name="/eng/package-consumer/MySQL-MariaDB/">
+    <Project Path="eng/package-consumer/MySql/Doka.EntityFrameworkCore.SafeMigrations.MySql.PackageConsumer.csproj" />
+    <Project
+      Path="eng/package-consumer/MySqlSplit/Generator/Doka.EntityFrameworkCore.SafeMigrations.MySql.SplitGenerator.csproj" />
+    <Project
+      Path="eng/package-consumer/MySqlSplit/MigrationsTarget/Doka.EntityFrameworkCore.SafeMigrations.MySql.SplitTarget.csproj" />
+  </Folder>
+  <Folder Name="/eng/package-consumer/PostgreSQL/">
+    <Project Path="eng/package-consumer/PostgreSql/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.PackageConsumer.csproj" />
+  </Folder>
+  <Folder Name="/eng/package-consumer/SQLite/">
+    <Project Path="eng/package-consumer/Sqlite/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.PackageConsumer.csproj" />
+  </Folder>
+  <Folder Name="/eng/package-consumer/SQL Server/">
+    <Project Path="eng/package-consumer/SqlServer/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.PackageConsumer.csproj" />
   </Folder>
 </Solution>

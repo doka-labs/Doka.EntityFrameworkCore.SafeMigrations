@@ -9,9 +9,11 @@ public sealed class MySqlColumnsStructuredDefaultsIntegrationTests : MySqlSafeMi
         MySqlEngineContainerFixture fixture
     ) : base(fixture) { }
 
+    /// <summary>Preserves an EF-authored current-timestamp default through convergence and replay.</summary>
     [Fact]
     public async Task CurrentTimestampDefault_FromEfOperationConvergesAndIsIdempotent()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -30,13 +32,12 @@ public sealed class MySqlColumnsStructuredDefaultsIntegrationTests : MySqlSafeMi
 
         var runner = context.GetService<ISafeMigrationRunner>();
 
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
             new SafeMigrationRunOptions("timestamp-default-preflight"),
             CancellationToken.None);
-
-        Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
@@ -47,6 +48,9 @@ public sealed class MySqlColumnsStructuredDefaultsIntegrationTests : MySqlSafeMi
             new SafeMigrationRunOptions("timestamp-default-postflight"),
             CancellationToken.None);
 
+        // Assert
+        Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
+
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
         Assert.True(Assert.Single(postflight.Assessments)
             .PostconditionSatisfied);
@@ -54,9 +58,11 @@ public sealed class MySqlColumnsStructuredDefaultsIntegrationTests : MySqlSafeMi
         Assert.Empty(postflight.UnexpectedObjects);
     }
 
+    /// <summary>Rejects an unbounded SQL default before creating a target table.</summary>
     [Fact]
     public async Task UnboundedSqlDefault_RemainsUnsupportedWithoutCreatingTheTable()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -72,6 +78,7 @@ public sealed class MySqlColumnsStructuredDefaultsIntegrationTests : MySqlSafeMi
                     defaultValueSql: "CURRENT_TIMESTAMP(6) + INTERVAL 1 DAY"),
             });
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -80,6 +87,7 @@ public sealed class MySqlColumnsStructuredDefaultsIntegrationTests : MySqlSafeMi
                 new SafeMigrationRunOptions("opaque-timestamp-default"),
                 CancellationToken.None);
 
+        // Assert
         var assessment = Assert.Single(report.Assessments);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);

@@ -1,7 +1,9 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Sample;
 
+/// <summary>Runs the source-construction sample without opening a database connection.</summary>
 internal static class Program
 {
+    /// <summary>Checks adapter registration touchpoints and prints the constructed migration scenario.</summary>
     private static void Main()
     {
         _ = new DbContextOptionsBuilder().UseMySqlSafeMigrations(options =>
@@ -16,18 +18,6 @@ internal static class Program
         _ = new DbContextOptionsBuilder().UseSqlServerSafeMigrations(options =>
             options.UseScaffoldingMode(SafeMigrationScaffoldingMode.LegacyConvergence));
 
-        var initialMigrationBuilder = new MigrationBuilder("Doka.Sample.Provider");
-        SampleMigrationUsage.BuildUpOperations(initialMigrationBuilder);
-
-        var maintenanceMigrationBuilder = new MigrationBuilder("Npgsql.EntityFrameworkCore.PostgreSQL");
-        SampleMigrationUsage.BuildPostgreSqlMaintenanceOperations(maintenanceMigrationBuilder);
-
-        Console.WriteLine("Doka.EntityFrameworkCore.SafeMigrations sample");
-        Console.WriteLine("Generated sample migration operations without executing SQL.");
-        Console.WriteLine($"Initial-migration example operation count: {initialMigrationBuilder.Operations.Count}");
-        Console.WriteLine($"Maintenance example operation count: {maintenanceMigrationBuilder.Operations.Count}");
-        Console.WriteLine(
-            "See SampleMigrationUsage, InitialSafeMigrationExample, and MaintenanceSafeMigrationExample "
-            + "for the recommended migration patterns.");
+        _ = SampleMigrationUsage.Run(Console.Out);
     }
 }

@@ -856,8 +856,9 @@ public sealed class SqliteCapturedExpressionSourceTests : SqliteIntegrationTestB
             "PRAGMA schema_version;",
             cancellationToken: CancellationToken.None);
 
-        // Assert
         var diagnostic = Encoding.UTF8.GetString(SafeMigrationReportJson.SerializeToUtf8Bytes(report));
+
+        // Assert
         Assert.NotNull(transition);
         Assert.Equal("\"score\" <> 'VALUE'",
             Assert.Single(transition.CheckConstraints)
@@ -1039,9 +1040,20 @@ public sealed class SqliteCapturedExpressionSourceTests : SqliteIntegrationTestB
     }
 
     /// <summary>Introduces one observable unrelated mutation after the accepted native rename.</summary>
-    private sealed class MutatingRenameBaseline(ISqliteSafeMigrationsBaselineGenerator inner)
+    private sealed class MutatingRenameBaseline
         : ISqliteSafeMigrationsBaselineGenerator
     {
+        private readonly ISqliteSafeMigrationsBaselineGenerator _inner;
+
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="inner">The supplied inner for this fixture.</param>
+        public MutatingRenameBaseline(
+            ISqliteSafeMigrationsBaselineGenerator inner
+        )
+        {
+            _inner = inner;
+        }
+
         /// <inheritdoc />
         public IReadOnlyList<MigrationCommand> Generate(
             IReadOnlyList<MigrationOperation> operations,
@@ -1051,13 +1063,13 @@ public sealed class SqliteCapturedExpressionSourceTests : SqliteIntegrationTestB
             SqliteCatalogSnapshot? snapshot = null
         )
         {
-            var commands = inner.Generate(operations, model, options, guardedOperations, snapshot);
+            var commands = _inner.Generate(operations, model, options, guardedOperations, snapshot);
             if (!operations.Any(static operation => operation is RenameColumnOperation))
             {
                 return commands;
             }
 
-            var mutation = inner.Generate(
+            var mutation = _inner.Generate(
                 [
                     new AddColumnOperation
                     {

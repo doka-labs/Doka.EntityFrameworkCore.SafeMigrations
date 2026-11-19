@@ -229,6 +229,11 @@ public sealed class SqliteParallelTestContractTests : SqliteIntegrationTestBase
                 "CREATE TABLE surviving_connection (Id INTEGER);",
                 cancellationToken: CancellationToken.None);
 
+            var observedScalar1 = await ScalarIntAsync(
+                second,
+                "SELECT COUNT(*) FROM sqlite_schema WHERE name = 'surviving_connection';",
+                cancellationToken: CancellationToken.None);
+
             // Assert
             Assert.NotEqual(firstPath, secondPath);
             Assert.False(new SqliteConnectionStringBuilder(firstString).Pooling);
@@ -241,10 +246,7 @@ public sealed class SqliteParallelTestContractTests : SqliteIntegrationTestBase
 
             Assert.Equal(
                 1,
-                await ScalarIntAsync(
-                    second,
-                    "SELECT COUNT(*) FROM sqlite_schema WHERE name = 'surviving_connection';",
-                    cancellationToken: CancellationToken.None));
+                observedScalar1);
         }
         finally
         {
@@ -260,6 +262,8 @@ public sealed class SqliteParallelTestContractTests : SqliteIntegrationTestBase
         .GetTypes()
         .Where(type => type is { IsClass: true, IsAbstract: false }
             && typeof(SqliteSafeMigrationCatalogIntegrationTests).IsAssignableFrom(type))
+        // WHY: Retain explicit fluent materialization and invocation-owned snapshot semantics.
+        // ReSharper disable once UseCollectionExpression
         .ToArray();
 
     /// <summary>Deletes only this test's allocated paths after the owning connections are disposed.</summary>

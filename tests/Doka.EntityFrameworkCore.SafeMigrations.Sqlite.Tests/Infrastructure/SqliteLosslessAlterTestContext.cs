@@ -58,6 +58,8 @@ internal sealed class SqliteLosslessAlterTestContext<TValue> : DbContext
         });
     }
 
+    // WHY: EF binds this fixture entity through writable property metadata.
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class LosslessAlterEntity
     {
         public int Id { get; set; }
@@ -119,6 +121,8 @@ internal sealed class SqliteDefaultAlterTestContext : DbContext
         });
     }
 
+    // WHY: EF binds this fixture entity through writable property metadata.
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class DefaultAlterEntity
     {
         public int Id { get; set; }
@@ -128,6 +132,8 @@ internal sealed class SqliteDefaultAlterTestContext : DbContext
 }
 
 /// <summary>Shares provider services across value-domain models and disposes their cache after the class.</summary>
+// WHY: xUnit constructs and disposes this class fixture through test discovery.
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public sealed class SqliteLosslessAlterServiceFixture : IDisposable
 {
     /// <summary>Builds one bounded service provider rather than adding models to EF's process-wide cache.</summary>

@@ -58,11 +58,15 @@ internal static class SafeMigrationAttributedEnumName
         where TEnum : struct, Enum
     {
         var maximumLength = defaultMaximumLength;
+        // WHY: Preserve direct array traversal while accumulating the caller's existing lower bound.
+        // ReSharper disable once LoopCanBeConvertedToQuery
         foreach (var name in Enum.GetNames<TEnum>())
         {
             maximumLength = Math.Max(maximumLength, name.Length);
         }
 
+        // WHY: The enum array is already materialized; each formatted alias contributes to the same accumulator.
+        // ReSharper disable once LoopCanBeConvertedToQuery
         foreach (var value in Enum.GetValues<TEnum>())
         {
             maximumLength = Math.Max(maximumLength,

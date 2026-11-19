@@ -1,6 +1,8 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-/// <summary>Exercises the ModelManagedDataTypedLiterals migration contracts in an independent class collection.</summary>
+/// <summary>
+/// Exercises the ModelManagedDataTypedLiterals migration contracts in an independent class collection.
+/// </summary>
 public sealed class MySqlModelManagedDataTypedLiteralsIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
     /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
@@ -9,6 +11,9 @@ public sealed class MySqlModelManagedDataTypedLiteralsIntegrationTests : MySqlSa
         MySqlEngineContainerFixture fixture
     ) : base(fixture) { }
 
+    /// <summary>Preserves CLR-aware typed values through managed-data mutation and replay.</summary>
+    /// <param name="mode">The explicitly selected strict or legacy-convergence scaffolding mode.</param>
+    /// <param name="guidFormat">The native GUID storage-format annotation under test.</param>
     [Theory]
     [InlineData(SafeMigrationScaffoldingMode.Strict, DokaMySqlGuidFormat.Char36)]
     [InlineData(SafeMigrationScaffoldingMode.Strict, DokaMySqlGuidFormat.Binary16)]
@@ -19,6 +24,7 @@ public sealed class MySqlModelManagedDataTypedLiteralsIntegrationTests : MySqlSa
         DokaMySqlGuidFormat guidFormat
     )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var storeType = GuidStoreType(guidFormat);
@@ -56,6 +62,8 @@ public sealed class MySqlModelManagedDataTypedLiteralsIntegrationTests : MySqlSa
             new object?[,] { { identifier, 'A', SafeMigrationScaffoldingWorkItemKind.Task } });
 
         var runner = context.GetService<ISafeMigrationRunner>();
+
+        // Act
         var ensurePreflight = await runner.AnalyzeAsync(
             context,
             ensure.Operations,
@@ -119,6 +127,7 @@ public sealed class MySqlModelManagedDataTypedLiteralsIntegrationTests : MySqlSa
             new SafeMigrationRunOptions($"typed-model-delete-replay-{mode}-{guidFormat}"),
             CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, ensurePreflight.Status);
         Assert.Equal(SafeMigrationReportStatus.Ready, ensureReplay.Status);
         Assert.Equal(SafeMigrationAction.NoOp, ensureReplay.Assessments[^1].Action);

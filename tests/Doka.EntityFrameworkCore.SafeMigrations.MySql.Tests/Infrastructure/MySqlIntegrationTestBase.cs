@@ -1,10 +1,13 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
+/// <summary>Owns per-test databases and pools while sharing only the assembly native engine.</summary>
 public abstract class MySqlIntegrationTestBase : IClassFixture<MySqlEngineContainerFixture>, IAsyncLifetime
 {
     private readonly List<string> _ownedDatabases = [];
     private readonly HashSet<string> _ownedPools = new(StringComparer.Ordinal);
 
+    /// <summary>Binds this test owner to its explicitly owned provider resources.</summary>
+    /// <param name="fixture">The initialized shared native engine without transferring its lifetime.</param>
     protected MySqlIntegrationTestBase(
         MySqlEngineContainerFixture fixture
     )
@@ -12,6 +15,7 @@ public abstract class MySqlIntegrationTestBase : IClassFixture<MySqlEngineContai
         Fixture = fixture;
     }
 
+    /// <summary>Gets the shared initialized engine without transferring its assembly lifetime to this test.</summary>
     protected MySqlEngineContainerFixture Fixture { get; }
 
     /// <inheritdoc />
@@ -78,13 +82,13 @@ public abstract class MySqlIntegrationTestBase : IClassFixture<MySqlEngineContai
     )
     {
         var settings = new MySqlConnectionStringBuilder(connectionString);
-        if (!_ownedDatabases.Any(owned =>
+        if (_ownedDatabases.All(owned =>
             {
                 var lease = new MySqlConnectionStringBuilder(owned);
 
-                return settings.Database == lease.Database
-                    && settings.Server == lease.Server
-                    && settings.Port == lease.Port;
+                return settings.Database != lease.Database
+                    || settings.Server != lease.Server
+                    || settings.Port != lease.Port;
             }))
         {
             throw new ArgumentException(
@@ -95,11 +99,20 @@ public abstract class MySqlIntegrationTestBase : IClassFixture<MySqlEngineContai
         _ownedPools.Add(connectionString);
     }
 
+    /// <summary>Creates an isolated native context with optionally registered guarded migration services.</summary>
+    /// <param name="connectionString">The uniquely owned native test database.</param>
+    /// <param name="registerSafeMigrations">
+    /// Whether this context registers the additive guarded migration services.
+    /// </param>
     protected SafeMigrationDbContext CreateContext(
         string connectionString,
         bool registerSafeMigrations = true
     ) => new(connectionString, Fixture.ServerVersion, registerSafeMigrations);
 
+    /// <summary>Executes the real provider-generated migration commands with explicit caller cancellation.</summary>
+    /// <param name="context">The context owning the provider model, services, and native connection.</param>
+    /// <param name="operations">The ordered migration operations passed to real provider generation.</param>
+    /// <param name="cancellationToken">The caller cancellation propagated to actual provider work.</param>
     protected static async Task ExecuteOperationsAsync(
         DbContext context,
         IReadOnlyList<MigrationOperation> operations,

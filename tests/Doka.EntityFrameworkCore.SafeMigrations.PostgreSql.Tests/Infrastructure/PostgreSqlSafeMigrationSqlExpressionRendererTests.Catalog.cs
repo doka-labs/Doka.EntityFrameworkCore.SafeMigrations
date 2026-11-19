@@ -1,5 +1,8 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
+/// <summary>
+/// Verifies PostgreSQL SafeMigrations Sql Expression Renderer contracts in independently owned test state.
+/// </summary>
 public sealed partial class PostgreSqlSafeMigrationSqlExpressionRendererTests
 {
     /// <summary>Preserves one server-quoted candidate or native-deparsed shape.</summary>

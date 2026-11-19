@@ -125,7 +125,9 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
     /// <param name="baseline">The atomic native stages with their separately admitted ordinary repair body.</param>
     /// <param name="runtimePlan">The final target postcondition, including owned CHECK absence.</param>
     /// <param name="renderedParameterValues">The already rendered operation-local provider literals.</param>
-    /// <param name="postconditionSuffix">The same correlated assertion and optional script result used by ordinary bodies.</param>
+    /// <param name="postconditionSuffix">
+    /// The same correlated assertion and optional script result used by ordinary bodies.
+    /// </param>
     private static string BuildRequiredColumnAddBody(
         RequiredColumnAddBaseline baseline,
         MySqlSafeMigrationRuntimePlan runtimePlan,
@@ -236,13 +238,14 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
                 continue;
             }
 
-            if (token == '(')
+            switch (token)
             {
-                depth++;
-            }
-            else if (token == ')')
-            {
-                depth--;
+                case '(':
+                    depth++;
+                    break;
+                case ')':
+                    depth--;
+                    break;
             }
 
             if (depth < 0

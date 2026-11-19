@@ -190,15 +190,26 @@ internal static class SafeMigrationModelManagedKeyIdentity
     // redundant value-type boxing. This allocation belongs to one unsorted
     // intent, never its individual rows; ordered inputs bypass sorting entirely.
     /// <summary>Orders one cached per-intent ordinal map through the BCL comparer contract.</summary>
-    private sealed class KeyOrdinalComparer(IReadOnlyList<string> columns) : IComparer<int>
+    private sealed class KeyOrdinalComparer : IComparer<int>
     {
+        private readonly IReadOnlyList<string> _columns;
+
+        /// <summary>Initializes ordinal ordering over the caller's stable column snapshot.</summary>
+        /// <param name="columns">The physical key member names.</param>
+        public KeyOrdinalComparer(
+            IReadOnlyList<string> columns
+        )
+        {
+            _columns = columns;
+        }
+
         /// <inheritdoc />
         public int Compare(
             int left,
             int right
         )
         {
-            var comparison = StringComparer.Ordinal.Compare(columns[left], columns[right]);
+            var comparison = StringComparer.Ordinal.Compare(_columns[left], _columns[right]);
 
             // WHY: Valid model keys have unique physical members. Stable ties
             // retain authored associations rather than merging duplicate labels.

@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations;
 
 /// <summary>Represents ensuring a primary key exists.</summary>
+[PublicAPI]
 public sealed class EnsurePrimaryKeyIntent : SafeMigrationIntent
 {
     /// <summary>Initializes the intent.</summary>
@@ -22,6 +23,7 @@ public sealed class EnsurePrimaryKeyIntent : SafeMigrationIntent
 }
 
 /// <summary>Represents dropping a primary key when it exists.</summary>
+[PublicAPI]
 public sealed class DropPrimaryKeyIntent : SafeMigrationIntent
 {
     /// <summary>Initializes the intent.</summary>

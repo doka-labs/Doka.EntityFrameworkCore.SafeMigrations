@@ -94,6 +94,10 @@ internal static class MySqlCatalogSqlTemplate
         return RenderPrepared(template,
             values
                 .Select(renderValue)
+
+                // WHY: Retain fluent materialization and its existing snapshot
+                // ownership rather than replacing this boundary with a spread.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray(),
             relations);
     }

@@ -1053,7 +1053,8 @@ public sealed class SqlServerSafeMigrationColumnLayoutIntegrationTests : SqlServ
 
         // Assert
         Assert.Null(failure);
-        var analysis = Assert.Single(Assert.IsAssignableFrom<IReadOnlyList<SafeMigrationProviderAnalysis>>(analyses));
+        var analysis = Assert.Single(
+            Assert.IsType<IReadOnlyList<SafeMigrationProviderAnalysis>>(analyses, exactMatch: false));
 
         Assert.Equal(SafeMigrationObservedState.Unsupported, analysis.ObservedState);
         Assert.Equal("column_row_layout_unproven", analysis.Code);

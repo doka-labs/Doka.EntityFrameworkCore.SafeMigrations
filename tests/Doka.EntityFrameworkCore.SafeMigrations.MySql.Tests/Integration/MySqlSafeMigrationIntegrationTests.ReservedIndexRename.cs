@@ -33,9 +33,9 @@ public sealed class MySqlReservedIndexRenameIntegrationTests : MySqlSafeMigratio
                 ? ", PRIMARY KEY (id)"
                 : string.Empty)});
             {(source == "PRIMARY"
-                ? string.Empty
-                : "CREATE INDEX source_index ON reserved_index_rows (id); "
-            )}INSERT INTO reserved_index_rows (id) VALUES (7);
+                    ? string.Empty
+                    : "CREATE INDEX source_index ON reserved_index_rows (id); "
+                )}INSERT INTO reserved_index_rows (id) VALUES (7);
             """,
             cancellationToken: CancellationToken.None);
 

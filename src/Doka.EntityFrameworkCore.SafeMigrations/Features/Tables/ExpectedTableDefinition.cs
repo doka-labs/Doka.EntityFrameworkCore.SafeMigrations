@@ -4,6 +4,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// Describes the complete expected table definition used by strict table
 /// comparison and baseline DDL generation.
 /// </summary>
+[PublicAPI]
 public sealed class ExpectedTableDefinition
 {
     /// <summary>Initializes an expected table definition.</summary>
@@ -52,18 +53,33 @@ public sealed class ExpectedTableDefinition
             ValidateOwner(PrimaryKey.Table, PrimaryKey.Schema, nameof(primaryKey));
         }
 
-        foreach (var definition in UniqueConstraints)
+        // WHY: This immutable definition snapshot is indexed; retain its authored order without interface enumeration.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var definitionIndex = 0; definitionIndex < UniqueConstraints.Count; definitionIndex++)
         {
+            var definition = UniqueConstraints[definitionIndex];
+
             ValidateOwner(definition.Table, definition.Schema, nameof(uniqueConstraints));
         }
 
-        foreach (var definition in CheckConstraints)
+        // WHY: This immutable definition snapshot is indexed; retain its authored order without interface enumeration.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var definitionIndex1 = 0; definitionIndex1 < CheckConstraints.Count; definitionIndex1++)
         {
+            var definition = CheckConstraints[definitionIndex1];
+
             ValidateOwner(definition.Table, definition.Schema, nameof(checkConstraints));
         }
 
-        foreach (var definition in ForeignKeys)
+        // WHY: This immutable definition snapshot is indexed; retain its authored order without interface enumeration.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var definitionIndex2 = 0; definitionIndex2 < ForeignKeys.Count; definitionIndex2++)
         {
+            var definition = ForeignKeys[definitionIndex2];
+
             ValidateOwner(definition.Table, definition.Schema, nameof(foreignKeys));
         }
 
@@ -102,6 +118,8 @@ public sealed class ExpectedTableDefinition
         string parameterName
     )
     {
+        // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+        // ReSharper disable once UseCollectionExpression
         var snapshot = names.ToArray();
         if (snapshot
                 .Distinct(StringComparer.Ordinal)
@@ -138,13 +156,23 @@ public sealed class ExpectedTableDefinition
             ValidateColumns(columns, PrimaryKey.Columns, nameof(PrimaryKey));
         }
 
-        foreach (var definition in UniqueConstraints)
+        // WHY: This immutable definition snapshot is indexed; retain its authored order without interface enumeration.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var definitionIndex3 = 0; definitionIndex3 < UniqueConstraints.Count; definitionIndex3++)
         {
+            var definition = UniqueConstraints[definitionIndex3];
+
             ValidateColumns(columns, definition.Columns, nameof(UniqueConstraints));
         }
 
-        foreach (var definition in ForeignKeys)
+        // WHY: This immutable definition snapshot is indexed; retain its authored order without interface enumeration.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var definitionIndex4 = 0; definitionIndex4 < ForeignKeys.Count; definitionIndex4++)
         {
+            var definition = ForeignKeys[definitionIndex4];
+
             ValidateColumns(columns, definition.Columns, nameof(ForeignKeys));
         }
     }

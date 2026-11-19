@@ -18,28 +18,34 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
     {
         _acceptedDeclaredChecks.Clear();
         _checkRenameDependencies.Clear();
-        if (!operations.Any(static operation => operation is SafeMigrationOperation
+        if (operations.All(static operation => operation is not SafeMigrationOperation
             {
                 Intent: RenameColumnIntent or DropColumnIntent,
             })
-            || !operations.Any(static operation => operation is AddCheckConstraintOperation
+            || operations.All(static operation => operation is not (AddCheckConstraintOperation
                 or CreateTableOperation { CheckConstraints.Count: > 0 }
                 or SafeMigrationOperation
                 {
                     Intent: EnsureCheckConstraintIntent
                     or EnsureTableIntent { Definition.CheckConstraints.Count: > 0 },
-                }))
+                })))
         {
             return;
         }
 
-        var declared = new Dictionary<(string Schema, string Table),
-            Dictionary<string, List<(string[]? Names, MigrationOperation Declaration)>>>();
+        Dictionary<(string Schema, string Table),
+            Dictionary<string, List<(string[]? Names, MigrationOperation Declaration)>>> declared = [];
 
-        var candidates = new List<(SafeMigrationOperation Rename, CheckRenameDependency Dependency, string[]? Names)>();
-        var drops = new List<(SafeMigrationOperation Drop, CheckRenameDependency Dependency, string[]? Names)>();
-        foreach (var operation in operations)
+        List<(SafeMigrationOperation Rename, CheckRenameDependency Dependency, string[]? Names)> candidates = [];
+        List<(SafeMigrationOperation Drop, CheckRenameDependency Dependency, string[]? Names)> drops = [];
+
+        // WHY: The stable indexed snapshot preserves operation and declaration order.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var operationIndex0 = 0; operationIndex0 < operations.Count; operationIndex0++)
         {
+            var operation = operations[operationIndex0];
+
             if (operation is not SafeMigrationOperation safe)
             {
                 switch (operation)
@@ -47,8 +53,14 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                     case CreateTableOperation table:
                         var checks = GetChecks(table.Name, table.Schema);
                         checks.Clear();
-                        foreach (var check in table.CheckConstraints)
+
+                        // WHY: The stable indexed snapshot preserves operation and declaration order.
+                        // ReSharper disable once ForCanBeConvertedToForeach
+                        // ReSharper disable once LoopCanBeConvertedToQuery
+                        for (var checkIndex0 = 0; checkIndex0 < table.CheckConstraints.Count; checkIndex0++)
                         {
+                            var check = table.CheckConstraints[checkIndex0];
+
                             checks[check.Name] = [(GetProviderCheckSourceNames(check), operation)];
                         }
 
@@ -84,8 +96,13 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             switch (safe.Intent)
             {
                 case EnsureTableIntent table:
-                    foreach (var check in table.Definition.CheckConstraints)
+                    // WHY: The stable indexed snapshot preserves operation and declaration order.
+                    // ReSharper disable once ForCanBeConvertedToForeach
+                    // ReSharper disable once LoopCanBeConvertedToQuery
+                    for (var checkIndex0 = 0; checkIndex0 < table.Definition.CheckConstraints.Count; checkIndex0++)
                     {
+                        var check = table.Definition.CheckConstraints[checkIndex0];
+
                         AddCheck(
                             table.Definition.Table,
                             table.Definition.Schema,
@@ -130,8 +147,13 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                         // executing it. Keep prior candidates until an owned drop;
                         // the actual accepted declaration reference selects exactly
                         // one physical contract during sequential projection.
-                        foreach (var check in history)
+                        // WHY: The stable indexed snapshot preserves declaration order without mutating the source.
+                        // ReSharper disable once ForCanBeConvertedToForeach
+                        // ReSharper disable once LoopCanBeConvertedToQuery
+                        for (var historyIndex0 = 0; historyIndex0 < history.Count; historyIndex0++)
                         {
+                            var check = history[historyIndex0];
+
                             candidates.Add(
                                 (safe, new CheckRenameDependency(
                                     check.Declaration,
@@ -148,8 +170,13 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                     out var dropChecks):
                     foreach (var (name, history) in dropChecks)
                     {
-                        foreach (var check in history)
+                        // WHY: The stable indexed snapshot preserves declaration order without mutating the source.
+                        // ReSharper disable once ForCanBeConvertedToForeach
+                        // ReSharper disable once LoopCanBeConvertedToQuery
+                        for (var historyIndex1 = 0; historyIndex1 < history.Count; historyIndex1++)
                         {
+                            var check = history[historyIndex1];
+
                             drops.Add(
                                 (safe, new CheckRenameDependency(
                                     check.Declaration,
@@ -170,9 +197,15 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             return;
         }
 
-        var captured = new Dictionary<SafeMigrationOperation, List<CheckRenameDependency>>();
-        foreach (var candidate in drops)
+        Dictionary<SafeMigrationOperation, List<CheckRenameDependency>> captured = [];
+
+        // WHY: The stable indexed snapshot preserves declaration order without mutating the source.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var candidateIndex0 = 0; candidateIndex0 < drops.Count; candidateIndex0++)
         {
+            var candidate = drops[candidateIndex0];
+
             var drop = (DropColumnIntent)candidate.Drop.Intent;
             var dependency = ClassifyDeclaredCheckDropSource(drop, candidate.Names);
             if (dependency == false)
@@ -205,20 +238,20 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             commandTimeout,
             (command, ordinal) =>
             {
-                var candidate = candidates[ordinal];
-                var rename = (RenameColumnIntent)candidate.Rename.Intent;
-                var names = candidate.Names;
-                var match = names is null
-                    ? "1"
-                    : names.Length == 0
-                        ? "0"
-                        : $"""
+                var (operation, _, names) = candidates[ordinal];
+                var rename = (RenameColumnIntent)operation.Intent;
+                var match = names switch
+                {
+                    null => "1",
+                    { Length: 0 } => "0",
+                    _ => $"""
                         CASE WHEN EXISTS(SELECT 1 FROM(VALUES {string.Join(
                             ",", names.Select(static name => "(" + KeyLiteral(name) + ")"))}) refs(name)
                         WHERE refs.name COLLATE CATALOG_DEFAULT={KeyLiteral(rename.Name)} COLLATE
                         CATALOG_DEFAULT)
                         THEN 1 ELSE 0 END
-                        """;
+                        """,
+                };
 
                 // WHY: Native identifier equality includes accent and width
                 // rules. Neither OrdinalIgnoreCase nor a data-collation guess
@@ -227,10 +260,10 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
 
                 return new SafeMigrationCatalogProbeStatement(1, 0, ordinal);
             },
-            async (reader, ordinal, _, token) =>
+            async (reader, ordinal, _, callbackCancellationToken) =>
             {
                 if (reader.FieldCount != 2
-                    || !await reader.ReadAsync(token)
+                    || !await reader.ReadAsync(callbackCancellationToken)
                     || reader.IsDBNull(0)
                     || reader.GetInt32(0) != ordinal
                     || reader.IsDBNull(1))
@@ -240,7 +273,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
 
                 var dependent = reader.GetInt32(1);
                 if (dependent is < 0 or > 1
-                    || await reader.ReadAsync(token))
+                    || await reader.ReadAsync(callbackCancellationToken))
                 {
                     throw new InvalidOperationException("SQL Server returned an invalid CHECK source identity proof.");
                 }
@@ -257,11 +290,13 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                     dependencies.Add(candidate.Dependency);
                 }
             },
-            cancellationToken,
             transaction,
-            SqlServerCatalogParameterBindings.MaximumParameters);
+            SqlServerCatalogParameterBindings.MaximumParameters,
+            cancellationToken);
 
         _checkRenameDependencies = captured;
+
+        return;
 
         Dictionary<string, List<(string[]?, MigrationOperation)>> GetChecks(
             string table,
@@ -352,8 +387,13 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
     {
         if (_checkRenameDependencies.TryGetValue(operation, out var dependencies))
         {
-            foreach (var dependency in dependencies)
+            // WHY: The stable indexed snapshot preserves declaration order without mutating the source.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var dependencyIndex0 = 0; dependencyIndex0 < dependencies.Count; dependencyIndex0++)
             {
+                var dependency = dependencies[dependencyIndex0];
+
                 if (_acceptedDeclaredChecks.TryGetValue((dependency.Schema ?? "dbo", dependency.Table), out var checks)
                     && checks.TryGetValue(dependency.Name, out var accepted)
                     && ReferenceEquals(accepted, dependency.Declaration))
@@ -395,8 +435,13 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                     _acceptedDeclaredChecks.Add(tableKey, declared);
                 }
 
-                foreach (var check in table.Definition.CheckConstraints)
+                // WHY: The stable indexed snapshot preserves operation and declaration order.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
+                for (var checkIndex1 = 0; checkIndex1 < table.Definition.CheckConstraints.Count; checkIndex1++)
                 {
+                    var check = table.Definition.CheckConstraints[checkIndex1];
+
                     declared[check.Name] = operation;
                 }
 
@@ -444,9 +489,15 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         switch (operation)
         {
             case CreateTableOperation table:
-                var declared = new Dictionary<string, MigrationOperation>();
-                foreach (var check in table.CheckConstraints)
+                Dictionary<string, MigrationOperation> declared = [];
+
+                // WHY: The stable indexed snapshot preserves operation and declaration order.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
+                for (var checkIndex1 = 0; checkIndex1 < table.CheckConstraints.Count; checkIndex1++)
                 {
+                    var check = table.CheckConstraints[checkIndex1];
+
                     declared[check.Name] = operation;
                 }
 

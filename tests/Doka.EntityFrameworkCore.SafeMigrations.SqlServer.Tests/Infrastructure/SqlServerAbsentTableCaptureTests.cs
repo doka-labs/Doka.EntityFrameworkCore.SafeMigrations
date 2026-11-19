@@ -24,7 +24,7 @@ public sealed class SqlServerAbsentTableCaptureTests
                 : 1,
         };
 
-        await using var transaction = await connection.BeginTransactionAsync();
+        await using var transaction = await connection.BeginTransactionAsync(CancellationToken.None);
         SafeMigrationOperation[] operations =
         [
             Column(), Column(), Table("first'item", "custom_schema"),
@@ -302,7 +302,7 @@ public sealed class SqlServerAbsentTableCaptureTests
         // Arrange
         await using var connection = new SqlServerCatalogTestConnection { ReturnPresenceRows = true };
         using var cancellation = new CancellationTokenSource();
-        cancellation.Cancel();
+        await cancellation.CancelAsync();
 
         // Act
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
@@ -320,7 +320,9 @@ public sealed class SqlServerAbsentTableCaptureTests
         Assert.Equal(0, connection.BatchesDisposed);
     }
 
-    /// <summary>Cancellation during occupancy reading releases transport resources but retains caller ownership.</summary>
+    /// <summary>
+    /// Cancellation during occupancy reading releases transport resources but retains caller ownership.
+    /// </summary>
     /// <param name="nativeBatch">Whether native batching is available.</param>
     [Theory]
     [InlineData(true)]
@@ -337,7 +339,7 @@ public sealed class SqlServerAbsentTableCaptureTests
             AfterRowRead = _ => cancellation.Cancel(),
         };
 
-        await using var transaction = await connection.BeginTransactionAsync();
+        await using var transaction = await connection.BeginTransactionAsync(cancellation.Token);
 
         // Act
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>

@@ -9,9 +9,11 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
         PostgreSqlContainerFixture fixture
     ) : base(fixture) { }
 
+    /// <summary>Existing Tables Project Accepted Columns And Keys Into Foreign Key Preflight.</summary>
     [Fact]
     public async Task ExistingTablesProjectAcceptedColumnsAndKeysIntoForeignKeyPreflight()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -27,6 +29,7 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
         var builder = ExistingTableForeignKeyConvergence(context, defaultValue: null);
         var runner = context.GetService<ISafeMigrationRunner>();
 
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
@@ -47,6 +50,7 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
             new SafeMigrationRunOptions("existing-table-foreign-key-replay"),
             CancellationToken.None);
 
+        // Assert
         var foreignKey = Assert.Single(
             preflight.Assessments,
             static assessment => assessment.OperationKind == SafeMigrationOperationKind.EnsureForeignKey);
@@ -55,8 +59,10 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
         Assert.Equal(SafeMigrationObservedState.Missing, foreignKey.ObservedState);
         Assert.Equal(SafeMigrationAction.Apply, foreignKey.Action);
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
+        Assert.Equal(builder.Operations.Count, postflight.Assessments.Count);
         Assert.All(postflight.Assessments, static assessment => Assert.True(assessment.PostconditionSatisfied));
         Assert.Equal(SafeMigrationReportStatus.Ready, replay.Status);
+        Assert.Equal(builder.Operations.Count, replay.Assessments.Count);
         Assert.All(replay.Assessments, static assessment => Assert.Equal(SafeMigrationAction.NoOp, assessment.Action));
         Assert.Equal(
             1,
@@ -74,9 +80,11 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Foreign Key Preflight Rejects Unproven Rows From New Defaulted Column.</summary>
     [Fact]
     public async Task ForeignKeyPreflightRejectsUnprovenRowsFromNewDefaultedColumn()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -91,6 +99,7 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
         await using var context = CreateContext(connectionString);
         var builder = ExistingTableForeignKeyConvergence(context, defaultValue: 999);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -99,6 +108,7 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
                 new SafeMigrationRunOptions("existing-table-foreign-key-default"),
                 CancellationToken.None);
 
+        // Assert
         var foreignKey = Assert.Single(
             report.Assessments,
             static assessment => assessment.OperationKind == SafeMigrationOperationKind.EnsureForeignKey);
@@ -119,9 +129,11 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Semantic Unique No Op Does Not Survive Physical Drop In Foreign Key Projection.</summary>
     [Fact]
     public async Task SemanticUniqueNoOpDoesNotSurvivePhysicalDropInForeignKeyProjection()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -135,6 +147,7 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
         await using var context = CreateContext(connectionString);
         var builder = SemanticUniqueDropProjection(context);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -143,6 +156,7 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
                 new SafeMigrationRunOptions("semantic-unique-drop-projection"),
                 CancellationToken.None);
 
+        // Assert
         var alias = Assert.Single(
             report.Assessments,
             static assessment => StringComparer.Ordinal.Equals(
@@ -164,9 +178,11 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
         Assert.Equal(SafeMigrationAction.RejectPrerequisiteMissing, foreignKey.Action);
     }
 
+    /// <summary>Provider Analysis Resolves Physical Identities For Semantic Aliases.</summary>
     [Fact]
     public async Task ProviderAnalysisResolvesPhysicalIdentitiesForSemanticAliases()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -189,10 +205,6 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
             .Cast<SafeMigrationOperation>()
             .ToArray();
 
-        var analyses = await context
-            .GetService<ISafeMigrationProviderAnalyzer>()
-            .AnalyzeAsync(context, operations, CancellationToken.None);
-
         string[] physicalNames =
         [
             "uq_identity_code",
@@ -201,7 +213,17 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
             "ix_identity_quantity",
         ];
 
+        // Act
+        var analyses = await context
+            .GetService<ISafeMigrationProviderAnalyzer>()
+            .AnalyzeAsync(context, operations, CancellationToken.None);
+
+        // Assert
         Assert.Equal(physicalNames.Length, analyses.Count);
+
+        // WHY: Native matches must preserve the ordered operation-to-identity association.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < analyses.Count; index++)
         {
             Assert.Equal(SafeMigrationObservedState.Matching, analyses[index].ObservedState);
@@ -209,9 +231,11 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
         }
     }
 
+    /// <summary>Provider Analysis Does Not Resolve Ambiguous Semantic Aliases.</summary>
     [Fact]
     public async Task ProviderAnalysisDoesNotResolveAmbiguousSemanticAliases()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -233,13 +257,11 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
 
         await using var context = CreateContext(connectionString);
 
-        Assert.Equal(
-            2,
-            await ScalarIntAsync(
-                connectionString,
-                "SELECT COUNT(*) FROM pg_catalog.pg_constraint "
-                + "WHERE conrelid = 'ambiguous_parents'::regclass AND contype = 'u';",
-                cancellationToken: CancellationToken.None));
+        var nativeUniqueCount = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM pg_catalog.pg_constraint "
+            + "WHERE conrelid = 'ambiguous_parents'::regclass AND contype = 'u';",
+            cancellationToken: CancellationToken.None);
 
         var builder = SemanticAliasOperations(context, "ambiguous");
         var operations = builder
@@ -247,10 +269,13 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
             .Cast<SafeMigrationOperation>()
             .ToArray();
 
+        // Act
         var analyses = await context
             .GetService<ISafeMigrationProviderAnalyzer>()
             .AnalyzeAsync(context, operations, CancellationToken.None);
 
+        // Assert
+        Assert.Equal(2, nativeUniqueCount);
         Assert.Equal(4, analyses.Count);
         Assert.All(
             analyses,
@@ -261,9 +286,11 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
             });
     }
 
+    /// <summary>Empty Existing Table Projects Primary Unique And Check Constraint Prerequisites.</summary>
     [Fact]
     public async Task EmptyExistingTableProjectsPrimaryUniqueAndCheckConstraintPrerequisites()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -274,6 +301,7 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
         var builder = EmptyExistingTableConstraintConvergence(context);
         var runner = context.GetService<ISafeMigrationRunner>();
 
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
@@ -294,6 +322,7 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
             new SafeMigrationRunOptions("existing-table-constraints-replay"),
             CancellationToken.None);
 
+        // Assert
         var constraints = preflight
             .Assessments
             .Where(static assessment => assessment.OperationKind is
@@ -312,11 +341,14 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
 
         Assert.All(constraints, static assessment => Assert.Equal(SafeMigrationAction.Apply, assessment.Action));
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
+        Assert.Equal(builder.Operations.Count, postflight.Assessments.Count);
         Assert.All(postflight.Assessments, static assessment => Assert.True(assessment.PostconditionSatisfied));
         Assert.Equal(SafeMigrationReportStatus.Ready, replay.Status);
+        Assert.Equal(builder.Operations.Count, replay.Assessments.Count);
         Assert.All(replay.Assessments, static assessment => Assert.Equal(SafeMigrationAction.NoOp, assessment.Action));
     }
 
+    /// <summary>Drop Then Ensure Uses Projected State Across Object Kinds.</summary>
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -324,6 +356,7 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
         bool useSemanticAliases
     )
     {
+        // Arrange
         var suffix = useSemanticAliases
             ? "alias"
             : "exact";
@@ -369,12 +402,22 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
 
         var runner = context.GetService<ISafeMigrationRunner>();
 
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
             new SafeMigrationRunOptions($"ordered-drop-ensure-{suffix}"),
             CancellationToken.None);
 
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+
+        var postflight = await runner.VerifyAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions($"ordered-drop-ensure-{suffix}-postflight"),
+            CancellationToken.None);
+
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
         AssertProjectedReplacement(
             preflight,
@@ -416,21 +459,16 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
                     or SafeMigrationOperationKind.DropIndex
                 && assessment.Action == SafeMigrationAction.Apply));
 
-        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-
-        var postflight = await runner.VerifyAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions($"ordered-drop-ensure-{suffix}-postflight"),
-            CancellationToken.None);
-
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
+        Assert.Equal(builder.Operations.Count, postflight.Assessments.Count);
         Assert.All(postflight.Assessments, static assessment => Assert.True(assessment.PostconditionSatisfied));
     }
 
+    /// <summary>Data Mutation Between Drop And Unique Ensure Fails Closed Before Ddl.</summary>
     [Fact]
     public async Task DataMutationBetweenDropAndUniqueEnsureFailsClosedBeforeDdl()
     {
+        // Arrange
         const string table = "ordered_data_mutation";
         const string constraint = "uq_ordered_data_mutation_code";
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
@@ -454,12 +492,14 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
         builder.AddUniqueConstraintIfNotExists(constraint, table, ["code"]);
         var runner = context.GetService<ISafeMigrationRunner>();
 
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
             new SafeMigrationRunOptions("ordered-drop-data-ensure"),
             CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, preflight.Status);
         var replacement = Assert.Single(
             preflight.Assessments,

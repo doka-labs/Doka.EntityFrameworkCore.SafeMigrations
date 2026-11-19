@@ -8,6 +8,13 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- WHY: EF and test infrastructure bind selected members through reflection;
+         these conditional IDE annotations must not become runtime assets. -->
+    <PackageReference Include="JetBrains.Annotations" PrivateAssets="all" IncludeAssets="compile" />
+    <Compile Include="$(MSBuildThisFileDirectory)Shared/DatabaseImageCatalog*.cs"
+             Link="Infrastructure/%(Filename)%(Extension)" />
+    <EmbeddedResource Include="$(MSBuildThisFileDirectory)../docker/database-images.Dockerfile"
+                      LogicalName="Doka.SafeMigrations.DatabaseImages" />
     <Compile Include="$(MSBuildThisFileDirectory)Shared/SharedContainer*.cs"
              Link="Infrastructure/%(Filename)%(Extension)" />
     <Compile Include="$(MSBuildThisFileDirectory)Shared/ProcessWideTestGroup.cs"

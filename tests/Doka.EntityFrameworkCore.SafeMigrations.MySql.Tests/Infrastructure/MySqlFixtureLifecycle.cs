@@ -4,8 +4,12 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 internal static class MySqlFixtureLifecycle
 {
     /// <summary>Records provisional ownership before attempting native database creation.</summary>
-    /// <param name="registerOwnership">Records the exact database lease and its initially empty login ownership.</param>
-    /// <param name="createDatabase">Executes CREATE after ownership is recorded, without discarding ownership on failure.</param>
+    /// <param name="registerOwnership">
+    /// Records the exact database lease and its initially empty login ownership.
+    /// </param>
+    /// <param name="createDatabase">
+    /// Executes CREATE after ownership is recorded, without discarding ownership on failure.
+    /// </param>
     /// <param name="cancellationToken">Cancels before registration or during native creation.</param>
     /// <returns>The creation task; its completion does not transfer fixture cleanup ownership.</returns>
     internal static async Task CreateDatabaseAsync(
@@ -16,7 +20,7 @@ internal static class MySqlFixtureLifecycle
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        // WHY: The server can create the database even when cancellation or transport failure loses its acknowledgement.
+        // WHY: Native CREATE can succeed even when cancellation or transport failure loses its acknowledgement.
         registerOwnership();
         await createDatabase(cancellationToken);
     }
@@ -63,7 +67,7 @@ internal static class MySqlFixtureLifecycle
 
         if (failures is not null)
         {
-            // WHY: Container teardown must still execute after a database drop failure, and neither cause may disappear.
+            // WHY: Container teardown must follow a database-drop failure without losing either cause.
             throw new InvalidOperationException(
                 "MySQL test-container cleanup failed.",
                 failures.Count == 1

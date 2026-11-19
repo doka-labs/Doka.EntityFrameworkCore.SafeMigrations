@@ -48,6 +48,12 @@ public sealed class PostgreSqlTestParallelismTests
             .Where(static type => type.GetCustomAttribute<CollectionAttribute>() is not null)
             .ToArray();
 
+        var columnAttribution = typeof(PostgreSqlColumnAttributionIntegrationTests);
+        var columnCase = columnAttribution.GetMethod(
+                nameof(PostgreSqlColumnAttributionIntegrationTests
+                    .ColumnAttribution_PairedPlainAndMixedCatalogRuntimeFixtures))
+            ?? throw new InvalidOperationException("The functional column-attribution case is missing.");
+
         // Act
         var methods = classes
             .SelectMany(static type => type.GetMethods())
@@ -57,7 +63,7 @@ public sealed class PostgreSqlTestParallelismTests
             .ToArray();
 
         // Assert
-        Assert.Equal(2, classes.Length);
+        Assert.Equal(typeof(PostgreSqlModelManagedDataAllocationIntegrationTests), Assert.Single(classes));
         Assert.All(
             classes,
             static type => Assert.Equal(
@@ -71,12 +77,15 @@ public sealed class PostgreSqlTestParallelismTests
 
         Assert.Equal(
             [
-                "ColumnAttribution_PairedPlainAndMixedCatalogRuntimeFixtures",
                 "ModelManagedData_FiftyThousandMixedRowsConvergeAndReplayIdempotently",
             ],
             methods);
 
         Assert.Null(typeof(PostgreSqlPerformanceIntegrationTests).GetCustomAttribute<CollectionAttribute>());
+        // WHY: Statistical attribution moved to BenchmarkDotNet; all sixteen functional cases remain parallel.
+        Assert.Null(columnAttribution.GetCustomAttribute<CollectionAttribute>());
+        Assert.IsType<TheoryAttribute>(columnCase.GetCustomAttribute<FactAttribute>());
+        Assert.Equal(16, columnCase.GetCustomAttributes<InlineDataAttribute>().Count());
     }
 
     /// <summary>The original helper/model owner declares no tests that could be inherited twice.</summary>
@@ -116,8 +125,10 @@ public sealed class PostgreSqlTestParallelismTests
         Assert.True(originalOwner.IsAbstract);
         Assert.Empty(inheritedCases);
         Assert.Equal(53, featureClasses.Length);
-        Assert.Equal(328, declaredCases.Length);
-        Assert.Equal(328,
+
+        // WHY: The independent pre-cancellation and complete literal-contract cases add two unique methods.
+        Assert.Equal(330, declaredCases.Length);
+        Assert.Equal(330,
             declaredCases
                 .Select(static method => method.Name)
                 .Distinct(StringComparer.Ordinal)

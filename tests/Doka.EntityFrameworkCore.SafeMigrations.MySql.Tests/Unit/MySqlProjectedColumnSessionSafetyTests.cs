@@ -292,9 +292,20 @@ public sealed class MySqlProjectedColumnSessionSafetyTests
             .UseMySqlSafeMigrations()
             .Options);
 
-    private sealed class TableView(ExpectedColumnDefinition source) : ISafeMigrationProjectedAlterTable
+    private sealed class TableView : ISafeMigrationProjectedAlterTable
     {
-        public IEnumerable<ExpectedColumnDefinition> Columns => [source];
+        private readonly ExpectedColumnDefinition _source;
+
+        /// <summary>Initializes the explicit dependencies of this isolated test helper.</summary>
+        /// <param name="source">The accepted source-column definition.</param>
+        public TableView(
+            ExpectedColumnDefinition source
+        )
+        {
+            _source = source;
+        }
+
+        public IEnumerable<ExpectedColumnDefinition> Columns => [_source];
 
         public ExpectedPrimaryKeyDefinition? PrimaryKey => null;
 
@@ -309,8 +320,8 @@ public sealed class MySqlProjectedColumnSessionSafetyTests
             [NotNullWhen(true)] out ExpectedColumnDefinition? definition
         )
         {
-            definition = StringComparer.Ordinal.Equals(column, source.Name)
-                ? source
+            definition = StringComparer.Ordinal.Equals(column, _source.Name)
+                ? _source
                 : null;
 
             return definition is not null;

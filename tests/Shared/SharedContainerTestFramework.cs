@@ -1,3 +1,6 @@
+// WHY: Native provider adapters derive from this linked base; Core and SQLite copies exercise its runner helpers.
+// ReSharper disable UnusedType.Global
+
 namespace Doka.EntityFrameworkCore.SafeMigrations.Testing;
 
 /// <summary>Shares one lazily activated container fixture across independent xUnit class collections.</summary>
@@ -79,7 +82,7 @@ internal sealed class SharedContainerTestFrameworkExecutor<TFixture> : XunitTest
 internal sealed class SharedContainerTestAssemblyRunner<TFixture> : XunitTestAssemblyRunner
     where TFixture : class, IAsyncLifetime, new()
 {
-    private readonly object _collectionGate = new();
+    private readonly Lock _collectionGate = new();
     private readonly List<Task<RunSummary>> _collectionRuns = [];
     private readonly SharedContainerFixtureLifecycle<TFixture> _lifecycle;
     private readonly bool _requiresFixture;
@@ -118,6 +121,8 @@ internal sealed class SharedContainerTestAssemblyRunner<TFixture> : XunitTestAss
     {
         lock (_collectionGate)
         {
+            // WHY: Snapshot the owned pending runs before cleanup; keep explicit fluent materialization.
+            // ReSharper disable once UseCollectionExpression
             return _finish ??= FinishAsync(_collectionRuns.ToArray());
         }
     }

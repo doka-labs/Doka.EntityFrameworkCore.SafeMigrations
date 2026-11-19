@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations;
 
 /// <summary>Represents ensuring a check constraint exists.</summary>
+[PublicAPI]
 public sealed class EnsureCheckConstraintIntent : SafeMigrationIntent
 {
     /// <summary>Initializes the intent.</summary>
@@ -22,6 +23,7 @@ public sealed class EnsureCheckConstraintIntent : SafeMigrationIntent
 }
 
 /// <summary>Represents dropping a check constraint when it exists.</summary>
+[PublicAPI]
 public sealed class DropCheckConstraintIntent : SafeMigrationIntent
 {
     /// <summary>Initializes the intent.</summary>

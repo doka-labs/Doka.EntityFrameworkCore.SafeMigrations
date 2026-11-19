@@ -9,9 +9,13 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
         MySqlEngineContainerFixture fixture
     ) : base(fixture) { }
 
+    /// <summary>
+    /// Recognizes equivalent unique and check aliases as matching without creating duplicate constraints.
+    /// </summary>
     [Fact]
     public async Task EquivalentUniqueAndCheckConstraintsWithDifferentNames_AreIdempotentNoOps()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -50,6 +54,7 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
                 SqlColumnAndInt("quantity", SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, 0)),
             SafeMigrationPolicy.ThrowIfDifferent);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -61,6 +66,7 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
         Assert.All(
             report.Assessments,
@@ -102,9 +108,13 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
         Assert.True(legacyConstraintCount >= 3);
     }
 
+    /// <summary>
+    /// Does not confuse a differently shaped unique or check alias with an installed target contract.
+    /// </summary>
     [Fact]
     public async Task DifferentlyNamedUniqueAndCheckConstraintsWithDifferentShapes_RemainApplicable()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -131,6 +141,7 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
                 SqlColumnAndInt("quantity", SafeMigrationSqlBinaryOperator.LessThanOrEqual, 100)),
             SafeMigrationPolicy.ThrowIfDifferent);
 
+        // Act
         var preflight = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -150,6 +161,7 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
                 new SafeMigrationRunOptions("constraint-nonidentity-post"),
                 CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
         Assert.All(
             preflight.Assessments,
@@ -163,9 +175,11 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
         Assert.All(postflight.Assessments, assessment => Assert.Equal(SafeMigrationAction.NoOp, assessment.Action));
     }
 
+    /// <summary>Keeps MariaDB table-scoped check names bound to their exact owning table.</summary>
     [Fact]
     public async Task MariaDbTableScopedCheckNames_DoNotCrossMatchCatalogRows()
     {
+        // Arrange
         if (!Fixture.IsMariaDb
             || Fixture.ServerVersion.Version < new Version(12, 1))
         {
@@ -192,6 +206,7 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
                 SqlColumnAndInt("value", SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, 0)),
             SafeMigrationPolicy.ThrowIfDifferent);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -205,6 +220,7 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
                 ExecuteOperationsAsync(context, builder.Operations, operationToken),
             cancellationToken: CancellationToken.None);
 
+        // Assert
         var assessment = Assert.Single(report.Assessments);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -213,9 +229,11 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
         Assert.Contains("doka_sm_different", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>Rejects an exact-name MySQL check that is present but not enforced.</summary>
     [Fact]
     public async Task MySqlNonEnforcedCheckWithExpectedName_IsRejectedBeforeDdl()
     {
+        // Arrange
         if (Fixture.IsMariaDb)
         {
             return;
@@ -239,6 +257,7 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
                 SqlColumnAndInt("quantity", SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, 0)),
             SafeMigrationPolicy.ThrowIfDifferent);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -252,6 +271,7 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
                 ExecuteOperationsAsync(context, builder.Operations, operationToken),
             cancellationToken: CancellationToken.None);
 
+        // Assert
         var assessment = Assert.Single(report.Assessments);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -260,9 +280,11 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
         Assert.Contains("doka_sm_different", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>Allows a required enforced check despite an unrelated differently named non-enforced check.</summary>
     [Fact]
     public async Task MySqlDifferentlyNamedNonEnforcedCheck_DoesNotBlockEnforcedConstraint()
     {
+        // Arrange
         if (Fixture.IsMariaDb)
         {
             return;
@@ -286,6 +308,7 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
                 SqlColumnAndInt("quantity", SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, 0)),
             SafeMigrationPolicy.ThrowIfDifferent);
 
+        // Act
         var preflight = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -305,6 +328,7 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
                 new SafeMigrationRunOptions("check-enforcement-post"),
                 CancellationToken.None);
 
+        // Assert
         var preflightAssessment = Assert.Single(preflight.Assessments);
         var postflightAssessment = Assert.Single(postflight.Assessments);
 
@@ -316,9 +340,11 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
         Assert.Equal(SafeMigrationAction.NoOp, postflightAssessment.Action);
     }
 
+    /// <summary>Rejects a MySQL schema-wide constraint-name collision before target DDL.</summary>
     [Fact]
     public async Task MySqlSchemaScopedConstraintNameCollisions_AreRejectedBeforeDdl()
     {
+        // Arrange
         if (Fixture.IsMariaDb)
         {
             return;
@@ -356,6 +382,7 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
             "namespace_target_parent",
             ["id"]);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -364,6 +391,28 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
                 new SafeMigrationRunOptions("constraint-namespace"),
                 CancellationToken.None);
 
+        List<MySqlException> failures = [];
+        foreach (var operation in builder.Operations)
+        {
+            var exception = await AssertOwnedGuardFailureAsync(
+                operationToken =>
+                    ExecuteOperationsAsync(context, [operation], operationToken),
+                cancellationToken: CancellationToken.None);
+
+            failures.Add(exception);
+        }
+
+        var preservedConstraintCount = await ScalarIntAsync(
+            connectionString,
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
+            WHERE CONSTRAINT_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'namespace_target'
+            AND CONSTRAINT_NAME IN ('ck_namespace_collision', 'fk_namespace_collision');
+            """,
+            cancellationToken: CancellationToken.None);
+
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.All(
             report.Assessments,
@@ -373,32 +422,21 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
                 Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
             });
 
-        foreach (var operation in builder.Operations)
-        {
-            var exception = await AssertOwnedGuardFailureAsync(
-                operationToken =>
-                    ExecuteOperationsAsync(context, [operation], operationToken),
-                cancellationToken: CancellationToken.None);
-
-            Assert.Contains("doka_sm_different", exception.Message, StringComparison.OrdinalIgnoreCase);
-        }
-
         Assert.Equal(
             0,
-            await ScalarIntAsync(
-                connectionString,
-                """
-                SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
-                WHERE CONSTRAINT_SCHEMA = DATABASE()
-                AND TABLE_NAME = 'namespace_target'
-                AND CONSTRAINT_NAME IN ('ck_namespace_collision', 'fk_namespace_collision');
-                """,
-                cancellationToken: CancellationToken.None));
+            preservedConstraintCount);
+
+        Assert.Equal(builder.Operations.Count, failures.Count);
+        Assert.All(failures,
+            exception =>
+                Assert.Contains("doka_sm_different", exception.Message, StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <summary>Uses the native MariaDB version boundary for foreign-key constraint-name scope.</summary>
     [Fact]
     public async Task MariaDbForeignKeyNameScope_FollowsTheServerVersionBoundary()
     {
+        // Arrange
         if (!Fixture.IsMariaDb)
         {
             return;
@@ -427,6 +465,11 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
             "fk_scope_target_parent",
             ["id"]);
 
+        var schemaScoped = Fixture.ServerVersion.Version < new Version(12, 1);
+        MySqlException? collisionFailure = null;
+        SafeMigrationRunReport? postflight = null;
+
+        // Act
         var preflight = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -435,19 +478,37 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
                 new SafeMigrationRunOptions("foreign-key-name-scope"),
                 CancellationToken.None);
 
-        var preflightAssessment = Assert.Single(preflight.Assessments);
-
-        if (Fixture.ServerVersion.Version < new Version(12, 1))
+        if (schemaScoped)
         {
-            var exception = await AssertOwnedGuardFailureAsync(
+            collisionFailure = await AssertOwnedGuardFailureAsync(
                 operationToken =>
                     ExecuteOperationsAsync(context, builder.Operations, operationToken),
                 cancellationToken: CancellationToken.None);
+        }
+        else
+        {
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
+            postflight = await context
+                .GetService<ISafeMigrationRunner>()
+                .AnalyzeAsync(
+                    context,
+                    builder.Operations,
+                    new SafeMigrationRunOptions("foreign-key-name-scope-post"),
+                    CancellationToken.None);
+        }
+
+        // Assert
+        var preflightAssessment = Assert.Single(preflight.Assessments);
+
+        if (schemaScoped)
+        {
             Assert.Equal(SafeMigrationReportStatus.Blocked, preflight.Status);
             Assert.Equal(SafeMigrationObservedState.Different, preflightAssessment.ObservedState);
             Assert.Equal(SafeMigrationAction.RejectDifferent, preflightAssessment.Action);
-            Assert.Contains("doka_sm_different", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.NotNull(collisionFailure);
+            Assert.Contains("doka_sm_different", collisionFailure.Message, StringComparison.OrdinalIgnoreCase);
             Assert.Equal(
                 1,
                 await ScalarIntAsync(
@@ -462,17 +523,7 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
             return;
         }
 
-        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-
-        var postflight = await context
-            .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(
-                context,
-                builder.Operations,
-                new SafeMigrationRunOptions("foreign-key-name-scope-post"),
-                CancellationToken.None);
-
+        Assert.NotNull(postflight);
         var postflightAssessment = Assert.Single(postflight.Assessments);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -493,6 +544,8 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Recognizes a differently named but equivalent foreign key as an idempotent match.</summary>
+    /// <param name="legacyConstraintCount">The exact number of preexisting constraints in this legacy fixture.</param>
     [Theory]
     [InlineData(1)]
     [InlineData(2)]
@@ -500,6 +553,7 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
         int legacyConstraintCount
     )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var legacyName = new string('l', 64);
         var secondLegacyName = new string('s', 64);
@@ -535,6 +589,7 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
             ["id", "tenant_id"],
             onDelete: ReferentialAction.Cascade);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -546,6 +601,7 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
+        // Assert
         var assessment = Assert.Single(report.Assessments);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -567,9 +623,11 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Does not hide an exact-name constraint mismatch behind an equivalent alias.</summary>
     [Fact]
     public async Task ExactNameDrift_IsNeverHiddenByEquivalentAliases()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -619,6 +677,7 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
             "identity_precedence_children",
             ["code"]);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -627,6 +686,27 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
                 new SafeMigrationRunOptions("identity-precedence"),
                 CancellationToken.None);
 
+        List<MySqlException> failures = [];
+        foreach (var operation in builder.Operations)
+        {
+            var exception = await AssertOwnedGuardFailureAsync(
+                operationToken =>
+                    ExecuteOperationsAsync(context, [operation], operationToken),
+                cancellationToken: CancellationToken.None);
+
+            failures.Add(exception);
+        }
+
+        var preservedConstraintCount = await ScalarIntAsync(
+            connectionString,
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS
+            WHERE CONSTRAINT_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'identity_precedence_children';
+            """,
+            cancellationToken: CancellationToken.None);
+
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.All(
             report.Assessments,
@@ -636,28 +716,21 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
                 Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
             });
 
-        foreach (var operation in builder.Operations)
-        {
-            var exception = await AssertOwnedGuardFailureAsync(
-                operationToken =>
-                    ExecuteOperationsAsync(context, [operation], operationToken),
-                cancellationToken: CancellationToken.None);
-
-            Assert.Contains("doka_sm_different", exception.Message, StringComparison.OrdinalIgnoreCase);
-        }
-
         Assert.Equal(
             2,
-            await ScalarIntAsync(
-                connectionString,
-                """
-                SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS
-                WHERE CONSTRAINT_SCHEMA = DATABASE()
-                AND TABLE_NAME = 'identity_precedence_children';
-                """,
-                cancellationToken: CancellationToken.None));
+            preservedConstraintCount);
+
+        Assert.Equal(builder.Operations.Count, failures.Count);
+        Assert.All(failures,
+            exception =>
+                Assert.Contains("doka_sm_different", exception.Message, StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <summary>
+    /// Does not treat a differently named foreign key with different referential actions as the target constraint.
+    /// </summary>
+    /// <param name="onUpdate">The declared update action participating in foreign-key identity.</param>
+    /// <param name="onDelete">The declared delete action participating in foreign-key identity.</param>
     [Theory]
     [InlineData(ReferentialAction.Cascade, ReferentialAction.Cascade)]
     [InlineData(ReferentialAction.Restrict, ReferentialAction.SetNull)]
@@ -666,6 +739,7 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
         ReferentialAction onDelete
     )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -689,6 +763,7 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
             onUpdate: onUpdate,
             onDelete: onDelete);
 
+        // Act
         var preflight = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -700,6 +775,7 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
+        // Assert
         var assessment = Assert.Single(preflight.Assessments);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -717,9 +793,24 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
                 cancellationToken: CancellationToken.None));
     }
 
-    [Fact]
-    public async Task ObservableConstraintFacetDrift_IsRejectedOneFieldAtATime()
+    /// <summary>
+    /// Detects each independently observable constraint facet while accepting the unchanged canonical contract.
+    /// </summary>
+    /// <param name="facet">The independently changed native definition facet.</param>
+    [Theory]
+    [InlineData("primary_key_order")]
+    [InlineData("unique_column_order")]
+    [InlineData("check_expression")]
+    [InlineData("dependent_column_order")]
+    [InlineData("principal_table")]
+    [InlineData("principal_column_order")]
+    [InlineData("update_action")]
+    [InlineData("delete_action")]
+    public async Task ObservableConstraintFacetDrift_IsRejectedOneFieldAtATime(
+        string facet
+    )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -765,6 +856,7 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
             onUpdate: ReferentialAction.Cascade,
             onDelete: ReferentialAction.SetNull);
 
+        // Act
         await ExecuteOperationsAsync(context, canonical.Operations, CancellationToken.None);
         await ExecuteOperationsAsync(context, canonical.Operations, CancellationToken.None);
 
@@ -775,11 +867,6 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
                 canonical.Operations,
                 new SafeMigrationRunOptions("constraint-matrix-canonical"),
                 CancellationToken.None);
-
-        Assert.Equal(SafeMigrationReportStatus.Ready, canonicalReport.Status);
-        Assert.All(
-            canonicalReport.Assessments,
-            assessment => Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState));
 
         await ExecuteSqlAsync(
             connectionString,
@@ -809,12 +896,6 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
                 new SafeMigrationRunOptions("constraint-matrix-strict"),
                 CancellationToken.None);
 
-        Assert.Equal(SafeMigrationReportStatus.Ready, strictReport.Status);
-        Assert.Equal(
-            SafeMigrationObservedState.Matching,
-            Assert.Single(strictReport.Assessments)
-                .ObservedState);
-
         var strictAliases = new MigrationBuilder(context.Database.ProviderName!);
         strictAliases.EnsureTable(
             CreateStrictConstraintMatrixTable(ReferentialAction.SetNull, useAliasNames: true),
@@ -828,19 +909,6 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
                 strictAliases.Operations,
                 new SafeMigrationRunOptions("constraint-matrix-strict-aliases"),
                 CancellationToken.None);
-
-        Assert.Equal(SafeMigrationReportStatus.Ready, strictAliasReport.Status);
-        Assert.Equal(
-            SafeMigrationObservedState.Matching,
-            Assert.Single(strictAliasReport.Assessments)
-                .ObservedState);
-
-        Assert.DoesNotContain(
-            strictAliasReport.UnexpectedObjects,
-            static unexpected => StringComparer.Ordinal.Equals(unexpected.Table, "constraint_matrix_children")
-                && unexpected.ObjectKind is SafeMigrationDatabaseObjectKind.UniqueConstraint
-                    or SafeMigrationDatabaseObjectKind.CheckConstraint
-                    or SafeMigrationDatabaseObjectKind.ForeignKey);
 
         var strictDrift = new MigrationBuilder(context.Database.ProviderName!);
         strictDrift.EnsureTable(
@@ -856,29 +924,17 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
                 new SafeMigrationRunOptions("constraint-matrix-strict-drift"),
                 CancellationToken.None);
 
-        Assert.Equal(SafeMigrationReportStatus.Blocked, strictDriftReport.Status);
-        Assert.Equal(
-            SafeMigrationObservedState.Different,
-            Assert.Single(strictDriftReport.Assessments)
-                .ObservedState);
-
-        var variants = new List<IReadOnlyList<MigrationOperation>>();
-
         var primaryKeyOrder = new MigrationBuilder(context.Database.ProviderName!);
         primaryKeyOrder.AddPrimaryKeyIfNotExists(
             "pk_constraint_matrix_children",
             "constraint_matrix_children",
             ["alternate_id", "id"]);
 
-        variants.Add(primaryKeyOrder.Operations);
-
         var uniqueColumnOrder = new MigrationBuilder(context.Database.ProviderName!);
         uniqueColumnOrder.AddUniqueConstraintIfNotExists(
             "uq_constraint_matrix_code",
             "constraint_matrix_children",
             ["alternate_code", "code"]);
-
-        variants.Add(uniqueColumnOrder.Operations);
 
         var checkExpression = new MigrationBuilder(context.Database.ProviderName!);
         checkExpression.EnsureCheckConstraint(
@@ -887,8 +943,6 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
                 "constraint_matrix_children",
                 SqlColumnAndInt("quantity", SafeMigrationSqlBinaryOperator.GreaterThan, 0)),
             SafeMigrationPolicy.ThrowIfDifferent);
-
-        variants.Add(checkExpression.Operations);
 
         var dependentColumnOrder = new MigrationBuilder(context.Database.ProviderName!);
         dependentColumnOrder.AddForeignKeyIfNotExists(
@@ -900,8 +954,6 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
             onUpdate: ReferentialAction.Cascade,
             onDelete: ReferentialAction.SetNull);
 
-        variants.Add(dependentColumnOrder.Operations);
-
         var principalTable = new MigrationBuilder(context.Database.ProviderName!);
         principalTable.AddForeignKeyIfNotExists(
             "fk_constraint_matrix_parent",
@@ -911,8 +963,6 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
             ["id", "alternate_id"],
             onUpdate: ReferentialAction.Cascade,
             onDelete: ReferentialAction.SetNull);
-
-        variants.Add(principalTable.Operations);
 
         var principalColumnOrder = new MigrationBuilder(context.Database.ProviderName!);
         principalColumnOrder.AddForeignKeyIfNotExists(
@@ -924,8 +974,6 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
             onUpdate: ReferentialAction.Cascade,
             onDelete: ReferentialAction.SetNull);
 
-        variants.Add(principalColumnOrder.Operations);
-
         var updateAction = new MigrationBuilder(context.Database.ProviderName!);
         updateAction.AddForeignKeyIfNotExists(
             "fk_constraint_matrix_parent",
@@ -935,8 +983,6 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
             ["id", "alternate_id"],
             onUpdate: ReferentialAction.NoAction,
             onDelete: ReferentialAction.SetNull);
-
-        variants.Add(updateAction.Operations);
 
         var deleteAction = new MigrationBuilder(context.Database.ProviderName!);
         deleteAction.AddForeignKeyIfNotExists(
@@ -948,24 +994,63 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
             onUpdate: ReferentialAction.Cascade,
             onDelete: ReferentialAction.Cascade);
 
-        variants.Add(deleteAction.Operations);
-
-        foreach (var operations in variants)
+        var operations = facet switch
         {
-            var report = await context
-                .GetService<ISafeMigrationRunner>()
-                .AnalyzeAsync(
-                    context,
-                    operations,
-                    new SafeMigrationRunOptions("constraint-matrix-drift"),
-                    CancellationToken.None);
+            "primary_key_order" => primaryKeyOrder.Operations,
+            "unique_column_order" => uniqueColumnOrder.Operations,
+            "check_expression" => checkExpression.Operations,
+            "dependent_column_order" => dependentColumnOrder.Operations,
+            "principal_table" => principalTable.Operations,
+            "principal_column_order" => principalColumnOrder.Operations,
+            "update_action" => updateAction.Operations,
+            "delete_action" => deleteAction.Operations,
+            _ => throw new ArgumentOutOfRangeException(nameof(facet)),
+        };
 
-            var assessment = Assert.Single(report.Assessments);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                operations,
+                new SafeMigrationRunOptions("constraint-matrix-drift"),
+                CancellationToken.None);
 
-            Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-            Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
-            Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
-        }
+        // Assert
+        var assessment = Assert.Single(report.Assessments);
+
+        Assert.Equal(SafeMigrationReportStatus.Ready, canonicalReport.Status);
+        Assert.All(
+            canonicalReport.Assessments,
+            rowAssessment => Assert.Equal(SafeMigrationObservedState.Matching, rowAssessment.ObservedState));
+
+        Assert.Equal(SafeMigrationReportStatus.Ready, strictReport.Status);
+        Assert.Equal(
+            SafeMigrationObservedState.Matching,
+            Assert.Single(strictReport.Assessments)
+                .ObservedState);
+
+        Assert.Equal(SafeMigrationReportStatus.Ready, strictAliasReport.Status);
+        Assert.Equal(
+            SafeMigrationObservedState.Matching,
+            Assert.Single(strictAliasReport.Assessments)
+                .ObservedState);
+
+        Assert.DoesNotContain(
+            strictAliasReport.UnexpectedObjects,
+            static unexpected => StringComparer.Ordinal.Equals(unexpected.Table, "constraint_matrix_children")
+                && unexpected.ObjectKind is SafeMigrationDatabaseObjectKind.UniqueConstraint
+                    or SafeMigrationDatabaseObjectKind.CheckConstraint
+                    or SafeMigrationDatabaseObjectKind.ForeignKey);
+
+        Assert.Equal(SafeMigrationReportStatus.Blocked, strictDriftReport.Status);
+        Assert.Equal(
+            SafeMigrationObservedState.Different,
+            Assert.Single(strictDriftReport.Assessments)
+                .ObservedState);
+
+        Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
+        Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
+        Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
     }
 
     private static ExpectedTableDefinition CreateStrictConstraintMatrixTable(

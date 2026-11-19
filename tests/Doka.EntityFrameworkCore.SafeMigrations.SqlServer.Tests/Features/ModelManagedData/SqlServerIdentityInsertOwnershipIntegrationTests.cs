@@ -175,7 +175,7 @@ public sealed class SqlServerIdentityInsertOwnershipIntegrationTests : SqlServer
             cancellationToken: CancellationToken.None);
 
         using var cancellation = new CancellationTokenSource();
-        cancellation.Cancel();
+        await cancellation.CancelAsync();
 
         // Act
         var canceled = await Record.ExceptionAsync(() => seed.ExecuteNonQueryAsync(
@@ -189,14 +189,14 @@ public sealed class SqlServerIdentityInsertOwnershipIntegrationTests : SqlServer
 
         await using var observation = session.CreateCommand();
         observation.CommandText = $"SELECT SESSION_CONTEXT(N'{SqlServerSafeMigrationIdentityInsertScope.ContextKey}');";
-        var marker = await observation.ExecuteScalarAsync();
+        var marker = await observation.ExecuteScalarAsync(CancellationToken.None);
         await RunSessionSqlAsync(
             session,
             "SET IDENTITY_INSERT dbo.identity_roles OFF;",
             cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.IsAssignableFrom<OperationCanceledException>(canceled);
+        Assert.IsType<OperationCanceledException>(canceled, exactMatch: false);
         Assert.Null(inheritedInsert);
         Assert.Equal("caller-owned marker", marker);
         Assert.Equal(ConnectionState.Open, session.State);
@@ -514,7 +514,7 @@ public sealed class SqlServerIdentityInsertOwnershipIntegrationTests : SqlServer
                 .Generate([], context.Model));
 
         await using var newLease = new SqlConnection(connectionString);
-        await newLease.OpenAsync();
+        await newLease.OpenAsync(CancellationToken.None);
 
         // WHY: Recovery observes completed attention independently of the canceled
         // execution token; no owner can be disposed while a cancellation request runs.

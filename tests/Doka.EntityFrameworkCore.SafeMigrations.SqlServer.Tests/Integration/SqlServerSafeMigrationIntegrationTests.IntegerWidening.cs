@@ -588,7 +588,8 @@ public sealed class SqlServerSafeMigrationIntegerWideningIntegrationTests : SqlS
             string.Join(
                 Environment.NewLine,
                 report.Assessments.Select(static assessment =>
-                    $"{assessment.Ordinal}: {assessment.ObservedState}/{assessment.Action}/{assessment.AnalysisCode}")));
+                    $"{assessment.Ordinal}: {assessment.ObservedState}/{assessment.Action}/"
+                    + $"{assessment.AnalysisCode}")));
 
         Assert.Equal(SafeMigrationAction.Repair, report.Assessments[^1].Action);
         Assert.Equal(1, target);
@@ -764,7 +765,8 @@ public sealed class SqlServerSafeMigrationIntegerWideningIntegrationTests : SqlS
             string.Join(
                 Environment.NewLine,
                 report.Assessments.Select(static assessment =>
-                    $"{assessment.Ordinal}: {assessment.ObservedState}/{assessment.Action}/{assessment.AnalysisCode}")));
+                    $"{assessment.Ordinal}: {assessment.ObservedState}/{assessment.Action}/"
+                    + $"{assessment.AnalysisCode}")));
 
         if (approved)
         {

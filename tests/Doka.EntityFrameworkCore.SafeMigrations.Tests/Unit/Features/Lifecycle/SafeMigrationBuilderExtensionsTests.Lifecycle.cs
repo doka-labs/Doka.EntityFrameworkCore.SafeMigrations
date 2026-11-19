@@ -2,9 +2,14 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
 public sealed partial class SafeMigrationBuilderExtensionsTests
 {
+    /// <summary>
+    /// Captures exactly one annotation-free safe envelope for every closed operation kind, including managed-row
+    /// writes.
+    /// </summary>
     [Fact]
     public void BuilderProducesExactlyOneClosedEnvelopeForEveryOperationKind()
     {
+        // Arrange
         var builder = new MigrationBuilder("test");
         var column = Column("value", nullable: true);
         var oldColumn = Column("value", nullable: false);
@@ -19,6 +24,7 @@ public sealed partial class SafeMigrationBuilderExtensionsTests
         var check = new ExpectedCheckConstraintDefinition("ck_items_id", "items", "id > 0");
         var foreignKey = new ExpectedForeignKeyDefinition("fk_items_parent", "items", ["parent_id"], "parents", ["id"]);
 
+        // Act
         builder.EnsureSchemaExists("app");
         builder.DropSchemaIfExists("legacy");
         builder.EnsureTable(table, SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
@@ -71,6 +77,7 @@ public sealed partial class SafeMigrationBuilderExtensionsTests
             .Cast<SafeMigrationOperation>()
             .ToArray();
 
+        // Assert
         Assert.Equal(
             Enum.GetValues<SafeMigrationOperationKind>()
                 .Length,

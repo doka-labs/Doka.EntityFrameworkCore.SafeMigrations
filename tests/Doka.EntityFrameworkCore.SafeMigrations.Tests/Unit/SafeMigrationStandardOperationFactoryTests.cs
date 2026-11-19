@@ -1,11 +1,15 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
+/// <summary>
+/// Verifies closed intents reconstruct complete EF operations without bypassing intrinsic or provider-owned exclusions.
+/// </summary>
 public sealed partial class SafeMigrationStandardOperationFactoryTests
 {
     private static IReadOnlyList<SafeMigrationIntent> CreateIntents()
     {
         var column = new ExpectedColumnDefinition("value", typeof(string), true, "varchar(100)");
         var table = new ExpectedTableDefinition("items", [column]);
+
         return
         [
             new EnsureSchemaIntent("app"),

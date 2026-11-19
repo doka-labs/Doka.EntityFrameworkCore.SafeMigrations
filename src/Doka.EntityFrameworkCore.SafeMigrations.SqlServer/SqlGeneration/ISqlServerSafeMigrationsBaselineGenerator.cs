@@ -3,6 +3,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer;
 /// <summary>
 /// Provides standard SQL Server migration SQL that SafeMigrations wraps with its guarded execution contract.
 /// </summary>
+[PublicAPI]
 public interface ISqlServerSafeMigrationsBaselineGenerator
 {
     /// <summary>Generates commands for ordinary EF Core migration operations.</summary>

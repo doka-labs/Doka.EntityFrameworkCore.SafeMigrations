@@ -77,6 +77,9 @@ internal static class MySqlSafeMigrationSetupCommandCompactor
         IReadOnlyList<string> cleanupCommands,
         int providerSetupOffset,
         int providerSetupCount,
+
+        // WHY: Original admission depends on the pre-fusion count; this validation cannot use the compacted count.
+        // ReSharper disable once ParameterOnlyUsedForPreconditionCheck.Local
         int fusedSetupFragmentCount
     )
         where TSource : struct, IFragmentSource
@@ -280,47 +283,69 @@ internal static class MySqlSafeMigrationSetupCommandCompactor
     }
 
     /// <summary>Preserves original string and collection identities for already materialized callers.</summary>
-    private readonly struct StringSource(IReadOnlyList<string> commands) : IFragmentSource
+    private readonly struct StringSource : IFragmentSource
     {
+        private readonly IReadOnlyList<string> _commands;
+
+        /// <summary>Retains materialized setup boundaries and their original string identities.</summary>
+        /// <param name="commands">The original immutable command view.</param>
+        internal StringSource(
+            IReadOnlyList<string> commands
+        )
+        {
+            _commands = commands;
+        }
+
         /// <inheritdoc />
-        public int Count => commands.Count;
+        public int Count => _commands.Count;
 
         /// <inheritdoc />
         public MySqlSafeMigrationSetupFragment this[
             int index
-        ] => commands[index];
+        ] => _commands[index];
 
         /// <inheritdoc />
-        public IReadOnlyList<string> Materialize() => commands;
+        public IReadOnlyList<string> Materialize() => _commands;
     }
 
     /// <summary>Materializes deferred SQL only when its independent final output slot is known.</summary>
-    private readonly struct DeferredSource(IReadOnlyList<MySqlSafeMigrationSetupFragment> commands) : IFragmentSource
+    private readonly struct DeferredSource : IFragmentSource
     {
+        private readonly IReadOnlyList<MySqlSafeMigrationSetupFragment> _commands;
+
+        /// <summary>Retains borrowed fragments until their final independent output slots are known.</summary>
+        /// <param name="commands">The original immutable deferred fragment view.</param>
+        internal DeferredSource(
+            IReadOnlyList<MySqlSafeMigrationSetupFragment> commands
+        )
+        {
+            _commands = commands;
+        }
+
         /// <inheritdoc />
-        public int Count => commands.Count;
+        public int Count => _commands.Count;
 
         /// <inheritdoc />
         public MySqlSafeMigrationSetupFragment this[
             int index
-        ] => commands[index];
+        ] => _commands[index];
 
         /// <inheritdoc />
         public IReadOnlyList<string> Materialize()
         {
-            if (commands.Count == 0)
+            if (_commands.Count == 0)
             {
                 return Array.Empty<string>();
             }
 
-            var result = new string[commands.Count];
+            var result = new string[_commands.Count];
 
             // WHY: Fill the SQL array at each fragment's original ordinal without an intermediate sequence.
             // ReSharper disable once ForCanBeConvertedToForeach
             // ReSharper disable once LoopCanBeConvertedToQuery
-            for (var index = 0; index < commands.Count; index++)
+            for (var index = 0; index < _commands.Count; index++)
             {
-                result[index] = commands[index]
+                result[index] = _commands[index]
                     .ToSql();
             }
 

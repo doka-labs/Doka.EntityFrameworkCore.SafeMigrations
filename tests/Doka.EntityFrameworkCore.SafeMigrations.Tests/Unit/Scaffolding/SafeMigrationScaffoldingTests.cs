@@ -1,5 +1,8 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
+/// <summary>
+/// Exercises decorated C# migrations while preserving provider metadata, source anchors and design-time safety guards.
+/// </summary>
 public sealed partial class SafeMigrationScaffoldingTests
 {
     /// <summary>Delegates table creation unchanged when safe scaffolding is disabled.</summary>

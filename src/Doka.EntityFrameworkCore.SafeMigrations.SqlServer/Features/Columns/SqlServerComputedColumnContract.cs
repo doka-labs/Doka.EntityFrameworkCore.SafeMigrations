@@ -205,8 +205,8 @@ internal static class SqlServerComputedColumnContract
                     case SafeMigrationSqlFunctionExpression function
                         when function.Name.Equals("COALESCE", StringComparison.OrdinalIgnoreCase):
                         if (current.Index == 0
-                            && !function.Arguments.Any(static argument
-                                => argument is not SafeMigrationSqlLiteralExpression
+                            && function.Arguments.All(static argument
+                                => argument is SafeMigrationSqlLiteralExpression
                                 {
                                     BorrowedValue: null, StoreType: null,
                                 }))

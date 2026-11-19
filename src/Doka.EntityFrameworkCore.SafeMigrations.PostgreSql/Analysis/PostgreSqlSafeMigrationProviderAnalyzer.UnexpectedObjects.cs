@@ -1,5 +1,3 @@
-using System.Data;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql;
 
 internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
@@ -56,7 +54,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         CancellationToken cancellationToken
     )
     {
-        var findings = new List<SafeMigrationUnexpectedObject>();
+        List<SafeMigrationUnexpectedObject> findings = [];
         var lookup = new ExpectedTableLookup(expected);
         var seen = new HashSet<(SafeMigrationDatabaseObjectKind Kind, string Schema, string Table, string Name)>();
         var schemaScopes = BuildSchemaScopeBatches(expected);
@@ -100,7 +98,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
 
                 return new SafeMigrationCatalogProbeStatement(1, parameters.Utf8PayloadBytes, slot);
             },
-            async (reader, slot, _, token) =>
+            async (reader, slot, _, callbackCancellationToken) =>
             {
                 var tablesOnly = slot < schemaScopes.Length;
                 var scope = tablesOnly
@@ -115,9 +113,11 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                     seen,
                     scope,
                     tablesOnly,
-                    token);
+                    callbackCancellationToken);
             },
-            cancellationToken);
+            transaction: null,
+            maximumParameters: SafeMigrationCatalogQueryLimits.MaximumParameters,
+            cancellationToken: cancellationToken);
 
         return findings;
     }
@@ -153,6 +153,10 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                 context,
                 candidates
                     .Select(static candidate => candidate.Operation)
+
+                    // WHY: Keep explicit fluent materialization and its existing
+                    // ownership/evaluation boundary instead of an implicit spread.
+                    // ReSharper disable once UseCollectionExpression
                     .ToArray(),
                 cancellationToken);
 
@@ -175,6 +179,10 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
 
         return findings
             .Where((_, index) => !semanticAliases.Contains(index))
+
+            // WHY: Keep explicit fluent materialization and its existing
+            // ownership/evaluation boundary instead of an implicit spread.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
     }
 
@@ -251,7 +259,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         IReadOnlyList<SafeMigrationExpectedTableInventory> expected
     )
     {
-        var representatives = new List<SafeMigrationExpectedTableInventory>();
+        List<SafeMigrationExpectedTableInventory> representatives = [];
         if (expected.FirstOrDefault(static table => table.Schema is null) is { } providerDefault)
         {
             representatives.Add(providerDefault);
@@ -264,6 +272,10 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
 
         return representatives
             .Chunk(SafeMigrationCatalogQueryLimits.MaximumInventoryValues)
+
+            // WHY: Keep explicit fluent materialization and its existing
+            // ownership/evaluation boundary instead of an implicit spread.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
     }
 
@@ -273,7 +285,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         PostgreSqlCatalogQueryParameters parameters
     )
     {
-        var conditions = new List<string>();
+        List<string> conditions = [];
         if (expected.Any(static table => table.Schema is null))
         {
             conditions.Add("n.nspname = current_schema()");
@@ -303,6 +315,10 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                     ? $"{schemaExpression} = current_schema()"
                     : $"{schemaExpression} = {parameters.AddString(table.Schema)}")
                 + $" AND {tableExpression} = {parameters.AddString(table.Table)})")
+
+            // WHY: Keep explicit fluent materialization and its existing
+            // ownership/evaluation boundary instead of an implicit spread.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         return $"({string.Join(" OR ", conditions)})";

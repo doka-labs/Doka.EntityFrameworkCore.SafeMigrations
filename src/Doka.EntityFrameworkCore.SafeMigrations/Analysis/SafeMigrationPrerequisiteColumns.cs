@@ -67,6 +67,10 @@ internal static class SafeMigrationPrerequisiteColumns
             ? []
             : columns
                 .Order(StringComparer.Ordinal)
+
+                // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based
+                // materialization.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray();
     }
 
@@ -85,6 +89,10 @@ internal static class SafeMigrationPrerequisiteColumns
                 .Definition
                 .PrincipalColumns
                 .Order(StringComparer.Ordinal)
+
+                // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based
+                // materialization.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray();
     }
 
@@ -118,8 +126,13 @@ internal static class SafeMigrationPrerequisiteColumns
         HashSet<string> columns
     )
     {
-        foreach (var key in definition.Keys)
+        // WHY: This immutable definition snapshot is indexed; retain its authored order without interface enumeration.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var keyIndex = 0; keyIndex < definition.Keys.Count; keyIndex++)
         {
+            var key = definition.Keys[keyIndex];
+
             if (key.Column is not null)
             {
                 columns.Add(key.Column);

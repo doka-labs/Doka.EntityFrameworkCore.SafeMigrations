@@ -83,7 +83,7 @@ internal sealed class SqlServerSafeMigrationRuntimeDiagnostic
                 ? 3
                 : 0);
 
-        foreach (var character in message)
+        foreach (var character in message.AsSpan())
         {
             var width = GetNativeWidth(character);
             if (width > remaining)

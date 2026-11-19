@@ -174,9 +174,8 @@ public sealed class SafeMigrationAuthoredErrorDiagnosticsTests
         {
             Name = "items\nforged-log",
             Schema = "tenant",
+            ["Test:Secret"] = "sensitive-annotation",
         };
-
-        operation["Test:Secret"] = "sensitive-annotation";
 
         // Act
         var exception = SafeMigrationOperationCompatibility.Unsupported(operation);
@@ -324,16 +323,25 @@ public sealed class SafeMigrationAuthoredErrorDiagnosticsTests
         Assert.Contains("Duplicate identifiers", exception.Message, StringComparison.Ordinal);
     }
 
-    private sealed class FirstProvider { }
+    private sealed class FirstProvider;
 
-    private sealed class SecondProvider { }
+    private sealed class SecondProvider;
 
-    private sealed class FirstContext { }
+    private sealed class FirstContext;
 
-    private sealed class MissingTableModelDiffer(
-        MigrationOperation operation
-    ) : IMigrationsModelDiffer
+    private sealed class MissingTableModelDiffer : IMigrationsModelDiffer
     {
+        private readonly MigrationOperation _operation;
+
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="operation">The supplied operation for this fixture.</param>
+        public MissingTableModelDiffer(
+            MigrationOperation operation
+        )
+        {
+            _operation = operation;
+        }
+
         public bool HasDifferences(
             IRelationalModel? source,
             IRelationalModel? target
@@ -342,6 +350,6 @@ public sealed class SafeMigrationAuthoredErrorDiagnosticsTests
         public IReadOnlyList<MigrationOperation> GetDifferences(
             IRelationalModel? source,
             IRelationalModel? target
-        ) => [operation];
+        ) => [_operation];
     }
 }

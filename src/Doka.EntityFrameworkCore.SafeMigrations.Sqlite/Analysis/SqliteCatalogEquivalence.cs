@@ -16,11 +16,12 @@ internal static class SqliteCatalogEquivalence
         ReferentialAction onDelete
     )
     {
-        var actualPrincipalColumns = actual.PrincipalColumns.Any(static column => column.Length > 0)
-            ? actual.PrincipalColumns
-            : snapshot.Tables.TryGetValue(actual.PrincipalTable, out var principal)
-                ? principal.PrimaryKeyColumns
-                : actual.PrincipalColumns;
+        var actualPrincipalColumns = actual.PrincipalColumns.Any(static column => column.Length > 0) switch
+        {
+            true => actual.PrincipalColumns,
+            _ when snapshot.Tables.TryGetValue(actual.PrincipalTable, out var principal) => principal.PrimaryKeyColumns,
+            _ => actual.PrincipalColumns,
+        };
 
         return s_identifierComparer.Equals(actual.PrincipalTable, principalTable)
             && IdentifiersEqual(actual.Columns, columns)
@@ -68,8 +69,13 @@ internal static class SqliteCatalogEquivalence
     )
     {
         var ordinal = 0;
-        foreach (var key in keys)
+
+        // WHY: Traverse the stable ordered source by ordinal without materializing another collection.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var keyIndex = 0; keyIndex < keys.Count; keyIndex++)
         {
+            var key = keys[keyIndex];
             if (!key.IsKey)
             {
                 continue;

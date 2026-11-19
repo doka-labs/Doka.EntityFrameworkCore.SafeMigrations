@@ -311,8 +311,14 @@ internal sealed class MySqlSafeMigrationRuntimeDiagnostic
         }
 
         var key = remaining[..^1];
-        foreach (var candidate in GuardCodes)
+
+        // WHY: Index this stable list while preserving its order and ownership.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var candidateIndex = 0; candidateIndex < GuardCodes.Count; candidateIndex++)
         {
+            var candidate = GuardCodes[candidateIndex];
+
             if (key.Equals(candidate, StringComparison.Ordinal)
                 && ReasonSlotAppliesToGuard(reasonSlot, candidate))
             {

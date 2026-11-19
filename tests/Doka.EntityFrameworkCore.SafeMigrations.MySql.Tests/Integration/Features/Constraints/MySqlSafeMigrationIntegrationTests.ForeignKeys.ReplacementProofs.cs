@@ -1,6 +1,8 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-/// <summary>Exercises the ForeignKeysReplacementProofs migration contracts in an independent class collection.</summary>
+/// <summary>
+/// Exercises the ForeignKeysReplacementProofs migration contracts in an independent class collection.
+/// </summary>
 public sealed class MySqlForeignKeysReplacementProofsIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
     /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
@@ -1855,6 +1857,9 @@ public sealed class MySqlForeignKeysReplacementProofsIntegrationTests : MySqlSaf
 
         var safeOperations = operations
             .Cast<SafeMigrationOperation>()
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var provider = context.GetService<ISafeMigrationProviderAnalyzer>();

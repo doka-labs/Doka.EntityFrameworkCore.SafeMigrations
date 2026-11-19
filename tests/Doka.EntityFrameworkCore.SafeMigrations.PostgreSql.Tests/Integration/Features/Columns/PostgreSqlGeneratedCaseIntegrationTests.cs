@@ -1263,20 +1263,31 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
     }
 
     /// <summary>Owns only the model-free migration contract for the real generated-script regression.</summary>
-    public sealed class GeneratedScriptDbContext(string connectionString) : DbContext
+    public sealed class GeneratedScriptDbContext : DbContext
     {
+        private readonly string _connectionString;
+
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        public GeneratedScriptDbContext(
+            string connectionString
+        )
+        {
+            _connectionString = connectionString;
+        }
+
         /// <inheritdoc />
         protected override void OnConfiguring(
             DbContextOptionsBuilder optionsBuilder
         ) => optionsBuilder
             .UseNpgsql(
-                connectionString,
+                _connectionString,
                 options => options.MigrationsHistoryTable("__GeneratedScriptHistory"))
             .UsePostgreSqlSafeMigrations<GeneratedScriptDbContext>();
     }
 
     /// <summary>Prevents unrelated model discovery from changing the authored fixture's script contract.</summary>
     [DbContext(typeof(GeneratedScriptDbContext))]
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed class GeneratedScriptSnapshot : ModelSnapshot
     {
         /// <inheritdoc />
@@ -1288,6 +1299,7 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
     /// <summary>Combines native CASE deparsing with multiline defaults, comments and delimiter-like data.</summary>
     [DbContext(typeof(GeneratedScriptDbContext))]
     [Migration("20261025010100_GeneratedScript")]
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed class GeneratedScriptMigration : Migration
     {
         /// <summary>Retains every character that is significant to the two nested SQL literal layers.</summary>

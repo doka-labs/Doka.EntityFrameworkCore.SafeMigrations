@@ -9,9 +9,25 @@ public sealed class MySqlColumnsDriftMatrixIntegrationTests : MySqlSafeMigration
         MySqlEngineContainerFixture fixture
     ) : base(fixture) { }
 
-    [Fact]
-    public async Task ObservableColumnFacetDrift_IsRejectedOneFieldAtATime()
+    /// <summary>Detects each observable column-facet drift without changing the accepted canonical contract.</summary>
+    /// <param name="facet">The independently changed native definition facet.</param>
+    [Theory]
+    [InlineData("max_length")]
+    [InlineData("nullability")]
+    [InlineData("collation")]
+    [InlineData("comment")]
+    [InlineData("default_value")]
+    [InlineData("missing_default")]
+    [InlineData("fixed_length")]
+    [InlineData("precision")]
+    [InlineData("scale")]
+    [InlineData("computed_expression")]
+    [InlineData("stored_generation")]
+    public async Task ObservableColumnFacetDrift_IsRejectedOneFieldAtATime(
+        string facet
+    )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -60,6 +76,7 @@ public sealed class MySqlColumnsDriftMatrixIntegrationTests : MySqlSafeMigration
             create.EnsureColumn("column_facets", definition, SafeMigrationPolicy.ThrowIfDifferent);
         }
 
+        // Act
         await ExecuteOperationsAsync(context, create.Operations, CancellationToken.None);
         await ExecuteOperationsAsync(context, create.Operations, CancellationToken.None);
 
@@ -71,14 +88,9 @@ public sealed class MySqlColumnsDriftMatrixIntegrationTests : MySqlSafeMigration
                 new SafeMigrationRunOptions("column-facets-canonical"),
                 CancellationToken.None);
 
-        Assert.Equal(SafeMigrationReportStatus.Ready, canonicalReport.Status);
-        Assert.All(
-            canonicalReport.Assessments,
-            assessment => Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState));
-
-        var variants = new[]
+        var variant = facet switch
         {
-            new ExpectedColumnDefinition(
+            "max_length" => new ExpectedColumnDefinition(
                 "text_value",
                 typeof(string),
                 true,
@@ -87,7 +99,7 @@ public sealed class MySqlColumnsDriftMatrixIntegrationTests : MySqlSafeMigration
                 collation: new SafeMigrationCollationIdentifier("utf8mb4_bin"),
                 comment: "canonical",
                 defaultValue: SafeMigrationDefaultValue.Literal("canonical")),
-            new ExpectedColumnDefinition(
+            "nullability" => new ExpectedColumnDefinition(
                 "text_value",
                 typeof(string),
                 false,
@@ -96,7 +108,7 @@ public sealed class MySqlColumnsDriftMatrixIntegrationTests : MySqlSafeMigration
                 collation: new SafeMigrationCollationIdentifier("utf8mb4_bin"),
                 comment: "canonical",
                 defaultValue: SafeMigrationDefaultValue.Literal("canonical")),
-            new ExpectedColumnDefinition(
+            "collation" => new ExpectedColumnDefinition(
                 "text_value",
                 typeof(string),
                 true,
@@ -105,7 +117,7 @@ public sealed class MySqlColumnsDriftMatrixIntegrationTests : MySqlSafeMigration
                 collation: new SafeMigrationCollationIdentifier("utf8mb4_general_ci"),
                 comment: "canonical",
                 defaultValue: SafeMigrationDefaultValue.Literal("canonical")),
-            new ExpectedColumnDefinition(
+            "comment" => new ExpectedColumnDefinition(
                 "text_value",
                 typeof(string),
                 true,
@@ -114,7 +126,7 @@ public sealed class MySqlColumnsDriftMatrixIntegrationTests : MySqlSafeMigration
                 collation: new SafeMigrationCollationIdentifier("utf8mb4_bin"),
                 comment: "different",
                 defaultValue: SafeMigrationDefaultValue.Literal("canonical")),
-            new ExpectedColumnDefinition(
+            "default_value" => new ExpectedColumnDefinition(
                 "text_value",
                 typeof(string),
                 true,
@@ -123,7 +135,7 @@ public sealed class MySqlColumnsDriftMatrixIntegrationTests : MySqlSafeMigration
                 collation: new SafeMigrationCollationIdentifier("utf8mb4_bin"),
                 comment: "canonical",
                 defaultValue: SafeMigrationDefaultValue.Literal("different")),
-            new ExpectedColumnDefinition(
+            "missing_default" => new ExpectedColumnDefinition(
                 "text_value",
                 typeof(string),
                 true,
@@ -131,14 +143,14 @@ public sealed class MySqlColumnsDriftMatrixIntegrationTests : MySqlSafeMigration
                 maxLength: 80,
                 collation: new SafeMigrationCollationIdentifier("utf8mb4_bin"),
                 comment: "canonical"),
-            new ExpectedColumnDefinition(
+            "fixed_length" => new ExpectedColumnDefinition(
                 "fixed_value",
                 typeof(string),
                 true,
                 "varchar(4)",
                 maxLength: 4,
                 isFixedLength: false),
-            new ExpectedColumnDefinition(
+            "precision" => new ExpectedColumnDefinition(
                 "numeric_value",
                 typeof(decimal),
                 false,
@@ -146,7 +158,7 @@ public sealed class MySqlColumnsDriftMatrixIntegrationTests : MySqlSafeMigration
                 precision: 11,
                 scale: 2,
                 defaultValue: SafeMigrationDefaultValue.Literal(12.34m)),
-            new ExpectedColumnDefinition(
+            "scale" => new ExpectedColumnDefinition(
                 "numeric_value",
                 typeof(decimal),
                 false,
@@ -154,40 +166,44 @@ public sealed class MySqlColumnsDriftMatrixIntegrationTests : MySqlSafeMigration
                 precision: 10,
                 scale: 3,
                 defaultValue: SafeMigrationDefaultValue.Literal(12.34m)),
-            new ExpectedColumnDefinition(
+            "computed_expression" => new ExpectedColumnDefinition(
                 "generated_value",
                 typeof(int),
                 true,
                 "int",
                 computedExpression: SqlColumnAndColumn("a", SafeMigrationSqlBinaryOperator.Subtract, "b"),
                 isStored: true),
-            new ExpectedColumnDefinition(
+            "stored_generation" => new ExpectedColumnDefinition(
                 "generated_value",
                 typeof(int),
                 true,
                 "int",
                 computedExpression: SqlColumnAndColumn("a", SafeMigrationSqlBinaryOperator.Add, "b"),
                 isStored: false),
+            _ => throw new ArgumentOutOfRangeException(nameof(facet)),
         };
 
-        foreach (var variant in variants)
-        {
-            var drift = new MigrationBuilder(context.Database.ProviderName!);
-            drift.EnsureColumn("column_facets", variant, SafeMigrationPolicy.ThrowIfDifferent);
+        var drift = new MigrationBuilder(context.Database.ProviderName!);
+        drift.EnsureColumn("column_facets", variant, SafeMigrationPolicy.ThrowIfDifferent);
 
-            var report = await context
-                .GetService<ISafeMigrationRunner>()
-                .AnalyzeAsync(
-                    context,
-                    drift.Operations,
-                    new SafeMigrationRunOptions($"column-drift-{variant.Name}"),
-                    CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                drift.Operations,
+                new SafeMigrationRunOptions($"column-drift-{variant.Name}"),
+                CancellationToken.None);
 
-            var assessment = Assert.Single(report.Assessments);
+        // Assert
+        var assessment = Assert.Single(report.Assessments);
 
-            Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-            Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
-            Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
-        }
+        Assert.Equal(SafeMigrationReportStatus.Ready, canonicalReport.Status);
+        Assert.All(
+            canonicalReport.Assessments,
+            rowAssessment => Assert.Equal(SafeMigrationObservedState.Matching, rowAssessment.ObservedState));
+
+        Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
+        Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
+        Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
     }
 }

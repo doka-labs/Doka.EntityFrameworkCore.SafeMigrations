@@ -1,5 +1,3 @@
-using System.Text.RegularExpressions;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
 /// <summary>Verifies native generated columns, scoped compiler proofs, and computed index admission.</summary>
@@ -259,6 +257,7 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
             cancellationToken: CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+
         // WHY: Constant chunks keep the exact native boundary-value fixture without runtime concatenation.
         await ExecuteSqlAsync(
             connectionString,
@@ -663,10 +662,10 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
 
         // WHY: Constant chunks preserve exact projection bytes without adding a runtime string allocation.
         options.CommandText = $"""
-        SELECT {"CONVERT(int,SESSIONPROPERTY(N'NUMERIC_ROUNDABORT'))*100 "
-            + "+CONVERT(int,SESSIONPROPERTY(N'QUOTED_IDENTIFIER'))*10"}
-        +CONVERT(int,SESSIONPROPERTY(N'ARITHABORT'));
-        """;
+            SELECT {"CONVERT(int,SESSIONPROPERTY(N'NUMERIC_ROUNDABORT'))*100 "
+                + "+CONVERT(int,SESSIONPROPERTY(N'QUOTED_IDENTIFIER'))*10"}
+            +CONVERT(int,SESSIONPROPERTY(N'ARITHABORT'));
+            """;
 
         var after = Convert.ToInt32(await options.ExecuteScalarAsync(), CultureInfo.InvariantCulture);
 

@@ -1,5 +1,3 @@
-using System.Data;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer;
 
 /// <summary>Classifies bounded SQL Server catalog operations within the active analysis transaction.</summary>
@@ -83,12 +81,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
     )
     {
         var orderedAnalysis = _dependencyGraph?.ValidateOpaqueGraphPostcondition(operation, liveAnalysis, columns);
-        if (orderedAnalysis is null)
-        {
-            return null;
-        }
-
-        return ValidateProjectedOperation(operation, orderedAnalysis, columns);
+        return orderedAnalysis is null
+            ? null
+            : ValidateProjectedOperation(operation, orderedAnalysis, columns);
     }
 
     /// <inheritdoc />
@@ -191,7 +186,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
     ) => identifier;
 
     /// <inheritdoc />
-    public string? NormalizeSchema(
+    public string NormalizeSchema(
         string? schema
     ) => schema ?? "dbo";
 
@@ -245,6 +240,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
             context,
             operations
                 .OfType<SafeMigrationOperation>()
+
+                // WHY: Retain this explicit fluent snapshot instead of a collection-spread rewrite.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray(),
             operations,
             cancellationToken);
@@ -265,7 +263,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
     {
         _dependencyGraph = null;
         ClearCatalogPreamble();
-        _projectedKeyTables = new Dictionary<(string Schema, string Table), SqlServerProjectedKeyTable>();
+        _projectedKeyTables = [];
         ResetProjectedSeedProofs();
         ResetProjectedIdentityProofs();
         ResetProjectedColumnLayouts();
@@ -320,6 +318,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
                 return Enumerable
                     .Range(0, operations.Count)
                     .Select(static _ => Unsupported("catalog_metadata_not_visible"))
+
+                    // WHY: Retain this explicit fluent snapshot instead of a collection-spread rewrite.
+                    // ReSharper disable once UseCollectionExpression
                     .ToArray();
             }
 
@@ -370,8 +371,8 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
                         _catalogSqlBuilder.BuildInlineForeignKeyPrerequisite,
                         _catalogSqlBuilder.ColumnStorageEquals,
                         _catalogSqlBuilder.InlineForeignKeyPhysicalWidthIsSupported,
-                        cancellationToken,
-                        _catalogSqlBuilder.BuildSparseForeignKeyPrerequisite)
+                        _catalogSqlBuilder.BuildSparseForeignKeyPrerequisite,
+                        cancellationToken)
                     : null;
             }
 
@@ -386,7 +387,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
                 '[',
                 foldUnquotedCapturedSqlIdentifiers: false);
 
-            baselineActivity?.Dispose();
+            // WHY: End the baseline span before classification; its using scope
+            // remains the sole disposal owner, including exceptional exits.
+            baselineActivity?.Stop();
             using var classificationActivity = SafeMigrationTelemetry.StartAnalysisStage(
                 "catalog-classification",
                 operations.Count);
@@ -589,11 +592,13 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
             ? SafeMigrationRepairCapability.Safe
             : SafeMigrationRepairCapability.None;
 
-        var code = reader.IsDBNull(4)
-            ? state == SafeMigrationObservedState.Unsupported
-                ? plan.UnsupportedCode ?? "classified_unsupported"
-                : StateCode(state)
-            : reader.GetString(4);
+        var code = reader.IsDBNull(4) switch
+        {
+            false => reader.GetString(4),
+            true when state == SafeMigrationObservedState.Unsupported
+                => plan.UnsupportedCode ?? "classified_unsupported",
+            true => StateCode(state),
+        };
 
         var permissionDenied = code is "dependency_catalog_permission"
             or "column_alter_write_permission"
@@ -622,7 +627,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
         IReadOnlyList<SafeMigrationFacetDifference> differences = state == SafeMigrationObservedState.Different
             && plan.DifferentDifference is not null
                 ? [plan.DifferentDifference]
-                : Array.Empty<SafeMigrationFacetDifference>();
+                : [];
 
         return new SafeMigrationProviderAnalysis(
             state,
@@ -638,11 +643,11 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
             IsInvariantUnsupported = permissionDenied
                 || (state == SafeMigrationObservedState.Unsupported
                     && (plan.IsStaticallyUnsupported
-                        || code == SqlServerSafeMigrationRuntimePlan.PhysicalTableUnsupportedCode
-                        || code == SqlServerSafeMigrationRuntimePlan.DefaultValueUnsupportedCode
-                        || code == "column_row_layout_unproven"
-                        || code == SqlServerSafeMigrationRuntimePlan.ColumnCollationUnsupportedCode
-                        || code == SqlServerSafeMigrationRuntimePlan.IndexFilterUnsupportedCode)),
+                        || code is SqlServerSafeMigrationRuntimePlan.PhysicalTableUnsupportedCode
+                            or SqlServerSafeMigrationRuntimePlan.DefaultValueUnsupportedCode
+                            or "column_row_layout_unproven"
+                            or SqlServerSafeMigrationRuntimePlan.ColumnCollationUnsupportedCode
+                            or SqlServerSafeMigrationRuntimePlan.IndexFilterUnsupportedCode)),
             MatchedObjectName = state == SafeMigrationObservedState.Matching && !reader.IsDBNull(8)
                 ? reader.GetString(8)
                 : null,

@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks;
 
 /// <summary>Measures PostgreSQL catalog-plan building at the retained analyzer operation counts.</summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public class PostgreSqlAnalyzerBenchmarks : IDisposable
 {
     private PostgreSqlSafeMigrationCatalogSqlBuilder _catalogBuilder = null!;
@@ -54,14 +55,23 @@ public class PostgreSqlAnalyzerBenchmarks : IDisposable
 
 internal static class PostgreSqlBenchmarkPlanBuilder
 {
+    /// <summary>Builds one real catalog plan per immutable prepared operation in its authored order.</summary>
+    /// <param name="catalogBuilder">The real native-profile catalog builder.</param>
+    /// <param name="operations">The immutable prepared operation list.</param>
+    /// <returns>The exact constructed plan count.</returns>
     public static int BuildPlans(
         PostgreSqlSafeMigrationCatalogSqlBuilder catalogBuilder,
         IReadOnlyList<MigrationOperation> operations
     )
     {
         var count = 0;
-        foreach (var operation in operations.Cast<SafeMigrationOperation>())
+
+        // WHY: The prepared list has stable indexable ownership throughout the measured invocation.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var index = 0; index < operations.Count; index++)
         {
+            var operation = (SafeMigrationOperation)operations[index];
             _ = catalogBuilder.Build(operation);
             count++;
         }

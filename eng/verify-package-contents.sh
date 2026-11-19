@@ -114,6 +114,22 @@ for package_id in "${package_ids[@]}"; do
         exit 1
     fi
 
+    if grep -Eiq '<dependency id="JetBrains\.Annotations"' <<<"$nuspec_content" \
+        || grep -Eiq '(^|/)JetBrains\.Annotations\.dll$' <<<"$nupkg_entries"; then
+        echo "Build-only annotation dependency or runtime asset leaked into $nupkg." >&2
+        exit 1
+    fi
+
+    # WHY: These adapters consume Core internals. A minimum version is insufficient
+    # for that private ABI, including prerelease packages with different identities.
+    if [[ "$package_id" != Doka.EntityFrameworkCore.SafeMigrations ]] \
+        && ! grep -Fq \
+            "<dependency id=\"Doka.EntityFrameworkCore.SafeMigrations\" version=\"[$package_version]\"" \
+            <<<"$nuspec_content"; then
+        echo "Provider package does not require the matching Core private ABI in $nupkg." >&2
+        exit 1
+    fi
+
     if [[ "$package_id" != Doka.EntityFrameworkCore.SafeMigrations.SqlServer ]] \
         && grep -Fq '<dependency id="System.Security.Cryptography.Pkcs"' <<<"$nuspec_content"; then
         echo "SQL Server-only PKCS dependency leaked into $nupkg." >&2

@@ -1,10 +1,18 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 
+/// <summary>
+/// Provides the SQLite safe migration test context fixture contract.
+/// </summary>
 public sealed class SqliteSafeMigrationTestContext : DbContext
 {
     private readonly DbConnection? _connection;
     private readonly bool _registerSafeMigrations;
 
+    /// <summary>
+    /// Initializes the fixture with explicitly supplied dependencies and ownership.
+    /// </summary>
+    /// <param name="connection">The caller-owned native SQLite connection.</param>
+    /// <param name="registerSafeMigrations">Whether to install SafeMigrations alongside the SQLite provider.</param>
     public SqliteSafeMigrationTestContext(
         DbConnection connection,
         bool registerSafeMigrations = true
@@ -16,6 +24,7 @@ public sealed class SqliteSafeMigrationTestContext : DbContext
         _registerSafeMigrations = registerSafeMigrations;
     }
 
+    /// <inheritdoc />
     protected override void OnConfiguring(
         DbContextOptionsBuilder optionsBuilder
     )
@@ -35,6 +44,7 @@ public sealed class SqliteSafeMigrationTestContext : DbContext
         }
     }
 
+    /// <inheritdoc />
     protected override void OnModelCreating(
         ModelBuilder modelBuilder
     )
@@ -114,6 +124,8 @@ public sealed class SqliteSafeMigrationTestContext : DbContext
         });
     }
 
+    // WHY: EF binds this fixture entity through writable property metadata.
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class ModelEntity
     {
         public int Id { get; set; }
@@ -121,6 +133,8 @@ public sealed class SqliteSafeMigrationTestContext : DbContext
         public string Code { get; set; } = string.Empty;
     }
 
+    // WHY: EF binds this fixture entity through writable property metadata.
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class RebuildEntity
     {
         public int Id { get; set; }
@@ -128,11 +142,15 @@ public sealed class SqliteSafeMigrationTestContext : DbContext
         public string Code { get; set; } = string.Empty;
     }
 
+    // WHY: EF binds this fixture entity through writable property metadata.
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class ConstraintParent
     {
         public int Id { get; set; }
     }
 
+    // WHY: EF binds this fixture entity through writable property metadata.
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class ConstraintChild
     {
         public int Id { get; set; }

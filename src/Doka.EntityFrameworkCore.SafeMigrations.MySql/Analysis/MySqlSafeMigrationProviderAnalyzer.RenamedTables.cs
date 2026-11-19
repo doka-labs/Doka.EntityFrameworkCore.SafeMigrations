@@ -29,15 +29,19 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
     )
     {
         var currentDatabase = _currentDatabase;
-        var sources = new Dictionary<(string? Schema, string Table), (string? Schema, string Table)>();
-        var originals = new List<SafeMigrationOperation>();
-        var rebound = new List<SafeMigrationOperation>();
-        var identities = new List<(string? Schema, string Table)>();
-        var requestedSources = new HashSet<RenamedSourceKey>();
+        Dictionary<(string? Schema, string Table), (string? Schema, string Table)> sources = [];
+        List<SafeMigrationOperation> originals = [];
+        List<SafeMigrationOperation> rebound = [];
+        List<(string? Schema, string Table)> identities = [];
+        HashSet<RenamedSourceKey> requestedSources = [];
 
         var renames = operations
             .Select(static operation => operation.Intent)
             .OfType<RenameTableIntent>()
+
+            // WHY: Retain fluent materialization and its existing snapshot
+            // ownership rather than replacing this boundary with a spread.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         if (renames.Length == 0)
@@ -59,8 +63,13 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
             }
         }
 
-        foreach (var operation in operations)
+        // WHY: Index this stable list while preserving its order and ownership.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var operationIndex = 0; operationIndex < operations.Count; operationIndex++)
         {
+            var operation = operations[operationIndex];
+
             cancellationToken.ThrowIfCancellationRequested();
 
             if (operation.Intent is RenameTableIntent rename)
@@ -120,8 +129,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
                 context,
                 rebound,
                 captureRenameSources: false,
-                cancellationToken,
-                backfillConstraints.Rebind(originals, rebound));
+                backfillConstraints.Rebind(originals, rebound),
+                cancellationToken);
 
             // WHY: Keep rename operations, physical identities and returned evidence aligned by ordinal.
             // ReSharper disable once ForCanBeConvertedToForeach
@@ -170,8 +179,15 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         var requested = renames
             .Where(intent => TargetsCurrentDatabase(intent, _currentDatabase))
             .GroupBy(static intent => intent.NewName ?? intent.Name, StringComparer.Ordinal)
+
+            // WHY: Retain fluent materialization and its existing snapshot
+            // ownership rather than replacing this boundary with a spread.
+            // ReSharper disable once UseCollectionExpression
             .ToDictionary(static group => group.Key, static group => group.ToArray(), StringComparer.Ordinal);
 
+        // WHY: Retain fluent materialization and its existing snapshot
+        // ownership rather than replacing this boundary with a spread.
+        // ReSharper disable once UseCollectionExpression
         var targets = requested.Keys.ToArray();
         if (targets.Length == 0)
         {
@@ -216,9 +232,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
 
                 return new SafeMigrationCatalogProbeStatement(1, valueBytes, offset);
             },
-            async (reader, _, _, token) =>
+            async (reader, _, _, callbackCancellationToken) =>
             {
-                while (await reader.ReadAsync(token))
+                while (await reader.ReadAsync(callbackCancellationToken))
                 {
                     if (!requested.TryGetValue(reader.GetString(0), out var matching))
                     {
@@ -231,12 +247,18 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
                     }
                 }
             },
+            transaction: null,
+            SafeMigrationCatalogQueryLimits.MaximumParameters,
             cancellationToken);
     }
 
+    // WHY: Every positional member is consumed by the dictionary key's generated equality and hashing.
+    // ReSharper disable NotAccessedPositionalProperty.Local
     private readonly record struct RenamedSourceKey(
         SafeMigrationOperation Operation,
         string Table,
         string? Schema
     );
+
+    // ReSharper restore NotAccessedPositionalProperty.Local
 }

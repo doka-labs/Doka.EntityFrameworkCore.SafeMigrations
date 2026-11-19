@@ -25,8 +25,13 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         var definition = intent.Definition;
         var physical = false;
         var unproven = false;
-        foreach (var key in definition.Keys)
+
+        // WHY: This pass only reads the stable ordered collection by ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var keyIndex = 0; keyIndex < definition.Keys.Count; keyIndex++)
         {
+            var key = definition.Keys[keyIndex];
             if (PostgreSqlSafeMigrationCatalogSqlBuilder.IndexPhysicalMember(key) is not { } member)
             {
                 continue;
@@ -114,8 +119,13 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             }
 
             hasIndex = true;
-            foreach (var key in index.Definition.Keys)
+
+            // WHY: This pass only reads the stable ordered collection by ordinal.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var keyIndex = 0; keyIndex < index.Definition.Keys.Count; keyIndex++)
             {
+                var key = index.Definition.Keys[keyIndex];
                 if (PostgreSqlSafeMigrationCatalogSqlBuilder.IndexPhysicalMember(key) is { } member)
                 {
                     (relevant ??= []).Add(
@@ -135,7 +145,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         var prior = new Dictionary<LiveColumnIdentity, HashSet<long>>();
         HashSet<LiveColumnIdentity>? priorCases = null;
         var requested = new HashSet<IndexInputRequest>();
-        var requests = new List<IndexInputRequest>();
+        List<IndexInputRequest> requests = [];
 
         // WHY: Advance authored column state in operation order before index capture.
         // ReSharper disable once ForCanBeConvertedToForeach
@@ -145,43 +155,52 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             cancellationToken.ThrowIfCancellationRequested();
             if (_providerIndexColumnProposals?.TryGetValue(ordinal, out var proposals) == true)
             {
-                foreach (var proposal in proposals)
+                // WHY: This pass only reads the stable ordered collection by ordinal.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
+                for (var proposalIndex = 0; proposalIndex < proposals.Count; proposalIndex++)
                 {
+                    var proposal = proposals[proposalIndex];
                     Record(proposal.Table, proposal.Schema, proposal.Definition);
                 }
             }
 
             var intent = operations[ordinal].Intent;
-            if (intent is EnsureTableIntent table)
+            switch (intent)
             {
-                foreach (var column in table.Definition.Columns)
-                {
-                    Record(table.Definition.Table, table.Definition.Schema, column);
-                }
-            }
-            else if (intent is EnsureColumnIntent column)
-            {
-                Record(column.Table, column.Schema, column.Definition);
-                if (PostgreSqlSafeMigrationCatalogSqlBuilder.RequiresGeneratedCaseInputCapture(column))
-                {
-                    (priorCases ??= []).Add(LiveColumnKey(column.Table, column.Schema, column.Definition.Name));
-                }
-            }
-            else if (intent is AlterColumnIntent altered)
-            {
-                Record(altered.Table, altered.Schema, altered.Definition);
-            }
-            else if (intent is RenameColumnIntent rename
-                && prior.TryGetValue(LiveColumnKey(rename.Table, rename.Schema, rename.Name), out var types))
-            {
-                var name = LiveColumnKey(rename.Table, rename.Schema, rename.NewName);
-                if (!prior.TryGetValue(name, out var renamed))
-                {
-                    renamed = [];
-                    prior.Add(name, renamed);
-                }
+                case EnsureTableIntent table:
+                    // WHY: This pass only reads the stable ordered collection by ordinal.
+                    // ReSharper disable once ForCanBeConvertedToForeach
+                    // ReSharper disable once LoopCanBeConvertedToQuery
+                    for (var columnIndex = 0; columnIndex < table.Definition.Columns.Count; columnIndex++)
+                    {
+                        var column = table.Definition.Columns[columnIndex];
+                        Record(table.Definition.Table, table.Definition.Schema, column);
+                    }
 
-                renamed.UnionWith(types);
+                    break;
+                case EnsureColumnIntent column:
+                    Record(column.Table, column.Schema, column.Definition);
+                    if (PostgreSqlSafeMigrationCatalogSqlBuilder.RequiresGeneratedCaseInputCapture(column))
+                    {
+                        (priorCases ??= []).Add(LiveColumnKey(column.Table, column.Schema, column.Definition.Name));
+                    }
+
+                    break;
+                case AlterColumnIntent altered:
+                    Record(altered.Table, altered.Schema, altered.Definition);
+                    break;
+                case RenameColumnIntent rename
+                    when prior.TryGetValue(LiveColumnKey(rename.Table, rename.Schema, rename.Name), out var types):
+                    var name = LiveColumnKey(rename.Table, rename.Schema, rename.NewName);
+                    if (!prior.TryGetValue(name, out var renamed))
+                    {
+                        renamed = [];
+                        prior.Add(name, renamed);
+                    }
+
+                    renamed.UnionWith(types);
+                    break;
             }
 
             if (intent is not EnsureIndexIntent index
@@ -207,8 +226,12 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                 Add(GeneratedIndexAbsenceIdentity(index.Definition));
             }
 
-            foreach (var key in index.Definition.Keys)
+            // WHY: This pass only reads the stable ordered collection by ordinal.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var keyIndex = 0; keyIndex < index.Definition.Keys.Count; keyIndex++)
             {
+                var key = index.Definition.Keys[keyIndex];
                 if (PostgreSqlSafeMigrationCatalogSqlBuilder.IndexPhysicalMember(key) is not { } member
                     || !IndexMemberTableMatches(index.Definition, member))
                 {
@@ -238,7 +261,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes,
             commandTimeout,
             (command, offset) => BuildIndexInputStatement(command, requests, offset),
-            async (reader, offset, count, token) =>
+            async (reader, offset, count, callbackCancellationToken) =>
             {
                 if (reader.FieldCount != 2)
                 {
@@ -246,7 +269,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                 }
 
                 var next = offset;
-                while (await reader.ReadAsync(token))
+                while (await reader.ReadAsync(callbackCancellationToken))
                 {
                     if (reader.GetValue(0) is not int ordinal
                         || ordinal != next
@@ -270,7 +293,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                     throw InvalidLivePrerequisiteEvidence();
                 }
             },
-            cancellationToken);
+            transaction: null,
+            maximumParameters: SafeMigrationCatalogQueryLimits.MaximumParameters,
+            cancellationToken: cancellationToken);
 
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -318,7 +343,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     )
     {
         using var parameters = new PostgreSqlCatalogQueryParameters(command, _typeMappingSource);
-        var selections = new List<string>();
+        List<string> selections = [];
         var sqlBytes = Encoding.UTF8.GetByteCount(SafeMigrationCatalogQueryLimits.Trailer);
         while (offset + selections.Count < requests.Count
             && selections.Count < SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
@@ -470,8 +495,13 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         HashSet<string>? droppedSchemas = null;
         var stream = _analysisOperationStream ?? operations;
         var ordinal = 0;
-        foreach (var operation in stream)
+
+        // WHY: This pass only reads the stable ordered collection by ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var operationIndex = 0; operationIndex < stream.Count; operationIndex++)
         {
+            var operation = stream[operationIndex];
             cancellationToken.ThrowIfCancellationRequested();
             if (operation is DropSchemaOperation nativeSchema)
             {
@@ -574,8 +604,12 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                 continue;
             }
 
-            foreach (var key in index.Definition.Keys)
+            // WHY: This pass only reads the stable ordered collection by ordinal.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var keyIndex = 0; keyIndex < index.Definition.Keys.Count; keyIndex++)
             {
+                var key = index.Definition.Keys[keyIndex];
                 if (PostgreSqlSafeMigrationCatalogSqlBuilder.IndexPhysicalMember(key) is { } member)
                 {
                     (relevant ??= []).Add(
@@ -595,8 +629,13 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         Dictionary<int, List<ProviderIndexColumnProposal>>? captured = null;
         List<ProviderIndexColumnProposal>? pending = null;
         var ordinal = 0;
-        foreach (var operation in _analysisOperationStream)
+
+        // WHY: This pass only reads the stable ordered collection by ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var operationIndex = 0; operationIndex < _analysisOperationStream.Count; operationIndex++)
         {
+            var operation = _analysisOperationStream[operationIndex];
             cancellationToken.ThrowIfCancellationRequested();
             if (ordinal == operations.Count)
             {
@@ -608,35 +647,41 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                 continue;
             }
 
-            if (operation is SafeMigrationOperation safe)
+            switch (operation)
             {
-                if (ordinal >= operations.Count
-                    || !ReferenceEquals(safe, operations[ordinal]))
-                {
-                    return;
-                }
+                case SafeMigrationOperation safe:
+                    if (ordinal >= operations.Count
+                        || !ReferenceEquals(safe, operations[ordinal]))
+                    {
+                        return;
+                    }
 
-                if (pending is not null)
-                {
-                    (captured ??= []).Add(ordinal, pending);
-                    pending = null;
-                }
+                    if (pending is not null)
+                    {
+                        (captured ??= []).Add(ordinal, pending);
+                        pending = null;
+                    }
 
-                ordinal++;
+                    ordinal++;
 
-                continue;
-            }
-
-            if (operation is AddColumnOperation or AlterColumnOperation)
-            {
-                Record((ColumnOperation)operation);
-            }
-            else if (operation is CreateTableOperation table)
-            {
-                foreach (var column in table.Columns)
-                {
+                    continue;
+                case AddColumnOperation column:
                     Record(column);
-                }
+                    break;
+                case AlterColumnOperation column:
+                    Record(column);
+                    break;
+                case CreateTableOperation table:
+                    // WHY: This pass only reads the stable ordered collection by ordinal.
+                    // ReSharper disable once ForCanBeConvertedToForeach
+                    // ReSharper disable once LoopCanBeConvertedToQuery
+                    for (var columnIndex = 0; columnIndex < table.Columns.Count; columnIndex++)
+                    {
+                        var column = table.Columns[columnIndex];
+                        Record(column);
+                    }
+
+                    break;
             }
         }
 
@@ -644,6 +689,8 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         {
             _providerIndexColumnProposals = captured;
         }
+
+        return;
 
         void Record(
             ColumnOperation operation

@@ -296,10 +296,20 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     }
 
     /// <summary>Places one independent writer barrier between final classification and target DDL selection.</summary>
-    private sealed class SparseDropCheckpointInterceptor(string gateName) : DbCommandInterceptor
+    private sealed class SparseDropCheckpointInterceptor : DbCommandInterceptor
     {
         private const string ApplyPrefix = "SET @doka_sm_sql = CASE WHEN @doka_sm_action = 'apply' THEN CONVERT(0x";
+        private readonly string _gateName;
         private int _injected;
+
+        /// <summary>Initializes the explicit dependencies of this isolated test helper.</summary>
+        /// <param name="gateName">The uniquely owned native advisory-lock identity.</param>
+        public SparseDropCheckpointInterceptor(
+            string gateName
+        )
+        {
+            _gateName = gateName;
+        }
 
         /// <summary>Gets whether the exact owned body received the deterministic barrier.</summary>
         public bool WasInjected => Volatile.Read(ref _injected) != 0;
@@ -320,7 +330,7 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
                 // a row-lock gate would release before the adversarial ALTER.
                 var barrier = $"""
                     UPDATE generated_drop_checkpoint SET reached = 1
-                    WHERE id = 1; DO GET_LOCK('{gateName}', 30); DO RELEASE_LOCK('{gateName}');{"\u0020"}
+                    WHERE id = 1; DO GET_LOCK('{_gateName}', 30); DO RELEASE_LOCK('{_gateName}');{"\u0020"}
                     """;
 
                 command.CommandText = command.CommandText.Insert(position, barrier);

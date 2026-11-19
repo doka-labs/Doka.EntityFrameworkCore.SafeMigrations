@@ -246,6 +246,8 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
         switch (step.Expression)
         {
             case SafeMigrationSqlUnaryExpression unary:
+                // WHY: Numeric proof callbacks must run before selecting the fallback traversal and token shape.
+                // ReSharper disable once ConvertIfStatementToSwitchStatement
                 if (writer.NativeLiteralForms
                     && TryAppendCapturedNumericUnary(writer, unary))
                 {
@@ -272,6 +274,7 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
 
                     pending.Push(new RenderStep(RenderStepKind.CloseParentheses, writer, operand, Index: count));
                     pending.Push(new RenderStep(RenderStepKind.Expression, writer, operand));
+
                     return;
                 }
 
@@ -493,48 +496,46 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
         var writer = step.Writer;
         var between = (SafeMigrationSqlBetweenExpression)step.Expression;
         SafeMigrationSqlExpression operand;
-        if (step.Index == 1)
+        switch (step.Index)
         {
-            writer.Append(
-                catalogShape
-                    ? between.Negated
-                        ? " < "
-                        : " >= "
-                    : between.Negated
-                        ? " NOT BETWEEN "
-                        : " BETWEEN ");
+            case 1:
+                writer.Append(
+                    catalogShape
+                        ? between.Negated
+                            ? " < "
+                            : " >= "
+                        : between.Negated
+                            ? " NOT BETWEEN "
+                            : " BETWEEN ");
 
-            operand = between.Lower;
-        }
-        else if (step.Index == 2 && catalogShape)
-        {
-            writer.Append(
-                between.Negated
-                    ? ") OR ("
-                    : ") AND (");
+                operand = between.Lower;
+                break;
+            case 2 when catalogShape:
+                writer.Append(
+                    between.Negated
+                        ? ") OR ("
+                        : ") AND (");
 
-            operand = between.Operand;
-        }
-        else if (step.Index == 2
-            || (step.Index == 3 && catalogShape))
-        {
-            writer.Append(
-                catalogShape
-                    ? between.Negated
-                        ? " > "
-                        : " <= "
-                    : " AND ");
+                operand = between.Operand;
+                break;
+            case 2:
+            case 3 when catalogShape:
+                writer.Append(
+                    catalogShape
+                        ? between.Negated
+                            ? " > "
+                            : " <= "
+                        : " AND ");
 
-            operand = between.Upper;
-        }
-        else
-        {
-            writer.Append(
-                catalogShape
-                    ? "))"
-                    : ")");
+                operand = between.Upper;
+                break;
+            default:
+                writer.Append(
+                    catalogShape
+                        ? "))"
+                        : ")");
 
-            return;
+                return;
         }
 
         pending.Push(step with { Index = step.Index + 1 });

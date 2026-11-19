@@ -20,17 +20,18 @@ public sealed class SafeMigrationCapturedExpressionSourceTests
         var alterIntent = new AlterColumnIntent("items", definition, definition);
 
         // Act
-        var add = Assert.IsType<AddColumnOperation>(
-            SafeMigrationStandardOperationFactory.Create(
-                addIntent,
-                static _ => throw new InvalidOperationException("Captured SQL must not be re-rendered.")));
+        var addOperation = SafeMigrationStandardOperationFactory.Create(
+            addIntent,
+            static _ => throw new InvalidOperationException("Captured SQL must not be re-rendered."));
 
-        var alter = Assert.IsType<AlterColumnOperation>(
-            SafeMigrationStandardOperationFactory.Create(
-                alterIntent,
-                static _ => throw new InvalidOperationException("Captured SQL must not be re-rendered.")));
+        var alterOperation = SafeMigrationStandardOperationFactory.Create(
+            alterIntent,
+            static _ => throw new InvalidOperationException("Captured SQL must not be re-rendered."));
 
         // Assert
+        var add = Assert.IsType<AddColumnOperation>(addOperation);
+        var alter = Assert.IsType<AlterColumnOperation>(alterOperation);
+
         Assert.NotNull(definition.ComputedExpression);
         Assert.Null(definition.ComputedColumnSql);
         Assert.Same(sql, definition.CapturedComputedSql);
@@ -53,12 +54,13 @@ public sealed class SafeMigrationCapturedExpressionSourceTests
         var definition = CaptureCheck(sql);
 
         // Act
-        var operation = Assert.IsType<AddCheckConstraintOperation>(
-            SafeMigrationStandardOperationFactory.Create(
-                new EnsureCheckConstraintIntent(definition),
-                static _ => throw new InvalidOperationException("Captured SQL must not be re-rendered.")));
+        var generated = SafeMigrationStandardOperationFactory.Create(
+            new EnsureCheckConstraintIntent(definition),
+            static _ => throw new InvalidOperationException("Captured SQL must not be re-rendered."));
 
         // Assert
+        var operation = Assert.IsType<AddCheckConstraintOperation>(generated);
+
         Assert.NotNull(definition.Expression);
         Assert.Null(definition.Sql);
         Assert.Same(sql, definition.CapturedSql);
@@ -120,17 +122,18 @@ public sealed class SafeMigrationCapturedExpressionSourceTests
         var check = ExpectedCheckConstraintDefinition.FromExpression("ck_items", "items", expression);
 
         // Act
-        var add = Assert.IsType<AddColumnOperation>(
-            SafeMigrationStandardOperationFactory.Create(
-                new EnsureColumnIntent("items", column),
-                static _ => "typed_column"));
+        var addOperation = SafeMigrationStandardOperationFactory.Create(
+            new EnsureColumnIntent("items", column),
+            static _ => "typed_column");
 
-        var constraint = Assert.IsType<AddCheckConstraintOperation>(
-            SafeMigrationStandardOperationFactory.Create(
-                new EnsureCheckConstraintIntent(check),
-                static _ => "typed_check"));
+        var checkOperation = SafeMigrationStandardOperationFactory.Create(
+            new EnsureCheckConstraintIntent(check),
+            static _ => "typed_check");
 
         // Assert
+        var add = Assert.IsType<AddColumnOperation>(addOperation);
+        var constraint = Assert.IsType<AddCheckConstraintOperation>(checkOperation);
+
         Assert.Null(column.CapturedComputedSql);
         Assert.Null(check.CapturedSql);
         Assert.Equal("typed_column", add.ComputedColumnSql);
@@ -158,19 +161,19 @@ public sealed class SafeMigrationCapturedExpressionSourceTests
         var repair = SafeMigrationColumnRepairHelper.CanSafelyAlterColumn(plain, parenthesized);
         var firstHash = Fingerprint(new EnsureColumnIntent("items", plain));
         var secondHash = Fingerprint(new EnsureColumnIntent("items", parenthesized));
+        var repeatedHash = Fingerprint(new EnsureColumnIntent("items", repeated));
+        var structurallyEqual = SafeMigrationSqlExpressionContract.Equivalent(
+            plain.ComputedExpression,
+            parenthesized.ComputedExpression);
 
         // Assert
-        Assert.True(
-            SafeMigrationSqlExpressionContract.Equivalent(
-                plain.ComputedExpression,
-                parenthesized.ComputedExpression));
-
+        Assert.True(structurallyEqual);
         Assert.False(differentSourceEqual);
         Assert.True(repeatedSourceEqual);
         Assert.False(typedSourceEqual);
         Assert.False(repair);
         Assert.NotEqual(firstHash, secondHash);
-        Assert.Equal(firstHash, Fingerprint(new EnsureColumnIntent("items", repeated)));
+        Assert.Equal(firstHash, repeatedHash);
     }
 
     /// <summary>CHECK semantic dictionaries and contract hashes retain the same source-sensitive identity.</summary>
@@ -194,11 +197,13 @@ public sealed class SafeMigrationCapturedExpressionSourceTests
         var differentlySpelledEquals = comparer.Equals(plain, parenthesized);
         var firstHash = Fingerprint(new EnsureCheckConstraintIntent(plain));
         var secondHash = Fingerprint(new EnsureCheckConstraintIntent(parenthesized));
+        var semanticHash = comparer.GetHashCode(plain);
+        var repeatedSemanticHash = comparer.GetHashCode(repeated);
 
         // Assert
         Assert.True(repeatedEquals);
         Assert.False(differentlySpelledEquals);
-        Assert.Equal(comparer.GetHashCode(plain), comparer.GetHashCode(repeated));
+        Assert.Equal(semanticHash, repeatedSemanticHash);
         Assert.Equal(2, definitions.Count);
         Assert.NotEqual(firstHash, secondHash);
     }
@@ -222,11 +227,17 @@ public sealed class SafeMigrationCapturedExpressionSourceTests
             "unexpected_check_constraint");
 
         // Act
-        var candidate = Assert.Single(SafeMigrationSemanticCandidateFactory.Create([operation], [unexpected]));
+        // WHY: Fully consume the candidate stream before asserting its single resulting identity.
+        // ReSharper disable once UseCollectionExpression
+        var candidates = SafeMigrationSemanticCandidateFactory
+            .Create([operation], [unexpected])
+            .ToArray();
+
+        // Assert
+        var candidate = Assert.Single(candidates);
         var copied = Assert.IsType<EnsureCheckConstraintIntent>(candidate.Operation.Intent)
             .Definition;
 
-        // Assert
         Assert.Equal("ck_legacy", copied.Name);
         Assert.Same(sql, copied.CapturedSql);
         Assert.Same(definition.Expression, copied.Expression);

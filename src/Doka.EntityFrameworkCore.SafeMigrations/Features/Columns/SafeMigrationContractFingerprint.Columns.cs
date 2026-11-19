@@ -78,8 +78,14 @@ public static partial class SafeMigrationContractFingerprint
         writer.Add(definition.IsStored);
 
         writer.Add(definition.ProviderAnnotations.Count);
-        foreach (var annotation in definition.ProviderAnnotations)
+
+        // WHY: This immutable definition snapshot is indexed; retain its authored order without interface enumeration.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var annotationIndex = 0; annotationIndex < definition.ProviderAnnotations.Count; annotationIndex++)
         {
+            var annotation = definition.ProviderAnnotations[annotationIndex];
+
             writer.Add(annotation.Name);
             writer.Add(annotation.Fingerprint);
         }
@@ -110,6 +116,7 @@ public static partial class SafeMigrationContractFingerprint
         {
             writer.Add(value.SqlExpression);
             SafeMigrationSqlExpressionContract.Write(writer, value.StructuredExpression);
+
             return;
         }
 

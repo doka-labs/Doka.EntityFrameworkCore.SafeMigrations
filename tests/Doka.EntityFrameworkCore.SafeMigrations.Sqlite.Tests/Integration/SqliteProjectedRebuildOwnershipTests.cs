@@ -175,8 +175,9 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
             "SELECT COUNT(*) FROM rebuild_nodes WHERE id = 1 AND extra = 7 AND derived = 8;",
             cancellationToken: CancellationToken.None);
 
-        // Assert
         var diagnostic = Encoding.UTF8.GetString(SafeMigrationReportJson.SerializeToUtf8Bytes(report));
+
+        // Assert
         Assert.True(report.Status == SafeMigrationReportStatus.Ready, diagnostic);
         Assert.Null(exception);
         Assert.Equal(1, retainedRows);
@@ -611,7 +612,7 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
     {
         // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
-        await CreateForeignKeyOwnerAsync(connection, orphan, cancellationToken: CancellationToken.None, sourceExists);
+        await CreateForeignKeyOwnerAsync(connection, orphan, sourceExists, CancellationToken.None);
         await using var context = new DroppedSourceContext(connection, _internalServices);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExists<int>("source", "rebuild_nodes", type: "INTEGER", nullable: true);
@@ -727,6 +728,8 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
             : new DroppedSourceContext(connection, _internalServices);
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
+        // WHY: Keep direct fixture mutations explicit; case scopes and breaks would not clarify this setup.
+        // ReSharper disable once ConvertIfStatementToSwitchStatement
         if (prefix == "rename_column")
         {
             builder.RenameColumnIfExists("source", "rebuild_nodes", "renamed_source");
@@ -740,6 +743,8 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
             builder.AddColumnIfNotExists<int>("source", "rebuild_nodes", type: "INTEGER", nullable: true);
         }
 
+        // WHY: Keep direct fixture mutations explicit; case scopes and breaks would not clarify this setup.
+        // ReSharper disable once ConvertIfStatementToSwitchStatement
         if (prefix == "mixed")
         {
             builder.AddColumnIfNotExists<int>("metadata", "parent_nodes", type: "INTEGER", nullable: true);
@@ -844,6 +849,8 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
             .Generate(builder.Operations, context.Model);
 
         var exception = synchronous
+            // WHY: Record.Exception executes this callback synchronously before the owning using scope ends.
+            // ReSharper disable once AccessToDisposedClosure
             ? Record.Exception(() => ExecuteCommands(context, commands))
             : await Record.ExceptionAsync(() => ExecuteCommandsAsync(
                 context,
@@ -961,6 +968,8 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
 
         // Act
         var exception = synchronous
+            // WHY: Record.Exception executes this callback synchronously before the owning using scope ends.
+            // ReSharper disable once AccessToDisposedClosure
             ? Record.Exception(() => ExecuteCommands(context, commands))
             : await Record.ExceptionAsync(() => ExecuteCommandsAsync(
                 context,
@@ -1283,8 +1292,8 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
     private static async Task CreateForeignKeyOwnerAsync(
         SqliteConnection connection,
         bool orphan,
-        CancellationToken cancellationToken,
-        bool sourceExists = true
+        bool sourceExists,
+        CancellationToken cancellationToken
     )
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -1312,6 +1321,13 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
             """,
             cancellationToken: cancellationToken);
     }
+
+    /// <summary>Creates the normal source-bearing owner while forwarding explicit operation cancellation.</summary>
+    private static Task CreateForeignKeyOwnerAsync(
+        SqliteConnection connection,
+        bool orphan,
+        CancellationToken cancellationToken
+    ) => CreateForeignKeyOwnerAsync(connection, orphan, true, cancellationToken);
 
     /// <summary>Runs the production wrapper with a deliberately adversarial native baseline.</summary>
     private static SqliteSafeMigrationsSqlGenerator CreateGenerator(
@@ -1512,11 +1528,23 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
     };
 
     /// <summary>Shares a fixed model family without turning model wishes into native ownership.</summary>
-    private abstract class RebuildContext(
-        DbConnection connection,
-        IServiceProvider services
-    ) : DbContext
+    private abstract class RebuildContext : DbContext
     {
+        private readonly DbConnection _connection;
+        private readonly IServiceProvider _services;
+
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="connection">The supplied connection for this fixture.</param>
+        /// <param name="services">The supplied services for this fixture.</param>
+        protected RebuildContext(
+            DbConnection connection,
+            IServiceProvider services
+        )
+        {
+            _connection = connection;
+            _services = services;
+        }
+
         /// <summary>Gets the actual target owner's physical name after any explicit rename.</summary>
         protected virtual string TableName => "rebuild_nodes";
 
@@ -1534,9 +1562,9 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
             DbContextOptionsBuilder optionsBuilder
         )
         {
-            optionsBuilder.UseSqlite(connection);
+            optionsBuilder.UseSqlite(_connection);
             optionsBuilder.UseSqliteSafeMigrations();
-            optionsBuilder.UseInternalServiceProvider(services);
+            optionsBuilder.UseInternalServiceProvider(_services);
         }
 
         /// <inheritdoc />
@@ -1592,6 +1620,8 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
             });
         }
 
+        // WHY: EF binds this fixture entity through writable property metadata.
+        [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
         private sealed class Row
         {
             public int Id { get; set; }
@@ -1605,30 +1635,46 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
     }
 
     /// <summary>Models the actual target after the temporary source is removed.</summary>
-    private sealed class DroppedSourceContext(
-        DbConnection connection,
-        IServiceProvider services
-    )
-        : RebuildContext(connection, services);
+    private sealed class DroppedSourceContext
+        : RebuildContext
+    {
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="connection">The supplied connection for this fixture.</param>
+        /// <param name="services">The supplied services for this fixture.</param>
+        public DroppedSourceContext(
+            DbConnection connection,
+            IServiceProvider services
+        ) : base(connection, services) { }
+    }
 
     /// <summary>Models the same physical owner after its explicitly authored rename.</summary>
-    private sealed class RenamedOwnerContext(
-        DbConnection connection,
-        IServiceProvider services
-    )
-        : RebuildContext(connection, services)
+    private sealed class RenamedOwnerContext
+        : RebuildContext
     {
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="connection">The supplied connection for this fixture.</param>
+        /// <param name="services">The supplied services for this fixture.</param>
+        public RenamedOwnerContext(
+            DbConnection connection,
+            IServiceProvider services
+        ) : base(connection, services) { }
+
         /// <inheritdoc />
         protected override string TableName => "renamed_nodes";
     }
 
     /// <summary>Owns the explicitly rebuilt child after its authored relationship removal.</summary>
-    private sealed class RemovedForeignKeyContext(
-        DbConnection connection,
-        IServiceProvider services
-    )
-        : RebuildContext(connection, services)
+    private sealed class RemovedForeignKeyContext
+        : RebuildContext
     {
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="connection">The supplied connection for this fixture.</param>
+        /// <param name="services">The supplied services for this fixture.</param>
+        public RemovedForeignKeyContext(
+            DbConnection connection,
+            IServiceProvider services
+        ) : base(connection, services) { }
+
         /// <inheritdoc />
         protected override void OnModelCreating(
             ModelBuilder modelBuilder
@@ -1653,6 +1699,8 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
             });
         }
 
+        // WHY: EF binds this fixture entity through writable property metadata.
+        [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
         private sealed class RemovedForeignKeyRow
         {
             public int Id { get; set; }
@@ -1662,12 +1710,17 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
     }
 
     /// <summary>Models the actual default-only ALTER target.</summary>
-    private sealed class AlteredSourceContext(
-        DbConnection connection,
-        IServiceProvider services
-    )
-        : RebuildContext(connection, services)
+    private sealed class AlteredSourceContext
+        : RebuildContext
     {
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="connection">The supplied connection for this fixture.</param>
+        /// <param name="services">The supplied services for this fixture.</param>
+        public AlteredSourceContext(
+            DbConnection connection,
+            IServiceProvider services
+        ) : base(connection, services) { }
+
         /// <inheritdoc />
         protected override bool IncludeSource => true;
 
@@ -1676,12 +1729,17 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
     }
 
     /// <summary>Models a requested CHECK without claiming its data prerequisites are proven.</summary>
-    private sealed class CheckedSourceContext(
-        DbConnection connection,
-        IServiceProvider services
-    )
-        : RebuildContext(connection, services)
+    private sealed class CheckedSourceContext
+        : RebuildContext
     {
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="connection">The supplied connection for this fixture.</param>
+        /// <param name="services">The supplied services for this fixture.</param>
+        public CheckedSourceContext(
+            DbConnection connection,
+            IServiceProvider services
+        ) : base(connection, services) { }
+
         /// <inheritdoc />
         protected override bool IncludeSource => true;
 
@@ -1692,12 +1750,24 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
     /// <summary>
     /// Injects one native integrity violation after real baseline DDL for a non-vacuous safety probe.
     /// </summary>
-    private sealed class MutatingForeignKeyBaseline(
-        ISqliteSafeMigrationsBaselineGenerator inner,
-        string sql
-    )
+    private sealed class MutatingForeignKeyBaseline
         : ISqliteSafeMigrationsBaselineGenerator
     {
+        private readonly ISqliteSafeMigrationsBaselineGenerator _inner;
+        private readonly string _sql;
+
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="inner">The supplied inner for this fixture.</param>
+        /// <param name="sql">The supplied sql for this fixture.</param>
+        public MutatingForeignKeyBaseline(
+            ISqliteSafeMigrationsBaselineGenerator inner,
+            string sql
+        )
+        {
+            _inner = inner;
+            _sql = sql;
+        }
+
         /// <summary>Gets whether baseline generation emitted the adversarial native commands.</summary>
         public bool MutationGenerated { get; private set; }
 
@@ -1710,8 +1780,8 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
             SqliteCatalogSnapshot? snapshot = null
         )
         {
-            var commands = inner.Generate(operations, model, options, guardedOperations, snapshot);
-            var mutation = inner.Generate([new SqlOperation { Sql = sql }], model, options);
+            var commands = _inner.Generate(operations, model, options, guardedOperations, snapshot);
+            var mutation = _inner.Generate([new SqlOperation { Sql = _sql }], model, options);
             MutationGenerated = true;
 
             return commands
@@ -1721,12 +1791,24 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
     }
 
     /// <summary>Executes actual native baselines while deliberately reporting zero affected rows.</summary>
-    private sealed class ZeroAffectedBaseline(
-        ISqliteSafeMigrationsBaselineGenerator inner,
-        DbContext context
-    )
+    private sealed class ZeroAffectedBaseline
         : ISqliteSafeMigrationsBaselineGenerator
     {
+        private readonly DbContext _context;
+        private readonly ISqliteSafeMigrationsBaselineGenerator _inner;
+
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="inner">The supplied inner for this fixture.</param>
+        /// <param name="context">The supplied context for this fixture.</param>
+        public ZeroAffectedBaseline(
+            ISqliteSafeMigrationsBaselineGenerator inner,
+            DbContext context
+        )
+        {
+            _inner = inner;
+            _context = context;
+        }
+
         /// <summary>Gets how many real baseline commands executed before the relationship guard.</summary>
         public int CommandsExecuted { get; private set; }
 
@@ -1737,18 +1819,27 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
             MigrationsSqlGenerationOptions options = MigrationsSqlGenerationOptions.Default,
             IReadOnlyList<MigrationOperation>? guardedOperations = null,
             SqliteCatalogSnapshot? snapshot = null
-        ) => inner
+        ) => _inner
             .Generate(operations, model, options, guardedOperations, snapshot)
-            .Select(command => new ZeroAffectedCommand(command, context, this))
+            .Select(command => new ZeroAffectedCommand(command, _context, this))
             .ToArray();
 
         /// <summary>Separates actual native execution from the provider's affected-row result.</summary>
-        private sealed class ZeroAffectedCommand(
-            MigrationCommand inner,
-            DbContext context,
-            ZeroAffectedBaseline owner
-        )
-            : MigrationCommand(
+        private sealed class ZeroAffectedCommand
+            : MigrationCommand
+        {
+            private readonly MigrationCommand _inner;
+            private readonly ZeroAffectedBaseline _owner;
+
+            /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+            /// <param name="inner">The supplied inner for this fixture.</param>
+            /// <param name="context">The supplied context for this fixture.</param>
+            /// <param name="owner">The supplied owner for this fixture.</param>
+            public ZeroAffectedCommand(
+                MigrationCommand inner,
+                DbContext context,
+                ZeroAffectedBaseline owner
+            ) : base(
                 context
                     .GetService<MigrationsSqlGeneratorDependencies>()
                     .CommandBuilderFactory
@@ -1758,9 +1849,13 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
                 context.GetService<MigrationsSqlGeneratorDependencies>()
                     .Logger,
                 inner.TransactionSuppressed)
-        {
+            {
+                _inner = inner;
+                _owner = owner;
+            }
+
             /// <inheritdoc />
-            public override string CommandText => inner.CommandText;
+            public override string CommandText => _inner.CommandText;
 
             /// <inheritdoc />
             public override int ExecuteNonQuery(
@@ -1768,8 +1863,8 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
                 IReadOnlyDictionary<string, object?>? parameterValues = null
             )
             {
-                owner.CommandsExecuted++;
-                _ = inner.ExecuteNonQuery(connection, parameterValues);
+                _owner.CommandsExecuted++;
+                _ = _inner.ExecuteNonQuery(connection, parameterValues);
 
                 return 0;
             }

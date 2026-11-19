@@ -1,4 +1,5 @@
 global using System;
+global using System.Buffers;
 global using System.Collections.Generic;
 global using System.Collections.ObjectModel;
 global using System.Data;
@@ -7,10 +8,12 @@ global using System.Diagnostics;
 global using System.Diagnostics.CodeAnalysis;
 global using System.Globalization;
 global using System.Linq;
+global using System.Runtime.CompilerServices;
 global using System.Text;
 global using System.Text.RegularExpressions;
 global using System.Threading;
 global using System.Threading.Tasks;
+global using JetBrains.Annotations;
 global using Microsoft.Data.Sqlite;
 global using Microsoft.EntityFrameworkCore;
 global using Microsoft.EntityFrameworkCore.Diagnostics;

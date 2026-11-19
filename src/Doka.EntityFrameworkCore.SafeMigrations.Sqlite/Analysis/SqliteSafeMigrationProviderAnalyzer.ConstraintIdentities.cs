@@ -33,13 +33,22 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
         // or a single semantic witness proves physical identity; anonymous or
         // ambiguous witnesses do not. Reuse the snapshot, without new queries
         // or capturing delegates per constraint.
-        foreach (var definition in expected.UniqueConstraints)
+        // WHY: Traverse the stable ordered source by ordinal without materializing another collection.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var definitionIndex = 0; definitionIndex < expected.UniqueConstraints.Count; definitionIndex++)
         {
+            var definition = expected.UniqueConstraints[definitionIndex];
             string? exact = null;
             string? candidate = null;
             var count = 0;
-            foreach (var actual in table.UniqueConstraints)
+
+            // WHY: Traverse the stable ordered source by ordinal without materializing another collection.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var actualIndex = 0; actualIndex < table.UniqueConstraints.Count; actualIndex++)
             {
+                var actual = table.UniqueConstraints[actualIndex];
                 if (SqliteCatalogEquivalence.KeyMatchesDeclaredColumns(
                     table,
                     actual.Keys,
@@ -59,14 +68,23 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
                     : null));
         }
 
-        foreach (var definition in expected.CheckConstraints)
+        // WHY: Traverse the stable ordered source by ordinal without materializing another collection.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var definitionIndex = 0; definitionIndex < expected.CheckConstraints.Count; definitionIndex++)
         {
+            var definition = expected.CheckConstraints[definitionIndex];
             var sql = RenderCheck(definition);
             string? exact = null;
             string? candidate = null;
             var count = 0;
-            foreach (var actual in table.Checks)
+
+            // WHY: Traverse the stable ordered source by ordinal without materializing another collection.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var actualIndex = 0; actualIndex < table.Checks.Count; actualIndex++)
             {
+                var actual = table.Checks[actualIndex];
                 if (sql is not null
                     && ExpressionMatches(actual.Expression, sql, definition.Expression))
                 {
@@ -83,13 +101,22 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
                     : null));
         }
 
-        foreach (var definition in expected.ForeignKeys)
+        // WHY: Traverse the stable ordered source by ordinal without materializing another collection.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var definitionIndex = 0; definitionIndex < expected.ForeignKeys.Count; definitionIndex++)
         {
+            var definition = expected.ForeignKeys[definitionIndex];
             string? exact = null;
             string? candidate = null;
             var count = 0;
-            foreach (var actual in table.ForeignKeys)
+
+            // WHY: Traverse the stable ordered source by ordinal without materializing another collection.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var actualIndex = 0; actualIndex < table.ForeignKeys.Count; actualIndex++)
             {
+                var actual = table.ForeignKeys[actualIndex];
                 if (SqliteCatalogEquivalence.ForeignKeyMatches(
                     snapshot,
                     actual,

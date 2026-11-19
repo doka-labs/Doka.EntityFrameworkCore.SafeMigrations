@@ -126,12 +126,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 
         try
         {
-            if (includeRows)
-            {
-                return $"SELECT NOT ({ForeignKeyDataBlocked(definition)});";
-            }
-
-            return BuildForeignKeyReplacementProofCore(definition, sourceExists);
+            return includeRows
+                ? $"SELECT NOT ({ForeignKeyDataBlocked(definition)});"
+                : BuildForeignKeyReplacementProofCore(definition, sourceExists);
         }
         finally
         {

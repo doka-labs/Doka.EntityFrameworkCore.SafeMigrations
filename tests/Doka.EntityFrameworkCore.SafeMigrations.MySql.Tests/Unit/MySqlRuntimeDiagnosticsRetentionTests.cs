@@ -38,7 +38,9 @@ public sealed class MySqlRuntimeDiagnosticsRetentionTests
         GC.KeepAlive(fixture.Commands);
     }
 
-    /// <summary>Keeps the authored source outside the test frame so JIT local lifetime cannot falsify collection.</summary>
+    /// <summary>
+    /// Keeps the authored source outside the test frame so JIT local lifetime cannot falsify collection.
+    /// </summary>
     /// <param name="context">The provider service owner, which outlives both generation and collection.</param>
     /// <param name="retainSource">Whether the positive control explicitly retains the original source.</param>
     [MethodImpl(MethodImplOptions.NoInlining)]
@@ -80,7 +82,9 @@ public sealed class MySqlRuntimeDiagnosticsRetentionTests
                 : null);
     }
 
-    /// <summary>Separates live generated commands, weak source probes and an intentional non-vacuous retention control.</summary>
+    /// <summary>
+    /// Separates live generated commands, weak source probes and an intentional non-vacuous retention control.
+    /// </summary>
     private sealed record ManagedPayloadRetentionFixture(
         IReadOnlyList<MigrationCommand> Commands,
         WeakReference Operation,

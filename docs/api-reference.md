@@ -11,147 +11,13 @@ completion/Quick Documentation for the selected package version. The
 [SQLite](../src/Doka.EntityFrameworkCore.SafeMigrations.Sqlite/PublicAPI.Shipped.txt),
 and [SQL Server](../src/Doka.EntityFrameworkCore.SafeMigrations.SqlServer/PublicAPI.Shipped.txt)
 API baselines are review inventories, not substitutes for this guide or XML.
-The initial public surface shipped with `10.0.0-rc.1`; `10.0.0-rc.2` added
-source-frozen legacy-convergence policy selection and provider-context
-validation. `10.0.0-rc.3` preserved that public API and existing
-migration-source compatibility while adding exact native Doka 10.1.1
-Guid-format analysis and ordered mixed-migration preflight. The 10.0.0 stable
-source promotes that exact public contract without a public API or generated
-migration-source delta. The published 10.0.1 and 10.0.2 maintenance releases
-preserve that public API. Stable 10.1.0 source adds two scaffolder-facing
-index-prefix methods while qualifying Doka 10.3.0's typed migration metadata;
-all earlier signatures remain compatible. Published stable 10.1.1 preserves
-that complete public surface while correcting internal provider analysis and
-structured-expression rendering. Published stable 10.1.2 preserves it again
-while correcting semantic identity, bounded catalog analysis, provider
-namespace guards, and ordered index replacement. Published stable 10.2.0 adds
-source-frozen model-managed-data operations and the transition-ready state.
-Published stable 10.2.1 preserves that public API and operation contract while
-correcting statement-terminator ownership in generated model-managed calls.
-Published stable 10.3.0 adds explicit model-managed-data ownership for excluded
-tables, provider-proven lossless column repair, report schema version 2, and
-typed diagnostic evidence. Published stable 10.3.1 preserves the complete
-public API and generated operation contract. Published stable 10.3.2 preserves
-them again while hardening design-time registration detection and consuming
-Doka 10.4.0's commandless operation result. Published stable 10.4.0 adds
-self-describing report-view serialization without changing canonical report-v2
-bytes and corrects MariaDB JSON collation diagnostics. Published stable 10.4.1
-preserves that public API, generated-operation contract, and report schemas
-while correcting ordered prerequisite and physical-identity projection.
-Published stable 10.4.2 adds the SQLite package and its provider-specific
-public registration and generator surface. Existing Core, MySQL/MariaDB, and
-PostgreSQL public APIs remain compatible. Published stable 10.4.3 adds the Core
-`AddColumnIfNotExistsFromModel` and `AlterColumnIfDifferentFromModel` methods
-and extends safe scaffolding to supported structural operations. Strict
-scaffolding remains the default. Stable 10.4.4 adds
-`SafeMigrationDeferredOrigin`, `SafeMigrationAssessment.DeferredOrigin`,
-`SafeMigrationAction.ValidateAtRuntime`, and
-`SafeMigrationReportStatus.RuntimeValidationRequired`. Canonical reports advance
-to schema v3 and filtered views to v2. Consumers must update exhaustive enum
-handling and schema validation, and rebuild references to the compiled
-`CurrentSchemaVersion` constant. Existing migration source, runtime guards,
-and history remain unchanged. The 10.4.5 patch preserves that public
-API, generated migration source, report schemas, and history. It changes only
-the MySQL/MariaDB index-catalog comparison query shape.
-
-Stable 10.4.6 adds the optional SQL Server package with
-provider-specific registration and generator composition. Core adds
-`CreateIndexWithIncludesIfNotExistsFromModel` and
-`CreateCompositeIndexWithIncludesIfNotExistsFromModel`; existing signatures
-remain compatible. Reports accept `sqlserver` as an engine-family value
-without changing canonical schema v3, filtered-view schema v2, or histories.
-Consumers with exhaustive engine-family handling must recognize the new value.
-
-The 10.4.9 patch preserves the complete 10.4.6 public API and dependency
-ranges. SQL Server admits proven built-in integer widening and simple integer
-CHECK validation on populated tables. PostgreSQL preserves repaired column
-collations and exact ALTER source authority; SQLite requires a lossless storage,
-CLR-domain and generation proof. Trigger-affected ordered row and structural
-evidence is deferred to runtime instead of reused as a stale certificate.
-Existing `ValidateAtRuntime`, `DeferredOrigin` and
-`RuntimeValidationRequired` report members express that boundary; independent
-permission, capability and invariant refusals remain blocking. PostgreSQL plan
-retention and SQL Server captures/runtime predicates omit unnecessary work
-without weakening fresh guards. Earlier MySQL/MariaDB optimizations remain.
-Migration source does not need regeneration; policy selection, canonical
-report v3, filtered-view v2, and migration histories remain unchanged. No
-API-baseline promotion is required for this patch.
-
-The 10.4.10 patch retains that API and dependency contract. Ordered
-nullability/backfill, sparse constraint/index and physical-rename proofs no
-longer fabricate authored definitions from existence-only acceptance. Canonical
-managed-key identities preserve column/value ordinals, and only internally
-captured actual pending migration boundaries reset transition validation.
-Owned required-add and PostgreSQL delete guards protect concurrent writes;
-schema/session cleanup consumes verified ownership. No public signature,
-policy selection, fingerprint format, report schema or migration history
-changes; existing migrations do not need regeneration. Native timing overruns
-are informational, not a waiver of functional or evidence validation.
-
-The 10.4.11 patch retains the same public APIs, EF/provider ranges, policies,
-fingerprint formats, canonical report v3, filtered-view v2 and migration history.
-An internal provider channel supplies actual sparse live prerequisites, not
-target-model definitions; ordered projection still owns accepted physical
-lifetimes and independent current row proofs. Related owner-case, supporting-
-index, PRIMARY-removal column-source, native CHECK/index-input and SQLite
-key/capacity fixes do not require migration regeneration or API-baseline promotion.
-The SQL Server PKCS minimum is 9.0.21.
-
-Stable 10.5.0 introduced operation identity, diagnostic explanation,
-`SafeMigrationDiagnosticMessages`, `SafeMigrationReportText` and
-`SafeMigrationExecutionException`; existing public signatures remain available.
-The Core shipped baseline includes this surface. That release introduced
-canonical report schema 4 and selected-view schema 3; update validators and rebuild
-references to the compiled `CurrentSchemaVersion` constant. MySQL/MariaDB callers
-must handle positively correlated owned assertions through the new managed
-exception, whose inner exception preserves the exact native cause. Other native
-failures and cancellation retain their contracts. Its Doka range was
-`[10.5.0,10.6.0)`; native UUID is opt-in and persisted-default reclassification
-can require an explicitly eligible repair. See [diagnostics](diagnostics.md),
-[support and qualification](support-and-qualification.md) and the
-[10.5.0 changelog](../CHANGELOG.md#1050---2026-10-15). That release preserved
-migration source, policy selection, fingerprint formats and history.
-
-Version 10.6.0 promotes the additive `SafeMigrationSql.Case`,
-`SafeMigrationSqlCaseExpression` and `SafeMigrationSqlCaseWhenClause` API to the
-Core shipped baseline and adds certified generated-column/CHECK contracts.
-Report schemas and diagnostic transport remain unchanged from 10.5.0.
-Successfully parsed EF computed/CHECK definitions can change approved contract
-fingerprints; see the [upgrade notes](support-and-qualification.md#upgrade-to-1060).
-Historical migration source is not regenerated or rewritten.
-
-Version 10.6.1 retains that public surface, report schemas and fingerprint
-formats. Its serviced dependency floors and upgrade requirements are listed
-in the [10.6.1 upgrade notes](support-and-qualification.md#upgrade-to-1061).
-
-Version 10.7.0 promotes the ten required-token runner/provider-analyzer
-declarations into the Core shipped baseline. CLR method signatures remain,
-but the optional/default-argument metadata is removed: callers must pass a
-token explicitly, including late-bound callers. This is a source/API contract
-break within the retained 10.x line, not a claim of strict SemVer compatibility.
-See the [10.7.0 upgrade notes](support-and-qualification.md#upgrade-to-1070).
-Framework-owned overrides, report schemas and fingerprint formats are unchanged.
-
-Version 10.7.1 retains the 10.7.0 public API and shipped baselines. Its internal
-table-scaffolding correction uses the existing typed `constraints` callback
-to apply certified annotations before immutable capture. No public factory
-overload, constructor parameter or configuration option is added. See the
-[10.7.1 upgrade notes](support-and-qualification.md#upgrade-to-1071).
-
-Version 10.7.2 retains those public declarations and dependency floors. Native
-expression/catalog corrections use existing contracts; binary literal values
-are defensive snapshots, not mutation handles. Corrected captured numeric SQL
-defaults can produce different contract fingerprints without changing their
-format. Review and renew affected approvals using the
-[10.7.2 upgrade notes](support-and-qualification.md#upgrade-to-1072).
-
-The current MySQL/MariaDB adapter requires Doka `[10.6.5,10.7.0)` and
-MySqlConnector minimum 2.6.2; EF Core and dependency-injection minimums are
-10.0.14. SQL Server requires SqlClient minimum 6.1.8 and PKCS minimum 9.0.22.
-These promoted transport floors belong only to their respective providers.
-Review implicit indexed-length model
-changes and renewed approval requirements in
-[support and qualification](support-and-qualification.md).
+This guide describes the current contract, not release history. Review the
+[upgrade notes](support-and-qualification.md#upgrade-to-1072) for caller changes,
+source-frozen migrations and approval renewal; the [changelog](../CHANGELOG.md)
+owns the chronological API and behavior history. All installed SafeMigrations
+packages must use matching versions because the adapters share Core's private ABI.
+External EF/provider ranges and provider-only transport floors are documented in
+[the dependency boundary](efcore-provider-upgrade-risk.md#qualified-dependency-ranges).
 
 ## Packages and registration
 
@@ -838,10 +704,10 @@ previously declared. This includes internal/test helpers and owned asynchronous
 action delegates. Cancellation is forwarded to the actual operation rather
 than merely accepted by an unused wrapper parameter.
 
-A local function belonging to the same operation may capture its enclosing
-token or token source directly; no redundant token argument is required there.
-Callbacks with a token-bearing delegate contract still use the invocation's
-token, and separate operations keep their own explicit cancellation boundary.
+Owned asynchronous local functions and callbacks also require an explicit final
+token parameter, even when they belong to the enclosing operation. Forward that
+same operation token; do not substitute a token merely because it is in scope.
+Framework adapters and protected cleanup retain their distinct contracts below.
 
 Removing the optional defaults is a source compatibility break for callers
 that omitted the token, including named-argument calls. Existing compiled
@@ -857,9 +723,12 @@ their external signatures and adapt explicitly to owned cancellable helpers.
 Cancellation remains cooperative, not a command timeout or rollback guarantee.
 Cleanup that must restore session state or release owned resources after the
 point of no cancellation is an explicit exception: uninterruptible cleanup and
-recovery methods remain tokenless where required, retaining their independent
-deadlines. Do not wrap their completion in a wait canceled by the failed
-operation; the resource must not be reused or disposed while cleanup still owns it.
+recovery methods remain tokenless where required and await actual native
+completion. No observer-only deadline may abandon pending cleanup or disposal.
+Configured native command timeouts and session quarantine remain in force; they
+are not replaced by a canceled wait. Primary work failure or cancellation retains
+its identity if cleanup also fails, while cleanup-only failure remains observable.
+See the canonical [ownership and recovery contract](runbooks/deployment-and-recovery.md#cleanup-ownership).
 
 ## Provider analyzer SPI
 

@@ -26,8 +26,8 @@ public sealed class MySqlCatalogTailBatchingTests
             PhysicalOperations(1),
             4 * 1024 * 1024,
             71,
-            CancellationToken.None,
-            comparer);
+            comparer,
+            CancellationToken.None);
 
         // Assert
         Assert.Single(result);
@@ -92,6 +92,7 @@ public sealed class MySqlCatalogTailBatchingTests
             PhysicalOperations(1),
             4 * 1024 * 1024,
             71,
+            identifierComparer: null,
             CancellationToken.None);
 
         // Assert
@@ -124,6 +125,7 @@ public sealed class MySqlCatalogTailBatchingTests
             operations,
             4 * 1024 * 1024,
             71,
+            identifierComparer: null,
             CancellationToken.None);
 
         // Assert
@@ -172,6 +174,7 @@ public sealed class MySqlCatalogTailBatchingTests
             operations,
             90_000,
             71,
+            identifierComparer: null,
             CancellationToken.None);
 
         // Assert
@@ -228,6 +231,7 @@ public sealed class MySqlCatalogTailBatchingTests
                 PhysicalOperations(513),
                 4 * 1024 * 1024,
                 71,
+                identifierComparer: null,
                 CancellationToken.None));
 
         // Assert
@@ -266,6 +270,7 @@ public sealed class MySqlCatalogTailBatchingTests
                 PhysicalOperations(513),
                 4 * 1024 * 1024,
                 71,
+                identifierComparer: null,
                 cancellation.Token));
 
         // Assert
@@ -482,6 +487,9 @@ public sealed class MySqlCatalogTailBatchingTests
                     $"{prefix}tail_{index:D4}",
                     [new ExpectedIndexKeyDefinition("id")])),
             SafeMigrationPolicy.ThrowIfDifferent))
+
+        // WHY: Retain this explicit materialization/copy path and its collection lowering.
+        // ReSharper disable once UseCollectionExpression
         .ToArray();
 
     private static Dictionary<string, SafeMigrationExpectedTableInventory> Inventory(

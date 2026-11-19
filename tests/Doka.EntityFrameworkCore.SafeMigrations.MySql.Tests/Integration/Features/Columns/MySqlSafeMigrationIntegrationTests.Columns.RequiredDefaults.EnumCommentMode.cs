@@ -1,6 +1,8 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-/// <summary>Exercises the ColumnsRequiredDefaultsEnumCommentMode migration contracts in an independent class collection.</summary>
+/// <summary>
+/// Exercises the ColumnsRequiredDefaultsEnumCommentMode migration contracts in an independent class collection.
+/// </summary>
 public sealed partial class
     MySqlColumnsRequiredDefaultsEnumCommentModeIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
@@ -95,10 +97,7 @@ public sealed partial class
             context,
             cancellationToken: CancellationToken.None);
 
-        var state = await ReadAtomicRequiredAddStateAsync(
-            connectionString,
-            operation,
-            cancellationToken: CancellationToken.None);
+        var state = await ReadAtomicRequiredAddStateAsync(connectionString, operation, null, CancellationToken.None);
 
         var physicalType = await RequiredDefaultsEnumCommentPhysicalTypeAsync(
             connectionString,
@@ -225,10 +224,7 @@ public sealed partial class
             "SELECT HEX(`value`) FROM `enum_comment_items` WHERE `key` = 1;",
             cancellationToken: CancellationToken.None);
 
-        var state = await ReadAtomicRequiredAddStateAsync(
-            connectionString,
-            operation,
-            cancellationToken: CancellationToken.None);
+        var state = await ReadAtomicRequiredAddStateAsync(connectionString, operation, null, CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -307,10 +303,7 @@ public sealed partial class
             "SELECT HEX(`value`) FROM `enum_comment_items` WHERE `key` = 1;",
             cancellationToken: CancellationToken.None);
 
-        var state = await ReadAtomicRequiredAddStateAsync(
-            connectionString,
-            operation,
-            cancellationToken: CancellationToken.None);
+        var state = await ReadAtomicRequiredAddStateAsync(connectionString, operation, null, CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -404,10 +397,7 @@ public sealed partial class
             "SELECT HEX(`value`) FROM `enum_comment_items` WHERE `key` = 1;",
             cancellationToken: CancellationToken.None);
 
-        var state = await ReadAtomicRequiredAddStateAsync(
-            connectionString,
-            operation,
-            cancellationToken: CancellationToken.None);
+        var state = await ReadAtomicRequiredAddStateAsync(connectionString, operation, null, CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -478,10 +468,7 @@ public sealed partial class
             context,
             cancellationToken: CancellationToken.None);
 
-        var state = await ReadAtomicRequiredAddStateAsync(
-            connectionString,
-            operation,
-            cancellationToken: CancellationToken.None);
+        var state = await ReadAtomicRequiredAddStateAsync(connectionString, operation, null, CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);

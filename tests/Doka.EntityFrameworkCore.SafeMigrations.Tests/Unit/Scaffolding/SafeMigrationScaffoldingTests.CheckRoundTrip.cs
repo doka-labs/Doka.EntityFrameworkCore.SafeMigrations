@@ -11,6 +11,7 @@ public sealed partial class SafeMigrationScaffoldingTests
         bool inline
     )
     {
+        // Arrange
         var check = new AddCheckConstraintOperation
         {
             Name = "ck_users_id",
@@ -22,6 +23,8 @@ public sealed partial class SafeMigrationScaffoldingTests
         table.CheckConstraints.Add(check);
         var generator = CreateOperationGenerator(SafeMigrationScaffoldingMode.Strict);
         var source = new IndentedStringBuilder();
+
+        // Act
         generator.Generate(
             "migrationBuilder",
             [
@@ -32,6 +35,8 @@ public sealed partial class SafeMigrationScaffoldingTests
             source);
 
         var operations = CompileAndExecuteGeneratedOperations(source.ToString());
+
+        // Assert
         var operation = Assert.IsType<SafeMigrationOperation>(Assert.Single(operations));
         var definition = inline
             ? Assert.Single(Assert.IsType<EnsureTableIntent>(operation.Intent)

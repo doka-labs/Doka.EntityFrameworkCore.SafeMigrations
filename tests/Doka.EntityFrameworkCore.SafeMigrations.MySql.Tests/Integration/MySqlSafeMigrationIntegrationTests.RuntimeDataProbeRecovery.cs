@@ -71,10 +71,7 @@ public sealed class MySqlRuntimeDataProbeRecoveryIntegrationTests : MySqlSafeMig
             : "SELECT `Id` FROM `runtime_setup_lock` WHERE `Id` = 1 FOR UPDATE;";
 
         observer.InjectFirstCompactedDataProbeGroup(
-            "SET @runtime_data_probe_prepared = 1; " + probe + " SET @runtime_data_probe_sentinel = 1;",
-            failureMode == "cancellation"
-                ? () => cancellation.CancelAfter(TimeSpan.FromMilliseconds(500))
-                : null);
+            "SET @runtime_data_probe_prepared = 1; " + probe + " SET @runtime_data_probe_sentinel = 1;");
 
         await using var context = CreateRuntimeContext(connectionString, observer);
         context.Database.SetCommandTimeout(
@@ -98,16 +95,26 @@ public sealed class MySqlRuntimeDataProbeRecoveryIntegrationTests : MySqlSafeMig
             SafeMigrationPolicy.RepairIfSafe);
 
         // Act
-        var result = await ExecuteRuntimeDataProbeRecoveryAsync(
+        var operation = ExecuteRuntimeDataProbeRecoveryAsync(
             context,
             observer,
             builder.Operations,
             cancellation.Token);
 
+        var result = failureMode == "cancellation"
+            ? await MySqlNativeCancellationCheckpoint.CancelWhenDispatchedAsync(
+                connectionString,
+                ((MySqlConnection)context.Database.GetDbConnection()).ServerThread,
+                "runtime_setup_lock",
+                cancellation,
+                operation,
+                CancellationToken.None)
+            : await operation;
+
         // Assert
         if (failureMode == "cancellation")
         {
-            Assert.IsAssignableFrom<OperationCanceledException>(result.Exception);
+            Assert.IsType<OperationCanceledException>(result.Exception, exactMatch: false);
         }
         else
         {

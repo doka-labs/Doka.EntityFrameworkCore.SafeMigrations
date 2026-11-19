@@ -112,10 +112,11 @@ public sealed partial class SafeMigrationScaffoldingTests
         // Arrange: This contract supplies its fixed rejection input.
 
         // Act
-        var exception = Assert.Throws<InvalidOperationException>(() =>
+        var failure = Record.Exception(() =>
             SafeMigrationGeneratedSource.GetConsistentNewLine(source));
 
         // Assert
+        var exception = Assert.IsType<InvalidOperationException>(failure);
         Assert.Contains("inconsistent line endings", exception.Message, StringComparison.Ordinal);
     }
 
@@ -126,11 +127,12 @@ public sealed partial class SafeMigrationScaffoldingTests
         // Arrange: This contract supplies its fixed rejection input.
 
         // Act
-        var exception = Assert.Throws<InvalidOperationException>(() =>
+        var failure = Record.Exception(() =>
             SafeMigrationCSharpMigrationsGenerator.EnsureSafeMigrationsUsingDirective(
                 "#nullable disable"));
 
         // Assert
+        var exception = Assert.IsType<InvalidOperationException>(failure);
         Assert.Contains("namespace directive", exception.Message, StringComparison.Ordinal);
         Assert.Contains("unresolved extension method", exception.Message, StringComparison.Ordinal);
     }
@@ -149,10 +151,11 @@ public sealed partial class SafeMigrationScaffoldingTests
             string.Empty);
 
         // Act
-        var exception = Assert.Throws<InvalidOperationException>(() =>
+        var failure = Record.Exception(() =>
             SafeMigrationCSharpMigrationsGenerator.EnsureSafeMigrationsUsingDirective(source));
 
         // Assert
+        var exception = Assert.IsType<InvalidOperationException>(failure);
         Assert.Contains(
             "more than one SafeMigrations namespace directive",
             exception.Message,
@@ -193,12 +196,13 @@ public sealed partial class SafeMigrationScaffoldingTests
         // Arrange: This contract supplies its fixed rejection input.
 
         // Act
-        var exception = Assert.Throws<InvalidOperationException>(() =>
+        var failure = Record.Exception(() =>
             SafeMigrationCSharpMigrationsGenerator.UseFileScopedNamespace(
                 "namespace Unexpected;",
                 "Company.Product.Migrations"));
 
         // Assert
+        var exception = Assert.IsType<InvalidOperationException>(failure);
         Assert.Contains("unexpected namespace shape", exception.Message, StringComparison.Ordinal);
     }
 

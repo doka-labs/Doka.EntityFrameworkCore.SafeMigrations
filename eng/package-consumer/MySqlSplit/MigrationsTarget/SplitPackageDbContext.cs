@@ -1,16 +1,17 @@
-using System;
-using Microsoft.EntityFrameworkCore;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.SplitTarget;
 
 /// <summary>
 /// Represents the migration-owning context in the split package-consumer
 /// qualification fixture.
 /// </summary>
-public sealed class SplitPackageDbContext(
-    DbContextOptions<SplitPackageDbContext> options
-) : DbContext(options)
+public sealed class SplitPackageDbContext : DbContext
 {
+    /// <summary>Initializes the migration-owning context with the configured provider options.</summary>
+    /// <param name="options">The provider and migration-lineage options.</param>
+    public SplitPackageDbContext(
+        DbContextOptions<SplitPackageDbContext> options
+    ) : base(options) { }
+
     /// <summary>Gets the entities owned by this migration lineage.</summary>
     public DbSet<SplitPackageEntity> Entities => Set<SplitPackageEntity>();
 

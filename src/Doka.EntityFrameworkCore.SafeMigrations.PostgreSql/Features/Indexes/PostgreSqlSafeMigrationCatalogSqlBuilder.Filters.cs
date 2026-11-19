@@ -59,8 +59,13 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         }
 
         var filterColumn = identifier.Parts[0];
-        foreach (var column in columns)
+
+        // WHY: This pass only reads the stable ordered collection by ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var columnIndex = 0; columnIndex < columns.Count; columnIndex++)
         {
+            var column = columns[columnIndex];
             if (StringComparer.Ordinal.Equals(column, filterColumn))
             {
                 return columns;

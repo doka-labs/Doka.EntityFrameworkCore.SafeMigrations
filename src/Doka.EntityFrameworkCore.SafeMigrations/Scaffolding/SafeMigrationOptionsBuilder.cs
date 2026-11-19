@@ -8,6 +8,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// The selected behavior is written into the generated C# migration. Changing
 /// this builder later never reinterprets an existing migration.
 /// </remarks>
+[PublicAPI]
 public sealed class SafeMigrationOptionsBuilder
 {
     /// <summary>Gets the mode currently selected for generated migrations.</summary>

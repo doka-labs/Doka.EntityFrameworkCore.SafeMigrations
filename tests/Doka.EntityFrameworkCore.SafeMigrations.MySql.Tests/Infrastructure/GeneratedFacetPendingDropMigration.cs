@@ -3,6 +3,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 /// <summary>Removes only an unrelated member while retaining the complete generated-column target.</summary>
 [DbContext(typeof(GeneratedFacetPendingDropDbContext))]
 [Migration(GeneratedFacetPendingDropDbContext.MigrationId)]
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public sealed class GeneratedFacetPendingDropMigration : Migration
 {
     /// <inheritdoc />

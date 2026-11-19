@@ -200,7 +200,7 @@ public sealed class SqlServerProjectedCheckPredicateTests
     )
     {
         // Arrange
-        using var context = new SafeMigrationDbContext(ConnectionString);
+        await using var context = new SafeMigrationDbContext(ConnectionString);
         var analyzer = new SqlServerSafeMigrationProviderAnalyzer(
             context.GetService<IRelationalTypeMappingSource>(),
             context.GetService<ISqlGenerationHelper>());

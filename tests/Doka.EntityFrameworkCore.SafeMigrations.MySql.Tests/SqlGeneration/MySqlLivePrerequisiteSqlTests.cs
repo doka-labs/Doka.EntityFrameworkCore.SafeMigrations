@@ -183,6 +183,9 @@ public sealed class MySqlLivePrerequisiteSqlTests
                 .Parameters
                 .Cast<DbParameter>()
                 .Select(static parameter => (string)parameter.Value!)
+
+                // WHY: Retain this explicit materialization/copy path and its collection lowering.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray());
 
         Assert.True(valueBytes >= 7 * 32);
@@ -418,6 +421,9 @@ public sealed class MySqlLivePrerequisiteSqlTests
             .Select(static index =>
                 ((string?)null, "t_" + index.ToString(CultureInfo.InvariantCulture) + new string('\u20AC', 58),
                     "c_" + index.ToString(CultureInfo.InvariantCulture) + new string('\u20AC', 58)))
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         const int maximumPayload = 4096;

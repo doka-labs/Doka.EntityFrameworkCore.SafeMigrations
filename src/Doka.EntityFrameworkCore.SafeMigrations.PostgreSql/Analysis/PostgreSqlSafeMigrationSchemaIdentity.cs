@@ -148,8 +148,12 @@ internal static class PostgreSqlSafeMigrationSchemaIdentity
                 Add(value.Name, value.Schema, tables);
                 break;
             case EnsureTableIntent value:
-                foreach (var foreignKey in value.Definition.ForeignKeys)
+                // WHY: This pass only reads the stable ordered collection by ordinal.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
+                for (var foreignKeyIndex = 0; foreignKeyIndex < value.Definition.ForeignKeys.Count; foreignKeyIndex++)
                 {
+                    var foreignKey = value.Definition.ForeignKeys[foreignKeyIndex];
                     Add(foreignKey.PrincipalTable, foreignKey.PrincipalSchema, tables);
                 }
 
@@ -158,8 +162,12 @@ internal static class PostgreSqlSafeMigrationSchemaIdentity
                 Add(value.Definition.PrincipalTable, value.Definition.PrincipalSchema, tables);
                 break;
             case DeleteModelManagedDataIntent value:
-                foreach (var foreignKey in value.ForeignKeys)
+                // WHY: This pass only reads the stable ordered collection by ordinal.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
+                for (var foreignKeyIndex = 0; foreignKeyIndex < value.ForeignKeys.Count; foreignKeyIndex++)
                 {
+                    var foreignKey = value.ForeignKeys[foreignKeyIndex];
                     Add(foreignKey.Table, foreignKey.Schema, tables);
                 }
 

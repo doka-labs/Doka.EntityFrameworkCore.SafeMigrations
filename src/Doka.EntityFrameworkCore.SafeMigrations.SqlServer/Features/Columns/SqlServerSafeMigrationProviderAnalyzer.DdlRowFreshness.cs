@@ -71,7 +71,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
     }
 
     /// <summary>Captures invocation-local DDL-trigger risk for both rows and physical metadata.</summary>
-    /// <param name="risk">The observed trigger or unproved metadata visibility that prevents an absence certificate.</param>
+    /// <param name="risk">
+    /// The observed trigger or unproved metadata visibility that prevents an absence certificate.
+    /// </param>
     internal void CaptureProjectedDdlRowEffects(
         SqlServerDdlRowEffectRisk risk
     ) => _ddlRowEffectRisk = risk;
@@ -240,17 +242,17 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             SafeMigrationObservedState.PrerequisiteMissing,
             SafeMigrationRepairCapability.None,
             false,
-            _freshnessInvalidatedByDml
-                ? rowDependent
-                    ? "projected_dml_trigger_data_unknown"
-                    : "projected_dml_trigger_structure_unknown"
-                : _ddlRowEffectRisk == SqlServerDdlRowEffectRisk.EnabledTrigger
-                    ? rowDependent
-                        ? "projected_ddl_trigger_data_unknown"
-                        : "projected_ddl_trigger_structure_unknown"
-                    : rowDependent
-                        ? "projected_ddl_visibility_data_unknown"
-                        : "projected_ddl_visibility_structure_unknown")
+            _freshnessInvalidatedByDml switch
+            {
+                true when rowDependent => "projected_dml_trigger_data_unknown",
+                true => "projected_dml_trigger_structure_unknown",
+                false when _ddlRowEffectRisk == SqlServerDdlRowEffectRisk.EnabledTrigger && rowDependent
+                    => "projected_ddl_trigger_data_unknown",
+                false when _ddlRowEffectRisk == SqlServerDdlRowEffectRisk.EnabledTrigger
+                    => "projected_ddl_trigger_structure_unknown",
+                false when rowDependent => "projected_ddl_visibility_data_unknown",
+                false => "projected_ddl_visibility_structure_unknown",
+            })
         {
             RequiresLiveDataProof = rowDependent,
             ProviderDeferredOriginOrdinal = _ddlRowOriginOrdinal,

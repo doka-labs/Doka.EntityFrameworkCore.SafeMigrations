@@ -20,6 +20,12 @@ real package boundary.
 
 ## Restore and build
 
+All 24 repository projects retain their default source-mode lockfiles. Review
+every affected lock on a dependency change. Platform-neutral CI source restores
+are locked; RID, explicit compatibility-matrix and isolated package-consumer
+profiles retain their qualified exceptions. See
+[dependency qualification](docs/support-and-qualification.md#dependency-qualification).
+
 ```bash
 dotnet restore Doka.EntityFrameworkCore.SafeMigrations.slnx
 dotnet build Doka.EntityFrameworkCore.SafeMigrations.slnx --configuration Release --no-restore
@@ -113,19 +119,25 @@ The default local engines are MariaDB 12.3.3 and PostgreSQL
 ```bash
 SAFE_MIGRATIONS_MYSQL_ENGINE=mysql \
 SAFE_MIGRATIONS_MYSQL_VERSION=8.4.13 \
-SAFE_MIGRATIONS_MYSQL_IMAGE='mysql:8.4.13@sha256:a0225d1ea6631c8bc2385dc4c2faba17bbf1834ecf369e1659a9a382bd8d5dd7' \
+SAFE_MIGRATIONS_MYSQL_IMAGE="$(bash eng/select-database-image.sh mysql84)" \
 dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests.csproj --configuration Release
 ```
 
 or:
 
 ```bash
-SAFE_MIGRATIONS_POSTGRES_IMAGE='postgres:14.24@sha256:0472f5295d05c211cc42b3daa5e84a128e390c5267b60ced9fe044bcf4edfdb8' \
+SAFE_MIGRATIONS_POSTGRES_IMAGE="$(bash eng/select-database-image.sh postgres14)" \
 SAFE_MIGRATIONS_POSTGRES_VERSION=14.24 \
 dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests.csproj --configuration Release
 ```
 
 ### Test structure and formatting
+
+Use the solution-shared `Built-in: Custom` cleanup profile. It preserves disabled
+auto-property/setter rewrites and excludes Markdown reformatting; CLI cleanup also
+excludes Markdown explicitly. Review both the diff and fresh compile/test evidence
+after cleanup. The [application decisions](docs/engineering-standards-application.md)
+own these project-specific settings.
 
 Use explicit Arrange, Act, and Assert sections once each, in that order. Each
 test exposes one independently observable contract; separate unrelated positive,
@@ -163,11 +175,11 @@ they still own resources. Framework-controlled xUnit and BenchmarkDotNet entry
 points retain their signatures; only the adapter chooses an explicit root token.
 Neither a familiar method name nor an unused parameter establishes compliance.
 
-Local functions within the same operation may capture its existing token or
-token source instead of accepting a redundant parameter. Token-aware callbacks
-still receive their invocation's token, and independent operations retain
-explicit arguments. Captured scope availability does not by itself prove
-correct propagation; cancellation behavior must remain covered by tests.
+Owned asynchronous local functions and callbacks also accept an explicit final
+operation token; capture availability does not replace that signature contract.
+Forward the actual operation/invocation token and retain independent tokens only
+for genuinely separate operations. Framework adapters and protected cleanup
+keep their reviewed exceptions; cancellation behavior remains covered by tests.
 
 Keep synchronous lifecycle tests synchronous when that is the behavior under
 test. If an IDE inspection suggests replacing that intentional path, use only a
@@ -187,6 +199,24 @@ dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Doka.Entit
 dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests.csproj --configuration Release --no-build --no-restore
 dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests.csproj --configuration Release --no-build --no-restore
 dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests.csproj --configuration Release --no-build --no-restore
+python3 -m unittest eng/tests/test_parallel_test_configuration.py -v
+python3 -m unittest eng/tests/test_verify_coverage.py -v
+bash eng/tests/test-ef-tooling.sh
+bash eng/tests/test-release-version.sh
+bash -e -c 'while IFS= read -r -d "" script; do bash -n "$script"; done < <(find eng -type f -name "*.sh" -print0)'
+dotnet format Doka.EntityFrameworkCore.SafeMigrations.slnx style --severity warn --verify-no-changes --no-restore
+dotnet format Doka.EntityFrameworkCore.SafeMigrations.slnx style --diagnostics IDE0005 --severity hidden --verify-no-changes --no-restore
+```
+
+### Explicit diagnostic benchmark execution
+
+Ordinary build, tests, cleanup and default CI do not start BenchmarkDotNet,
+including `Dry`. To request measurements deliberately, run the relevant commands
+below, or dispatch CI with `capture-benchmark-evidence: true`. The separate
+`capture-sqlserver-baseline` input requests the SQL Server Short measurement.
+Neither input changes required functional, package or native qualification.
+
+```bash
 dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Benchmarks \
   --configuration Release --no-build --no-restore -- \
   --filter '*' --job Dry --artifacts artifacts/performance/core
@@ -202,24 +232,15 @@ dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.B
 dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Benchmarks \
   --configuration Release --no-build --no-restore -- \
   --filter '*' --job Dry --artifacts artifacts/performance/sqlserver
-python3 -m unittest eng/tests/test_parallel_test_configuration.py -v
-python3 -m unittest eng/tests/test_verify_coverage.py -v
-bash eng/tests/test-ef-tooling.sh
-bash eng/tests/test-release-version.sh
-bash -e -c 'while IFS= read -r -d "" script; do bash -n "$script"; done < <(find eng -type f -name "*.sh" -print0)'
-dotnet format Doka.EntityFrameworkCore.SafeMigrations.slnx style --severity warn --verify-no-changes --no-restore
-dotnet format Doka.EntityFrameworkCore.SafeMigrations.slnx style --diagnostics IDE0005 --severity hidden --verify-no-changes --no-restore
 ```
 
-All five suites use BenchmarkDotNet 0.15.8 with managed allocation diagnostics
-and native full JSON export. The commands above match CI and release
-qualification: `Dry` exercises every selected case and validates its evidence,
-but is not a statistically meaningful performance comparison. The default
-workloads include prepared projection, evidence parsing, dependency reuse,
-provider generation and catalog assembly across the five isolated executables.
-Configuration, generated-build, execution, missing/failed case, and missing or
-invalid export failures remain fatal. Measured durations and allocation values
-never determine success; there are no custom benchmark budgets or strict mode.
+All five suites use BenchmarkDotNet 0.15.8 with native full JSON and managed
+allocation diagnostics. An explicitly requested `Dry` run checks selected-case
+execution/export, not statistical performance. For requested runs, invalid
+configuration, generated builds, execution, missing/failed cases and missing or
+invalid exports fail. Numeric duration and allocation values never determine
+success. Deterministic workload/configuration/export-shape controls stay in
+ordinary tests without launching the benchmark engine.
 
 Functional tests must not assert sampled managed-allocation byte counts,
 including absolute caps, relative comparisons or zero-byte samples. Keep
@@ -301,12 +322,49 @@ evidence through `SAFE_MIGRATIONS_SQLSERVER_ATTRIBUTION_OUTPUT`. Native server
 evidence requires an available supported host and database; prepared client
 runs cannot establish it. Never commit connection strings or credentials.
 
-Live pooled-runner p95 comparisons for server providers are also informational.
-Their 20 measured calls and `2 * clean p95 + 250 ms` comparison remain unchanged;
-JSON retains `evaluationMode: "informational"` and an exceeded
-`requirement.passed: false` verdict. Timing overruns do not fail those integration
-tests. Report-state and catalog-scope assertions, invalid measurements,
-execution exceptions and evidence-output failures still fail qualification.
+### Native catalog and migration measurements
+
+The server-provider executables also preserve native workloads behind explicit
+modes. They are excluded from the default benchmark inventory, so ordinary
+generation smoke does not unexpectedly require a database:
+
+| Executable suffix | Mode | Native workload | Private inherited connection variable |
+| --- | --- | --- | --- |
+| `.MySql` | `--live-catalog` | 100 managed tables, clean or with 1,000 foreign tables | `SAFE_MIGRATIONS_MYSQL_BENCHMARK_CONNECTION` |
+| `.MySql` | `--live-runtime` | Initial migration and replay from four legacy states | `SAFE_MIGRATIONS_MYSQL_BENCHMARK_CONNECTION` |
+| `.PostgreSql` | `--live-catalog` | 100 managed tables, clean or with 1,000 foreign tables | `SAFE_MIGRATIONS_POSTGRES_BENCHMARK_CONNECTION` |
+| `.PostgreSql` | `--live-column-attribution` | 16 actual catalog/runtime column fixtures | `SAFE_MIGRATIONS_POSTGRES_BENCHMARK_CONNECTION` |
+| `.SqlServer` | `--live-catalog` | 100 managed tables, clean or with 1,000 foreign tables | `SAFE_MIGRATIONS_SQLSERVER_BENCHMARK_CONNECTION` |
+
+Set the appropriate inherited environment variable through your private local or
+CI secret configuration, never BenchmarkDotNet `--envVars`, parameters, committed
+files or command-line connection values. Use a dedicated diagnostic server whose
+account can create/drop databases. Setup creates a fresh generated database;
+cleanup removes only that owned database, not the database named in the supplied
+connection. No native mode is implicitly requested by ordinary CI qualification.
+
+For example, after supplying the private MySQL/MariaDB connection:
+
+```sh
+dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.MySql.Benchmarks \
+  --configuration Release -- --live-catalog --filter '*' --job Short \
+  --artifacts artifacts/performance/live-bdn/mysql
+```
+
+Use `--list flat` after a mode to discover its cases without contacting a server.
+BenchmarkDotNet owns process isolation, warmup, sampling and full JSON export;
+the old 20-sample collector, relative-budget formula and custom percentile JSON
+are retired. Historical reports are not directly comparable to the new method.
+Preparation/reset and functional validation remain outside measured invocations.
+Mutating fixtures reject extra invocations before executing SQL, rather than
+silently measuring a replay as an initial application. Core deep equality and
+SQL Server capture allocation cases are part of their ordinary BDN inventories.
+
+Integration tests retain clean/noisy state, identity, catalog-scope, mutation and
+replay assertions once per scenario. Once-per-operation diagnostic counters and
+duration observations remain operational evidence, not statistical benchmarks.
+Numeric values cannot fail qualification; execution, isolation, cleanup,
+functional-output and requested-export failures still fail.
 
 The reusable quality workflow additionally collects Microsoft Cobertura output
 from all five test assemblies, merges product lines conservatively, and runs:

@@ -134,6 +134,9 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
         }
 
         var hasSurvivingGeneratedColumn = false;
+
+        // WHY: Preserve the concrete dictionary enumerator and its first matching dependency short circuit.
+        // ReSharper disable once LoopCanBeConvertedToQuery
         foreach (var candidate in table.Columns.Values)
         {
             if (!s_identifierComparer.Equals(candidate.Name, intent.Name)
@@ -438,7 +441,7 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
         ExpectedColumnDefinition expected
     )
     {
-        var result = new List<SafeMigrationFacetDifference>();
+        List<SafeMigrationFacetDifference> result = [];
         var expectedStoreType = ExpectedStoreType(expected);
         if (!StringComparer.Ordinal.Equals(NormalizeStoreType(actual.StoreType), NormalizeStoreType(expectedStoreType)))
         {

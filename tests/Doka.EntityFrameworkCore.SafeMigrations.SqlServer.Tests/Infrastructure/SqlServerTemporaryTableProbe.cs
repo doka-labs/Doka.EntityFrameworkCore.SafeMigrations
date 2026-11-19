@@ -46,8 +46,8 @@ internal static class SqlServerTemporaryTableProbe
     internal static async Task<int?> ReadObjectIdAsync(
         SqlConnection connection,
         string localName,
-        CancellationToken cancellationToken,
-        SqlTransaction? transaction = null
+        SqlTransaction? transaction,
+        CancellationToken cancellationToken
     )
     {
         cancellationToken.ThrowIfCancellationRequested();

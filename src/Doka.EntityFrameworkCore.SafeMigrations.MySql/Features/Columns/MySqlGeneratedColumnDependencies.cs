@@ -44,6 +44,10 @@ internal static class MySqlGeneratedColumnDependencies
 
         return names.Count == 0
             ? Array.Empty<string>()
+
+            // WHY: Retain fluent materialization and its existing snapshot
+            // ownership rather than replacing this boundary with a spread.
+            // ReSharper disable once UseCollectionExpression
             : names.ToArray();
     }
 
@@ -53,8 +57,15 @@ internal static class MySqlGeneratedColumnDependencies
         ExpectedTableDefinition table
     )
     {
-        foreach (var source in Collect(definition))
+        var sources = Collect(definition);
+
+        // WHY: Retain the collected snapshot once and read its stable source order directly.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var sourceIndex = 0; sourceIndex < sources.Count; sourceIndex++)
         {
+            var source = sources[sourceIndex];
+
             if (StringComparer.OrdinalIgnoreCase.Equals(source, definition.Name))
             {
                 return false;
@@ -96,10 +107,22 @@ internal static class MySqlGeneratedColumnDependencies
         ExpectedTableDefinition table
     )
     {
-        foreach (var source in Collect(definition))
+        var sources = Collect(definition);
+
+        // WHY: Retain the collected snapshot once and read its stable source order directly.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var sourceIndex = 0; sourceIndex < sources.Count; sourceIndex++)
         {
-            foreach (var candidate in table.Columns)
+            var source = sources[sourceIndex];
+
+            // WHY: Index this stable list while preserving its order and ownership.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var candidateIndex = 0; candidateIndex < table.Columns.Count; candidateIndex++)
             {
+                var candidate = table.Columns[candidateIndex];
+
                 if (StringComparer.OrdinalIgnoreCase.Equals(source, candidate.Name)
                     && IsIdentitySource(candidate))
                 {

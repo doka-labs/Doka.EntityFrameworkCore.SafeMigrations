@@ -109,7 +109,7 @@ internal static class PostgreSqlIndexInputEligibilitySql
         }
 
         var nativeMask = mask.ToString(CultureInfo.InvariantCulture);
-        var profile = """
+        const string profile = """
             CASE am.amhandler
             WHEN 330 THEN 15
             WHEN 331 THEN 0

@@ -17,11 +17,11 @@ public sealed class SqlServerIdentityInsertCommandTests
     )
     {
         // Arrange
-        using var session = new RecoveryConnection { InheritedIdentityInsert = true };
+        await using var session = new RecoveryConnection { InheritedIdentityInsert = true };
         var options = new DbContextOptionsBuilder().UseSqlServer(session)
             .Options;
 
-        using var context = new DbContext(options);
+        await using var context = new DbContext(options);
         var dependencies = context.GetService<MigrationsSqlGeneratorDependencies>();
         var analyzer = CreateAnalyzer(context);
         var failure = new InvalidOperationException("guard rejected before own ON");
@@ -54,7 +54,7 @@ public sealed class SqlServerIdentityInsertCommandTests
     public async Task AlreadyCanceledDispatch_DoesNotBootstrapOrRecoverCallerState()
     {
         // Arrange
-        using var session = new RecoveryConnection
+        await using var session = new RecoveryConnection
         {
             InheritedIdentityInsert = true,
             IdentityOwner = "foreign ownership marker",
@@ -63,9 +63,9 @@ public sealed class SqlServerIdentityInsertCommandTests
         var options = new DbContextOptionsBuilder().UseSqlServer(session)
             .Options;
 
-        using var context = new DbContext(options);
+        await using var context = new DbContext(options);
         using var cancellation = new CancellationTokenSource();
-        cancellation.Cancel();
+        await cancellation.CancelAsync();
         var dependencies = context.GetService<MigrationsSqlGeneratorDependencies>();
         var original = new FailingCommand(dependencies, new InvalidOperationException("must not dispatch"));
         var command = new SqlServerSafeMigrationIdentityInsertCommand(
@@ -82,7 +82,7 @@ public sealed class SqlServerIdentityInsertCommandTests
             cancellationToken: cancellation.Token));
 
         // Assert
-        Assert.IsAssignableFrom<OperationCanceledException>(observed);
+        Assert.IsType<OperationCanceledException>(observed, exactMatch: false);
         Assert.Equal(0, original.ExecutionCount);
         Assert.Empty(session.Commands);
         Assert.True(session.InheritedIdentityInsert);
@@ -102,7 +102,7 @@ public sealed class SqlServerIdentityInsertCommandTests
     )
     {
         // Arrange
-        using var session = new RecoveryConnection
+        await using var session = new RecoveryConnection
         {
             InheritedIdentityInsert = true,
             IdentityOwner = "caller-owned marker",
@@ -112,7 +112,7 @@ public sealed class SqlServerIdentityInsertCommandTests
         var options = new DbContextOptionsBuilder().UseSqlServer(session)
             .Options;
 
-        using var context = new DbContext(options);
+        await using var context = new DbContext(options);
         var dependencies = context.GetService<MigrationsSqlGeneratorDependencies>();
         var analyzer = CreateAnalyzer(context);
         var original = new FailingCommand(dependencies, new InvalidOperationException("must not dispatch"));
@@ -150,12 +150,12 @@ public sealed class SqlServerIdentityInsertCommandTests
     )
     {
         // Arrange
-        using var session = new RecoveryConnection { FailOpen = true };
-        session.Close();
+        await using var session = new RecoveryConnection { FailOpen = true };
+        await session.CloseAsync();
         var options = new DbContextOptionsBuilder().UseSqlServer(session)
             .Options;
 
-        using var context = new DbContext(options);
+        await using var context = new DbContext(options);
         var dependencies = context.GetService<MigrationsSqlGeneratorDependencies>();
         var analyzer = CreateAnalyzer(context);
         var original = new FailingCommand(dependencies, new InvalidOperationException("must not dispatch"));
@@ -195,7 +195,7 @@ public sealed class SqlServerIdentityInsertCommandTests
         // Arrange
         using var cancellation = new CancellationTokenSource();
         var failure = new OperationCanceledException(cancellation.Token);
-        using var session = new RecoveryConnection
+        await using var session = new RecoveryConnection
         {
             InheritedIdentityInsert = true,
             BootstrapFailure = failure,
@@ -206,7 +206,7 @@ public sealed class SqlServerIdentityInsertCommandTests
         var options = new DbContextOptionsBuilder().UseSqlServer(session)
             .Options;
 
-        using var context = new DbContext(options);
+        await using var context = new DbContext(options);
         var dependencies = context.GetService<MigrationsSqlGeneratorDependencies>();
         var analyzer = CreateAnalyzer(context);
         var original = new FailingCommand(dependencies, new InvalidOperationException("must not dispatch"));
@@ -253,7 +253,7 @@ public sealed class SqlServerIdentityInsertCommandTests
     {
         // Arrange
         using var cancellation = new CancellationTokenSource();
-        using var session = new RecoveryConnection
+        await using var session = new RecoveryConnection
         {
             InheritedIdentityInsert = true,
             OnBootstrap = cancellation.Cancel,
@@ -262,7 +262,7 @@ public sealed class SqlServerIdentityInsertCommandTests
         var options = new DbContextOptionsBuilder().UseSqlServer(session)
             .Options;
 
-        using var context = new DbContext(options);
+        await using var context = new DbContext(options);
         var dependencies = context.GetService<MigrationsSqlGeneratorDependencies>();
         var analyzer = CreateAnalyzer(context);
         var original = new FailingCommand(dependencies, new InvalidOperationException("must not dispatch"));
@@ -280,7 +280,7 @@ public sealed class SqlServerIdentityInsertCommandTests
             cancellationToken: cancellation.Token));
 
         // Assert
-        Assert.IsAssignableFrom<OperationCanceledException>(observed);
+        Assert.IsType<OperationCanceledException>(observed, exactMatch: false);
         Assert.Equal(0, original.ExecutionCount);
         Assert.Equal(0, session.IdentityOffCount);
         Assert.True(session.InheritedIdentityInsert);
@@ -309,7 +309,7 @@ public sealed class SqlServerIdentityInsertCommandTests
     )
     {
         // Arrange
-        using var session = new RecoveryConnection
+        await using var session = new RecoveryConnection
         {
             InheritedIdentityInsert = true,
             IdentityOwner = marker,
@@ -319,7 +319,7 @@ public sealed class SqlServerIdentityInsertCommandTests
         var options = new DbContextOptionsBuilder().UseSqlServer(session)
             .Options;
 
-        using var context = new DbContext(options);
+        await using var context = new DbContext(options);
         var dependencies = context.GetService<MigrationsSqlGeneratorDependencies>();
         var analyzer = CreateAnalyzer(context);
         var original = new FailingCommand(dependencies, new InvalidOperationException("must not dispatch"));
@@ -359,11 +359,11 @@ public sealed class SqlServerIdentityInsertCommandTests
     )
     {
         // Arrange
-        using var session = new RecoveryConnection { InheritedIdentityInsert = true };
+        await using var session = new RecoveryConnection { InheritedIdentityInsert = true };
         var options = new DbContextOptionsBuilder().UseSqlServer(session)
             .Options;
 
-        using var context = new DbContext(options);
+        await using var context = new DbContext(options);
         var dependencies = context.GetService<MigrationsSqlGeneratorDependencies>();
         var analyzer = CreateAnalyzer(context);
         var failure = new OperationCanceledException("attention interrupted acquisition confirmation");
@@ -402,11 +402,11 @@ public sealed class SqlServerIdentityInsertCommandTests
     )
     {
         // Arrange
-        using var session = new RecoveryConnection();
+        await using var session = new RecoveryConnection();
         var options = new DbContextOptionsBuilder().UseSqlServer(session)
             .Options;
 
-        using var context = new DbContext(options);
+        await using var context = new DbContext(options);
         var dependencies = context.GetService<MigrationsSqlGeneratorDependencies>();
         var analyzer = CreateAnalyzer(context);
         var failure = new InvalidOperationException("original migration failure");
@@ -452,19 +452,21 @@ public sealed class SqlServerIdentityInsertCommandTests
     }
 
     /// <summary>
-    /// Recovers canceled work independently of its token while retaining the caller's transaction.
+    /// Uses protected cleanup after cancellation while retaining the caller's transaction.
     /// </summary>
     [Fact]
     public async Task CanceledCommand_RecoversWithIndependentTokenAndCurrentTransaction()
     {
         // Arrange
-        using var session = new RecoveryConnection();
+        await using var session = new RecoveryConnection();
         var options = new DbContextOptionsBuilder().UseSqlServer(session)
             .Options;
 
-        using var context = new DbContext(options);
-        using var transaction = session.BeginTransaction();
-        using var contextTransaction = context.Database.UseTransaction(transaction);
+        await using var context = new DbContext(options);
+        await using var transaction = await session.BeginTransactionAsync(CancellationToken.None);
+        await using var contextTransaction = await context.Database.UseTransactionAsync(
+            transaction,
+            CancellationToken.None);
         using var cancellation = new CancellationTokenSource();
         var dependencies = context.GetService<MigrationsSqlGeneratorDependencies>();
         var analyzer = CreateAnalyzer(context);
@@ -488,9 +490,9 @@ public sealed class SqlServerIdentityInsertCommandTests
             session.Commands,
             static command => command.Sql.StartsWith("DECLARE", StringComparison.Ordinal));
 
-        Assert.True(cleanup.Token.CanBeCanceled);
-        Assert.False(cleanup.Token.IsCancellationRequested);
-        Assert.NotEqual(cancellation.Token, cleanup.Token);
+        Assert.Equal(CancellationToken.None, cleanup.ObservedCancellationToken);
+        Assert.False(cleanup.ObservedCancellationToken.IsCancellationRequested);
+        Assert.NotEqual(cancellation.Token, cleanup.ObservedCancellationToken);
         Assert.Same(transaction, cleanup.Transaction);
         Assert.Equal(ConnectionState.Open, session.State);
         var callerTransaction = Assert.IsType<RecoveryTransaction>(transaction);
@@ -511,11 +513,11 @@ public sealed class SqlServerIdentityInsertCommandTests
     )
     {
         // Arrange
-        using var session = new RecoveryConnection { FailCleanup = true };
+        await using var session = new RecoveryConnection { FailCleanup = true };
         var options = new DbContextOptionsBuilder().UseSqlServer(session)
             .Options;
 
-        using var context = new DbContext(options);
+        await using var context = new DbContext(options);
         var dependencies = context.GetService<MigrationsSqlGeneratorDependencies>();
         var analyzer = CreateAnalyzer(context);
         var failure = new OperationCanceledException("original cancellation");
@@ -565,7 +567,7 @@ public sealed class SqlServerIdentityInsertCommandTests
     )
     {
         // Arrange
-        using var session = new RecoveryConnection
+        await using var session = new RecoveryConnection
         {
             FailCleanup = true,
             CloseFailuresRemaining = 1,
@@ -577,9 +579,11 @@ public sealed class SqlServerIdentityInsertCommandTests
         var options = new DbContextOptionsBuilder().UseSqlServer(session)
             .Options;
 
-        using var context = new DbContext(options);
-        using var transaction = session.BeginTransaction();
-        using var contextTransaction = context.Database.UseTransaction(transaction);
+        await using var context = new DbContext(options);
+        await using var transaction = await session.BeginTransactionAsync(CancellationToken.None);
+        await using var contextTransaction = await context.Database.UseTransactionAsync(
+            transaction,
+            CancellationToken.None);
         using var cancellation = new CancellationTokenSource();
         var dependencies = context.GetService<MigrationsSqlGeneratorDependencies>();
         var analyzer = CreateAnalyzer(context);
@@ -658,8 +662,8 @@ public sealed class SqlServerIdentityInsertCommandTests
 
         Assert.Same(transaction, cleanup.Transaction);
         Assert.Equal(30, cleanup.Timeout);
-        Assert.NotEqual(cancellation.Token, cleanup.Token);
-        Assert.False(cleanup.Token.IsCancellationRequested);
+        Assert.NotEqual(cancellation.Token, cleanup.ObservedCancellationToken);
+        Assert.False(cleanup.ObservedCancellationToken.IsCancellationRequested);
 
         var callerTransaction = Assert.IsType<RecoveryTransaction>(transaction);
 
@@ -675,12 +679,12 @@ public sealed class SqlServerIdentityInsertCommandTests
     public async Task ClosedConnection_BalancesCommandOwnedOpenAfterFailure()
     {
         // Arrange
-        using var session = new RecoveryConnection();
-        session.Close();
+        await using var session = new RecoveryConnection();
+        await session.CloseAsync();
         var options = new DbContextOptionsBuilder().UseSqlServer(session)
             .Options;
 
-        using var context = new DbContext(options);
+        await using var context = new DbContext(options);
         var dependencies = context.GetService<MigrationsSqlGeneratorDependencies>();
         var analyzer = CreateAnalyzer(context);
         var failure = new OperationCanceledException("canceled before execution");
@@ -713,11 +717,11 @@ public sealed class SqlServerIdentityInsertCommandTests
     )
     {
         // Arrange
-        using var session = new RecoveryConnection();
+        await using var session = new RecoveryConnection();
         var options = new DbContextOptionsBuilder().UseSqlServer(session)
             .Options;
 
-        using var context = new DbContext(options);
+        await using var context = new DbContext(options);
         using var cancellation = new CancellationTokenSource();
         var dependencies = context.GetService<MigrationsSqlGeneratorDependencies>();
         var original = new SuccessfulCommand(dependencies);
@@ -730,6 +734,8 @@ public sealed class SqlServerIdentityInsertCommandTests
         // Act
         var result = asynchronous
             ? await command.ExecuteNonQueryAsync(connection, parameters, cancellation.Token)
+            // WHY: This branch deliberately tests the synchronous entry point independently of the async control.
+            // ReSharper disable once MethodHasAsyncOverloadWithCancellation
             : command.ExecuteNonQuery(connection, parameters);
 
         // Assert
@@ -822,8 +828,13 @@ public sealed class SqlServerIdentityInsertCommandTests
         }
     }
 
-    private sealed class SuccessfulCommand(MigrationsSqlGeneratorDependencies dependencies)
-        : MigrationCommand(
+    private sealed class SuccessfulCommand
+        : MigrationCommand
+    {
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        public SuccessfulCommand(
+            MigrationsSqlGeneratorDependencies dependencies
+        ) : base(
             dependencies
                 .CommandBuilderFactory
                 .Create()
@@ -831,8 +842,8 @@ public sealed class SqlServerIdentityInsertCommandTests
                 .Build(),
             dependencies.CurrentContext.Context,
             dependencies.Logger,
-            transactionSuppressed: true)
-    {
+            transactionSuppressed: true) { }
+
         public string Text { get; set; } = string.Empty;
 
         public IReadOnlyDictionary<string, object?>? Parameters { get; private set; }
@@ -1153,10 +1164,15 @@ public sealed class SqlServerIdentityInsertCommandTests
         }
     }
 
+    /// <summary>Snapshots the actual cleanup command rather than accepting a token for future execution.</summary>
+    /// <param name="Sql">The cleanup text observed by the controlled command.</param>
+    /// <param name="Timeout">The effective cleanup command timeout.</param>
+    /// <param name="Transaction">The caller transaction retained for cleanup.</param>
+    /// <param name="ObservedCancellationToken">The independently protected token actually used by cleanup.</param>
     private sealed record CleanupTrace(
         string Sql,
         int Timeout,
         DbTransaction? Transaction,
-        CancellationToken Token
+        CancellationToken ObservedCancellationToken
     );
 }

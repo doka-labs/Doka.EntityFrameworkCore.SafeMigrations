@@ -42,7 +42,7 @@ public sealed class SqliteOwnedHelperCancellationTests : SqliteIntegrationTestBa
         command.CommandText = "CREATE TABLE helper_probe (Id INTEGER NOT NULL); INSERT INTO helper_probe VALUES (17);";
         await command.ExecuteNonQueryAsync(CancellationToken.None);
         using var cancellation = new CancellationTokenSource();
-        cancellation.Cancel();
+        await cancellation.CancelAsync();
 
         // Act
         var exception = await Record.ExceptionAsync(async () =>
@@ -66,11 +66,13 @@ public sealed class SqliteOwnedHelperCancellationTests : SqliteIntegrationTestBa
             }
         });
 
-        // Assert
-        var canceled = Assert.IsAssignableFrom<OperationCanceledException>(exception);
-        Assert.Equal(cancellation.Token, canceled.CancellationToken);
         command.CommandText = "SELECT COUNT(*) FROM helper_probe;";
-        Assert.Equal(1L, await command.ExecuteScalarAsync(CancellationToken.None));
+        var remainingRows = await command.ExecuteScalarAsync(CancellationToken.None);
+
+        // Assert
+        var canceled = Assert.IsType<OperationCanceledException>(exception, exactMatch: false);
+        Assert.Equal(cancellation.Token, canceled.CancellationToken);
+        Assert.Equal(1L, remainingRows);
         Assert.Equal(ConnectionState.Open, connection.State);
     }
 }

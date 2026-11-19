@@ -14,6 +14,7 @@ public sealed partial class SqliteSafeMigrationProjectedForeignKeyNewOwnerIntegr
         bool bindsInitial
     )
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
@@ -38,6 +39,7 @@ public sealed partial class SqliteSafeMigrationProjectedForeignKeyNewOwnerIntegr
         builder.DropPrimaryKeyIfExists("logical_initial_pk", "transition_items");
         builder.AddPrimaryKeyIfNotExists("logical_terminal_pk", "transition_items", ["OtherId"]);
 
+        // Act
         var results = await context
             .GetService<ISafeMigrationProviderAnalyzer>()
             .AnalyzeAsync(
@@ -48,6 +50,7 @@ public sealed partial class SqliteSafeMigrationProjectedForeignKeyNewOwnerIntegr
                     .ToArray(),
                 cancellationToken: CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationObservedState.Matching, results[0].ObservedState);
         Assert.Equal(
             bindsInitial,
@@ -75,6 +78,7 @@ public sealed partial class SqliteSafeMigrationProjectedForeignKeyNewOwnerIntegr
         string scenario
     )
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
@@ -126,6 +130,7 @@ public sealed partial class SqliteSafeMigrationProjectedForeignKeyNewOwnerIntegr
         await using var context = CreateContext(connection);
         var builder = CreateProjectedForeignKeyNewOwnerBuilder(context, strict: true);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .VerifyAsync(
@@ -134,6 +139,7 @@ public sealed partial class SqliteSafeMigrationProjectedForeignKeyNewOwnerIntegr
                 new SafeMigrationRunOptions("sqlite-strict-constraint-negative"),
                 cancellationToken: CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.False(
             report.Assessments[scenario == "missing_fk"
@@ -150,6 +156,7 @@ public sealed partial class SqliteSafeMigrationProjectedForeignKeyNewOwnerIntegr
     [Fact]
     public async Task StrictConstraintTransition_RejectsReversedNativeForeignKeyOrder()
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
@@ -177,6 +184,7 @@ public sealed partial class SqliteSafeMigrationProjectedForeignKeyNewOwnerIntegr
             ["Id", "OtherId"],
             onDelete: ReferentialAction.Cascade);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -185,6 +193,7 @@ public sealed partial class SqliteSafeMigrationProjectedForeignKeyNewOwnerIntegr
                 new SafeMigrationRunOptions("sqlite-strict-fk-member-order"),
                 cancellationToken: CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationAction.RejectDifferent, report.Assessments[0].Action);
         Assert.Equal(SafeMigrationAction.RejectDifferent, report.Assessments[2].Action);
@@ -194,6 +203,7 @@ public sealed partial class SqliteSafeMigrationProjectedForeignKeyNewOwnerIntegr
     [Fact]
     public async Task StrictConstraintTransition_UsesSqlitePhysicalTableIdentity()
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
@@ -220,6 +230,7 @@ public sealed partial class SqliteSafeMigrationProjectedForeignKeyNewOwnerIntegr
             principalSchema: "main",
             onDelete: ReferentialAction.Cascade);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .VerifyAsync(
@@ -228,6 +239,7 @@ public sealed partial class SqliteSafeMigrationProjectedForeignKeyNewOwnerIntegr
                 new SafeMigrationRunOptions("sqlite-strict-constraint-aliases"),
                 cancellationToken: CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
         Assert.All(report.Assessments, item => Assert.True(item.PostconditionSatisfied));
     }
@@ -243,6 +255,7 @@ public sealed partial class SqliteSafeMigrationProjectedForeignKeyNewOwnerIntegr
         string boundary
     )
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
@@ -294,6 +307,7 @@ public sealed partial class SqliteSafeMigrationProjectedForeignKeyNewOwnerIntegr
             ["Id"],
             onDelete: ReferentialAction.Cascade);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -302,6 +316,7 @@ public sealed partial class SqliteSafeMigrationProjectedForeignKeyNewOwnerIntegr
                 new SafeMigrationRunOptions("sqlite-strict-native-boundary"),
                 cancellationToken: CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationAction.RejectDifferent, report.Assessments[0].Action);
         Assert.Equal("classified_different", report.Assessments[0].AnalysisCode);

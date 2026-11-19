@@ -58,7 +58,7 @@ string path and validates borrowed inputs without mutation. Doka also requires
 The latter is a low-level wire contract and does not replace the independently
 configurable model-level `Binary16`, `Char36` or MariaDB `Uuid` storage contract.
 
-The reviewed Doka 10.6 line retains UUID introduced in 10.5 only on MariaDB 10.7 or later, with
+The reviewed Doka 10.7 line retains UUID introduced in 10.5 only on MariaDB 10.7 or later, with
 unsized storage, text-bound Guid values and 16-byte physical budgets. It does
 not permit implicit GUID representation changes. It also changes implicit
 application-owned 16-byte binary mappings to `varbinary(17)` independently of
@@ -96,7 +96,7 @@ when a GUID property belongs only to a secondary Entity Splitting table. Shared
 SQL, computed and literal defaults are resolved through actual property mappings;
 explicit generation choices remain authoritative. This is a model-metadata
 correction, not a schema migration or a change to GUID storage defaults.
-The current 10.6.5 minimum retains those fixes and the MySqlConnector
+The current 10.7.0 minimum retains those fixes and the MySqlConnector
 minimum of 2.6.1 introduced in 10.6.3; direct consumer pins must satisfy that floor.
 SafeMigrations 10.6.1 additionally promotes the existing connector to minimum
 2.6.2 in its own MySQL/MariaDB package. The Doka upper bound remains in effect;
@@ -273,12 +273,11 @@ allocation values are informational, not acceptance thresholds.
 
 ## Qualified dependency ranges
 
-Central package declarations use bounded ranges. The five publishable package
-lockfiles establish the exact graph used to compile and qualify package
-artifacts. Dependabot updates the declarations and those lockfiles through a
-reviewed pull request, where the complete provider, tooling, package, coverage,
-and performance workflow resolves and tests every execution project's proposed
-graph.
+Central package declarations use bounded ranges. All 24 default source-mode project
+lockfiles establish the reviewed resolved graphs and package content hashes.
+Dependabot updates declarations and every affected lock through a reviewed pull
+request. Platform-neutral CI source restores remain locked; RID, compatibility
+matrix and isolated package-consumer profiles are qualified independently.
 
 The declared range must never be widened beyond the profiles actually tested.
 Publishable SafeMigrations candidates and stable packages must depend on a
@@ -289,14 +288,17 @@ The Doka boundary therefore stops at the next minor rather than the next major.
 Patch releases within the qualified minor line follow Doka's compatible-fix
 contract, while a new minor may revise the binary or behavioral SPI and requires
 an explicit range change plus the complete upgrade evidence below. Committed
-package-project lockfiles preserve the package build at the exact qualified
-patch; engineering projects resolve the central declarations during CI.
+repository lockfiles preserve each default source-mode graph at its qualified
+patch. Shipping projects disable transitive promotion and retain explicit
+provider-owned transport/security minimum references. The adapters publish an
+exact dependency on their own matching Core version because they consume Core
+internals; this private-ABI rule does not replace external dependency ranges.
 
 ## Required upgrade evidence
 
 Every EF, Doka, Npgsql, or supported database update requires:
 
-1. locked package-project restore, resolved engineering-project restore, and a
+1. locked default source-mode restore of all 24 repository projects, and a
    warning-free Release build;
 2. review of the proposed declarations, package lockfile resolutions, and
    resolved engineering graphs;
@@ -311,8 +313,9 @@ Every EF, Doka, Npgsql, or supported database update requires:
    and Migration Bundle;
 9. deterministic pack, exact contents, package-only consumer, and Public API
    validation;
-10. complete BenchmarkDotNet execution/export smoke, pooled clean/noisy live p95 evidence, and
-    SPDX SBOM validation.
+10. deterministic clean/noisy catalog contracts and SPDX SBOM validation, plus
+    complete BenchmarkDotNet execution/export evidence for explicitly requested
+    statistical measurements.
 
 If any behavior changes, update expected definitions or provider logic only
 after determining whether the new behavior is semantically correct for every

@@ -101,6 +101,7 @@ internal sealed partial class SafeMigrationPreflightProjection
         {
             // WHY: A requested alias does not create a second physical key.
             // Only current, proven physical shapes can provide this semantic NoOp.
+            // ReSharper disable once ForeachCanBeConvertedToQueryUsingAnotherGetEnumerator
             foreach (var constraint in table.UniqueConstraints.Values)
             {
                 if (ProjectedUniqueConstraintSemantics(constraint, intent.Definition))

@@ -23,7 +23,7 @@ public sealed class SqlServerParallelDatabaseIsolationTests : SqlServerIntegrati
 
         // Act
         // WHY: The barrier proves two distinct connections are open together;
-        // its timeout bounds a deadlock, not a hardware-dependent performance target.
+        // a failed owner faults the barrier so its peer is released and both operations are drained.
         var rows = await Task.WhenAll(
             ApplyAndReadAsync(
                 firstConnectionString,
@@ -56,33 +56,43 @@ public sealed class SqlServerParallelDatabaseIsolationTests : SqlServerIntegrati
             CancellationToken cancellationToken
         )
         {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            await using var context = CreateContext(connectionString);
-            await context.Database.OpenConnectionAsync(cancellationToken: cancellationToken);
-
-            if (Interlocked.Increment(ref openCount) == 2)
+            try
             {
-                bothConnectionsOpen.SetResult();
+                cancellationToken.ThrowIfCancellationRequested();
+
+                await using var context = CreateContext(connectionString);
+                await context.Database.OpenConnectionAsync(cancellationToken: cancellationToken);
+
+                if (Interlocked.Increment(ref openCount) == 2)
+                {
+                    bothConnectionsOpen.TrySetResult();
+                }
+
+                await bothConnectionsOpen.Task.WaitAsync(cancellationToken);
+                var builder = new MigrationBuilder(context.Database.ProviderName!);
+                builder.CreateTableIfNotExists(
+                    "parallel_isolation",
+                    table => new { Id = table.Column<int>(type: "int", nullable: false) },
+                    constraints: table => table.PrimaryKey("PK_parallel_isolation", row => row.Id));
+
+                await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: cancellationToken);
+                await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: cancellationToken);
+                await context.Database.ExecuteSqlInterpolatedAsync(
+                    $"INSERT dbo.parallel_isolation (Id) VALUES ({id});",
+                    cancellationToken);
+
+                return await ScalarIntAsync(
+                    connectionString,
+                    "SELECT Id FROM dbo.parallel_isolation;",
+                    cancellationToken: cancellationToken);
             }
+            catch (Exception exception)
+            {
+                // WHY: A failed participant must release its peer before Task.WhenAll can drain both.
+                bothConnectionsOpen.TrySetException(exception);
 
-            await bothConnectionsOpen.Task.WaitAsync(TimeSpan.FromSeconds(30), cancellationToken);
-            var builder = new MigrationBuilder(context.Database.ProviderName!);
-            builder.CreateTableIfNotExists(
-                "parallel_isolation",
-                table => new { Id = table.Column<int>(type: "int", nullable: false) },
-                constraints: table => table.PrimaryKey("PK_parallel_isolation", row => row.Id));
-
-            await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: cancellationToken);
-            await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: cancellationToken);
-            await context.Database.ExecuteSqlInterpolatedAsync(
-                $"INSERT dbo.parallel_isolation (Id) VALUES ({id});",
-                cancellationToken);
-
-            return await ScalarIntAsync(
-                connectionString,
-                "SELECT Id FROM dbo.parallel_isolation;",
-                cancellationToken: cancellationToken);
+                throw;
+            }
         }
     }
 }

@@ -1,5 +1,8 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 
+/// <summary>
+/// Provides isolated SQLite coverage for safe migration SQL expression renderer.
+/// </summary>
 public sealed partial class SqliteSafeMigrationSqlExpressionRendererTests
 {
     /// <summary>Public expression trees retain their SQL beyond the parser's separate grammar limits.</summary>
@@ -24,6 +27,7 @@ public sealed partial class SqliteSafeMigrationSqlExpressionRendererTests
         string shape
     )
     {
+        // Arrange
         using var connection = new SqliteConnection("Data Source=:memory:");
         using var context = new SqliteSafeMigrationTestContext(connection, registerSafeMigrations: false);
         var renderer = CreateRenderer(context);
@@ -43,9 +47,11 @@ public sealed partial class SqliteSafeMigrationSqlExpressionRendererTests
             expected.Append(suffix);
         }
 
+        // Act
         var sql = renderer.Render(expression);
         var feature = renderer.GetUnsupportedFeature(expression);
 
+        // Assert
         Assert.Equal(expected.ToString(), sql);
         Assert.Null(feature);
     }
@@ -66,6 +72,7 @@ public sealed partial class SqliteSafeMigrationSqlExpressionRendererTests
         string shape
     )
     {
+        // Arrange
         using var connection = new SqliteConnection("Data Source=:memory:");
         using var context = new SqliteSafeMigrationTestContext(connection, registerSafeMigrations: false);
         var renderer = CreateRenderer(context);
@@ -74,11 +81,16 @@ public sealed partial class SqliteSafeMigrationSqlExpressionRendererTests
             20_000,
             SafeMigrationSql.ProviderFragment("another_provider", "foreign_leaf"));
 
+        // Act
         var feature = renderer.GetUnsupportedFeature(expression);
-        var exception = Assert.Throws<NotSupportedException>(() => renderer.Render(expression));
+        var exception = Record.Exception(() => renderer.Render(expression));
 
+        // Assert
         Assert.Equal("provider_fragment_mismatch", feature);
-        Assert.Contains("another_provider", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("another_provider",
+            Assert.IsType<NotSupportedException>(exception)
+                .Message,
+            StringComparison.Ordinal);
     }
 
     /// <summary>Validation visits only the prefix needed to identify the first unsupported feature.</summary>
@@ -97,6 +109,7 @@ public sealed partial class SqliteSafeMigrationSqlExpressionRendererTests
         string shape
     )
     {
+        // Arrange
         using var connection = new SqliteConnection("Data Source=:memory:");
         using var context = new SqliteSafeMigrationTestContext(connection, registerSafeMigrations: false);
         var renderer = CreateRenderer(context);
@@ -108,33 +121,47 @@ public sealed partial class SqliteSafeMigrationSqlExpressionRendererTests
             _ => "provider_fragment_mismatch",
         };
 
+        // Act
         var feature = renderer.GetUnsupportedFeature(expression);
         var exception = Record.Exception(() => renderer.Render(expression));
 
+        // Assert
         Assert.Equal(expected, feature);
         Assert.IsType<NotSupportedException>(exception);
     }
 
-    /// <summary>Unknown public subclasses remain explicit failures rather than silently accepted leaves.</summary>
-    [Fact]
-    public void UnknownPublicSubclassesStillFailWhenReached()
+    /// <summary>Both public tree consumers independently reject an unknown expression subclass.</summary>
+    /// <param name="render">Whether to exercise rendering rather than validation.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void UnknownPublicSubclassesStillFailWhenReached(
+        bool render
+    )
     {
+        // Arrange
         using var connection = new SqliteConnection("Data Source=:memory:");
         using var context = new SqliteSafeMigrationTestContext(connection, registerSafeMigrations: false);
         var renderer = CreateRenderer(context);
         var expression = SafeMigrationSql.Function("COALESCE", SafeMigrationSql.Literal(1), new UnknownExpression());
 
-        var validation = Record.Exception(() => renderer.GetUnsupportedFeature(expression));
-        var rendering = Record.Exception(() => renderer.Render(expression));
+        // Act
+        var exception = Record.Exception(() =>
+        {
+            _ = render
+                ? renderer.Render(expression)
+                : renderer.GetUnsupportedFeature(expression);
+        });
 
-        Assert.IsType<UnreachableException>(validation);
-        Assert.IsType<UnreachableException>(rendering);
+        // Assert
+        Assert.IsType<UnreachableException>(exception);
     }
 
     /// <summary>Shallow SQL fixes separators and literal visitation order independently of deep fixtures.</summary>
     [Fact]
     public void OrderedBranchesAndListsPreserveExactLiteralOrder()
     {
+        // Arrange
         using var connection = new SqliteConnection("Data Source=:memory:");
         using var context = new SqliteSafeMigrationTestContext(connection, registerSafeMigrations: false);
         var renderer = CreateRenderer(context);
@@ -157,8 +184,10 @@ public sealed partial class SqliteSafeMigrationSqlExpressionRendererTests
                 SafeMigrationSql.Literal("lower"),
                 SafeMigrationSql.Literal("upper")));
 
+        // Act
         var sql = renderer.Render(expression);
 
+        // Assert
         Assert.Equal(
             "CASE WHEN ('operand' IN ('first', 'second')) THEN COALESCE('then', NULL)"
             + " WHEN ('condition' IS NULL) THEN 'result' ELSE ('else' BETWEEN 'lower' AND 'upper') END",

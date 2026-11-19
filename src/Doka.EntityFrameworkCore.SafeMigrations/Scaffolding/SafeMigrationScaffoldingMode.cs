@@ -3,6 +3,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// <summary>
 /// Selects the safe table semantics written into newly scaffolded migrations.
 /// </summary>
+[PublicAPI]
 public enum SafeMigrationScaffoldingMode
 {
     /// <summary>

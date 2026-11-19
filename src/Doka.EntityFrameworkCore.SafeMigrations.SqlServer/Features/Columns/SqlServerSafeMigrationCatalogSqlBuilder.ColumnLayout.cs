@@ -84,30 +84,12 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             "smallint" => 2,
             "date" => 3,
             "int" or "real" or "smalldatetime" or "smallmoney" => 4,
-            "time" => type.Scale <= 2
-                ? 3
-                : type.Scale <= 4
-                    ? 4
-                    : 5,
-            "datetime2" => type.Scale <= 2
-                ? 6
-                : type.Scale <= 4
-                    ? 7
-                    : 8,
-            "datetimeoffset" => type.Scale <= 2
-                ? 8
-                : type.Scale <= 4
-                    ? 9
-                    : 10,
+            "time" => type.Scale switch { <= 2 => 3, <= 4 => 4, _ => 5 },
+            "datetime2" => type.Scale switch { <= 2 => 6, <= 4 => 7, _ => 8 },
+            "datetimeoffset" => type.Scale switch { <= 2 => 8, <= 4 => 9, _ => 10 },
             "bigint" or "datetime" or "float" or "money" or "timestamp" => 8,
             "uniqueidentifier" => 16,
-            "decimal" or "numeric" => type.Precision <= 9
-                ? 5
-                : type.Precision <= 19
-                    ? 9
-                    : type.Precision <= 28
-                        ? 13
-                        : 17,
+            "decimal" or "numeric" => type.Precision switch { <= 9 => 5, <= 19 => 9, <= 28 => 13, _ => 17 },
             "bit" or "varchar" or "nvarchar" or "varbinary" => 0,
             _ => 8061,
         };
@@ -124,7 +106,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     /// <summary>Builds a catalog-only admission code for a missing physical column.</summary>
     /// <param name="intent">The scalar column addition.</param>
     /// <returns>NULL for supported capacity, otherwise a stable physical-layout diagnostic.</returns>
-    internal string BuildColumnAdditionLayoutFailureExpression(
+    private string BuildColumnAdditionLayoutFailureExpression(
         EnsureColumnIntent intent
     )
     {
@@ -178,7 +160,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     /// <summary>Checks the separate conservative capacity proof for materializing existing rows.</summary>
     /// <param name="intent">The authored column addition.</param>
     /// <returns>A metadata-only predicate requiring an empty-row proof, or null when no row materializes.</returns>
-    internal string? BuildColumnAdditionRowCapacityPredicate(
+    private string? BuildColumnAdditionRowCapacityPredicate(
         EnsureColumnIntent intent
     )
     {

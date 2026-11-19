@@ -36,13 +36,18 @@ def write_packages(
     transport_versions: dict[str, str | None] | None = None,
     transport_leak: tuple[str, str] | None = None,
     benchmark_leak: tuple[str, str] | None = None,
+    core_versions: dict[str, str | None] | None = None,
+    package_version: str = PACKAGE_VERSION,
+    annotation_leak: tuple[str, str] | None = None,
 ) -> None:
     """Create the exact five-package fixture without restoring or loading code."""
     for suffix, provider in PROVIDER_DEPENDENCIES.items():
         package_id = CORE_ID + suffix
         dependencies = [(provider, "[10.0.14,10.1.0)")]
         if suffix:
-            dependencies.append((CORE_ID, PACKAGE_VERSION))
+            core_version = (core_versions or {}).get(suffix, f"[{package_version}]")
+            if core_version is not None:
+                dependencies.append((CORE_ID, core_version))
 
         if suffix in TRANSPORT_DEPENDENCIES:
             name, minimum = TRANSPORT_DEPENDENCIES[suffix]
@@ -61,23 +66,29 @@ def write_packages(
         if benchmark_leak is not None and suffix == benchmark_leak[0]:
             dependencies.append((benchmark_leak[1], "0.15.8"))
 
+        if annotation_leak is not None and suffix == annotation_leak[0] and annotation_leak[1] == "dependency":
+            dependencies.append(("JetBrains.Annotations", "2026.2.0"))
+
         dependency_xml = "".join(
             f'<dependency id="{name}" version="{version}" />' for name, version in dependencies
         )
         nuspec = (
-            f'<package><metadata><id>{package_id}</id><version>{PACKAGE_VERSION}</version>'
+            f'<package><metadata><id>{package_id}</id><version>{package_version}</version>'
             '<readme>README.md</readme><repository type="git" '
             'url="https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations" />'
             f'<dependencies><group targetFramework="net10.0">{dependency_xml}'
             '</group></dependencies></metadata></package>'
         )
 
-        with zipfile.ZipFile(directory / f"{package_id}.{PACKAGE_VERSION}.nupkg", "w") as package:
+        with zipfile.ZipFile(directory / f"{package_id}.{package_version}.nupkg", "w") as package:
             package.writestr(f"{package_id}.nuspec", nuspec)
             package.writestr("README.md", (REPOSITORY_ROOT / "README.md").read_bytes())
             package.writestr("LICENSE", (REPOSITORY_ROOT / "LICENSE").read_bytes())
             package.writestr(f"lib/net10.0/{package_id}.dll", b"synthetic fixture, never loaded")
             package.writestr(f"lib/net10.0/{package_id}.xml", "<doc />")
+            if annotation_leak is not None and suffix == annotation_leak[0] and annotation_leak[1] == "runtime":
+                package.writestr("lib/net10.0/JetBrains.Annotations.dll", b"synthetic runtime asset")
+
             if suffix:
                 package.writestr(f"buildTransitive/{package_id}.props", "<Project />")
             else:
@@ -85,7 +96,7 @@ def write_packages(
                     if schema.name != omitted_schema:
                         package.writestr(f"schemas/{schema.name}", schema.read_bytes())
 
-        with zipfile.ZipFile(directory / f"{package_id}.{PACKAGE_VERSION}.snupkg", "w") as symbols:
+        with zipfile.ZipFile(directory / f"{package_id}.{package_version}.snupkg", "w") as symbols:
             symbols.writestr(f"lib/net10.0/{package_id}.pdb", b"synthetic fixture, never loaded")
 
 
@@ -96,15 +107,18 @@ def verify(
     transport_versions: dict[str, str | None] | None = None,
     transport_leak: tuple[str, str] | None = None,
     benchmark_leak: tuple[str, str] | None = None,
+    core_versions: dict[str, str | None] | None = None,
+    package_version: str = PACKAGE_VERSION,
+    annotation_leak: tuple[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Exercise the real package gate against isolated archives, not a duplicate validator."""
     with tempfile.TemporaryDirectory() as temporary_root:
         directory = Path(temporary_root)
         write_packages(directory, pkcs_version, leak, omitted_schema, transport_versions,
-                       transport_leak, benchmark_leak)
+                       transport_leak, benchmark_leak, core_versions, package_version, annotation_leak)
 
         return subprocess.run(
-            ["bash", str(VERIFIER), "--package-dir", str(directory), "--version", PACKAGE_VERSION],
+            ["bash", str(VERIFIER), "--package-dir", str(directory), "--version", package_version],
             capture_output=True,
             text=True,
             check=False,
@@ -141,6 +155,49 @@ def verify_consumer_graph(
 
 class VerifyPackageContentsTests(unittest.TestCase):
     """Prove the security floor reaches consumers without crossing provider boundaries."""
+
+    def test_accepts_exact_matching_core_for_stable_and_prerelease_packages(self) -> None:
+        """Own-package ABI identity follows the complete stable or prerelease version."""
+        for version in ("10.6.0", "10.6.0-dev", "10.6.0-rc.2"):
+            with self.subTest(version=version):
+                # Arrange
+                package_version = version
+
+                # Act
+                result = verify("9.0.22", package_version=package_version)
+
+                # Assert
+                self.assertEqual(0, result.returncode, result.stderr)
+
+    def test_rejects_missing_minimum_broad_or_mismatched_core_dependencies(self) -> None:
+        """A private ABI dependency must not permit another Core binary identity."""
+        for suffix in tuple(PROVIDER_DEPENDENCIES)[1:]:
+            for core_version in (None, "10.6.0", "[10.6.0,11.0.0)", "[10.6.1]", "[10.6.0-rc.2]"):
+                with self.subTest(provider=suffix, core_version=core_version):
+                    # Arrange
+                    versions = {suffix: core_version}
+
+                    # Act
+                    result = verify("9.0.22", core_versions=versions)
+
+                    # Assert
+                    self.assertNotEqual(0, result.returncode)
+                    self.assertIn("matching Core private ABI", result.stderr)
+
+    def test_rejects_annotation_dependency_or_runtime_assets_in_all_product_packages(self) -> None:
+        """Build-only Rider annotations must not become consumer dependencies or assets."""
+        for suffix in PROVIDER_DEPENDENCIES:
+            for kind in ("dependency", "runtime"):
+                with self.subTest(provider=suffix, kind=kind):
+                    # Arrange
+                    leak = (suffix, kind)
+
+                    # Act
+                    result = verify("9.0.22", annotation_leak=leak)
+
+                    # Assert
+                    self.assertNotEqual(0, result.returncode)
+                    self.assertIn("Build-only annotation", result.stderr)
 
     def test_rejects_benchmark_dependencies_in_all_product_packages(self) -> None:
         """Benchmark assets must never reach any published product dependency graph."""

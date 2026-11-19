@@ -45,8 +45,14 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             && projectedAnalysis.Code == "projected_key_after_column_drop_unproven")
         {
             var valuesPreserved = true;
-            foreach (var key in intent.Definition.Keys)
+
+            // WHY: Index this stable list while preserving its order and ownership.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var keyIndex = 0; keyIndex < intent.Definition.Keys.Count; keyIndex++)
             {
+                var key = intent.Definition.Keys[keyIndex];
+
                 if (key.Column is null
                     || !HasCurrentProjectedKeyMember(
                         intent.Definition.Table,
@@ -130,12 +136,10 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             // WHY: Feasibility never proves uniqueness, but infeasible native
             // storage remains a refusal even when row validation is deferred.
             var physical = QualifyProjectedConstraint(result, liveAnalysis, ProjectedKeyMissing(), "primary_key");
-            if (physical.ObservedState != SafeMigrationObservedState.Missing)
-            {
-                return physical;
-            }
 
-            return QualifyReplacementPrimaryKey(intent, columns, liveAnalysis, projectedAnalysis);
+            return physical.ObservedState != SafeMigrationObservedState.Missing
+                ? physical
+                : QualifyReplacementPrimaryKey(intent, columns, liveAnalysis, projectedAnalysis);
         }
 
         return QualifyProjectedConstraint(
@@ -172,8 +176,14 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             }
 
             var valuesPreserved = true;
-            foreach (var name in intent.Definition.Columns)
+
+            // WHY: Index this stable list while preserving its order and ownership.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var nameIndex = 0; nameIndex < intent.Definition.Columns.Count; nameIndex++)
             {
+                var name = intent.Definition.Columns[nameIndex];
+
                 if (!HasCurrentProjectedKeyMember(
                     intent.Definition.Table,
                     intent.Definition.Schema,
@@ -290,8 +300,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
     /// <param name="operations">The immutable current-database operation stream.</param>
     /// <param name="maximumPayloadBytes">The qualified packet and shared payload bound.</param>
     /// <param name="commandTimeout">The caller's command timeout.</param>
-    /// <param name="cancellationToken">The token that cancels construction and reading.</param>
     /// <param name="identifierComparer">The independently qualified native table-name policy.</param>
+    /// <param name="cancellationToken">The token that cancels construction and reading.</param>
     /// <returns>The fully captured requested environments.</returns>
     internal static async Task<IReadOnlyDictionary<string, SafeMigrationIndexPhysicalEnvironment>>
         ReadIndexPhysicalEnvironmentsAsync(
@@ -299,8 +309,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             IReadOnlyList<SafeMigrationOperation> operations,
             int maximumPayloadBytes,
             int? commandTimeout,
-            CancellationToken cancellationToken,
-            StringComparer? identifierComparer = null
+            StringComparer? identifierComparer,
+            CancellationToken cancellationToken
         )
     {
         var tableComparer = identifierComparer ?? StringComparer.Ordinal;
@@ -328,6 +338,10 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         var tables = requestedColumns
             .Keys
             .OrderBy(static table => table, StringComparer.Ordinal)
+
+            // WHY: Retain fluent materialization and its existing snapshot
+            // ownership rather than replacing this boundary with a spread.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         if (tables.Length == 0)
@@ -420,14 +434,14 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
 
                 return new SafeMigrationCatalogProbeStatement(1, valueBytes, offset);
             },
-            async (reader, slot, _, token) =>
+            async (reader, slot, _, callbackCancellationToken) =>
             {
                 var permitted = tables
                     .Skip(slot * SafeMigrationCatalogQueryLimits.MaximumInventoryValues)
                     .Take(SafeMigrationCatalogQueryLimits.MaximumInventoryValues)
                     .ToHashSet(tableComparer);
 
-                while (await reader.ReadAsync(token))
+                while (await reader.ReadAsync(callbackCancellationToken))
                 {
                     var table = reader.GetString(0);
                     if (!permitted.Contains(table))
@@ -484,6 +498,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                     }
                 }
             },
+            transaction: null,
+            SafeMigrationCatalogQueryLimits.MaximumParameters,
             cancellationToken);
 
         foreach (var table in tables)
@@ -543,72 +559,107 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         CancellationToken cancellationToken
     )
     {
-        await using var command = connection.CreateCommand();
-        ApplyCommandTimeout(command, commandTimeout);
-        command.CommandText = """
-        SELECT @@default_storage_engine, @@innodb_default_row_format, @@innodb_page_size,
-        @@character_set_database, @@SESSION.sql_mode, VERSION();
-        """;
-
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        if (!await reader.ReadAsync(cancellationToken))
+        // WHY: Native reader/command disposal must not replace the actual metadata failure or cancellation.
+        var command = connection.CreateCommand();
+        Exception? commandFailure = null;
+        try
         {
-            throw new InvalidOperationException("MySQL did not return its default index environment.");
-        }
+            ApplyCommandTimeout(command, commandTimeout);
+            command.CommandText = """
+            SELECT @@default_storage_engine, @@innodb_default_row_format, @@innodb_page_size,
+            @@character_set_database, @@SESSION.sql_mode, VERSION();
+            """;
 
-        var engine = reader.IsDBNull(0)
-            ? null
-            : reader.GetString(0);
-
-        var rowFormat = reader.IsDBNull(1)
-            ? null
-            : reader.GetString(1);
-
-        var pageSize = Convert.ToInt32(reader.GetValue(2), CultureInfo.InvariantCulture);
-        var dynamicMaximumKeyBytes = MaximumIndexKeyBytes(pageSize);
-        var characterSet = reader.IsDBNull(3)
-            ? null
-            : reader.GetString(3);
-
-        var sqlMode = reader.IsDBNull(4)
-            ? string.Empty
-            : reader.GetString(4);
-
-        var strictMode = sqlMode
-            .Split(',')
-            .Any(static mode =>
-                mode
-                    .AsSpan()
-                    .Trim()
-                    .Equals("STRICT_TRANS_TABLES", StringComparison.OrdinalIgnoreCase)
-                || mode
-                    .AsSpan()
-                    .Trim()
-                    .Equals("STRICT_ALL_TABLES", StringComparison.OrdinalIgnoreCase));
-
-        var isMariaDb = reader
-            .GetString(5)
-            .Contains("MariaDB", StringComparison.OrdinalIgnoreCase);
-
-        var supportsQuotedExpressionDefaults = isMariaDb
-            || !sqlMode
-                .Split(',')
-                .Any(static mode =>
-                    mode
-                        .AsSpan()
-                        .Trim()
-                        .Equals("NO_BACKSLASH_ESCAPES", StringComparison.OrdinalIgnoreCase));
-
-        return new IndexEnvironmentDefaults(
-            CreateIndexPhysicalEnvironment(engine, rowFormat, dynamicMaximumKeyBytes, pageSize) with
+            var reader = await command.ExecuteReaderAsync(cancellationToken);
+            Exception? readerFailure = null;
+            try
             {
-                DefaultCharacterSet = characterSet,
-                StrictSqlMode = strictMode,
-                SupportsQuotedExpressionDefaults = supportsQuotedExpressionDefaults,
-                SupportsTextExpressionControlCharacters = !isMariaDb,
-            },
-            dynamicMaximumKeyBytes,
-            pageSize);
+                if (!await reader.ReadAsync(cancellationToken))
+                {
+                    throw new InvalidOperationException("MySQL did not return its default index environment.");
+                }
+
+                var engine = reader.IsDBNull(0)
+                    ? null
+                    : reader.GetString(0);
+
+                var rowFormat = reader.IsDBNull(1)
+                    ? null
+                    : reader.GetString(1);
+
+                var pageSize = Convert.ToInt32(reader.GetValue(2), CultureInfo.InvariantCulture);
+                var dynamicMaximumKeyBytes = MaximumIndexKeyBytes(pageSize);
+                var characterSet = reader.IsDBNull(3)
+                    ? null
+                    : reader.GetString(3);
+
+                var sqlMode = reader.IsDBNull(4)
+                    ? string.Empty
+                    : reader.GetString(4);
+
+                var strictMode = sqlMode
+                    .Split(',')
+                    .Any(static mode =>
+                        mode
+                            .AsSpan()
+                            .Trim()
+                            .Equals("STRICT_TRANS_TABLES", StringComparison.OrdinalIgnoreCase)
+                        || mode
+                            .AsSpan()
+                            .Trim()
+                            .Equals("STRICT_ALL_TABLES", StringComparison.OrdinalIgnoreCase));
+
+                var isMariaDb = reader
+                    .GetString(5)
+                    .Contains("MariaDB", StringComparison.OrdinalIgnoreCase);
+
+                var supportsQuotedExpressionDefaults = isMariaDb
+                    || !sqlMode
+                        .Split(',')
+                        .Any(static mode =>
+                            mode
+                                .AsSpan()
+                                .Trim()
+                                .Equals("NO_BACKSLASH_ESCAPES", StringComparison.OrdinalIgnoreCase));
+
+                return new IndexEnvironmentDefaults(
+                    CreateIndexPhysicalEnvironment(engine, rowFormat, dynamicMaximumKeyBytes, pageSize) with
+                    {
+                        DefaultCharacterSet = characterSet,
+                        StrictSqlMode = strictMode,
+                        SupportsQuotedExpressionDefaults = supportsQuotedExpressionDefaults,
+                        SupportsTextExpressionControlCharacters = !isMariaDb,
+                    },
+                    dynamicMaximumKeyBytes,
+                    pageSize);
+            }
+            catch (Exception exception)
+            {
+                readerFailure = exception;
+
+                throw;
+            }
+            finally
+            {
+                await SafeMigrationAnalysisCleanup.DisposeAsync(
+                    reader,
+                    readerFailure,
+                    "SafeMigrations.AnalysisReaderDisposeException");
+            }
+        }
+        catch (Exception exception)
+        {
+            commandFailure = exception;
+
+            throw;
+        }
+        finally
+        {
+            await SafeMigrationAnalysisCleanup.DisposeAsync(
+                command,
+                commandFailure,
+                "SafeMigrations.AnalysisCommandDisposeException");
+        }
     }
 
     private static SafeMigrationIndexPhysicalEnvironment CreateIndexPhysicalEnvironment(

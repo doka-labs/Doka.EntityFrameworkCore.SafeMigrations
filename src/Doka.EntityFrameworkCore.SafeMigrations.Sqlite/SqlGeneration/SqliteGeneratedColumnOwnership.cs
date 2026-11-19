@@ -17,8 +17,13 @@ internal sealed class SqliteGeneratedColumnOwnership
     )
     {
         _inputs = new HashSet<MigrationOperation>(operations, ReferenceEqualityComparer.Instance);
-        foreach (var original in guardedOperations)
+
+        // WHY: Traverse the stable ordered source by ordinal without materializing another collection.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var originalIndex = 0; originalIndex < guardedOperations.Count; originalIndex++)
         {
+            var original = guardedOperations[originalIndex];
             if (original is not SafeMigrationOperation)
             {
                 _providerOperations ??= new HashSet<MigrationOperation>(ReferenceEqualityComparer.Instance);
@@ -26,8 +31,12 @@ internal sealed class SqliteGeneratedColumnOwnership
             }
         }
 
-        foreach (var operation in operations)
+        // WHY: Traverse the stable ordered source by ordinal without materializing another collection.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var operationIndex = 0; operationIndex < operations.Count; operationIndex++)
         {
+            var operation = operations[operationIndex];
             var safe = !IsProviderOperation(operation);
             switch (operation)
             {
@@ -66,6 +75,8 @@ internal sealed class SqliteGeneratedColumnOwnership
         IModel? model
     )
     {
+        // WHY: Traverse the owned creator set directly without changing enumerator or short-circuit behavior.
+        // ReSharper disable once ForeachCanBeConvertedToQueryUsingAnotherGetEnumerator
         foreach (var creator in _safeCreators)
         {
             if (creator.Columns.Any(static column => column.ComputedColumnSql is not null))
@@ -121,8 +132,13 @@ internal sealed class SqliteGeneratedColumnOwnership
     )
     {
         Dictionary<string, string>? nativeTargets = null;
-        foreach (var operation in rewritten)
+
+        // WHY: Traverse the stable ordered source by ordinal without materializing another collection.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var operationIndex = 0; operationIndex < rewritten.Count; operationIndex++)
         {
+            var operation = rewritten[operationIndex];
             if (operation is RenameTableOperation { NewName: not null } rename
                 && !_inputs.Contains(rename))
             {
@@ -135,8 +151,13 @@ internal sealed class SqliteGeneratedColumnOwnership
         }
 
         var creators = new Dictionary<CreateTableOperation, string>(ReferenceEqualityComparer.Instance);
-        foreach (var operation in rewritten)
+
+        // WHY: Traverse the stable ordered source by ordinal without materializing another collection.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var operationIndex = 0; operationIndex < rewritten.Count; operationIndex++)
         {
+            var operation = rewritten[operationIndex];
             if (operation is CreateTableOperation creator
                 && !_inputs.Contains(creator)
                 && nativeTargets?.TryGetValue(creator.Name, out var target) == true)

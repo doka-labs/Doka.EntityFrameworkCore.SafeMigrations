@@ -9,9 +9,11 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
         MySqlEngineContainerFixture fixture
     ) : base(fixture) { }
 
+    /// <summary>Projects an ordinary unique-index replacement after dropping an equivalent unique constraint.</summary>
     [Fact]
     public async Task UniqueConstraintDropCanBeReplacedByAnEquivalentUniqueIndex()
     {
+        // Arrange
         const string table = "constraint_to_index";
         const string constraint = "uq_constraint_to_index_code";
         const string index = "ux_constraint_to_index_code";
@@ -32,6 +34,8 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
         builder.CreateIndexIfNotExists(index, table, ["code"], unique: true);
 
         var runner = context.GetService<ISafeMigrationRunner>();
+
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
@@ -40,6 +44,7 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
         Assert.Equal(SafeMigrationAction.Apply, preflight.Assessments[^1].Action);
         Assert.Equal(
@@ -56,9 +61,11 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Projects an ordinary unique-constraint replacement after dropping an equivalent unique index.</summary>
     [Fact]
     public async Task UniqueIndexDropCanBeReplacedByAnEquivalentUniqueConstraint()
     {
+        // Arrange
         const string table = "index_to_constraint";
         const string index = "ux_index_to_constraint_code";
         const string constraint = "uq_index_to_constraint_code";
@@ -79,6 +86,8 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
         builder.AddUniqueConstraintIfNotExists(constraint, table, ["code"]);
 
         var runner = context.GetService<ISafeMigrationRunner>();
+
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
@@ -87,6 +96,7 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
         Assert.Equal(SafeMigrationAction.Apply, preflight.Assessments[^1].Action);
         Assert.Equal(
@@ -103,9 +113,13 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>
+    /// Invalidates the unique-constraint lifetime before following data mutation can borrow an alias.
+    /// </summary>
     [Fact]
     public async Task DroppedUniqueConstraintInvalidatesEquivalentUniqueIndexBeforeDataMutation()
     {
+        // Arrange
         const string table = "cross_kind_constraint_drop";
         const string physicalName = "uq_cross_kind_constraint_code";
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
@@ -136,6 +150,7 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
             ["code"],
             unique: true);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -144,6 +159,7 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
                 new SafeMigrationRunOptions("cross-kind-constraint-drop"),
                 CancellationToken.None);
 
+        // Assert
         var replacement = report.Assessments[^1];
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -163,9 +179,11 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Invalidates the unique-index lifetime before following data mutation can borrow an alias.</summary>
     [Fact]
     public async Task DroppedUniqueIndexInvalidatesEquivalentUniqueConstraintBeforeDataMutation()
     {
+        // Arrange
         const string table = "cross_kind_index_drop";
         const string physicalName = "ux_cross_kind_index_code";
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
@@ -196,6 +214,7 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
             table,
             ["code"]);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -204,6 +223,7 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
                 new SafeMigrationRunOptions("cross-kind-index-drop"),
                 CancellationToken.None);
 
+        // Assert
         var replacement = report.Assessments[^1];
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -223,9 +243,11 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Does not use a primary key as evidence for an ordinary unique-index contract.</summary>
     [Fact]
     public async Task PrimaryKeyDoesNotSatisfyAnOrdinaryUniqueIndexContract()
     {
+        // Arrange
         const string table = "primary_is_not_index_alias";
         const string index = "ux_primary_is_not_index_alias_id";
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
@@ -240,6 +262,8 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
         builder.CreateIndexIfNotExists(index, table, ["id"], unique: true);
 
         var runner = context.GetService<ISafeMigrationRunner>();
+
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
@@ -248,6 +272,7 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
+        // Assert
         var assessment = Assert.Single(preflight.Assessments);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -267,9 +292,11 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Rejects the native PRIMARY identity as an authored ordinary index name.</summary>
     [Fact]
     public async Task PrimaryIsRejectedAsAnOrdinaryIndexName()
     {
+        // Arrange
         const string table = "reserved_primary_index_name";
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
 
@@ -282,6 +309,7 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateIndexIfNotExists("PRIMARY", table, ["id"], unique: true);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -290,6 +318,7 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
                 new SafeMigrationRunOptions("reserved-primary-index-name"),
                 CancellationToken.None);
 
+        // Assert
         var assessment = Assert.Single(report.Assessments);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -298,9 +327,13 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
         Assert.Equal("index_name_reserved_primary", assessment.Code);
     }
 
+    /// <summary>
+    /// Does not hide an exact-name nonunique mismatch behind an equivalent differently named unique constraint.
+    /// </summary>
     [Fact]
     public async Task SameNameNonUniqueIndexPrecedesAnEquivalentUniqueConstraintAlias()
     {
+        // Arrange
         const string table = "unique_constraint_name_collision";
         const string requestedName = "uq_requested_code";
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
@@ -319,6 +352,7 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddUniqueConstraintIfNotExists(requestedName, table, ["code"]);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -327,6 +361,7 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
                 new SafeMigrationRunOptions("unique-constraint-name-collision"),
                 CancellationToken.None);
 
+        // Assert
         var assessment = Assert.Single(report.Assessments);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -334,9 +369,13 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
         Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
     }
 
+    /// <summary>
+    /// Checks the replacement key budget before dropping an exact-name index whose column width is unchanged.
+    /// </summary>
     [Fact]
     public async Task SameNameIndexReplacementValidatesUnchangedTargetWidthBeforeDrop()
     {
+        // Arrange
         const string table = "wide_index_replacement";
         const string index = "ix_wide_index_replacement";
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
@@ -357,6 +396,7 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
         builder.DropIndexIfExists(index, table);
         builder.CreateIndexIfNotExists(index, table, ["wide_value"]);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -365,6 +405,7 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
                 new SafeMigrationRunOptions("wide-index-replacement"),
                 CancellationToken.None);
 
+        // Assert
         var replacement = report.Assessments[^1];
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -385,9 +426,13 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>
+    /// Checks the replacement key budget across a unique index-to-constraint family change before dropping its source.
+    /// </summary>
     [Fact]
     public async Task CrossKindUniqueReplacementValidatesUnchangedTargetWidthBeforeDrop()
     {
+        // Arrange
         const string table = "wide_cross_kind_replacement";
         const string keyName = "uq_wide_cross_kind_replacement";
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
@@ -408,6 +453,7 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
         builder.DropIndexIfExists(keyName, table);
         builder.AddUniqueConstraintIfNotExists(keyName, table, ["wide_value"]);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -416,6 +462,7 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
                 new SafeMigrationRunOptions("wide-cross-kind-replacement"),
                 CancellationToken.None);
 
+        // Assert
         var replacement = report.Assessments[^1];
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -436,9 +483,11 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Retains duplicate-row evidence for a same-family unique replacement.</summary>
     [Fact]
     public async Task SameKindUniqueReplacementPreservesHiddenDuplicateEvidence()
     {
+        // Arrange
         const string table = "unique_replacement_duplicates";
         const string constraint = "uq_unique_replacement";
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
@@ -460,6 +509,7 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
         builder.DropUniqueConstraintIfExists(constraint, table);
         builder.AddUniqueConstraintIfNotExists(constraint, table, ["target_value"]);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -468,6 +518,7 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
                 new SafeMigrationRunOptions("unique-replacement-duplicates"),
                 CancellationToken.None);
 
+        // Assert
         var replacement = report.Assessments[^1];
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -488,9 +539,11 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Rejects oversized primary and unique keys before native constraint creation.</summary>
     [Fact]
     public async Task WidePrimaryAndUniqueKeysAreRejectedBeforePhysicalCreation()
     {
+        // Arrange
         const string primaryTable = "wide_primary_key";
         const string uniqueTable = "wide_unique_constraint";
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
@@ -511,6 +564,7 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
         builder.AddPrimaryKeyIfNotExists("pk_wide_primary_key", primaryTable, ["value"]);
         builder.AddUniqueConstraintIfNotExists("uq_wide_unique_constraint", uniqueTable, ["value"]);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -519,6 +573,7 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
                 new SafeMigrationRunOptions("wide-physical-keys"),
                 CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Collection(
             report.Assessments,
@@ -546,9 +601,11 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Allows narrow primary and unique keys at the compact-row native budget boundary.</summary>
     [Fact]
     public async Task NarrowPrimaryAndUniqueKeysRemainApplicableAtTheCompactLimit()
     {
+        // Arrange
         const string primaryTable = "narrow_primary_key";
         const string uniqueTable = "narrow_unique_constraint";
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
@@ -570,6 +627,8 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
         builder.AddUniqueConstraintIfNotExists("uq_narrow_unique_constraint", uniqueTable, ["value"]);
 
         var runner = context.GetService<ISafeMigrationRunner>();
+
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
@@ -578,6 +637,7 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
         Assert.All(
             preflight.Assessments,
@@ -596,15 +656,20 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Rejects excessive composite key-part counts before native constraint creation.</summary>
     [Fact]
     public async Task ExcessiveKeyPartCountsAreRejectedBeforePhysicalCreation()
     {
+        // Arrange
         const string indexTable = "excessive_index_parts";
         const string primaryTable = "excessive_primary_parts";
         const string uniqueTable = "excessive_unique_parts";
         var columns = Enumerable
             .Range(0, 17)
             .Select(index => $"value_{index.ToString("D2", CultureInfo.InvariantCulture)}")
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var columnDefinitions = string.Join(
@@ -629,6 +694,7 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
         builder.AddPrimaryKeyIfNotExists("pk_excessive_parts", primaryTable, columns);
         builder.AddUniqueConstraintIfNotExists("uq_excessive_parts", uniqueTable, columns);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -637,6 +703,7 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
                 new SafeMigrationRunOptions("excessive-key-parts"),
                 CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Collection(
             report.Assessments,
@@ -657,15 +724,20 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
             });
     }
 
+    /// <summary>Compares maximum composite-key identities by ordinal without GROUP_CONCAT truncation.</summary>
     [Fact]
     public async Task MaximumCompositeKeyNamesUseOrdinalIdentityWithoutGroupConcatTruncation()
     {
+        // Arrange
         const string primaryTable = "long_composite_primary";
         const string uniqueTable = "long_composite_unique";
         const string uniqueName = "uq_long_composite_unique";
         var columns = Enumerable
             .Range(0, 16)
             .Select(index => MySqlMaximumIdentifier($"c{index.ToString("D2", CultureInfo.InvariantCulture)}_"))
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var columnDefinitions = string.Join(
@@ -692,6 +764,8 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
         matching.AddUniqueConstraintIfNotExists(uniqueName, uniqueTable, columns);
 
         var runner = context.GetService<ISafeMigrationRunner>();
+
+        // Act
         var matchingReport = await runner.AnalyzeAsync(
             context,
             matching.Operations,
@@ -700,6 +774,9 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
 
         var reversed = columns
             .Reverse()
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var different = new MigrationBuilder(context.Database.ProviderName!);
@@ -712,6 +789,7 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
             new SafeMigrationRunOptions("long-composite-different"),
             CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, matchingReport.Status);
         Assert.All(
             matchingReport.Assessments,

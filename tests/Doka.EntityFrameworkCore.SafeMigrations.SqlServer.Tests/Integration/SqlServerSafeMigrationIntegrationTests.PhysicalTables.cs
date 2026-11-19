@@ -213,6 +213,8 @@ public sealed class SqlServerSafeMigrationPhysicalTablesIntegrationTests : SqlSe
 
         return intents
             .Select(static intent => new SafeMigrationOperation(intent, SafeMigrationPolicy.ThrowIfDifferent))
+            // WHY: Fluent terminal materialization preserves the existing snapshot and enumeration contract.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
     }
 

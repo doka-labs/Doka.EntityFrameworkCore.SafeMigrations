@@ -1,9 +1,3 @@
-using System;
-using Doka.EntityFrameworkCore.MySql;
-using Doka.EntityFrameworkCore.SafeMigrations.MySql.SplitTarget;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Design;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.SplitGenerator;
 
 /// <summary>

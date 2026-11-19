@@ -36,17 +36,15 @@ public sealed partial class SafeMigrationScaffoldingTests
             Name = "ix_items_caption",
             Table = "items",
             Columns = ["caption"],
+            ["Test:ProviderMetadata"] = 1,
         };
-
-        index["Test:ProviderMetadata"] = 1;
 
         var drop = new DropColumnOperation
         {
             Name = "legacy",
             Table = "items",
+            ["Test:ProviderMetadata"] = 1,
         };
-
-        drop["Test:ProviderMetadata"] = 1;
 
         // Act
         generator.Generate("migrationBuilder", [index, drop], builder);

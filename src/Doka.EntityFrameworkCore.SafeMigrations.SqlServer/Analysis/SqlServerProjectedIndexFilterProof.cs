@@ -37,12 +37,18 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             CancellationToken cancellationToken
         )
     {
-        var authored = new Dictionary<(string Schema, string Table), Dictionary<string, ExpectedColumnDefinition>>();
-        var mutations = new Dictionary<(string Schema, string Table), HashSet<string>>();
-        var result = new Dictionary<EnsureIndexIntent, List<SqlServerProjectedIndexFilterProof>>();
+        Dictionary<(string Schema, string Table), Dictionary<string, ExpectedColumnDefinition>> authored = [];
+        Dictionary<(string Schema, string Table), HashSet<string>> mutations = [];
+        Dictionary<EnsureIndexIntent, List<SqlServerProjectedIndexFilterProof>> result = [];
         var cache = new Dictionary<string, List<SqlServerProjectedIndexFilterProof>>(StringComparer.Ordinal);
-        foreach (var operation in operations)
+
+        // WHY: The stable indexed snapshot preserves operation and declaration order.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var operationIndex0 = 0; operationIndex0 < operations.Count; operationIndex0++)
         {
+            var operation = operations[operationIndex0];
+
             cancellationToken.ThrowIfCancellationRequested();
             if (operation.Intent is EnsureIndexIntent index
                 && SqlServerSafeMigrationCatalogSqlBuilder.GetStructuredIndexFilter(index.Definition) is { } filter)
@@ -59,6 +65,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                         .Distinct(StringComparer.Ordinal)
                         .Where(definitions.ContainsKey)
                         .Select(name => definitions[name])
+
+                        // WHY: Retain this explicit fluent snapshot instead of a collection-spread rewrite.
+                        // ReSharper disable once UseCollectionExpression
                         .ToArray();
 
                     var allMutated = captured.Length != 0
@@ -198,7 +207,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             return FilterUnsupported();
         }
 
-        var captured = new List<ExpectedColumnDefinition>();
+        List<ExpectedColumnDefinition> captured = [];
         var hasUntouchedColumn = false;
         foreach (var name in SqlServerSafeMigrationCatalogSqlBuilder
             .GetIndexFilterComparisons(filter)
@@ -229,8 +238,11 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             }
         }
 
-        if (live.ObservedState == SafeMigrationObservedState.Unsupported
-            && live.Code == SqlServerSafeMigrationRuntimePlan.IndexFilterUnsupportedCode
+        if (live is
+            {
+                ObservedState: SafeMigrationObservedState.Unsupported,
+                Code: SqlServerSafeMigrationRuntimePlan.IndexFilterUnsupportedCode,
+            }
             && (captured.Count == 0 || hasUntouchedColumn))
         {
             // WHY: An unchanged predicate column retains its original failed
@@ -257,8 +269,11 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             return FilterUnsupported();
         }
 
-        if (live.ObservedState == SafeMigrationObservedState.Unsupported
-            && live.Code == SqlServerSafeMigrationRuntimePlan.IndexFilterUnsupportedCode)
+        if (live is
+            {
+                ObservedState: SafeMigrationObservedState.Unsupported,
+                Code: SqlServerSafeMigrationRuntimePlan.IndexFilterUnsupportedCode,
+            })
         {
             var recreated = source is ISafeMigrationProjectedTableSource tables
                 && tables.TryGetProjectedTableState(index.Definition.Table, index.Definition.Schema, out var state)

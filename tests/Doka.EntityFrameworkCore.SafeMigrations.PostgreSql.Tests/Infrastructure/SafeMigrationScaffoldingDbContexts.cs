@@ -1,10 +1,13 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
+/// <summary>Verifies SafeMigrations Scaffolding Db Context contracts in independently owned test state.</summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public abstract class SafeMigrationScaffoldingDbContext : DbContext
 {
     private readonly string _connectionString;
     private readonly SafeMigrationScaffoldingMode _mode;
 
+    /// <summary>Initializes the fixture with its configured dependencies and ownership boundary.</summary>
     protected SafeMigrationScaffoldingDbContext(
         string connectionString,
         SafeMigrationScaffoldingMode mode
@@ -14,8 +17,10 @@ public abstract class SafeMigrationScaffoldingDbContext : DbContext
         _mode = mode;
     }
 
+    /// <summary>Exposes the mapped users used by scaffolding and ownership qualification.</summary>
     public DbSet<SafeMigrationScaffoldingUser> Users => Set<SafeMigrationScaffoldingUser>();
 
+    /// <inheritdoc />
     protected override void OnConfiguring(
         DbContextOptionsBuilder optionsBuilder
     )
@@ -31,6 +36,7 @@ public abstract class SafeMigrationScaffoldingDbContext : DbContext
         });
     }
 
+    /// <inheritdoc />
     protected override void OnModelCreating(
         ModelBuilder modelBuilder
     )
@@ -185,98 +191,153 @@ public abstract class SafeMigrationScaffoldingDbContext : DbContext
     }
 }
 
+/// <summary>
+/// Verifies Strict SafeMigrations Scaffolding Db Context contracts in independently owned test state.
+/// </summary>
 public sealed class StrictSafeMigrationScaffoldingDbContext : SafeMigrationScaffoldingDbContext
 {
+    /// <summary>Initializes the fixture with its configured dependencies and ownership boundary.</summary>
     public StrictSafeMigrationScaffoldingDbContext(
         string connectionString
     ) : base(connectionString, SafeMigrationScaffoldingMode.Strict) { }
 }
 
+/// <summary>
+/// Verifies Legacy SafeMigrations Scaffolding Db Context contracts in independently owned test state.
+/// </summary>
 public sealed class LegacySafeMigrationScaffoldingDbContext : SafeMigrationScaffoldingDbContext
 {
+    /// <summary>Initializes the fixture with its configured dependencies and ownership boundary.</summary>
     public LegacySafeMigrationScaffoldingDbContext(
         string connectionString
     ) : base(connectionString, SafeMigrationScaffoldingMode.LegacyConvergence) { }
 }
 
+/// <summary>Verifies SafeMigrations Scaffolding User contracts in independently owned test state.</summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public sealed class SafeMigrationScaffoldingUser
 {
+    /// <summary>Gets or sets the mapped id fixture value.</summary>
     public int Id { get; set; }
 
+    /// <summary>Gets or sets the mapped tenant id fixture value.</summary>
     public int TenantId { get; set; }
 
+    /// <summary>Gets or sets the mapped email fixture value.</summary>
     public string Email { get; set; } = string.Empty;
 
+    /// <summary>Gets or sets the mapped request id fixture value.</summary>
     public int? RequestId { get; set; }
 
+    /// <summary>Gets or sets the mapped request metadata fixture value.</summary>
     public string? RequestMetadata { get; set; }
 
+    /// <summary>Gets or sets the mapped request fixture value.</summary>
     public SafeMigrationScaffoldingRequest? Request { get; set; }
 }
 
+/// <summary>Verifies SafeMigrations Scaffolding Request contracts in independently owned test state.</summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public sealed class SafeMigrationScaffoldingRequest
 {
+    /// <summary>Gets or sets the mapped id fixture value.</summary>
     public int Id { get; set; }
 }
 
+/// <summary>Verifies SafeMigrations Scaffolding Work Item contracts in independently owned test state.</summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public abstract class SafeMigrationScaffoldingWorkItem
 {
+    /// <summary>Gets or sets the mapped id fixture value.</summary>
     public int Id { get; set; }
 
+    /// <summary>Gets or sets the mapped caption fixture value.</summary>
     public string Caption { get; set; } = string.Empty;
 }
 
+/// <summary>Verifies SafeMigrations Scaffolding Task contracts in independently owned test state.</summary>
 public sealed class SafeMigrationScaffoldingTask : SafeMigrationScaffoldingWorkItem;
 
+/// <summary>
+/// Verifies SafeMigrations Scaffolding External Work Item contracts in independently owned test state.
+/// </summary>
 public sealed class SafeMigrationScaffoldingExternalWorkItem : SafeMigrationScaffoldingWorkItem;
 
+/// <summary>Defines distinct mapped work-item values used to qualify scaffolding and conversion.</summary>
 public enum SafeMigrationScaffoldingWorkItemKind
 {
+    /// <summary>Retains this distinct fixture value and its configured serialization contract.</summary>
     Task,
+
+    /// <summary>Retains this distinct fixture value and its configured serialization contract.</summary>
     External,
 }
 
+/// <summary>Verifies SafeMigrations Attributed Work Item contracts in independently owned test state.</summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public abstract class SafeMigrationAttributedWorkItem
 {
+    /// <summary>Gets or sets the mapped id fixture value.</summary>
     public int Id { get; set; }
 
+    /// <summary>Gets or sets the mapped caption fixture value.</summary>
     public string Caption { get; set; } = string.Empty;
 }
 
+/// <summary>Verifies SafeMigrations Json Named Work Item contracts in independently owned test state.</summary>
 public sealed class SafeMigrationJsonNamedWorkItem : SafeMigrationAttributedWorkItem;
 
+/// <summary>Verifies SafeMigrations Contract Named Work Item contracts in independently owned test state.</summary>
 public sealed class SafeMigrationContractNamedWorkItem : SafeMigrationAttributedWorkItem;
 
+/// <summary>Verifies SafeMigrations Fallback Named Work Item contracts in independently owned test state.</summary>
 public sealed class SafeMigrationFallbackNamedWorkItem : SafeMigrationAttributedWorkItem;
 
+/// <summary>Verifies SafeMigrations Scaffolding Cycle Left contracts in independently owned test state.</summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public sealed class SafeMigrationScaffoldingCycleLeft
 {
+    /// <summary>Gets or sets the mapped id fixture value.</summary>
     public int Id { get; set; }
 
+    /// <summary>Gets or sets the mapped right id fixture value.</summary>
     public int? RightId { get; set; }
 }
 
+/// <summary>Verifies SafeMigrations Scaffolding Cycle Right contracts in independently owned test state.</summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public sealed class SafeMigrationScaffoldingCycleRight
 {
+    /// <summary>Gets or sets the mapped id fixture value.</summary>
     public int Id { get; set; }
 
+    /// <summary>Gets or sets the mapped left id fixture value.</summary>
     public int? LeftId { get; set; }
 }
 
+/// <summary>Defines distinct mapped work-item values used to qualify scaffolding and conversion.</summary>
 public enum SafeMigrationAttributedWorkItemKind
 {
+    /// <summary>Retains this distinct fixture value and its configured serialization contract.</summary>
     [JsonStringEnumMemberName("json-named")]
     JsonNamed,
 
+    /// <summary>Retains this distinct fixture value and its configured serialization contract.</summary>
     [EnumMember(Value = "contract-named")]
     ContractNamed,
 
+    /// <summary>Retains this distinct fixture value and its configured serialization contract.</summary>
     Fallback,
 }
 
+/// <summary>
+/// Verifies Strict SafeMigrations Scaffolding Db Context Factory contracts in independently owned test state.
+/// </summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public sealed class StrictSafeMigrationScaffoldingDbContextFactory
     : IDesignTimeDbContextFactory<StrictSafeMigrationScaffoldingDbContext>
 {
+    /// <summary>Create Db Context.</summary>
     public StrictSafeMigrationScaffoldingDbContext CreateDbContext(
         string[] args
     )
@@ -288,9 +349,14 @@ public sealed class StrictSafeMigrationScaffoldingDbContextFactory
     }
 }
 
+/// <summary>
+/// Verifies Legacy SafeMigrations Scaffolding Db Context Factory contracts in independently owned test state.
+/// </summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public sealed class LegacySafeMigrationScaffoldingDbContextFactory
     : IDesignTimeDbContextFactory<LegacySafeMigrationScaffoldingDbContext>
 {
+    /// <summary>Create Db Context.</summary>
     public LegacySafeMigrationScaffoldingDbContext CreateDbContext(
         string[] args
     )
@@ -302,11 +368,16 @@ public sealed class LegacySafeMigrationScaffoldingDbContextFactory
     }
 }
 
+/// <summary>
+/// Verifies SafeMigrations Data Transition Scaffolding Db Context contracts in independently owned test state.
+/// </summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public abstract class SafeMigrationDataTransitionScaffoldingDbContext : DbContext
 {
     private readonly string _connectionString;
     private readonly SafeMigrationScaffoldingMode _mode;
 
+    /// <summary>Initializes the fixture with its configured dependencies and ownership boundary.</summary>
     protected SafeMigrationDataTransitionScaffoldingDbContext(
         string connectionString,
         SafeMigrationScaffoldingMode mode
@@ -316,8 +387,10 @@ public abstract class SafeMigrationDataTransitionScaffoldingDbContext : DbContex
         _mode = mode;
     }
 
+    /// <summary>Exposes the mapped users used by scaffolding and ownership qualification.</summary>
     public DbSet<SafeMigrationDataTransitionUser> Users => Set<SafeMigrationDataTransitionUser>();
 
+    /// <inheritdoc />
     protected override void OnConfiguring(
         DbContextOptionsBuilder optionsBuilder
     )
@@ -333,6 +406,7 @@ public abstract class SafeMigrationDataTransitionScaffoldingDbContext : DbContex
         });
     }
 
+    /// <inheritdoc />
     protected override void OnModelCreating(
         ModelBuilder modelBuilder
     )
@@ -448,50 +522,78 @@ public abstract class SafeMigrationDataTransitionScaffoldingDbContext : DbContex
     }
 }
 
+/// <summary>
+/// Verifies Strict SafeMigrations Data Transition Scaffolding Db Context contracts in independently owned test
+/// state.
+/// </summary>
 public sealed class StrictSafeMigrationDataTransitionScaffoldingDbContext
     : SafeMigrationDataTransitionScaffoldingDbContext
 {
+    /// <summary>Initializes the fixture with its configured dependencies and ownership boundary.</summary>
     public StrictSafeMigrationDataTransitionScaffoldingDbContext(
         string connectionString
     ) : base(connectionString, SafeMigrationScaffoldingMode.Strict) { }
 }
 
+/// <summary>
+/// Verifies Legacy SafeMigrations Data Transition Scaffolding Db Context contracts in independently owned test
+/// state.
+/// </summary>
 public sealed class LegacySafeMigrationDataTransitionScaffoldingDbContext
     : SafeMigrationDataTransitionScaffoldingDbContext
 {
+    /// <summary>Initializes the fixture with its configured dependencies and ownership boundary.</summary>
     public LegacySafeMigrationDataTransitionScaffoldingDbContext(
         string connectionString
     ) : base(connectionString, SafeMigrationScaffoldingMode.LegacyConvergence) { }
 }
 
+/// <summary>Verifies SafeMigrations Data Transition User contracts in independently owned test state.</summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public sealed class SafeMigrationDataTransitionUser
 {
+    /// <summary>Gets or sets the mapped id fixture value.</summary>
     public int Id { get; set; }
 
+    /// <summary>Gets or sets the mapped email fixture value.</summary>
     public string Email { get; set; } = string.Empty;
 
+    /// <summary>Gets or sets the mapped request id fixture value.</summary>
     public int? RequestId { get; set; }
 
+    /// <summary>Gets or sets the mapped request metadata fixture value.</summary>
     public string? RequestMetadata { get; set; }
 
+    /// <summary>Gets or sets the mapped request fixture value.</summary>
     public SafeMigrationDataTransitionRequest? Request { get; set; }
 }
 
+/// <summary>Verifies SafeMigrations Data Transition Request contracts in independently owned test state.</summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public sealed class SafeMigrationDataTransitionRequest
 {
+    /// <summary>Gets or sets the mapped id fixture value.</summary>
     public int Id { get; set; }
 
+    /// <summary>Gets or sets the mapped caption fixture value.</summary>
     public string Caption { get; set; } = string.Empty;
 }
 
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 internal sealed class SafeMigrationDataTransitionAuxiliary
 {
     public int Id { get; set; }
 }
 
+/// <summary>
+/// Verifies Strict SafeMigrations Data Transition Scaffolding Db Context Factory contracts in independently owned
+/// test state.
+/// </summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public sealed class StrictSafeMigrationDataTransitionScaffoldingDbContextFactory
     : IDesignTimeDbContextFactory<StrictSafeMigrationDataTransitionScaffoldingDbContext>
 {
+    /// <summary>Create Db Context.</summary>
     public StrictSafeMigrationDataTransitionScaffoldingDbContext CreateDbContext(
         string[] args
     )
@@ -503,9 +605,15 @@ public sealed class StrictSafeMigrationDataTransitionScaffoldingDbContextFactory
     }
 }
 
+/// <summary>
+/// Verifies Legacy SafeMigrations Data Transition Scaffolding Db Context Factory contracts in independently owned
+/// test state.
+/// </summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public sealed class LegacySafeMigrationDataTransitionScaffoldingDbContextFactory
     : IDesignTimeDbContextFactory<LegacySafeMigrationDataTransitionScaffoldingDbContext>
 {
+    /// <summary>Create Db Context.</summary>
     public LegacySafeMigrationDataTransitionScaffoldingDbContext CreateDbContext(
         string[] args
     )

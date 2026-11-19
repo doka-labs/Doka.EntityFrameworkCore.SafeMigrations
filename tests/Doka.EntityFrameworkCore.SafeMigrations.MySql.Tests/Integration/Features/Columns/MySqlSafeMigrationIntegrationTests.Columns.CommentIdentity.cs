@@ -243,10 +243,7 @@ public sealed class MySqlColumnsCommentIdentityIntegrationTests : MySqlSafeMigra
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
-        var before = await ReadAtomicRequiredAddStateAsync(
-            connectionString,
-            operation,
-            cancellationToken: CancellationToken.None);
+        var before = await ReadAtomicRequiredAddStateAsync(connectionString, operation, null, CancellationToken.None);
 
         // Act
         var comparison = await ReadCommentIdentityComparisonAsync(
@@ -265,10 +262,7 @@ public sealed class MySqlColumnsCommentIdentityIntegrationTests : MySqlSafeMigra
         var exception = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, [operation], CancellationToken.None));
 
-        var after = await ReadAtomicRequiredAddStateAsync(
-            connectionString,
-            operation,
-            cancellationToken: CancellationToken.None);
+        var after = await ReadAtomicRequiredAddStateAsync(connectionString, operation, null, CancellationToken.None);
 
         var finalComparison = await ReadCommentIdentityComparisonAsync(
             connectionString,

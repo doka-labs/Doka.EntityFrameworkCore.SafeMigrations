@@ -106,7 +106,7 @@ public sealed partial class MySqlProofMarkerRenderingTests
     public void QuotedIdentifierMarkerPayloadsRemainUnchanged()
     {
         // Arrange
-        var sql = "'a''" + IdentifierMarker + "' AND `b``" + IdentifierMarker + "`";
+        const string sql = "'a''" + IdentifierMarker + "' AND `b``" + IdentifierMarker + "`";
         var plan = CreateIdentifierPlan(sql, "TRUE") with { IdentifierReferenceProofs = [] };
 
         // Act

@@ -138,7 +138,9 @@ public sealed class SqlServerDependencyCatalogPermissionTests
         Assert.Equal("N'unsupported'", plan.StateEvaluationGuardFailureExpression);
     }
 
-    /// <summary>Text ALTER proves SELECT outside its row scope without inferring a grant from target matching.</summary>
+    /// <summary>
+    /// Text ALTER proves SELECT outside its row scope without inferring a grant from target matching.
+    /// </summary>
     [Fact]
     public void TextAlter_ReadPermissionPrecedesRowBinding()
     {

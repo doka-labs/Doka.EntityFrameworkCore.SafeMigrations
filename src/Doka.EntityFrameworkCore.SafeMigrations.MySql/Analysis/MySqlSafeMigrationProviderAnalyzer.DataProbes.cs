@@ -21,7 +21,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
     )
     {
         var results = new MySqlDataProbeResult?[plans.Length];
-        var candidates = new Dictionary<MySqlDataProbeContract, MySqlDataProbeCandidate>();
+        Dictionary<MySqlDataProbeContract, MySqlDataProbeCandidate> candidates = [];
 
         // WHY: Keep data-probe plans, short-circuit states and result slots aligned by ordinal.
         // ReSharper disable once ForCanBeConvertedToForeach
@@ -51,10 +51,17 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
 
         if (candidates.Count > 0)
         {
+            // WHY: Retain fluent materialization and its existing snapshot
+            // ownership rather than replacing this boundary with a spread.
+            // ReSharper disable once UseCollectionExpression
             var candidateArray = candidates.Values.ToArray();
             var transitionPlans = CapturePlans(
                 candidateArray
                     .Select(static candidate => candidate.Operation)
+
+                    // WHY: Retain fluent materialization and its existing snapshot
+                    // ownership rather than replacing this boundary with a spread.
+                    // ReSharper disable once UseCollectionExpression
                     .ToArray(),
                 model,
                 expectedUniqueIndexes,
@@ -180,10 +187,10 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                     parameterizer.Utf8PayloadBytes,
                     candidates[offset].Ordinal);
             },
-            async (reader, offset, count, token) =>
+            async (reader, offset, count, callbackCancellationToken) =>
             {
                 var row = 0;
-                while (await reader.ReadAsync(token))
+                while (await reader.ReadAsync(callbackCancellationToken))
                 {
                     if (row >= count
                         || reader.GetInt32(0) != candidates[offset + row].Ordinal)
@@ -211,6 +218,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                         "The MySQL narrowing prerequisite query returned an inconsistent row count.");
                 }
             },
+            transaction: null,
+            SafeMigrationCatalogQueryLimits.MaximumParameters,
             cancellationToken);
 
         return results;
@@ -228,6 +237,10 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         var statements = requiredCandidates
             .GroupBy(static candidate => candidate.Probe.DelimitedTable, StringComparer.Ordinal)
             .SelectMany(static group => group.Chunk(SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement))
+
+            // WHY: Retain fluent materialization and its existing snapshot
+            // ownership rather than replacing this boundary with a spread.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         // WHY: Eligibility has already been evaluated for every candidate.
@@ -257,6 +270,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                 else
                 {
                     var selections = new List<string>(candidates.Length);
+
+                    // WHY: Preserve the concrete candidate order while appending bounded SQL selections.
+                    // ReSharper disable once LoopCanBeConvertedToQuery
                     foreach (var candidate in candidates)
                     {
                         var probe = candidate.Probe;
@@ -274,12 +290,12 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
 
                 return new SafeMigrationCatalogProbeStatement(1, ParameterPayloadBytes: 0, candidates[0].Ordinal);
             },
-            async (reader, offset, _, token) =>
+            async (reader, offset, _, callbackCancellationToken) =>
             {
                 var candidates = statements[offset];
 
                 if (reader.FieldCount != candidates.Length
-                    || !await reader.ReadAsync(token))
+                    || !await reader.ReadAsync(callbackCancellationToken))
                 {
                     throw new InvalidOperationException("The MySQL narrowing data query returned an invalid result.");
                 }
@@ -295,12 +311,14 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                     cache.Add(identity, blocked);
                 }
 
-                if (await reader.ReadAsync(token))
+                if (await reader.ReadAsync(callbackCancellationToken))
                 {
                     throw new InvalidOperationException(
                         "The MySQL narrowing data query returned more than one result row.");
                 }
             },
+            transaction: null,
+            SafeMigrationCatalogQueryLimits.MaximumParameters,
             cancellationToken);
     }
 

@@ -1,8 +1,8 @@
 ---
 id: D-018
 status: implemented
-date: 2026-10-25
-decision-makers: [Dominic Kalkbrenner]
+date: 2026-11-19
+decision-makers: ["Dominic Kalkbrenner"]
 consulted: []
 informed: ["@doka-labs/core-maintainers"]
 scope: "Exact release lines, current publication authority and monotonic Latest"
@@ -42,9 +42,9 @@ single-maintainer approval and exact-byte recovery must remain intact.
 
 ## Decision Outcome
 
-Chosen option: "One shared pipeline with exact line policy and bounded admission
-adapters". Reuse the existing release, signature, package, readback and provenance
-primitives. Adapt Doka D-030's line contract, not its provider-specific release
+Chosen option: "One shared pipeline with exact line policy and bounded admission adapters",
+because the existing release, signature, package, readback and provenance
+primitives must retain one protected publisher. Adapt Doka D-030's line contract, not its provider-specific release
 subsystem, package inventory or framework migration.
 
 The reviewed policy names exact refs, roles, package majors, channels and upstream
@@ -136,11 +136,17 @@ No additional active line or hosted configuration is implied by this decision.
 
 ### Decision History
 
+- 2026-10-25: Decision recorded with status proposed.
 - 2026-10-25: Owner approved complete release-line support modeled on Doka,
   excluding .NET 11 work and activation of any additional line.
-- 2026-10-25: Decision accepted and implemented. Behavioral engineering tests,
+- 2026-10-25: Status changed from proposed to accepted.
+- 2026-10-25: Status changed from accepted to implemented. Behavioral engineering tests,
   original shell regressions, locked restore and warning-free Release build
   confirm the repository contract, separately from hosted operational activation.
+- 2026-11-19: Aligned last-update metadata, reciprocal amendments, option titles
+  and source/navigation format with the current documentation profile. Retained
+  the recorded status and historical approval evidence; this migration grants no
+  new architectural acceptance or publication authority.
 
 ### Implementation References
 
@@ -159,21 +165,13 @@ No additional active line or hosted configuration is implied by this decision.
 
 ### Sources
 
-- [Doka D-030](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/6e2618140d821bd6befdf46181fcb82dca323c4f/docs/decisions/D-030-release-lines-and-monotonic-publication.md)
-  (reference implementation; retrieved 2026-10-25)
-- [GitHub concurrency](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency)
-  (primary source; retrieved 2026-10-25)
-- [Workflow events](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows)
-  (primary source; retrieved 2026-10-25)
-- [GitHub environments](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments)
-  (primary source; retrieved 2026-10-25)
-- [GitHub reruns](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs)
-  (primary source; retrieved 2026-10-25)
-- [Dependabot target branches](https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference#target-branch)
-  (primary source; retrieved 2026-10-25)
-- [Runner condition evaluation](https://github.com/actions/runner/blob/main/src/Runner.Worker/StepsRunner.cs)
-  and [execution-context timestamps](https://github.com/actions/runner/blob/main/src/Runner.Worker/ExecutionContext.cs)
-  (primary sources; retrieved 2026-10-25)
-- [Dependabot NuGet version comparison](https://github.com/dependabot/dependabot-core/blob/72d5b295e35a0cd031b57f19a3d96d912fedb601/nuget/lib/dependabot/nuget/version.rb)
-  and [requirement matching](https://github.com/dependabot/dependabot-core/blob/72d5b295e35a0cd031b57f19a3d96d912fedb601/nuget/lib/dependabot/nuget/requirement.rb)
-  (primary sources; retrieved 2026-10-25)
+- [Doka D-030](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/6e2618140d821bd6befdf46181fcb82dca323c4f/docs/decisions/D-030-release-lines-and-monotonic-publication.md) (primary source; retrieved 2026-10-25)
+- [GitHub concurrency](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency) (primary source; retrieved 2026-10-25)
+- [Workflow events](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows) (primary source; retrieved 2026-10-25)
+- [GitHub environments](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments) (primary source; retrieved 2026-10-25)
+- [GitHub reruns](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs) (primary source; retrieved 2026-10-25)
+- [Dependabot target branches](https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference#target-branch) (primary source; retrieved 2026-10-25)
+- [Runner condition evaluation](https://github.com/actions/runner/blob/main/src/Runner.Worker/StepsRunner.cs) (primary source; retrieved 2026-10-25)
+- [execution-context timestamps](https://github.com/actions/runner/blob/main/src/Runner.Worker/ExecutionContext.cs) (primary source; retrieved 2026-10-25)
+- [Dependabot NuGet version comparison](https://github.com/dependabot/dependabot-core/blob/72d5b295e35a0cd031b57f19a3d96d912fedb601/nuget/lib/dependabot/nuget/version.rb) (primary source; retrieved 2026-10-25)
+- [requirement matching](https://github.com/dependabot/dependabot-core/blob/72d5b295e35a0cd031b57f19a3d96d912fedb601/nuget/lib/dependabot/nuget/requirement.rb) (primary source; retrieved 2026-10-25)

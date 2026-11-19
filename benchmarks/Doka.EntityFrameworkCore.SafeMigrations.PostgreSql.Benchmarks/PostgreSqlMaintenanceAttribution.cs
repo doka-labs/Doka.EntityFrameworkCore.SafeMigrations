@@ -1,7 +1,8 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Benchmarks;
 
 /// <summary>Attributes real bounded narrowing discovery and transport phases with deterministic ADO results.</summary>
-public class PostgreSqlMaintenanceAttribution : IDisposable
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
+public class PostgreSqlMaintenanceAttribution : IDisposable, IAsyncDisposable
 {
     private CatalogStatementTestConnection _connection = null!;
     private PostgreSqlGenerationContext _context = null!;
@@ -28,6 +29,44 @@ public class PostgreSqlMaintenanceAttribution : IDisposable
     [Params(false, true)]
     public bool NativeBatch { get; set; }
 
+    /// <inheritdoc />
+    public async ValueTask DisposeAsync()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        Exception? originalFailure = null;
+        try
+        {
+            // WHY: Setup can fail between context and transport acquisition; dispose only actual owned resources.
+            await SafeMigrationAnalysisCleanup.DisposeAsync(
+                _connection,
+                null,
+                "SafeMigrations.PostgreSqlBenchmarkConnectionDisposeException");
+        }
+        catch (Exception exception)
+        {
+            originalFailure = exception;
+
+            throw;
+        }
+        finally
+        {
+            await SafeMigrationAnalysisCleanup.DisposeAsync(
+                _context,
+                originalFailure,
+                "SafeMigrations.PostgreSqlBenchmarkContextDisposeException");
+
+            _disposed = originalFailure is null;
+            if (_disposed)
+            {
+                GC.SuppressFinalize(this);
+            }
+        }
+    }
+
     /// <summary>Releases the deterministic transport and provider service context.</summary>
     public void Dispose()
     {
@@ -43,8 +82,9 @@ public class PostgreSqlMaintenanceAttribution : IDisposable
     ) => BenchmarkProgram.Run(args, typeof(PostgreSqlMaintenanceAttribution));
 
     /// <summary>Checks exact SQL, ordinal ownership, replay and cancellation outside measurements.</summary>
+    /// <returns>The asynchronous setup and functional verification.</returns>
     [GlobalSetup]
-    public void Setup()
+    public async Task Setup()
     {
         _disposed = false;
         _context = new PostgreSqlGenerationContext();
@@ -61,9 +101,7 @@ public class PostgreSqlMaintenanceAttribution : IDisposable
         _states = new SafeMigrationObservedState?[OperationCount];
         _connection = new CatalogStatementTestConnection(NativeBatch, EligibilityRows);
         var resolved = ResolveEligibility();
-        resolved
-            .GetAwaiter()
-            .GetResult();
+        await resolved;
 
         var observed = ReadResult(resolved);
         var expected = _operations
@@ -77,6 +115,9 @@ public class PostgreSqlMaintenanceAttribution : IDisposable
                         operation,
                         window * SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement + ordinal)))
                 + SafeMigrationCatalogQueryLimits.Trailer)
+
+            // WHY: Retain fluent materialization and the resulting snapshot ownership.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         MaintenanceAttribution.Require(
@@ -91,6 +132,9 @@ public class PostgreSqlMaintenanceAttribution : IDisposable
             "The PostgreSQL attribution transport or result shape is invalid.");
 
         VerifyFacts(observed);
+
+        // WHY: Retain fluent materialization and the resulting snapshot ownership.
+        // ReSharper disable once UseCollectionExpression
         var batches = _connection.BatchCounts.ToArray();
         var sqlBytes = _connection.Submissions.Sum(static submission =>
             Encoding.UTF8.GetByteCount(submission.Sql));
@@ -98,9 +142,7 @@ public class PostgreSqlMaintenanceAttribution : IDisposable
         var hash = MaintenanceAttribution.Hash(string.Join("\n", expected));
         _connection.ResetCaptures();
         var replay = ResolveEligibility();
-        replay
-            .GetAwaiter()
-            .GetResult();
+        await replay;
 
         VerifyFacts(ReadResult(replay));
         MaintenanceAttribution.Require(
@@ -108,11 +150,11 @@ public class PostgreSqlMaintenanceAttribution : IDisposable
             && batches.SequenceEqual(_connection.BatchCounts),
             "PostgreSQL attribution replay accumulated captures or changed transport ownership.");
 
-        VerifyRepeatedSkippedAndCancelled(_resolve);
+        await VerifyRepeatedSkippedAndCancelledAsync(_resolve, CancellationToken.None);
         var output = Environment.GetEnvironmentVariable("SAFE_MIGRATIONS_ATTRIBUTION_OUTPUT");
         if (!string.IsNullOrWhiteSpace(output))
         {
-            _ = MaintenanceAttribution.Write(
+            await MaintenanceAttribution.WriteAsync(
                 Path.Combine(output, $"postgresql-eligibility-{OperationCount}-{NativeBatch}.json"),
                 "Functional/source evidence; PostgreSQL deterministic client ADO workload; not timing evidence",
                 [
@@ -127,17 +169,16 @@ public class PostgreSqlMaintenanceAttribution : IDisposable
                         SqlUtf8Bytes = sqlBytes,
                         ExactSqlHash = hash,
                     },
-                ]);
+                ],
+                CancellationToken.None);
         }
 
         // WHY: Keep exact SQL/replay assertions above, but never retain or clear diagnostic observations
         // in measured invocations. IterationSetup would force single-invocation calibration instead.
-        _connection.Dispose();
+        await _connection.DisposeAsync();
         _connection = new CatalogStatementTestConnection(NativeBatch, EligibilityRows) { CaptureObservations = false };
         var unrecorded = ResolveEligibility();
-        unrecorded
-            .GetAwaiter()
-            .GetResult();
+        await unrecorded;
 
         VerifyFacts(ReadResult(unrecorded));
     }
@@ -148,8 +189,9 @@ public class PostgreSqlMaintenanceAttribution : IDisposable
     public Task ResolveEligibility() => _resolve(_connection, _operations, _states, CancellationToken.None);
 
     /// <summary>Disposes the deterministic transport and provider service context.</summary>
+    /// <returns>The asynchronous, noncancellable release of owned resources.</returns>
     [GlobalCleanup]
-    public void Cleanup() => Dispose();
+    public async Task Cleanup() => await DisposeAsync();
 
     /// <summary>Releases owned managed resources once while supporting generated benchmark subclasses.</summary>
     /// <param name="disposing">Whether managed resources should be released.</param>
@@ -162,9 +204,33 @@ public class PostgreSqlMaintenanceAttribution : IDisposable
             return;
         }
 
-        _connection.Dispose();
-        _context.Dispose();
-        _disposed = true;
+        Exception? originalFailure = null;
+        try
+        {
+            _connection?.Dispose();
+        }
+        catch (Exception exception)
+        {
+            originalFailure = exception;
+
+            throw;
+        }
+        finally
+        {
+            try
+            {
+                _context?.Dispose();
+                _disposed = originalFailure is null;
+            }
+            catch (Exception cleanupFailure) when (originalFailure is not null)
+            {
+                // WHY: Releasing the second resource must not replace the transport's primary cleanup failure.
+                SafeMigrationAnalysisCleanup.RetainFailure(
+                    originalFailure,
+                    cleanupFailure,
+                    "SafeMigrations.PostgreSqlBenchmarkContextDisposeException");
+            }
+        }
     }
 
     /// <summary>Binds the existing private phase once so reflection and argument arrays are never measured.</summary>
@@ -246,9 +312,12 @@ public class PostgreSqlMaintenanceAttribution : IDisposable
 
     /// <summary>Retains deduplication, skipped-ordinal and cancellation controls outside measurement.</summary>
     /// <param name="resolve">The one-time bound real phase delegate.</param>
-    private static void VerifyRepeatedSkippedAndCancelled(
+    /// <param name="cancellationToken">The token controlling the positive functional probe.</param>
+    /// <returns>The asynchronous positive and pre-cancelled control verification.</returns>
+    private static async Task VerifyRepeatedSkippedAndCancelledAsync(
         Func<DbConnection, IReadOnlyList<SafeMigrationOperation>, SafeMigrationObservedState?[], CancellationToken,
-            Task> resolve
+            Task> resolve,
+        CancellationToken cancellationToken
     )
     {
         var operations = Operations(514);
@@ -257,12 +326,10 @@ public class PostgreSqlMaintenanceAttribution : IDisposable
         var states = new SafeMigrationObservedState?[operations.Length];
         states[0] = SafeMigrationObservedState.PrerequisiteMissing;
         states[511] = SafeMigrationObservedState.Unsupported;
-        using var connection = new CatalogStatementTestConnection(true, EligibilityRows);
-        var task = resolve(connection, operations, states, CancellationToken.None);
+        await using var connection = new CatalogStatementTestConnection(true, EligibilityRows);
+        var task = resolve(connection, operations, states, cancellationToken);
 
-        task
-            .GetAwaiter()
-            .GetResult();
+        await task;
 
         var output = ReadResult(task);
 
@@ -275,13 +342,11 @@ public class PostgreSqlMaintenanceAttribution : IDisposable
             "The PostgreSQL repeated/skipped candidate fixture no longer owns its result slots.");
 
         using var cancellation = new CancellationTokenSource();
-        cancellation.Cancel();
+        await cancellation.CancelAsync();
         var cancelled = false;
         try
         {
-            resolve(connection, operations, states, cancellation.Token)
-                .GetAwaiter()
-                .GetResult();
+            await resolve(connection, operations, states, cancellation.Token);
         }
         catch (OperationCanceledException)
         {
@@ -304,6 +369,9 @@ public class PostgreSqlMaintenanceAttribution : IDisposable
                 new ExpectedColumnDefinition($"value_{index:D5}", typeof(string), true, "character varying(40)"),
                 new ExpectedColumnDefinition($"value_{index:D5}", typeof(string), true, "character varying(80)")),
             SafeMigrationPolicy.RepairIfSafe))
+
+        // WHY: Retain fluent materialization and the resulting snapshot ownership.
+        // ReSharper disable once UseCollectionExpression
         .ToArray();
 
     /// <summary>Builds the independent pre-materialized eligibility oracle before the measured private phase.</summary>
@@ -322,7 +390,8 @@ public class PostgreSqlMaintenanceAttribution : IDisposable
             ?? throw new InvalidOperationException("The PostgreSQL attribution operation has no narrowing probe.");
 
         return $"""
-            SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, COALESCE(({probe.TransitionInvariantExpression}),
+            SELECT {ordinal.ToString(CultureInfo.InvariantCulture)},
+            COALESCE(({probe.TransitionInvariantExpression}),
             FALSE), COALESCE(({probe.NarrowingExpression}), FALSE)
             """;
     }

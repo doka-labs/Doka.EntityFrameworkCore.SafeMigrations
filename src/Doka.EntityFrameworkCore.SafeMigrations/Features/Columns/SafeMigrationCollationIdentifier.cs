@@ -4,6 +4,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// Identifies a database collation without encoding qualification into a
 /// delimiter-sensitive string.
 /// </summary>
+[PublicAPI]
 public sealed class SafeMigrationCollationIdentifier : IEquatable<SafeMigrationCollationIdentifier>
 {
     /// <summary>Initializes a collation identity.</summary>

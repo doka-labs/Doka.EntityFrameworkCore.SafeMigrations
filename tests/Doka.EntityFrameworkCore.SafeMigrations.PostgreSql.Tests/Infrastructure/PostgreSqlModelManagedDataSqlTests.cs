@@ -1,10 +1,13 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
+/// <summary>Verifies PostgreSQL Model Managed Data Sql contracts in independently owned test state.</summary>
 public sealed class PostgreSqlModelManagedDataSqlTests
 {
+    /// <summary>Model Managed Delete Uses Exact Source And Dependency Guards.</summary>
     [Fact]
     public void ModelManagedDeleteUsesExactSourceAndDependencyGuards()
     {
+        // Arrange
         var options = new DbContextOptionsBuilder<DbContext>();
         options.UseNpgsql("Host=127.0.0.1;Port=1;Username=test;Password=test;Database=test");
         ((DbContextOptionsBuilder)options).UsePostgreSqlSafeMigrations();
@@ -30,10 +33,13 @@ public sealed class PostgreSqlModelManagedDataSqlTests
                 ]),
             SafeMigrationPolicy.ThrowIfDifferent);
 
-        var command = Assert.Single(
-            context
-                .GetService<IMigrationsSqlGenerator>()
-                .Generate([operation], context.Model));
+        // Act
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate([operation], context.Model);
+
+        // Assert
+        var command = Assert.Single(commands);
 
         Assert.Contains(
             "WHEN doka_state OPERATOR(pg_catalog.=) 'transition_ready' THEN 'apply'",
@@ -58,9 +64,11 @@ public sealed class PostgreSqlModelManagedDataSqlTests
         Assert.Contains("MESSAGE = E'doka_sm_data_blocked:", command.CommandText, StringComparison.Ordinal);
     }
 
+    /// <summary>Model Managed Ensure Does Not Render An Overwrite Path.</summary>
     [Fact]
     public void ModelManagedEnsureDoesNotRenderAnOverwritePath()
     {
+        // Arrange
         var options = new DbContextOptionsBuilder<DbContext>();
         options.UseNpgsql("Host=127.0.0.1;Port=1;Username=test;Password=test;Database=test");
         ((DbContextOptionsBuilder)options).UsePostgreSqlSafeMigrations();
@@ -78,10 +86,13 @@ public sealed class PostgreSqlModelManagedDataSqlTests
                 uniqueKeys: null),
             SafeMigrationPolicy.ThrowIfDifferent);
 
-        var command = Assert.Single(
-            context
-                .GetService<IMigrationsSqlGenerator>()
-                .Generate([operation], context.Model));
+        // Act
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate([operation], context.Model);
+
+        // Assert
+        var command = Assert.Single(commands);
 
         Assert.Contains("INSERT INTO roles", command.CommandText, StringComparison.Ordinal);
         Assert.Contains("WHERE NOT EXISTS", command.CommandText, StringComparison.Ordinal);
@@ -89,9 +100,11 @@ public sealed class PostgreSqlModelManagedDataSqlTests
         Assert.DoesNotContain("UPDATE SET", command.CommandText, StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>Model Managed Json Uses Document Comparison Without Reclassifying Text.</summary>
     [Fact]
     public void ModelManagedJsonUsesDocumentComparisonWithoutReclassifyingText()
     {
+        // Arrange
         var options = new DbContextOptionsBuilder<DbContext>();
         options.UseNpgsql("Host=127.0.0.1;Port=1;Username=test;Password=test;Database=test");
         ((DbContextOptionsBuilder)options).UsePostgreSqlSafeMigrations();
@@ -109,10 +122,13 @@ public sealed class PostgreSqlModelManagedDataSqlTests
                 uniqueKeys: null),
             SafeMigrationPolicy.ThrowIfDifferent);
 
-        var command = Assert.Single(
-            context
-                .GetService<IMigrationsSqlGenerator>()
-                .Generate([operation], context.Model));
+        // Act
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate([operation], context.Model);
+
+        // Assert
+        var command = Assert.Single(commands);
 
         Assert.Contains(
             "(doka_actual.json_payload)::jsonb IS NOT DISTINCT FROM (doka_expected.t1)::jsonb",

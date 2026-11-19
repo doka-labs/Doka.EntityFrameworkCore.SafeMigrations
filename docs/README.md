@@ -51,6 +51,8 @@ OpenSSF status is established by its linked external registry.
   1.0 on MADR 4.0.0, with named decision authority and explicit review status.
 - [Contributing](../CONTRIBUTING.md): development setup, positive/negative
   tests, package verification, coding standards, and pull requests.
+- [Engineering standards application](engineering-standards-application.md):
+  project-specific compatibility, cleanup, dependency and evidence decisions.
 - [Security design and assurance](security/security-design.md): assets, trust
   boundaries, abuse cases, controls, and evidence limitations.
 - [Secure development](security/secure-development.md): review, analysis,

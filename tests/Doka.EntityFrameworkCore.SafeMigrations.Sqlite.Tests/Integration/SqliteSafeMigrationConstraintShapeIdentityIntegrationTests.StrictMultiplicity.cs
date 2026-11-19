@@ -12,6 +12,7 @@ public sealed partial class SqliteSafeMigrationConstraintShapeIdentityIntegratio
         SafeMigrationOperationKind kind
     )
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await CreateConstraintShapeOwnerAsync(
             connection,
@@ -65,6 +66,7 @@ public sealed partial class SqliteSafeMigrationConstraintShapeIdentityIntegratio
         var observedConstraintCount = ConstraintShapeNames(snapshot.Tables["shape_items"], kind)
             .Count();
 
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
@@ -77,6 +79,7 @@ public sealed partial class SqliteSafeMigrationConstraintShapeIdentityIntegratio
             new SafeMigrationRunOptions("sqlite-native-constraint-capacity"),
             cancellationToken: CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, preflight.Status);
         Assert.Equal(SafeMigrationAction.RejectDifferent, preflight.Assessments[0].Action);
         Assert.Equal(SafeMigrationReportStatus.Blocked, postflight.Status);
@@ -95,6 +98,7 @@ public sealed partial class SqliteSafeMigrationConstraintShapeIdentityIntegratio
         SafeMigrationOperationKind kind
     )
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await CreateConstraintShapeOwnerAsync(
             connection,
@@ -112,6 +116,7 @@ public sealed partial class SqliteSafeMigrationConstraintShapeIdentityIntegratio
         AddConstraintShapeDrop(builder, kind, "logical_b");
         var runner = context.GetService<ISafeMigrationRunner>();
 
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
@@ -125,6 +130,14 @@ public sealed partial class SqliteSafeMigrationConstraintShapeIdentityIntegratio
             new SafeMigrationRunOptions("sqlite-authored-duplicate-aliases"),
             cancellationToken: CancellationToken.None);
 
+        var finalConstraintCount = ConstraintShapeNames(
+                SqliteSafeMigrationCatalog
+                    .Read(connection, transaction: null)
+                    .Tables["shape_items"],
+                kind)
+            .Count();
+
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
         Assert.All(preflight.Assessments, item => Assert.Equal(SafeMigrationAction.NoOp, item.Action));
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
@@ -137,12 +150,7 @@ public sealed partial class SqliteSafeMigrationConstraintShapeIdentityIntegratio
             kind == SafeMigrationOperationKind.EnsureUniqueConstraint
                 ? 1
                 : 2,
-            ConstraintShapeNames(
-                    SqliteSafeMigrationCatalog
-                        .Read(connection, transaction: null)
-                        .Tables["shape_items"],
-                    kind)
-                .Count());
+            finalConstraintCount);
     }
 
     /// <summary>Distinct required FK/check aliases require distinct physical witnesses.</summary>
@@ -154,6 +162,7 @@ public sealed partial class SqliteSafeMigrationConstraintShapeIdentityIntegratio
         SafeMigrationOperationKind kind
     )
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await CreateConstraintShapeOwnerAsync(
             connection,
@@ -168,6 +177,7 @@ public sealed partial class SqliteSafeMigrationConstraintShapeIdentityIntegratio
             SafeMigrationTableMode.StrictDefinition,
             SafeMigrationPolicy.ThrowIfDifferent);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -176,6 +186,7 @@ public sealed partial class SqliteSafeMigrationConstraintShapeIdentityIntegratio
                 new SafeMigrationRunOptions("sqlite-required-constraint-capacity"),
                 cancellationToken: CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationAction.RejectDifferent, report.Assessments[0].Action);
     }
@@ -184,6 +195,7 @@ public sealed partial class SqliteSafeMigrationConstraintShapeIdentityIntegratio
     [Fact]
     public async Task StrictConstraintTransition_SnapshotRejectsUniqueShapeCapacityBorrowing()
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await CreateConstraintShapeOwnerAsync(
             connection,
@@ -198,11 +210,11 @@ public sealed partial class SqliteSafeMigrationConstraintShapeIdentityIntegratio
         var snapshot = SqliteSafeMigrationCatalog.Read(connection, transaction: null);
         var owner = snapshot.Tables["shape_items"];
         var unique = owner.UniqueConstraints[0];
-        var duplicate = new SqliteUniqueSnapshot(
-            "physical_a2",
-            "synthetic_independent_index",
-            unique.Columns,
-            unique.Keys);
+        var duplicate = unique with
+        {
+            Name = "physical_a2",
+            PhysicalName = "synthetic_independent_index",
+        };
 
         var tables = snapshot.Tables.ToDictionary(
             pair => pair.Key,
@@ -253,6 +265,7 @@ public sealed partial class SqliteSafeMigrationConstraintShapeIdentityIntegratio
         var analyzer = Assert.IsType<SqliteSafeMigrationProviderAnalyzer>(
             context.GetService<ISafeMigrationProviderAnalyzer>());
 
+        // Act
         var analysis = analyzer.Analyze(
             captured,
             connection,
@@ -262,6 +275,7 @@ public sealed partial class SqliteSafeMigrationConstraintShapeIdentityIntegratio
                     .Model,
                 builder.Operations));
 
+        // Assert
         Assert.Single(owner.UniqueConstraints);
         Assert.Equal(SafeMigrationObservedState.Different, analysis.ObservedState);
     }

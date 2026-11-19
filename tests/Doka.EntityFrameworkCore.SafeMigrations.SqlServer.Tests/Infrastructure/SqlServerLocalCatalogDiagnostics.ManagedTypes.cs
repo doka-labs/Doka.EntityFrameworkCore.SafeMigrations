@@ -26,6 +26,7 @@ internal static partial class SqlServerLocalCatalogDiagnostics
             await connection.OpenAsync(cancellationToken: cancellationToken);
             await SqlServerScalarProofRegressionTests.VerifyLocalAsync(
                 connection,
+                connectionString,
                 cancellationToken: cancellationToken);
 
             await ExecuteAsync(
@@ -33,7 +34,7 @@ internal static partial class SqlServerLocalCatalogDiagnostics
                 "CREATE TYPE dbo.guard_alias FROM int;",
                 cancellationToken: cancellationToken);
 
-            using var context = new SafeMigrationDbContext(connectionString);
+            await using var context = new SafeMigrationDbContext(connectionString);
             var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
                 context.GetService<IRelationalTypeMappingSource>(),
                 context.GetService<ISqlGenerationHelper>());
@@ -209,6 +210,8 @@ internal static partial class SqlServerLocalCatalogDiagnostics
                     ["int", "bigint"],
                     new object?[,] { { 1, 2L } },
                     null,
+                    // WHY: Fluent terminal materialization preserves the existing snapshot and enumeration contract.
+                    // ReSharper disable once UseCollectionExpression
                     foreignKeys.ToArray());
 
                 var guard = catalog.BuildModelManagedDataAnalysisGuard(intent)

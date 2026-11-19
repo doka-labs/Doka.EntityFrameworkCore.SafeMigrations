@@ -1,6 +1,6 @@
 # SafeMigrations sample
 
-This compilable sample demonstrates the current .NET 10 API:
+This runnable source-construction sample demonstrates the current .NET 10 API:
 
 - a provider-neutral `SampleDbContext`;
 - a forward-only heterogeneous Core convergence baseline;
@@ -17,6 +17,20 @@ The normal authoring path is `dotnet ef migrations add` with
 generator writes the calls represented by this sample. `SampleMigrationUsage`
 keeps them as executable source so the repository can compile and inspect the
 result without requiring a database during the sample build.
+
+`Program.Main` calls the internal `SampleMigrationUsage.Run(TextWriter)` entrypoint
+after checking the four adapter-registration touchpoints. The same entrypoint is
+called in-process by [linked-source SQLite tests](../../tests/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests/Infrastructure/SqliteSampleExecutionTests.cs); it returns the actual 14 initial
+and five independent maintenance operations used in its output. It opens no
+database. The tests execute those initial operations through the real SQLite
+generator, check the native keys/CHECK/FK/index, replay the stream, verify cascades,
+and prove that invalid data and a populated partial required-column addition are
+rejected without changing retained data or schema. They do not claim live
+MySQL/MariaDB, PostgreSQL or SQL Server qualification.
+
+The canonical `SampleDbContext` accepts explicit provider options and maps the
+same lower-case columns, keys, relationship, index and check as the source example.
+Its configuration is not an implicit connection string or provider choice.
 
 The no-argument provider registration uses strict scaffolding. Select legacy
 convergence only while generating a migration that intentionally adopts
@@ -89,6 +103,7 @@ Build and run without a database:
 ```bash
 dotnet build samples/Doka.EntityFrameworkCore.SafeMigrations.Sample/Doka.EntityFrameworkCore.SafeMigrations.Sample.csproj --configuration Release
 dotnet run --project samples/Doka.EntityFrameworkCore.SafeMigrations.Sample/Doka.EntityFrameworkCore.SafeMigrations.Sample.csproj --configuration Release --no-build --no-restore
+dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests.csproj --configuration Release --filter FullyQualifiedName~SqliteSampleExecutionTests
 ```
 
 For preflight and operational sequencing, see the repository

@@ -10,8 +10,13 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var collector = new DatabaseQualificationExpressionCollector();
         if (requiredDatabaseQualifiers is not null)
         {
-            foreach (var qualifier in requiredDatabaseQualifiers)
+            // WHY: Index this stable list while preserving its order and ownership.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var qualifierIndex = 0; qualifierIndex < requiredDatabaseQualifiers.Count; qualifierIndex++)
             {
+                var qualifier = requiredDatabaseQualifiers[qualifierIndex];
+
                 collector.Visit(qualifier);
             }
         }
@@ -96,8 +101,14 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 break;
             case EnsureTableIntent value:
                 visitor.Visit(value.Definition.Schema);
-                foreach (var foreignKey in value.Definition.ForeignKeys)
+
+                // WHY: Index this stable list while preserving its order and ownership.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
+                for (var foreignKeyIndex = 0; foreignKeyIndex < value.Definition.ForeignKeys.Count; foreignKeyIndex++)
                 {
+                    var foreignKey = value.Definition.ForeignKeys[foreignKeyIndex];
+
                     visitor.Visit(foreignKey.PrincipalSchema);
                 }
 
@@ -157,8 +168,14 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 break;
             case DeleteModelManagedDataIntent value:
                 visitor.Visit(value.Schema);
-                foreach (var foreignKey in value.ForeignKeys)
+
+                // WHY: Index this stable list while preserving its order and ownership.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
+                for (var foreignKeyIndex = 0; foreignKeyIndex < value.ForeignKeys.Count; foreignKeyIndex++)
                 {
+                    var foreignKey = value.ForeignKeys[foreignKeyIndex];
+
                     visitor.Visit(foreignKey.Schema);
                 }
 
@@ -173,13 +190,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         }
     }
 
-    private static MySqlSafeMigrationRuntimePlan BuildEnsureSchema(
-        EnsureSchemaIntent intent
-    ) => Plan("'matching'", "TRUE");
+    private static MySqlSafeMigrationRuntimePlan BuildEnsureSchema() => Plan("'matching'", "TRUE");
 
-    private static MySqlSafeMigrationRuntimePlan BuildDropSchema(
-        DropSchemaIntent intent
-    ) => Unsupported("schema_operations");
+    private static MySqlSafeMigrationRuntimePlan BuildDropSchema() => Unsupported("schema_operations");
 
     private MySqlSafeMigrationRuntimePlan ApplyCurrentDatabaseQualification(
         SafeMigrationIntent intent,
@@ -246,6 +259,10 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         public string[] GetValues(
         ) => First is null
             ? []
+
+            // WHY: Retain fluent materialization and its existing snapshot
+            // ownership rather than replacing this boundary with a spread.
+            // ReSharper disable once UseCollectionExpression
             : Distinct?.ToArray() ?? [First];
     }
 
@@ -258,19 +275,29 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         ) => HasQualifier |= qualifier is not null;
     }
 
-    private struct DatabaseQualifierTargetVisitor(
-        string? currentDatabase
-    ) : IDatabaseQualifierVisitor
+    private struct DatabaseQualifierTargetVisitor : IDatabaseQualifierVisitor
     {
-        public bool AllQualifiersMatch { get; private set; } = true;
+        private readonly string? _currentDatabase;
+
+        /// <summary>Starts a visited qualifier proof with its independently verified target database.</summary>
+        /// <param name="currentDatabase">The exact current database, or null without qualification.</param>
+        internal DatabaseQualifierTargetVisitor(
+            string? currentDatabase
+        )
+        {
+            _currentDatabase = currentDatabase;
+            AllQualifiersMatch = true;
+        }
+
+        public bool AllQualifiersMatch { get; private set; }
 
         public void Visit(
             string? qualifier
         )
         {
             if (qualifier is not null
-                && (currentDatabase is null
-                    || !StringComparer.Ordinal.Equals(qualifier, currentDatabase)))
+                && (_currentDatabase is null
+                    || !StringComparer.Ordinal.Equals(qualifier, _currentDatabase)))
             {
                 AllQualifiersMatch = false;
             }

@@ -15,6 +15,9 @@ public sealed class MySqlParallelTestStructureTests
             .Assembly
             .GetTypes()
             .Where(type => !type.IsAbstract && type.IsSubclassOf(helperOwner))
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         // Act
@@ -23,6 +26,9 @@ public sealed class MySqlParallelTestStructureTests
             .Where(method => method
                 .GetCustomAttributes<FactAttribute>()
                 .Any())
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var declaredTests = featureClasses
@@ -31,6 +37,9 @@ public sealed class MySqlParallelTestStructureTests
             .Where(method => method
                 .GetCustomAttributes<FactAttribute>()
                 .Any())
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var checkBypassMethod = typeof(MySqlColumnsAtomicRequiredAddConcurrencyIntegrationTests).GetMethod(
@@ -41,6 +50,9 @@ public sealed class MySqlParallelTestStructureTests
             nameof(MySqlColumnsRequiredDefaultsProjectedAddsIntegrationTests
                 .RequiredDefaultProjectedNoDefaultAddRejectsDisabledMariaCheckProtection));
 
+        var unrelatedTimeoutMethod = typeof(MySqlPerformanceIntegrationTests).GetMethod(
+            nameof(MySqlPerformanceIntegrationTests.Analyzer_CommandTimeoutAssertionRejectsUnrelatedNativeFailure));
+
         // Assert
         Assert.True(helperOwner.IsAbstract);
         Assert.Empty(inheritedTests);
@@ -48,10 +60,11 @@ public sealed class MySqlParallelTestStructureTests
         // WHY: Exact feature-family coverage includes custom Fact subclasses; approximate counts can hide omissions.
         Assert.Equal(84, featureClasses.Length);
 
-        // WHY: Serialization/independent admission and transitions/drift each have their own selectable fact.
+        // WHY: The native timeout's unrelated-error negative control adds one selectable method;
+        // theory case splits retain the original method identities rather than multiplying this count.
         // Generated tooling facts are not integration-helper subclasses and do not belong to this count.
-        Assert.Equal(658, declaredTests.Length);
-        Assert.Equal(658,
+        Assert.Equal(659, declaredTests.Length);
+        Assert.Equal(659,
             declaredTests
                 .Select(method => method.Name)
                 .Distinct(StringComparer.Ordinal)
@@ -63,6 +76,9 @@ public sealed class MySqlParallelTestStructureTests
         Assert.Equal(
             typeof(MySqlColumnsRequiredDefaultsProjectedAddsIntegrationTests),
             projectedProtectionMethod.DeclaringType);
+
+        Assert.NotNull(unrelatedTimeoutMethod);
+        Assert.Equal(typeof(MySqlPerformanceIntegrationTests), unrelatedTimeoutMethod.DeclaringType);
 
         Assert.Contains(typeof(MySqlTablesIntegrationTests), featureClasses);
         Assert.Contains(typeof(MySqlInnoDbTableIntegrationTests), featureClasses);
@@ -141,6 +157,9 @@ public sealed class MySqlParallelTestStructureTests
                 .Where(attribute => attribute.AttributeType == typeof(CollectionAttribute))
                 .Select(attribute => attribute.ConstructorArguments[0].Value as string)
                 .Contains(ProcessWideTestGroup.Name))
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         // Assert
@@ -151,8 +170,8 @@ public sealed class MySqlParallelTestStructureTests
         Assert.True(definition.DisableParallelization);
         Assert.Equal(
             new[] { typeof(MySqlProcessWidePerformanceIntegrationTests), typeof(MySqlRuntimeDiagnosticsRetentionTests) }
-                .OrderBy(type => type.Name),
-            exclusiveClasses.OrderBy(type => type.Name));
+                .OrderBy(type => type.Name, StringComparer.Ordinal),
+            exclusiveClasses.OrderBy(type => type.Name, StringComparer.Ordinal));
 
         Assert.Equal(
             nameof(MySqlProcessWidePerformanceIntegrationTests

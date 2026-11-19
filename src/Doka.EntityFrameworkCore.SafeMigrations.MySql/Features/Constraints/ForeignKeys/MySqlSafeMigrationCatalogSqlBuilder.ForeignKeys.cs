@@ -165,8 +165,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             definition.PrincipalColumns,
             "kcu.REFERENCED_COLUMN_NAME");
 
-        var actualColumns = "GROUP_CONCAT(kcu.COLUMN_NAME ORDER BY kcu.ORDINAL_POSITION SEPARATOR ',')";
-        var actualPrincipalColumns = "GROUP_CONCAT(kcu.REFERENCED_COLUMN_NAME "
+        const string actualColumns = "GROUP_CONCAT(kcu.COLUMN_NAME ORDER BY kcu.ORDINAL_POSITION SEPARATOR ',')";
+        const string actualPrincipalColumns = "GROUP_CONCAT(kcu.REFERENCED_COLUMN_NAME "
             + "ORDER BY kcu.ORDINAL_POSITION SEPARATOR ',')";
 
         var columnDiagnostics = BoundedOrderedListDiagnostics(

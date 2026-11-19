@@ -26,6 +26,8 @@ internal static partial class SafeMigrationExpectedCatalog
         table.Table = intent.NewName ?? intent.Name;
         table.Schema = intent.NewSchema ?? intent.Schema;
 
+        // WHY: Snapshot before changing the source collection; retain the existing materialization contract.
+        // ReSharper disable once UseCollectionExpression
         foreach (var pair in table.IndexDefinitions.ToArray())
         {
             table.IndexDefinitions[pair.Key] = Copy(

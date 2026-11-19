@@ -82,7 +82,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     /// <summary>Resolves destination occupancy independently of the rename source's current existence.</summary>
     /// <param name="intent">The immutable source and destination identities.</param>
     /// <returns>The same relation-level destination predicate used by the runtime rename guard.</returns>
-    public string BuildRenameTargetExistsExpression(
+    private string BuildRenameTargetExistsExpression(
         RenameTableIntent intent
     ) => RelationExists(intent.NewName ?? intent.Name, intent.NewSchema ?? intent.Schema);
 
@@ -122,8 +122,8 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             ?? definition.ForeignKeys;
 
         var schema = SchemaExpression(definition.Schema);
-        var conditions = new List<string>
-        {
+        List<string> conditions =
+        [
             TableExists(definition.Table, definition.Schema),
             $"""
             (SELECT COUNT(*) FROM pg_catalog.pg_attribute a
@@ -138,7 +138,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             AllCheckConstraintsModeled(definition.Table, definition.Schema, allowedCheckConstraints),
             AllForeignKeysModeled(definition.Table, definition.Schema, allowedForeignKeys),
             TableCommentMatches(definition),
-        };
+        ];
 
         if (definition.Columns.Count > 0)
         {
@@ -155,6 +155,9 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 .Select(group => AllRequiredUniqueConstraintsSatisfied(
                     group.Key.Table,
                     group.Key.Schema,
+
+                    // WHY: Preserve this explicit grouped snapshot, not an implicit spread conversion.
+                    // ReSharper disable once UseCollectionExpression
                     group.ToArray())));
 
         conditions.AddRange(
@@ -163,6 +166,9 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 .Select(group => AllRequiredCheckConstraintsSatisfied(
                     group.Key.Table,
                     group.Key.Schema,
+
+                    // WHY: Preserve this explicit grouped snapshot, not an implicit spread conversion.
+                    // ReSharper disable once UseCollectionExpression
                     group.ToArray())));
 
         conditions.AddRange(
@@ -171,6 +177,9 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 .Select(group => AllRequiredForeignKeysSatisfied(
                     group.Key.Table,
                     group.Key.Schema,
+
+                    // WHY: Preserve this explicit grouped snapshot, not an implicit spread conversion.
+                    // ReSharper disable once UseCollectionExpression
                     group.ToArray())));
 
         return $"({string.Join(" AND ", conditions)})";
@@ -201,6 +210,10 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 'p',
                 primaryKey.Columns,
                 "TRUE"))
+
+            // WHY: Keep explicit fluent materialization and its existing
+            // ownership/evaluation boundary instead of an implicit spread.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         if (!expectedTableConstraints.PrimaryKeyMayBeAbsent)
@@ -250,6 +263,10 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             {
                 var rows = group
                     .Select(value => $"({NameArray(value.Columns)})")
+
+                    // WHY: Keep explicit fluent materialization and its existing
+                    // ownership/evaluation boundary instead of an implicit spread.
+                    // ReSharper disable once UseCollectionExpression
                     .ToArray();
 
                 var matcher = ConstraintColumnsMatchQuery(
@@ -264,6 +281,10 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                     WHERE EXISTS ({matcher}))
                     """;
             })
+
+            // WHY: Keep explicit fluent materialization and its existing
+            // ownership/evaluation boundary instead of an implicit spread.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         return AllConstraintsModeled(table, schema, 'u', matchers);
@@ -317,6 +338,10 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                     WHERE EXISTS ({matcher}))
                     """;
             })
+
+            // WHY: Keep explicit fluent materialization and its existing
+            // ownership/evaluation boundary instead of an implicit spread.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         return AllConstraintsModeled(table, schema, 'c', matchers);
@@ -353,6 +378,10 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                         + $"{NameArray(value.PrincipalColumns)}, "
                         + $"CAST({Literal(ReferentialCode(value.OnUpdate))} AS pg_catalog.\"char\"), "
                         + $"CAST({Literal(ReferentialCode(value.OnDelete))} AS pg_catalog.\"char\"))")
+
+                    // WHY: Keep explicit fluent materialization and its existing
+                    // ownership/evaluation boundary instead of an implicit spread.
+                    // ReSharper disable once UseCollectionExpression
                     .ToArray();
 
                 var matcher = ConstraintRowsWithoutName(group.Key.Table, group.Key.Schema, 'f')
@@ -370,6 +399,10 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                     WHERE EXISTS ({matcher}))
                     """;
             })
+
+            // WHY: Keep explicit fluent materialization and its existing
+            // ownership/evaluation boundary instead of an implicit spread.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         return AllConstraintsModeled(table, schema, 'f', matchers);

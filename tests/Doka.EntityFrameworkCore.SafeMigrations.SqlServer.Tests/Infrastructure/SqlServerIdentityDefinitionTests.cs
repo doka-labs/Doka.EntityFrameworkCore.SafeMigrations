@@ -188,7 +188,8 @@ public sealed class SqlServerIdentityDefinitionTests
         Type expectedClrType
     )
     {
-        // Arrange: The theory supplies the original store-type and CLR-type pair.
+        // Arrange
+        // The theory supplies the original store-type and CLR-type pair.
 
         // Act
         var clrType = IdentityClrType(storeType);
@@ -292,7 +293,7 @@ public sealed class SqlServerIdentityDefinitionTests
     public async Task EmptyAnalysis_ResetsOrderedIdentityProofs()
     {
         // Arrange
-        using var context = new SafeMigrationDbContext(ConnectionString);
+        await using var context = new SafeMigrationDbContext(ConnectionString);
         var analyzer = CreateIdentityAnalyzer(context);
         AcceptIdentityOperation(
             analyzer,

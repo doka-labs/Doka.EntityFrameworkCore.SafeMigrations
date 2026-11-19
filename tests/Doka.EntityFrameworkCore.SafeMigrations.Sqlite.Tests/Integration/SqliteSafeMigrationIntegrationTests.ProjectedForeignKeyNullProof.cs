@@ -20,6 +20,7 @@ public sealed class SqliteSafeMigrationProjectedForeignKeyNullProofIntegrationTe
     [Fact]
     public async Task ProjectedForeignKey_NonNullAddDefaultCannotProveNullRows()
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
@@ -53,6 +54,7 @@ public sealed class SqliteSafeMigrationProjectedForeignKeyNullProofIntegrationTe
             ["Id"],
             onDelete: ReferentialAction.Cascade);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -61,14 +63,17 @@ public sealed class SqliteSafeMigrationProjectedForeignKeyNullProofIntegrationTe
                 new SafeMigrationRunOptions("sqlite-projected-fk-orphan-default"),
                 cancellationToken: CancellationToken.None);
 
+        var observedScalar1 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM pragma_table_xinfo('constraint_children') WHERE name = 'ParentId';",
+            cancellationToken: CancellationToken.None);
+
+        // Assert
         Assert.NotEqual(SafeMigrationReportStatus.Ready, report.Status);
         Assert.NotEqual(SafeMigrationAction.Apply, report.Assessments[2].Action);
         Assert.Equal(
             0,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM pragma_table_xinfo('constraint_children') WHERE name = 'ParentId';",
-                cancellationToken: CancellationToken.None));
+            observedScalar1);
     }
 
     /// <summary>Preserves live parent proof for an actual ordered NULL-populating column ADD.</summary>
@@ -80,6 +85,7 @@ public sealed class SqliteSafeMigrationProjectedForeignKeyNullProofIntegrationTe
         bool explicitNull
     )
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await CreateProjectedForeignKeyTablesAsync(connection, cancellationToken: CancellationToken.None);
         await using DbContext context = explicitNull
@@ -98,6 +104,7 @@ public sealed class SqliteSafeMigrationProjectedForeignKeyNullProofIntegrationTe
         var builder = CreateProjectedForeignKeyBuilder(context, column);
         var runner = context.GetService<ISafeMigrationRunner>();
 
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
@@ -118,6 +125,21 @@ public sealed class SqliteSafeMigrationProjectedForeignKeyNullProofIntegrationTe
             new SafeMigrationRunOptions("sqlite-projected-fk-null"),
             cancellationToken: CancellationToken.None);
 
+        var observedScalar1 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM constraint_children WHERE Id = 11 AND ParentId IS NULL;",
+            cancellationToken: CancellationToken.None);
+
+        var observedScalar2 = await ScalarIntAsync(
+            connection,
+            """
+            SELECT COUNT(*) FROM pragma_foreign_key_list('constraint_children')
+            WHERE "table" = 'constraint_parents'
+            AND "from" = 'ParentId' AND "to" = 'Id';
+            """,
+            cancellationToken: CancellationToken.None);
+
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
         Assert.All(preflight.Assessments, item => Assert.Equal(SafeMigrationAction.Apply, item.Action));
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
@@ -126,27 +148,18 @@ public sealed class SqliteSafeMigrationProjectedForeignKeyNullProofIntegrationTe
         Assert.All(replay.Assessments, item => Assert.Equal(SafeMigrationAction.NoOp, item.Action));
         Assert.Equal(
             1,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM constraint_children WHERE Id = 11 AND ParentId IS NULL;",
-                cancellationToken: CancellationToken.None));
+            observedScalar1);
 
         Assert.Equal(
             1,
-            await ScalarIntAsync(
-                connection,
-                """
-                SELECT COUNT(*) FROM pragma_foreign_key_list('constraint_children')
-                WHERE "table" = 'constraint_parents'
-                AND "from" = 'ParentId' AND "to" = 'Id';
-                """,
-                cancellationToken: CancellationToken.None));
+            observedScalar2);
     }
 
     /// <summary>Never accepts a future ADD as a prerequisite for an earlier FK.</summary>
     [Fact]
     public async Task ProjectedForeignKey_FutureColumnAddDoesNotAuthorizeEarlierForeignKey()
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await CreateProjectedForeignKeyTablesAsync(connection, cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
@@ -158,6 +171,7 @@ public sealed class SqliteSafeMigrationProjectedForeignKeyNullProofIntegrationTe
         builder.Operations.RemoveAt(2);
         builder.Operations.Insert(0, foreignKey);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -166,14 +180,17 @@ public sealed class SqliteSafeMigrationProjectedForeignKeyNullProofIntegrationTe
                 new SafeMigrationRunOptions("sqlite-projected-fk-future-add"),
                 cancellationToken: CancellationToken.None);
 
+        var observedScalar1 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM pragma_table_xinfo('constraint_children') WHERE name = 'ParentId';",
+            cancellationToken: CancellationToken.None);
+
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationAction.RejectPrerequisiteMissing, report.Assessments[0].Action);
         Assert.Equal(
             0,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM pragma_table_xinfo('constraint_children') WHERE name = 'ParentId';",
-                cancellationToken: CancellationToken.None));
+            observedScalar1);
     }
 
     /// <summary>Actual generated or required column definitions cannot inherit the model's nullable wishes.</summary>
@@ -185,6 +202,7 @@ public sealed class SqliteSafeMigrationProjectedForeignKeyNullProofIntegrationTe
         bool generated
     )
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await CreateProjectedForeignKeyTablesAsync(connection, cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
@@ -199,6 +217,7 @@ public sealed class SqliteSafeMigrationProjectedForeignKeyNullProofIntegrationTe
 
         var builder = CreateProjectedForeignKeyBuilder(context, column);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -207,14 +226,17 @@ public sealed class SqliteSafeMigrationProjectedForeignKeyNullProofIntegrationTe
                 new SafeMigrationRunOptions("sqlite-projected-fk-authored-definition"),
                 cancellationToken: CancellationToken.None);
 
+        var observedScalar1 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM pragma_table_xinfo('constraint_children') WHERE name = 'ParentId';",
+            cancellationToken: CancellationToken.None);
+
+        // Assert
         Assert.NotEqual(SafeMigrationReportStatus.Ready, report.Status);
         Assert.NotEqual(SafeMigrationAction.Apply, report.Assessments[2].Action);
         Assert.Equal(
             0,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM pragma_table_xinfo('constraint_children') WHERE name = 'ParentId';",
-                cancellationToken: CancellationToken.None));
+            observedScalar1);
     }
 
     /// <summary>NULL row proof cannot manufacture missing or unusable principal metadata.</summary>
@@ -246,6 +268,7 @@ public sealed class SqliteSafeMigrationProjectedForeignKeyNullProofIntegrationTe
         string principalSql
     )
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
@@ -264,6 +287,7 @@ public sealed class SqliteSafeMigrationProjectedForeignKeyNullProofIntegrationTe
             context,
             new ExpectedColumnDefinition("ParentId", typeof(int), true, storeType: "INTEGER"));
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -277,22 +301,27 @@ public sealed class SqliteSafeMigrationProjectedForeignKeyNullProofIntegrationTe
             builder.Operations,
             cancellationToken: CancellationToken.None));
 
+        var observedScalar1 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM pragma_table_xinfo('constraint_children') WHERE name = 'ParentId';",
+            cancellationToken: CancellationToken.None);
+
+        var observedScalar2 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM constraint_children WHERE Id = 11;",
+            cancellationToken: CancellationToken.None);
+
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationAction.RejectPrerequisiteMissing, report.Assessments[2].Action);
         Assert.IsType<InvalidOperationException>(exception);
         Assert.Equal(
             0,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM pragma_table_xinfo('constraint_children') WHERE name = 'ParentId';",
-                cancellationToken: CancellationToken.None));
+            observedScalar1);
 
         Assert.Equal(
             1,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM constraint_children WHERE Id = 11;",
-                cancellationToken: CancellationToken.None));
+            observedScalar2);
     }
 
     /// <summary>Recognizes independent unique constraints and indexes using their actual native identities.</summary>
@@ -308,6 +337,7 @@ public sealed class SqliteSafeMigrationProjectedForeignKeyNullProofIntegrationTe
         bool descending
     )
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         var keySql = descending
             ? "Id DESC"
@@ -346,6 +376,7 @@ public sealed class SqliteSafeMigrationProjectedForeignKeyNullProofIntegrationTe
 
         var runner = context.GetService<ISafeMigrationRunner>();
 
+        // Act
         var report = await runner.AnalyzeAsync(
             context,
             builder.Operations,
@@ -359,21 +390,25 @@ public sealed class SqliteSafeMigrationProjectedForeignKeyNullProofIntegrationTe
             new SafeMigrationRunOptions("sqlite-projected-fk-unique-parent"),
             cancellationToken: CancellationToken.None);
 
+        var observedScalar1 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM constraint_children WHERE Id = 11 AND ParentId IS NULL;",
+            cancellationToken: CancellationToken.None);
+
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
         Assert.All(report.Assessments, item => Assert.Equal(SafeMigrationAction.Apply, item.Action));
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
         Assert.Equal(
             1,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM constraint_children WHERE Id = 11 AND ParentId IS NULL;",
-                cancellationToken: CancellationToken.None));
+            observedScalar1);
     }
 
     /// <summary>Rechecks rows atomically after a write invalidates read-only preflight proof.</summary>
     [Fact]
     public async Task ProjectedForeignKey_InterveningOrphanWriteIsRejectedBeforeBatchMutation()
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await CreateProjectedForeignKeyTablesAsync(connection, cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
@@ -381,6 +416,7 @@ public sealed class SqliteSafeMigrationProjectedForeignKeyNullProofIntegrationTe
             context,
             new ExpectedColumnDefinition("ParentId", typeof(int), true, storeType: "INTEGER"));
 
+        // Act
         var preflight = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -400,6 +436,23 @@ public sealed class SqliteSafeMigrationProjectedForeignKeyNullProofIntegrationTe
             builder.Operations,
             cancellationToken: CancellationToken.None));
 
+        var observedScalar1 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM pragma_foreign_key_list('constraint_children');",
+            cancellationToken: CancellationToken.None);
+
+        var observedScalar2 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM pragma_index_list('constraint_children') "
+            + "WHERE name = 'ix_constraint_children_parent_id';",
+            cancellationToken: CancellationToken.None);
+
+        var observedScalar3 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM constraint_children WHERE Id = 11 AND ParentId = 999;",
+            cancellationToken: CancellationToken.None);
+
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
         Assert.Contains(
             "data_blocked",
@@ -409,31 +462,22 @@ public sealed class SqliteSafeMigrationProjectedForeignKeyNullProofIntegrationTe
 
         Assert.Equal(
             0,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM pragma_foreign_key_list('constraint_children');",
-                cancellationToken: CancellationToken.None));
+            observedScalar1);
 
         Assert.Equal(
             0,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM pragma_index_list('constraint_children') "
-                + "WHERE name = 'ix_constraint_children_parent_id';",
-                cancellationToken: CancellationToken.None));
+            observedScalar2);
 
         Assert.Equal(
             1,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM constraint_children WHERE Id = 11 AND ParentId = 999;",
-                cancellationToken: CancellationToken.None));
+            observedScalar3);
     }
 
     /// <summary>Opaque preparation between ADD and FK invalidates earlier NULL row evidence.</summary>
     [Fact]
     public async Task ProjectedForeignKey_InterveningSqlDefersAndRuntimeRejectsOrphans()
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await CreateProjectedForeignKeyTablesAsync(connection, cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
@@ -448,6 +492,7 @@ public sealed class SqliteSafeMigrationProjectedForeignKeyNullProofIntegrationTe
                 Sql = "UPDATE constraint_children SET ParentId = 999;",
             });
 
+        // Act
         var preflight = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -461,6 +506,17 @@ public sealed class SqliteSafeMigrationProjectedForeignKeyNullProofIntegrationTe
             builder.Operations,
             cancellationToken: CancellationToken.None));
 
+        var observedScalar1 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM pragma_foreign_key_list('constraint_children');",
+            cancellationToken: CancellationToken.None);
+
+        var observedScalar2 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM constraint_children WHERE Id = 11 AND ParentId = 999;",
+            cancellationToken: CancellationToken.None);
+
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, preflight.Status);
         Assert.Equal(SafeMigrationAction.ValidateAtRuntime, preflight.Assessments[3].Action);
         Assert.Contains(
@@ -471,17 +527,11 @@ public sealed class SqliteSafeMigrationProjectedForeignKeyNullProofIntegrationTe
 
         Assert.Equal(
             0,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM pragma_foreign_key_list('constraint_children');",
-                cancellationToken: CancellationToken.None));
+            observedScalar1);
 
         Assert.Equal(
             1,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM constraint_children WHERE Id = 11 AND ParentId = 999;",
-                cancellationToken: CancellationToken.None));
+            observedScalar2);
     }
 
     /// <summary>Native candidate metadata cannot resurrect an accepted removed key or principal owner.</summary>
@@ -493,6 +543,7 @@ public sealed class SqliteSafeMigrationProjectedForeignKeyNullProofIntegrationTe
         bool removeTable
     )
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
@@ -522,6 +573,7 @@ public sealed class SqliteSafeMigrationProjectedForeignKeyNullProofIntegrationTe
                     new ExpectedColumnDefinition("ParentId", typeof(int), true, storeType: "INTEGER"))
                 .Operations);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -530,6 +582,7 @@ public sealed class SqliteSafeMigrationProjectedForeignKeyNullProofIntegrationTe
                 new SafeMigrationRunOptions("sqlite-projected-fk-removed-prerequisite"),
                 cancellationToken: CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationAction.Apply, report.Assessments[0].Action);
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationAction.RejectPrerequisiteMissing, report.Assessments[3].Action);
@@ -539,6 +592,7 @@ public sealed class SqliteSafeMigrationProjectedForeignKeyNullProofIntegrationTe
     [Fact]
     public async Task ProjectedForeignKey_SurvivingLiveCandidateRemainsUsable()
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
@@ -561,6 +615,7 @@ public sealed class SqliteSafeMigrationProjectedForeignKeyNullProofIntegrationTe
                     new ExpectedColumnDefinition("ParentId", typeof(int), true, storeType: "INTEGER"))
                 .Operations);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -571,27 +626,33 @@ public sealed class SqliteSafeMigrationProjectedForeignKeyNullProofIntegrationTe
 
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
 
+        var observedScalar1 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM pragma_index_list('constraint_parents') WHERE name = 'ux_parent_id_survivor';",
+            cancellationToken: CancellationToken.None);
+
+        var observedScalar2 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM constraint_children WHERE Id = 11 AND ParentId IS NULL;",
+            cancellationToken: CancellationToken.None);
+
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
         Assert.All(report.Assessments, item => Assert.Equal(SafeMigrationAction.Apply, item.Action));
         Assert.Equal(
             1,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM pragma_index_list('constraint_parents') WHERE name = 'ux_parent_id_survivor';",
-                cancellationToken: CancellationToken.None));
+            observedScalar1);
 
         Assert.Equal(
             1,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM constraint_children WHERE Id = 11 AND ParentId IS NULL;",
-                cancellationToken: CancellationToken.None));
+            observedScalar2);
     }
 
     /// <summary>A live child component combines with a new NULL component without inventing its parent value.</summary>
     [Fact]
     public async Task ProjectedForeignKey_CompositeLiveAndNullColumnsApplyWithoutParentRow()
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
@@ -619,6 +680,7 @@ public sealed class SqliteSafeMigrationProjectedForeignKeyNullProofIntegrationTe
             "composite_parents",
             ["TenantId", "Id"]);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -636,28 +698,34 @@ public sealed class SqliteSafeMigrationProjectedForeignKeyNullProofIntegrationTe
                 new SafeMigrationRunOptions("sqlite-projected-composite-fk"),
                 cancellationToken: CancellationToken.None);
 
+        var observedScalar1 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM composite_children WHERE Id = 11 AND ParentId IS NULL;",
+            cancellationToken: CancellationToken.None);
+
+        var observedScalar2 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM composite_parents;",
+            cancellationToken: CancellationToken.None);
+
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
         Assert.All(report.Assessments, item => Assert.Equal(SafeMigrationAction.Apply, item.Action));
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
         Assert.Equal(
             1,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM composite_children WHERE Id = 11 AND ParentId IS NULL;",
-                cancellationToken: CancellationToken.None));
+            observedScalar1);
 
         Assert.Equal(
             0,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM composite_parents;",
-                cancellationToken: CancellationToken.None));
+            observedScalar2);
     }
 
     /// <summary>A preceding ordinary unique index can establish the live principal's missing candidate key.</summary>
     [Fact]
     public async Task ProjectedForeignKey_AcceptedOrdinaryUniqueIndexProvidesCandidateKey()
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
@@ -678,6 +746,7 @@ public sealed class SqliteSafeMigrationProjectedForeignKeyNullProofIntegrationTe
                     new ExpectedColumnDefinition("ParentId", typeof(int), true, storeType: "INTEGER"))
                 .Operations);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -695,21 +764,25 @@ public sealed class SqliteSafeMigrationProjectedForeignKeyNullProofIntegrationTe
                 new SafeMigrationRunOptions("sqlite-projected-fk-accepted-unique"),
                 cancellationToken: CancellationToken.None);
 
+        var observedScalar1 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM constraint_children WHERE Id = 11 AND ParentId IS NULL;",
+            cancellationToken: CancellationToken.None);
+
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
         Assert.All(report.Assessments, item => Assert.Equal(SafeMigrationAction.Apply, item.Action));
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
         Assert.Equal(
             1,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM constraint_children WHERE Id = 11 AND ParentId IS NULL;",
-                cancellationToken: CancellationToken.None));
+            observedScalar1);
     }
 
     /// <summary>Accepted collated unique indexes cannot bypass native parent-key collation requirements.</summary>
     [Fact]
     public async Task ProjectedForeignKey_AcceptedWrongCollationUniqueIndexDoesNotProvideCandidateKey()
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
@@ -737,6 +810,7 @@ public sealed class SqliteSafeMigrationProjectedForeignKeyNullProofIntegrationTe
                     new ExpectedColumnDefinition("ParentId", typeof(int), true, storeType: "INTEGER"))
                 .Operations);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -750,23 +824,28 @@ public sealed class SqliteSafeMigrationProjectedForeignKeyNullProofIntegrationTe
             builder.Operations,
             cancellationToken: CancellationToken.None));
 
+        var observedScalar1 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM pragma_foreign_key_list('constraint_children');",
+            cancellationToken: CancellationToken.None);
+
+        var observedScalar2 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM pragma_table_xinfo('constraint_children') WHERE name = 'ParentId';",
+            cancellationToken: CancellationToken.None);
+
+        // Assert
         Assert.Equal(SafeMigrationAction.Apply, report.Assessments[0].Action);
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationAction.RejectPrerequisiteMissing, report.Assessments[3].Action);
         Assert.IsType<InvalidOperationException>(exception);
         Assert.Equal(
             0,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM pragma_foreign_key_list('constraint_children');",
-                cancellationToken: CancellationToken.None));
+            observedScalar1);
 
         Assert.Equal(
             0,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM pragma_table_xinfo('constraint_children') WHERE name = 'ParentId';",
-                cancellationToken: CancellationToken.None));
+            observedScalar2);
     }
 
     /// <summary>Converging every raw definition cannot hide an existing key's incompatible collation.</summary>
@@ -780,6 +859,7 @@ public sealed class SqliteSafeMigrationProjectedForeignKeyNullProofIntegrationTe
         bool matches
     )
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
@@ -802,6 +882,7 @@ public sealed class SqliteSafeMigrationProjectedForeignKeyNullProofIntegrationTe
                     new ExpectedColumnDefinition("ParentId", typeof(int), true, storeType: "INTEGER"))
                 .Operations);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -810,6 +891,12 @@ public sealed class SqliteSafeMigrationProjectedForeignKeyNullProofIntegrationTe
                 new SafeMigrationRunOptions("sqlite-projected-fk-all-definitions"),
                 cancellationToken: CancellationToken.None);
 
+        var observedScalar1 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM pragma_table_xinfo('constraint_children') WHERE name = 'ParentId';",
+            cancellationToken: CancellationToken.None);
+
+        // Assert
         Assert.Equal(
             matches
                 ? SafeMigrationReportStatus.Ready
@@ -824,10 +911,7 @@ public sealed class SqliteSafeMigrationProjectedForeignKeyNullProofIntegrationTe
 
         Assert.Equal(
             0,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM pragma_table_xinfo('constraint_children') WHERE name = 'ParentId';",
-                cancellationToken: CancellationToken.None));
+            observedScalar1);
     }
 
     /// <summary>Creates an isolated populated live child without the future FK column.</summary>

@@ -86,8 +86,13 @@ internal static class SqlServerSourceExpressionRoles
     {
         // WHY: Whole-method role checks measured faster with snapshot enumeration for larger CASE branches.
         // ReSharper disable once LoopCanBeConvertedToQuery
-        foreach (var clause in expression.WhenClauses)
+        // WHY: CASE clauses are immutable indexed snapshots; native branch order remains significant.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var clauseIndex = 0; clauseIndex < expression.WhenClauses.Count; clauseIndex++)
         {
+            var clause = expression.WhenClauses[clauseIndex];
+
             if (!IsPredicate(clause.Condition, depth)
                 || !IsScalar(clause.Result, depth))
             {

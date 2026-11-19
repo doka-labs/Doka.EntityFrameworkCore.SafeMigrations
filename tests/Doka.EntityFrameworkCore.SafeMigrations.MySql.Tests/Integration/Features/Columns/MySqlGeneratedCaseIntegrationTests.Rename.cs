@@ -59,6 +59,9 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         var operations = builder
             .Operations
             .Cast<SafeMigrationOperation>()
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         using var capture = context
@@ -73,7 +76,7 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
             .Complete()[1];
 
         // Act
-        await context.Database.OpenConnectionAsync();
+        await context.Database.OpenConnectionAsync(CancellationToken.None);
         await using var command = context
             .Database
             .GetDbConnection()
@@ -84,7 +87,10 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
             context.GetService<IRelationalTypeMappingSource>());
 
         command.CommandText = "SELECT (" + plan.RenderStateExpression(parameters.Add) + ");";
-        var state = Convert.ToString(await command.ExecuteScalarAsync(), CultureInfo.InvariantCulture);
+        var state = Convert.ToString(
+            await command.ExecuteScalarAsync(CancellationToken.None),
+            CultureInfo.InvariantCulture);
+
         var nativeFailure = await Record.ExceptionAsync(() => ExecuteSqlAsync(
             connectionString,
             $"ALTER TABLE `{Table}` RENAME COLUMN s TO renamed_s;",

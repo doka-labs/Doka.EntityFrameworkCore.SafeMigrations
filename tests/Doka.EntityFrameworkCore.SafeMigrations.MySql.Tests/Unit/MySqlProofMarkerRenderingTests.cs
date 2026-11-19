@@ -7,8 +7,9 @@ public sealed partial class MySqlProofMarkerRenderingTests
 
     /// <summary>Enumerates every ordinary or prepared expression consumer and each supported proof binding.</summary>
     /// <returns>Consumer names, independently completed bindings and their exact substitutions.</returns>
-    public static IEnumerable<object?[]> BinaryRenderCases()
+    public static TheoryData<string, string?, string> BinaryRenderCases()
     {
+        var cases = new TheoryData<string, string?, string>();
         string[] consumers =
         [
             "prerequisite", "qualification", "state", "state-resolved", "guard", "guard-failure",
@@ -32,9 +33,11 @@ public sealed partial class MySqlProofMarkerRenderingTests
         {
             foreach (var binding in bindings)
             {
-                yield return [consumer, binding.Binding, binding.Expected];
+                cases.Add(consumer, binding.Binding, binding.Expected);
             }
         }
+
+        return cases;
     }
 
     /// <summary>Every expression consumer binds native default evidence without leaking a structural token.</summary>
@@ -116,7 +119,7 @@ public sealed partial class MySqlProofMarkerRenderingTests
     public void GuardDiagnosticsPreserveQuotedMarkersAndBoundRequiredStatus()
     {
         // Arrange
-        var expression = "CASE WHEN "
+        const string expression = "CASE WHEN "
             + MySqlSafeMigrationRuntimePlan.RequiredColumnAddStatusPlaceholder
             + " = 'staged' THEN '"
             + BinaryMarker
@@ -205,7 +208,9 @@ public sealed partial class MySqlProofMarkerRenderingTests
     )
     {
         // Arrange
-        var expression = BinaryMarker + " AND " + MySqlSafeMigrationRuntimePlan.RequiredColumnAddStatusPlaceholder;
+        const string expression = BinaryMarker + " AND "
+            + MySqlSafeMigrationRuntimePlan.RequiredColumnAddStatusPlaceholder;
+
         var plan = CreatePlan(expression, "TRUE");
         plan = plan with
         {
@@ -371,7 +376,7 @@ public sealed partial class MySqlProofMarkerRenderingTests
             + "` AND "
             + parameter;
 
-        var value = "'payload " + BinaryMarker + "'";
+        const string value = "'payload " + BinaryMarker + "'";
         var expected = expression.Replace(parameter, value, StringComparison.Ordinal);
         var plan = CreatePlan(expression, "TRUE") with
         {

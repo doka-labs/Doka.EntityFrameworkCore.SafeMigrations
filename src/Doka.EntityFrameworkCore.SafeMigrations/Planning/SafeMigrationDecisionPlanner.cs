@@ -4,6 +4,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// Selects a provider-neutral action from operation kind, observed state,
 /// policy and proven repair capability without performing I/O.
 /// </summary>
+[PublicAPI]
 public static class SafeMigrationDecisionPlanner
 {
     /// <summary>Selects the deterministic action for one classified operation.</summary>

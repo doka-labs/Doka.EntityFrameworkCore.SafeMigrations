@@ -1,8 +1,8 @@
 ---
 id: D-016
 status: proposed
-date: 2026-10-14
-decision-makers: [Dominic Kalkbrenner]
+date: 2026-11-19
+decision-makers: ["Dominic Kalkbrenner"]
 consulted: []
 informed: ["@doka-labs/core-maintainers"]
 scope: "Structural error identity, readable reports and owned provider rejection transport"
@@ -125,6 +125,10 @@ decision semantics or authorize a safety bypass, dependency or external service.
 ### Decision History
 
 - 2026-10-14: Decision recorded with status proposed.
+- 2026-11-19: Aligned last-update metadata, reciprocal amendments, option titles
+  and source/navigation format with the current documentation profile. Retained
+  the recorded status and historical approval evidence; this migration grants no
+  new architectural acceptance or publication authority.
 
 ### Implementation References
 

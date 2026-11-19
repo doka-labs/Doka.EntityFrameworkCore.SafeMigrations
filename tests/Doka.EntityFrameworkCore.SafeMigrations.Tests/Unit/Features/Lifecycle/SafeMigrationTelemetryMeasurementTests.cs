@@ -38,10 +38,10 @@ public sealed class SafeMigrationTelemetryMeasurementTests
         // Assert
         var tags = Assert.Single(measurements);
         Assert.Equal(2, tags.Length);
-        Assert.Contains(tags, value => value.Key == "safe_migrations.mode" && Equals(value.Value, "preflight"));
+        Assert.Contains(tags, value => value is { Key: "safe_migrations.mode", Value: "preflight" });
         Assert.Contains(
             tags,
-            value => value.Key == "safe_migrations.failure_code" && Equals(value.Value, "runtime_contract_invalid"));
+            value => value is { Key: "safe_migrations.failure_code", Value: "runtime_contract_invalid" });
 
         Assert.DoesNotContain(
             tags,
@@ -108,20 +108,20 @@ public sealed class SafeMigrationTelemetryMeasurementTests
                 Assert.Equal(4, measurement.Tags.Length);
                 Assert.Contains(
                     measurement.Tags,
-                    value => value.Key == "db.system.name" && Equals(value.Value, "postgresql"));
+                    value => value is { Key: "db.system.name", Value: "postgresql" });
 
                 Assert.DoesNotContain(measurement.Tags, value => value.Key == "db.system");
                 Assert.Contains(
                     measurement.Tags,
-                    value => value.Key == "safe_migrations.provider" && Equals(value.Value, "npgsql_postgresql"));
+                    value => value is { Key: "safe_migrations.provider", Value: "npgsql_postgresql" });
 
                 Assert.Contains(
                     measurement.Tags,
-                    value => value.Key == "safe_migrations.mode" && Equals(value.Value, "preflight"));
+                    value => value is { Key: "safe_migrations.mode", Value: "preflight" });
 
                 Assert.Contains(
                     measurement.Tags,
-                    value => value.Key == "safe_migrations.status" && Equals(value.Value, "ready"));
+                    value => value is { Key: "safe_migrations.status", Value: "ready" });
             });
     }
 }

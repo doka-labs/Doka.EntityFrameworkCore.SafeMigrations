@@ -39,6 +39,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             source,
             StringComparer.OrdinalIgnoreCase);
 
+        // WHY: Proven dependence, proven absence and unknown metadata carry different projection authority.
+        // ReSharper disable once ConvertIfStatementToSwitchStatement
         if (dependency == true)
         {
             return projected.ObservedState == SafeMigrationObservedState.Missing

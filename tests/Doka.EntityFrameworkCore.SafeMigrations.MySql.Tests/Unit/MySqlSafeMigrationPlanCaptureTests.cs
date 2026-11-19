@@ -1,66 +1,104 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
+/// <summary>Protects bounded capture ownership and operation-local complete migration contracts.</summary>
 public sealed class MySqlSafeMigrationPlanCaptureTests
 {
+    /// <summary>
+    /// Returns captured plans in original operation order while retaining each operation's reference identity.
+    /// </summary>
     [Fact]
     public void Capture_PreservesOrdinalAndOperationIdentity()
     {
+        // Arrange
         var capture = new MySqlSafeMigrationPlanCapture();
         var first = Operation("first");
         var second = Operation("second");
         var firstPlan = Plan("first");
         var secondPlan = Plan("second");
 
+        // Act
         using var lease = capture.Begin([first, second]);
         capture.Record(1, second, secondPlan);
         capture.Record(0, first, firstPlan);
         var plans = lease.Complete();
 
+        // Assert
         Assert.Same(firstPlan, plans[0]);
         Assert.Same(secondPlan, plans[1]);
         Assert.False(capture.IsActive);
     }
 
-    [Fact]
-    public void Capture_RejectsMissingDuplicateForeignAndOutOfRangeRecords()
+    /// <summary>Rejects each invalid capture transition independently with the original identity intact.</summary>
+    /// <param name="violation">The missing, duplicate, foreign, or out-of-range capture transition.</param>
+    [Theory]
+    [InlineData("missing")]
+    [InlineData("negative-ordinal")]
+    [InlineData("past-end-ordinal")]
+    [InlineData("foreign-operation")]
+    [InlineData("duplicate")]
+    public void Capture_RejectsMissingDuplicateForeignAndOutOfRangeRecords(
+        string violation
+    )
     {
+        // Arrange
         var capture = new MySqlSafeMigrationPlanCapture();
         var operation = Operation("expected");
         var plan = Plan("expected");
-
         using var lease = capture.Begin([operation]);
+        if (violation == "duplicate")
+        {
+            capture.Record(0, operation, plan);
+        }
 
-        Assert.Throws<InvalidOperationException>(() => lease.Complete());
-        Assert.Throws<InvalidOperationException>(() => capture.Record(-1, operation, plan));
-        Assert.Throws<InvalidOperationException>(() => capture.Record(1, operation, plan));
-        Assert.Throws<InvalidOperationException>(() => capture.Record(0, Operation("foreign"), plan));
+        Action action = violation switch
+        {
+            "missing" => () => lease.Complete(),
+            "negative-ordinal" => () => capture.Record(-1, operation, plan),
+            "past-end-ordinal" => () => capture.Record(1, operation, plan),
+            "foreign-operation" => () => capture.Record(0, Operation("foreign"), plan),
+            "duplicate" => () => capture.Record(0, operation, plan),
+            _ => throw new ArgumentOutOfRangeException(nameof(violation)),
+        };
 
-        capture.Record(0, operation, plan);
+        // Act
+        var exception = Record.Exception(action);
 
-        Assert.Throws<InvalidOperationException>(() => capture.Record(0, operation, plan));
+        // Assert
+        Assert.IsType<InvalidOperationException>(exception);
     }
 
+    /// <summary>Releases failed capture ownership and permits a later independent capture to complete.</summary>
     [Fact]
     public void Capture_DisposeClearsFailedLeaseAndAllowsRecovery()
     {
+        // Arrange
         var capture = new MySqlSafeMigrationPlanCapture();
         var operation = Operation("expected");
+        bool active;
+        Exception? nestedFailure;
 
+        // Act
         using (capture.Begin([operation]))
         {
-            Assert.True(capture.IsActive);
-            Assert.Throws<InvalidOperationException>(() => capture.Begin([operation]));
+            active = capture.IsActive;
+            nestedFailure = Record.Exception(() => capture.Begin([operation]));
         }
 
         using var recovered = capture.Begin([operation]);
         capture.Record(0, operation, Plan("recovered"));
+        var plans = recovered.Complete();
 
-        Assert.Single(recovered.Complete());
+        // Assert
+        Assert.True(active);
+        Assert.IsType<InvalidOperationException>(nestedFailure);
+        Assert.Single(plans);
     }
 
+    /// <summary>Scopes expected unique-index projections to the requested owner and active lease.</summary>
     [Fact]
     public void Capture_ProjectsOnlyExpectedUniqueIndexesByTable()
     {
+        // Arrange
         var capture = new MySqlSafeMigrationPlanCapture();
         var table = new SafeMigrationOperation(
             new EnsureTableIntent(
@@ -87,23 +125,31 @@ public sealed class MySqlSafeMigrationPlanCaptureTests
                     [new ExpectedIndexKeyDefinition(column: "name")])),
             SafeMigrationPolicy.ThrowIfDifferent);
 
+        IReadOnlyList<ExpectedIndexDefinition> ownerIndexes;
+        IReadOnlyList<ExpectedIndexDefinition> otherIndexes;
+
+        // Act
         using (capture.Begin([table, unique, nonUnique]))
         {
-            Assert.Equal(
-                ["ux_users_email"],
-                capture
-                    .GetExpectedUniqueIndexes("users")
-                    .Select(static index => index.Name));
-
-            Assert.Empty(capture.GetExpectedUniqueIndexes("other"));
+            ownerIndexes = capture.GetExpectedUniqueIndexes("users");
+            otherIndexes = capture.GetExpectedUniqueIndexes("other");
         }
 
-        Assert.Throws<InvalidOperationException>(() => capture.GetExpectedUniqueIndexes("users"));
+        var exception = Record.Exception(() => capture.GetExpectedUniqueIndexes("users"));
+
+        // Assert
+        Assert.Equal(["ux_users_email"], ownerIndexes.Select(static index => index.Name));
+        Assert.Empty(otherIndexes);
+        Assert.IsType<InvalidOperationException>(exception);
     }
 
+    /// <summary>
+    /// Uses the complete migration index catalog even when only one bounded operation chunk is captured.
+    /// </summary>
     [Fact]
     public void BoundedCapture_UsesTheCompleteMigrationIndexCatalog()
     {
+        // Arrange
         var capture = new MySqlSafeMigrationPlanCapture();
         var table = new SafeMigrationOperation(
             new EnsureTableIntent(
@@ -123,21 +169,23 @@ public sealed class MySqlSafeMigrationPlanCaptureTests
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var completeCatalog = MySqlSafeMigrationPlanCapture.CreateExpectedUniqueIndexes([table, unique]);
+
+        // Act
         using var lease = capture.Begin([table], completeCatalog);
-
-        Assert.Equal(
-            ["ux_users_email"],
-            capture
-                .GetExpectedUniqueIndexes("users")
-                .Select(static index => index.Name));
-
+        var indexes = capture.GetExpectedUniqueIndexes("users");
         capture.Record(0, table, Plan("table"));
-        Assert.Single(lease.Complete());
+        var plans = lease.Complete();
+
+        // Assert
+        Assert.Equal(["ux_users_email"], indexes.Select(static index => index.Name));
+        Assert.Single(plans);
     }
 
+    /// <summary>Exposes the full foreign-key and unique-index catalog until generation ownership is released.</summary>
     [Fact]
-    public void GenerationScope_ExposesCompleteTransitionCatalogAndRejectsNestedOwnership()
+    public void GenerationScope_ExposesCompleteTransitionCatalogAndReleasesOwnership()
     {
+        // Arrange
         var capture = new MySqlSafeMigrationPlanCapture();
         var builder = new MigrationBuilder("Provider");
         builder.EnsureTable(
@@ -155,36 +203,77 @@ public sealed class MySqlSafeMigrationPlanCaptureTests
             ["id"]);
 
         builder.CreateIndexIfNotExists("ux_users_id", "users", ["id"], unique: true);
-        var tableIntent = Assert.IsType<EnsureTableIntent>(
-            Assert.IsType<SafeMigrationOperation>(builder.Operations[0])
-                .Intent);
+        var tableIntent = (EnsureTableIntent)((SafeMigrationOperation)builder.Operations[0]).Intent;
 
+        bool active;
+        SafeMigrationExpectedTableConstraints? constraints;
+        IReadOnlyList<ExpectedIndexDefinition> indexes;
+
+        // Act
         using (capture.BeginGeneration(builder.Operations))
         {
-            Assert.True(capture.HasGenerationContract);
-            Assert.Equal(
-                "fk_users_parent",
-                Assert.Single(capture.GetGenerationTableConstraints(tableIntent)!.AllowedForeignKeys)
-                    .Name);
-
-            Assert.Equal(
-                "ux_users_id",
-                Assert.Single(capture.GetGenerationUniqueIndexes("users"))
-                    .Name);
-
-            Assert.Throws<InvalidOperationException>(() => capture.BeginGeneration(builder.Operations));
-            Assert.Throws<InvalidOperationException>(() => capture.Begin(
-                builder
-                    .Operations
-                    .Cast<SafeMigrationOperation>()
-                    .ToArray()));
+            active = capture.HasGenerationContract;
+            constraints = capture.GetGenerationTableConstraints(tableIntent);
+            indexes = capture.GetGenerationUniqueIndexes("users");
         }
 
+        // Assert
+        Assert.True(active);
+        Assert.NotNull(constraints);
+        Assert.Equal("fk_users_parent",
+            Assert.Single(constraints.AllowedForeignKeys)
+                .Name);
+
+        Assert.Equal("ux_users_id",
+            Assert.Single(indexes)
+                .Name);
+
         Assert.False(capture.HasGenerationContract);
-        Assert.Throws<InvalidOperationException>(() => capture.GetGenerationTableConstraints(tableIntent));
-        Assert.Throws<InvalidOperationException>(() => capture.GetGenerationUniqueIndexes("users"));
     }
 
+    /// <summary>
+    /// Rejects nested ownership and reads after disposal as independently discoverable contract cases.
+    /// </summary>
+    /// <param name="violation">The illegal nested lease or expired generation-catalog access.</param>
+    [Theory]
+    [InlineData("nested-generation")]
+    [InlineData("nested-capture")]
+    [InlineData("expired-constraints")]
+    [InlineData("expired-indexes")]
+    public void GenerationScope_RejectsInvalidOwnership(
+        string violation
+    )
+    {
+        // Arrange
+        var capture = new MySqlSafeMigrationPlanCapture();
+        var operation = Operation("expected");
+        using var lease = capture.BeginGeneration([operation]);
+        if (violation.StartsWith("expired", StringComparison.Ordinal))
+        {
+            lease.Dispose();
+        }
+
+        var table = new EnsureTableIntent(
+            new ExpectedTableDefinition("users", [new ExpectedColumnDefinition("id", typeof(int), false)]),
+            SafeMigrationTableMode.StrictDefinition);
+
+        Action action = violation switch
+        {
+            "nested-generation" => () => capture.BeginGeneration([operation]),
+            "nested-capture" => () => capture.Begin([operation]),
+            "expired-constraints" => () => capture.GetGenerationTableConstraints(table),
+            "expired-indexes" => () => capture.GetGenerationUniqueIndexes("users"),
+            _ => throw new ArgumentOutOfRangeException(nameof(violation)),
+        };
+
+        // Act
+        var exception = Record.Exception(action);
+
+        // Assert
+        Assert.IsType<InvalidOperationException>(exception);
+    }
+
+    /// <summary>Provides an empty unique-index catalog when generation contains no complete table contract.</summary>
     [Fact]
     public void GenerationScopeWithoutEnsureTableUsesAnEmptyUniqueIndexCatalog()
     {
@@ -209,23 +298,29 @@ public sealed class MySqlSafeMigrationPlanCaptureTests
         Assert.Empty(indexes);
     }
 
+    /// <summary>Releases generation ownership when the wrapped provider generator throws.</summary>
     [Fact]
     public void GeneratorDecorator_ClearsGenerationScopeWhenTheProviderFails()
     {
+        // Arrange
         var capture = new MySqlSafeMigrationPlanCapture();
         var generator = new MySqlSafeMigrationsSqlGenerator(new ThrowingSqlGenerator(), capture);
 
+        // Act
         var exception = Record.Exception(() => generator.Generate(
             [Operation("schema")],
             model: null));
 
+        // Assert
         Assert.IsType<InvalidOperationException>(exception);
         Assert.False(capture.HasGenerationContract);
     }
 
+    /// <summary>Normalizes an explicit current-database qualifier into the same expected index identity.</summary>
     [Fact]
     public void CurrentDatabaseQualificationSharesOneExpectedIndexIdentity()
     {
+        // Arrange
         var capture = new MySqlSafeMigrationPlanCapture();
         var table = new SafeMigrationOperation(
             new EnsureTableIntent(
@@ -249,26 +344,25 @@ public sealed class MySqlSafeMigrationPlanCaptureTests
             [table, unique],
             currentDatabase: "application");
 
+        // Act
         using var lease = capture.Begin([table], catalog);
-
-        Assert.Equal(
-            ["ux_users_email"],
-            capture
-                .GetExpectedUniqueIndexes("users")
-                .Select(static index => index.Name));
-
-        Assert.Equal(
-            ["ux_users_email"],
-            capture
-                .GetExpectedUniqueIndexes("users", "application")
-                .Select(static index => index.Name));
-
-        Assert.Empty(capture.GetExpectedUniqueIndexes("users", "foreign"));
-
+        var unqualified = capture.GetExpectedUniqueIndexes("users");
+        var qualified = capture.GetExpectedUniqueIndexes("users", "application");
+        var foreign = capture.GetExpectedUniqueIndexes("users", "foreign");
         capture.Record(0, table, Plan("table"));
-        Assert.Single(lease.Complete());
+        var plans = lease.Complete();
+
+        // Assert
+        Assert.Equal(["ux_users_email"], unqualified.Select(static index => index.Name));
+        Assert.Equal(["ux_users_email"], qualified.Select(static index => index.Name));
+        Assert.Empty(foreign);
+        Assert.Single(plans);
     }
 
+    /// <summary>
+    /// Shares qualified and unqualified transition catalogs only under the verified current-database identity.
+    /// </summary>
+    /// <param name="tableIsQualified">Whether the owner explicitly names the current database.</param>
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
@@ -329,6 +423,7 @@ public sealed class MySqlSafeMigrationPlanCaptureTests
                 .Name);
     }
 
+    /// <summary>Does not merge two distinct explicitly qualified database owners.</summary>
     [Fact]
     public void GenerationScope_DoesNotMergeDistinctExplicitDatabaseQualifiers()
     {
@@ -362,6 +457,9 @@ public sealed class MySqlSafeMigrationPlanCaptureTests
         Assert.Empty(capture.GetGenerationUniqueIndexes("users", "foreign"));
     }
 
+    /// <summary>
+    /// Does not infer an unqualified current database from a single explicit qualifier during direct capture.
+    /// </summary>
     [Fact]
     public void DirectCaptureDoesNotInferCurrentDatabaseFromAnExplicitQualifier()
     {
@@ -465,6 +563,9 @@ public sealed class MySqlSafeMigrationPlanCaptureTests
         var operations = builder
             .Operations
             .Cast<SafeMigrationOperation>()
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var intent = (EnsureTableIntent)operations[0].Intent;

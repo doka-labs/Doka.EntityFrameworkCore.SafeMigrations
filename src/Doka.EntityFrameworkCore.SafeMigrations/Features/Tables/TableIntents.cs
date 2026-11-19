@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations;
 
 /// <summary>Represents ensuring a table exists.</summary>
+[PublicAPI]
 public sealed class EnsureTableIntent : SafeMigrationIntent
 {
     /// <summary>Initializes the intent.</summary>
@@ -33,6 +34,7 @@ public sealed class EnsureTableIntent : SafeMigrationIntent
 }
 
 /// <summary>Represents dropping a table when it exists.</summary>
+[PublicAPI]
 public sealed class DropTableIntent : SafeMigrationIntent
 {
     /// <summary>Initializes the intent.</summary>
@@ -58,6 +60,7 @@ public sealed class DropTableIntent : SafeMigrationIntent
 }
 
 /// <summary>Represents renaming a table when the source exists.</summary>
+[PublicAPI]
 public sealed class RenameTableIntent : SafeMigrationIntent
 {
     /// <summary>Initializes the intent.</summary>

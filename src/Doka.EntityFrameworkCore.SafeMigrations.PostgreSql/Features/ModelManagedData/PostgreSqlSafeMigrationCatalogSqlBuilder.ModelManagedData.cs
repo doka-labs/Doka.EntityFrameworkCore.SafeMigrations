@@ -362,12 +362,16 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             .KeyColumns
             .Concat(intent.Columns)
             .Distinct(StringComparer.Ordinal)
+
+            // WHY: Keep explicit fluent materialization and its existing
+            // ownership/evaluation boundary instead of an implicit spread.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
-        var predicates = new List<string>
-        {
+        List<string> predicates =
+        [
             TableAndColumnsExist(intent.Table, intent.Schema, columns),
-        };
+        ];
 
         if (intent is DeleteModelManagedDataIntent deletion)
         {

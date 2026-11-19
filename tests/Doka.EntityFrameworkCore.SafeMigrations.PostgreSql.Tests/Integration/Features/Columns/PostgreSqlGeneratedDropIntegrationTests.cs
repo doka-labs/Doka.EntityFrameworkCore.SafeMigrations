@@ -384,6 +384,8 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests : PostgreSql
         var connection = context.Database.GetDbConnection();
         if (connection.State != ConnectionState.Open)
         {
+            // WHY: This branch qualifies synchronous native DDL independently of the async executor above.
+            // ReSharper disable once MethodHasAsyncOverloadWithCancellation
             connection.Open();
         }
 
@@ -391,6 +393,8 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests : PostgreSql
         {
             using var native = connection.CreateCommand();
             native.CommandText = command.CommandText;
+            // WHY: Preserve the synchronous runtime-guard path this test explicitly selects.
+            // ReSharper disable once MethodHasAsyncOverloadWithCancellation
             native.ExecuteNonQuery();
         }
     }

@@ -176,6 +176,9 @@ internal static class SqliteSqlNormalizer
             if (preserveDoubleQuotedValues)
             {
                 declaredIdentifier = false;
+
+                // WHY: Only opening and closing delimiters adjust depth; an if pair avoids dispatch boilerplate.
+                // ReSharper disable once ConvertIfStatementToSwitchStatement
                 if (character == '(')
                 {
                     depth++;

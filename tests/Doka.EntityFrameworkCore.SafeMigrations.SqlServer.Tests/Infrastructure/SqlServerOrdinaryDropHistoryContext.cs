@@ -52,6 +52,7 @@ public sealed class SqlServerOrdinaryDropHistoryContext : DbContext
 }
 
 /// <summary>Creates populated ordinary columns and an independent source-index prerequisite.</summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 [DbContext(typeof(SqlServerOrdinaryDropHistoryContext))]
 [Migration(MigrationIdentifier)]
 public sealed class SqlServerOrdinaryDropInitialMigration : Migration
@@ -71,6 +72,7 @@ public sealed class SqlServerOrdinaryDropInitialMigration : Migration
 }
 
 /// <summary>Retains a matching source confirmation before a DROP with a live independent index blocker.</summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 [DbContext(typeof(SqlServerOrdinaryDropHistoryContext))]
 [Migration(MigrationIdentifier)]
 public sealed class SqlServerOrdinaryDropBlockedMigration : Migration
@@ -144,6 +146,7 @@ public sealed class SqlServerOrdinaryDropCheckHistoryContext : DbContext
 }
 
 /// <summary>Creates the same populated source with a CHECK-only native prerequisite.</summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 [DbContext(typeof(SqlServerOrdinaryDropCheckHistoryContext))]
 [Migration(Identifier)]
 public sealed class SqlServerOrdinaryDropCheckInitialMigration : Migration
@@ -163,6 +166,7 @@ public sealed class SqlServerOrdinaryDropCheckInitialMigration : Migration
 }
 
 /// <summary>Reuses the exact guarded source confirmation and DROP under independent CHECK-only history.</summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 [DbContext(typeof(SqlServerOrdinaryDropCheckHistoryContext))]
 [Migration(Identifier)]
 public sealed class SqlServerOrdinaryDropCheckBlockedMigration : Migration

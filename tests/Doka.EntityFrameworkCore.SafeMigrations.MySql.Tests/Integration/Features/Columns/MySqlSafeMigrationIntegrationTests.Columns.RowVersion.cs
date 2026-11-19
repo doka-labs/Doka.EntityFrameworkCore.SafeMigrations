@@ -9,9 +9,13 @@ public sealed class MySqlColumnsRowVersionIntegrationTests : MySqlSafeMigrationI
         MySqlEngineContainerFixture fixture
     ) : base(fixture) { }
 
+    /// <summary>
+    /// Preserves provider-owned temporal rowversion and JSON-check behavior through idempotent migration.
+    /// </summary>
     [Fact]
     public async Task ProviderGeneratedTemporalRowVersionAndJsonConstraint_AreOwnedAndIdempotent()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -74,6 +78,7 @@ public sealed class MySqlColumnsRowVersionIntegrationTests : MySqlSafeMigrationI
         var runner = context.GetService<ISafeMigrationRunner>();
         var options = new SafeMigrationRunOptions("provider-row-version-json");
 
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
@@ -96,11 +101,14 @@ public sealed class MySqlColumnsRowVersionIntegrationTests : MySqlSafeMigrationI
             options,
             CancellationToken.None);
 
-        var invalidJson = await Assert.ThrowsAsync<MySqlException>(() => ExecuteSqlAsync(
+        var invalidJsonFailure = await Record.ExceptionAsync(() => ExecuteSqlAsync(
             connectionString,
             "INSERT INTO `provider_artifacts` (`PublicId`, `Payload`) "
             + "VALUES ('ad0a2937-5455-4bb6-a793-32e866112fde', 'not-json');",
             cancellationToken: CancellationToken.None));
+
+        // Assert
+        var invalidJson = Assert.IsType<MySqlException>(invalidJsonFailure);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
@@ -130,9 +138,11 @@ public sealed class MySqlColumnsRowVersionIntegrationTests : MySqlSafeMigrationI
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Reports a temporal rowversion missing its native ON UPDATE modifier as different.</summary>
     [Fact]
     public async Task TemporalRowVersionWithoutOnUpdate_IsRejectedAsDifferent()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -154,6 +164,7 @@ public sealed class MySqlColumnsRowVersionIntegrationTests : MySqlSafeMigrationI
             },
             constraints: table => table.PrimaryKey("pk_row_version_drift", value => value.Id));
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -167,6 +178,7 @@ public sealed class MySqlColumnsRowVersionIntegrationTests : MySqlSafeMigrationI
                 ExecuteOperationsAsync(context, builder.Operations, operationToken),
             cancellationToken: CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationObservedState.Different,
             Assert.Single(report.Assessments)

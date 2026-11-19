@@ -9,9 +9,11 @@ public sealed class MySqlConstraintsIntegrationTests : MySqlSafeMigrationIntegra
         MySqlEngineContainerFixture fixture
     ) : base(fixture) { }
 
+    /// <summary>Matches the native canonical PRIMARY name and preserves primary-key replay safety.</summary>
     [Fact]
     public async Task PrimaryKey_UsesEngineCanonicalNameAndRemainsIdempotent()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -22,9 +24,11 @@ public sealed class MySqlConstraintsIntegrationTests : MySqlSafeMigrationIntegra
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddPrimaryKeyIfNotExists("pk_snapshots", "snapshots", ["id"]);
 
+        // Act
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
+        // Assert
         Assert.Equal(
             1,
             await ScalarIntAsync(
@@ -38,9 +42,11 @@ public sealed class MySqlConstraintsIntegrationTests : MySqlSafeMigrationIntegra
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Preserves idempotent creation and removal across all supported constraint families.</summary>
     [Fact]
     public async Task ConstraintLifecycle_IsIdempotentAcrossEveryConstraintFamily()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -70,6 +76,7 @@ public sealed class MySqlConstraintsIntegrationTests : MySqlSafeMigrationIntegra
             ["id"],
             onDelete: ReferentialAction.SetNull);
 
+        // Act
         foreach (var operation in add.Operations)
         {
             try
@@ -84,16 +91,14 @@ public sealed class MySqlConstraintsIntegrationTests : MySqlSafeMigrationIntegra
             }
         }
 
-        Assert.Equal(
-            4,
-            await ScalarIntAsync(
-                connectionString,
-                """
-                SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
-                WHERE CONSTRAINT_SCHEMA = DATABASE()
-                AND TABLE_NAME = 'children';
-                """,
-                cancellationToken: CancellationToken.None));
+        var constraintsAfterAdd = await ScalarIntAsync(
+            connectionString,
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
+            WHERE CONSTRAINT_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'children';
+            """,
+            cancellationToken: CancellationToken.None);
 
         var drop = new MigrationBuilder(context.Database.ProviderName!);
         drop.DropForeignKeyIfExists("fk_children_parents", "children");
@@ -106,21 +111,25 @@ public sealed class MySqlConstraintsIntegrationTests : MySqlSafeMigrationIntegra
             await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
         }
 
-        Assert.Equal(
-            0,
-            await ScalarIntAsync(
-                connectionString,
-                """
-                SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
-                WHERE CONSTRAINT_SCHEMA = DATABASE()
-                AND TABLE_NAME = 'children';
-                """,
-                cancellationToken: CancellationToken.None));
+        var constraintsAfterDrop = await ScalarIntAsync(
+            connectionString,
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
+            WHERE CONSTRAINT_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'children';
+            """,
+            cancellationToken: CancellationToken.None);
+
+        // Assert
+        Assert.Equal(4, constraintsAfterAdd);
+        Assert.Equal(0, constraintsAfterDrop);
     }
 
+    /// <summary>Rejects existing definition drift for every constraint family before target mutation.</summary>
     [Fact]
     public async Task ExistingConstraintDefinitionDrift_IsRejectedForEveryConstraintFamily()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -156,6 +165,7 @@ public sealed class MySqlConstraintsIntegrationTests : MySqlSafeMigrationIntegra
             "constraint_parents",
             ["id"]);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -164,15 +174,7 @@ public sealed class MySqlConstraintsIntegrationTests : MySqlSafeMigrationIntegra
                 new SafeMigrationRunOptions("test-instance"),
                 CancellationToken.None);
 
-        Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.All(
-            report.Assessments,
-            assessment =>
-            {
-                Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
-                Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
-            });
-
+        List<MySqlException> failures = [];
         foreach (var operation in builder.Operations)
         {
             var exception =
@@ -183,13 +185,30 @@ public sealed class MySqlConstraintsIntegrationTests : MySqlSafeMigrationIntegra
                         operationToken),
                     cancellationToken: CancellationToken.None);
 
-            Assert.Contains("doka_sm_different", exception.Message, StringComparison.OrdinalIgnoreCase);
+            failures.Add(exception);
         }
+
+        // Assert
+        Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
+        Assert.All(
+            report.Assessments,
+            assessment =>
+            {
+                Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
+                Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
+            });
+
+        Assert.Equal(builder.Operations.Count, failures.Count);
+        Assert.All(failures,
+            exception =>
+                Assert.Contains("doka_sm_different", exception.Message, StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <summary>Rejects invalid rows before creating the requested constraint or unique index.</summary>
     [Fact]
     public async Task ConstraintAndUniqueIndexDataBlockers_StopBeforeTargetDdl()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -223,6 +242,7 @@ public sealed class MySqlConstraintsIntegrationTests : MySqlSafeMigrationIntegra
 
         builder.CreateIndexIfNotExists("ux_blocker_children_code", "blocker_children", ["code"], unique: true);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -231,11 +251,7 @@ public sealed class MySqlConstraintsIntegrationTests : MySqlSafeMigrationIntegra
                 new SafeMigrationRunOptions("test-instance"),
                 CancellationToken.None);
 
-        Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.All(
-            report.Assessments,
-            assessment => Assert.Equal(SafeMigrationObservedState.DataBlocked, assessment.ObservedState));
-
+        List<MySqlException> failures = [];
         foreach (var operation in builder.Operations)
         {
             var exception =
@@ -246,30 +262,40 @@ public sealed class MySqlConstraintsIntegrationTests : MySqlSafeMigrationIntegra
                         operationToken),
                     cancellationToken: CancellationToken.None);
 
-            Assert.Contains("doka_sm_data_blocked", exception.Message, StringComparison.OrdinalIgnoreCase);
+            failures.Add(exception);
         }
 
-        Assert.Equal(
-            0,
-            await ScalarIntAsync(
-                connectionString,
-                """
-                SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
-                WHERE CONSTRAINT_SCHEMA = DATABASE()
-                AND TABLE_NAME = 'blocker_children';
-                """,
-                cancellationToken: CancellationToken.None));
+        var remainingConstraints = await ScalarIntAsync(
+            connectionString,
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
+            WHERE CONSTRAINT_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'blocker_children';
+            """,
+            cancellationToken: CancellationToken.None);
 
-        Assert.Equal(
-            0,
-            await ScalarIntAsync(
-                connectionString,
-                """
-                SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
-                WHERE TABLE_SCHEMA = DATABASE()
-                AND TABLE_NAME = 'blocker_children'
-                AND INDEX_NAME = 'ux_blocker_children_code';
-                """,
-                cancellationToken: CancellationToken.None));
+        var remainingIndexes = await ScalarIntAsync(
+            connectionString,
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'blocker_children'
+            AND INDEX_NAME = 'ux_blocker_children_code';
+            """,
+            cancellationToken: CancellationToken.None);
+
+        // Assert
+        Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
+        Assert.All(
+            report.Assessments,
+            assessment => Assert.Equal(SafeMigrationObservedState.DataBlocked, assessment.ObservedState));
+
+        Assert.Equal(builder.Operations.Count, failures.Count);
+        Assert.All(failures,
+            exception =>
+                Assert.Contains("doka_sm_data_blocked", exception.Message, StringComparison.OrdinalIgnoreCase));
+
+        Assert.Equal(0, remainingConstraints);
+        Assert.Equal(0, remainingIndexes);
     }
 }

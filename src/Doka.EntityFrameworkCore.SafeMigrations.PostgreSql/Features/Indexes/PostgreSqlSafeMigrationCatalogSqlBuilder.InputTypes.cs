@@ -47,7 +47,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     /// <param name="definition">The index definition whose method and independently requested flags apply.</param>
     /// <param name="key">The physical key, or null for the method-only request.</param>
     /// <returns>The metadata-only nullable Boolean selection.</returns>
-    internal string BuildIndexInputProof(
+    private string BuildIndexInputProof(
         string nativeType,
         ExpectedIndexDefinition definition,
         ExpectedIndexKeyDefinition? key
@@ -147,8 +147,13 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     )
     {
         var inputs = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var key in definition.Keys)
+
+        // WHY: This pass only reads the stable ordered collection by ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var keyIndex = 0; keyIndex < definition.Keys.Count; keyIndex++)
         {
+            var key = definition.Keys[keyIndex];
             if (IndexPhysicalMember(key) is not { } member)
             {
                 continue;
@@ -175,7 +180,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     }
 
     /// <summary>Requires the structured member's qualifier to resolve to the actual owning index relation.</summary>
-    internal string IndexMemberOwnerPredicate(
+    private string IndexMemberOwnerPredicate(
         ExpectedIndexDefinition definition,
         PostgreSqlIndexPhysicalMember member
     ) => member.PartCount switch

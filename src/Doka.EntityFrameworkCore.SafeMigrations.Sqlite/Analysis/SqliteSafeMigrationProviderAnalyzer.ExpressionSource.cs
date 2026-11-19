@@ -78,6 +78,7 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
         var references = new HashSet<string>(s_identifierComparer);
         SafeMigrationSqlExpressionInspector.CollectIdentifiers(expression, references);
 
+        // WHY: Check the non-indexable identifier set directly and stop at the first missing operand.
         // ReSharper disable once ForeachCanBeConvertedToQueryUsingAnotherGetEnumerator
         foreach (var reference in references)
         {

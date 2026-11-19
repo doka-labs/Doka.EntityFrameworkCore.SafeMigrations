@@ -125,6 +125,9 @@ public sealed class MySqlBackfillConstraintCatalogTests
         var operation = Alter("rows", "value");
         var operations = Enumerable
             .Repeat(operation, 100_000)
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         operations[0] = new SafeMigrationOperation(

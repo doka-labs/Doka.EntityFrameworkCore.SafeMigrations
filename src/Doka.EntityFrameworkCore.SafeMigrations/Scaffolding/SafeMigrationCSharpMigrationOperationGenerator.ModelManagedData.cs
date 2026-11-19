@@ -163,8 +163,14 @@ internal sealed partial class SafeMigrationCSharpMigrationOperationGenerator
                 .AppendLine("[")
                 .IncrementIndent();
 
-            foreach (var foreignKey in delete.ForeignKeys)
+            // WHY: This immutable definition snapshot is indexed; retain its authored order without interface
+            // enumeration.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var foreignKeyIndex = 0; foreignKeyIndex < delete.ForeignKeys.Count; foreignKeyIndex++)
             {
+                var foreignKey = delete.ForeignKeys[foreignKeyIndex];
+
                 builder
                     .AppendLine("new ExpectedModelManagedDataForeignKeyDefinition(")
                     .IncrementIndent();

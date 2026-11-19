@@ -9,6 +9,7 @@ public sealed class PostgreSqlColumnsScaffoldingIntegrationTests : PostgreSqlSaf
         PostgreSqlContainerFixture fixture
     ) : base(fixture) { }
 
+    /// <summary>Scaffolded Identity Table Preserves Generation And Is Idempotent.</summary>
     [Theory]
     [InlineData(NpgsqlValueGenerationStrategy.IdentityAlwaysColumn, "a")]
     [InlineData(NpgsqlValueGenerationStrategy.IdentityByDefaultColumn, "d")]
@@ -17,11 +18,13 @@ public sealed class PostgreSqlColumnsScaffoldingIntegrationTests : PostgreSqlSaf
         string expectedIdentity
     )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         _ = AddScaffoldedIdentityTable(builder, "scaffolded_identity", strategy);
 
+        // Act
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         await ExecuteSqlAsync(
@@ -37,6 +40,7 @@ public sealed class PostgreSqlColumnsScaffoldingIntegrationTests : PostgreSqlSaf
                 new SafeMigrationRunOptions("scaffolded-identity"),
                 CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
         Assert.Equal(SafeMigrationObservedState.Matching,
             Assert.Single(report.Assessments)
@@ -64,9 +68,11 @@ public sealed class PostgreSqlColumnsScaffoldingIntegrationTests : PostgreSqlSaf
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Scaffolded Identity Table Rejects Existing Non Generated Column.</summary>
     [Fact]
     public async Task ScaffoldedIdentityTable_RejectsExistingNonGeneratedColumn()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -81,6 +87,7 @@ public sealed class PostgreSqlColumnsScaffoldingIntegrationTests : PostgreSqlSaf
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         _ = AddScaffoldedIdentityTable(builder, "scaffolded_identity_drift");
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -89,9 +96,11 @@ public sealed class PostgreSqlColumnsScaffoldingIntegrationTests : PostgreSqlSaf
                 new SafeMigrationRunOptions("scaffolded-identity-drift"),
                 CancellationToken.None);
 
-        var exception = await Assert.ThrowsAsync<PostgresException>(() =>
+        var failure = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
 
+        // Assert
+        var exception = Assert.IsType<PostgresException>(failure);
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationObservedState.Different,
             Assert.Single(report.Assessments)
@@ -115,15 +124,18 @@ public sealed class PostgreSqlColumnsScaffoldingIntegrationTests : PostgreSqlSaf
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Scaffolded Operation Level Annotation Is Rejected Before Ddl.</summary>
     [Fact]
     public async Task ScaffoldedOperationLevelAnnotation_IsRejectedBeforeDdl()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         var operation = AddScaffoldedIdentityTable(builder, "unsupported_scaffolded_annotation");
         operation["Test:UnsupportedOperationFacet"] = true;
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -132,9 +144,11 @@ public sealed class PostgreSqlColumnsScaffoldingIntegrationTests : PostgreSqlSaf
                 new SafeMigrationRunOptions("unsupported-operation-facet"),
                 CancellationToken.None);
 
-        var exception = await Assert.ThrowsAsync<PostgresException>(() =>
+        var failure = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
 
+        // Assert
+        var exception = Assert.IsType<PostgresException>(failure);
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationObservedState.Unsupported,
             Assert.Single(report.Assessments)
@@ -154,9 +168,11 @@ public sealed class PostgreSqlColumnsScaffoldingIntegrationTests : PostgreSqlSaf
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Unmodeled Serial Strategy Is Rejected Before Ddl.</summary>
     [Fact]
     public async Task UnmodeledSerialStrategy_IsRejectedBeforeDdl()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -165,6 +181,7 @@ public sealed class PostgreSqlColumnsScaffoldingIntegrationTests : PostgreSqlSaf
             "unsupported_serial_strategy",
             NpgsqlValueGenerationStrategy.SerialColumn);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -173,9 +190,11 @@ public sealed class PostgreSqlColumnsScaffoldingIntegrationTests : PostgreSqlSaf
                 new SafeMigrationRunOptions("unsupported-serial"),
                 CancellationToken.None);
 
-        var exception = await Assert.ThrowsAsync<PostgresException>(() =>
+        var failure = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
 
+        // Assert
+        var exception = Assert.IsType<PostgresException>(failure);
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationObservedState.Unsupported,
             Assert.Single(report.Assessments)

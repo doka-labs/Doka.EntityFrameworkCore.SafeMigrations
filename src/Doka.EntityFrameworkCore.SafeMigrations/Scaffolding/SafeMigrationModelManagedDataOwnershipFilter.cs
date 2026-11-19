@@ -56,7 +56,7 @@ internal static class SafeMigrationModelManagedDataOwnershipFilter
         IRelationalModel? model
     )
     {
-        var tables = new Dictionary<TableIdentity, bool>();
+        Dictionary<TableIdentity, bool> tables = [];
         if (model is null)
         {
             return tables;
@@ -134,12 +134,9 @@ internal static class SafeMigrationModelManagedDataOwnershipFilter
             return excluded;
         }
 
-        if (excluded != transitionExcluded)
-        {
-            throw OwnershipTransition(identity, transitionContext, transitionExcluded, requiredContext, excluded);
-        }
-
-        return excluded;
+        return excluded != transitionExcluded
+            ? throw OwnershipTransition(identity, transitionContext, transitionExcluded, requiredContext, excluded)
+            : excluded;
     }
 
     private static bool RequiredExclusion(

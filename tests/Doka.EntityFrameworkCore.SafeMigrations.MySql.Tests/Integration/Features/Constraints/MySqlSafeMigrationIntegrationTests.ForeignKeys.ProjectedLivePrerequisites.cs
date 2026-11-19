@@ -1,6 +1,8 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-/// <summary>Exercises the ForeignKeysProjectedLivePrerequisites migration contracts in an independent class collection.</summary>
+/// <summary>
+/// Exercises the ForeignKeysProjectedLivePrerequisites migration contracts in an independent class collection.
+/// </summary>
 public sealed class MySqlForeignKeysProjectedLivePrerequisitesIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
     /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
@@ -505,6 +507,9 @@ public sealed class MySqlForeignKeysProjectedLivePrerequisitesIntegrationTests :
         await ExecuteOperationsAsync(context,
             operations
                 .Take(2)
+
+                // WHY: Retain this explicit materialization/copy path and its collection lowering.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray(),
             CancellationToken.None);
 
@@ -723,7 +728,7 @@ public sealed class MySqlForeignKeysProjectedLivePrerequisitesIntegrationTests :
         await using var context = CreateContext(connectionString);
         var operations = NullableLivePrincipalOperations(context, guidStorage: false, ReferentialAction.NoAction);
         await using var connection = new MySqlConnection(connectionString);
-        await connection.OpenAsync();
+        await connection.OpenAsync(CancellationToken.None);
         var version = MySqlServerVersion.AutoDetect(connection, MySqlServerVersionCompatibilityMode.AllowUnsupported);
         var databaseScopedNames = !version.IsMariaDb || version.Version < new Version(12, 1);
 
@@ -1022,7 +1027,7 @@ public sealed class MySqlForeignKeysProjectedLivePrerequisitesIntegrationTests :
         await using var context = CreateContext(connectionString);
         var operations = NullableLivePrincipalOperations(context, guidStorage: false, ReferentialAction.NoAction);
         var analyzer = context.GetService<ISafeMigrationProviderAnalyzer>();
-        var source = Assert.IsAssignableFrom<ISafeMigrationLivePrerequisiteSource>(analyzer);
+        var source = Assert.IsType<ISafeMigrationLivePrerequisiteSource>(analyzer, exactMatch: false);
         using var cancellation = new CancellationTokenSource();
 
         // Act
@@ -1041,6 +1046,9 @@ public sealed class MySqlForeignKeysProjectedLivePrerequisitesIntegrationTests :
                 context,
                 operations
                     .Cast<SafeMigrationOperation>()
+
+                    // WHY: Retain this explicit materialization/copy path and its collection lowering.
+                    // ReSharper disable once UseCollectionExpression
                     .ToArray(),
                 cancellation.Token));
 
@@ -1049,7 +1057,7 @@ public sealed class MySqlForeignKeysProjectedLivePrerequisitesIntegrationTests :
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, first.Status);
         Assert.True(capturedBeforeCancellation);
-        Assert.IsAssignableFrom<OperationCanceledException>(exception);
+        Assert.IsType<OperationCanceledException>(exception, exactMatch: false);
         Assert.False(capturedAfterCancellation);
     }
 
@@ -1237,6 +1245,9 @@ public sealed class MySqlForeignKeysProjectedLivePrerequisitesIntegrationTests :
             builder
                 .Operations
                 .Take(2)
+
+                // WHY: Retain this explicit materialization/copy path and its collection lowering.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray(),
             CancellationToken.None);
 
@@ -1569,6 +1580,9 @@ public sealed class MySqlForeignKeysProjectedLivePrerequisitesIntegrationTests :
         await ExecuteOperationsAsync(context,
             operations
                 .Take(2)
+
+                // WHY: Retain this explicit materialization/copy path and its collection lowering.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray(),
             CancellationToken.None);
 
@@ -1803,7 +1817,8 @@ public sealed class MySqlForeignKeysProjectedLivePrerequisitesIntegrationTests :
                 STORED; CREATE INDEX `ix_child_multi` ON `live_child` (`parent_id`,
                 `derived_id`);
                 """
-                : "CREATE INDEX `ix_child_multi` ON `live_child` (`parent_id`, (CAST(`values_json` AS UNSIGNED ARRAY)));",
+                : "CREATE INDEX `ix_child_multi` ON `live_child` "
+                + "(`parent_id`, (CAST(`values_json` AS UNSIGNED ARRAY)));",
             cancellationToken: CancellationToken.None);
 
         if (shape == "ordinary_after")
@@ -1946,7 +1961,8 @@ public sealed class MySqlForeignKeysProjectedLivePrerequisitesIntegrationTests :
                 STORED; CREATE INDEX `ix_child_multi` ON `live_child` (`parent_id`,
                 `derived_id`);
                 """
-                : "CREATE INDEX `ix_child_multi` ON `live_child` (`parent_id`, (CAST(`values_json` AS UNSIGNED ARRAY)));",
+                : "CREATE INDEX `ix_child_multi` ON `live_child` "
+                + "(`parent_id`, (CAST(`values_json` AS UNSIGNED ARRAY)));",
             cancellationToken: CancellationToken.None);
 
         await ExecuteSqlAsync(
@@ -2053,7 +2069,8 @@ public sealed class MySqlForeignKeysProjectedLivePrerequisitesIntegrationTests :
                 STORED; CREATE INDEX `ix_child_multi` ON `live_child` (`parent_id`,
                 `derived_id`);
                 """
-                : "CREATE INDEX `ix_child_multi` ON `live_child` (`parent_id`, (CAST(`values_json` AS UNSIGNED ARRAY)));",
+                : "CREATE INDEX `ix_child_multi` ON `live_child` "
+                + "(`parent_id`, (CAST(`values_json` AS UNSIGNED ARRAY)));",
             cancellationToken: CancellationToken.None);
 
         var nativeName = alias
@@ -2105,6 +2122,18 @@ public sealed class MySqlForeignKeysProjectedLivePrerequisitesIntegrationTests :
             builder.Operations,
             CancellationToken.None));
 
+        var remainingUnsafeIndexes = Fixture.IsMariaDb
+            ? (int?)null
+            : await ScalarIntAsync(
+                connectionString,
+                """
+                SELECT COUNT(DISTINCT INDEX_NAME)
+                FROM INFORMATION_SCHEMA.STATISTICS
+                WHERE TABLE_SCHEMA=DATABASE()
+                AND TABLE_NAME='live_child' AND INDEX_NAME='ix_child_multi';
+                """,
+                cancellationToken: CancellationToken.None);
+
         // Assert
         Assert.Equal(
             Fixture.IsMariaDb
@@ -2125,17 +2154,7 @@ public sealed class MySqlForeignKeysProjectedLivePrerequisitesIntegrationTests :
                     .Message,
                 StringComparison.Ordinal);
 
-            Assert.Equal(
-                1,
-                await ScalarIntAsync(
-                    connectionString,
-                    """
-                    SELECT COUNT(DISTINCT INDEX_NAME)
-                    FROM INFORMATION_SCHEMA.STATISTICS
-                    WHERE TABLE_SCHEMA=DATABASE()
-                    AND TABLE_NAME='live_child' AND INDEX_NAME='ix_child_multi';
-                    """,
-                    cancellationToken: CancellationToken.None));
+            Assert.Equal(1, remainingUnsafeIndexes);
         }
     }
 }

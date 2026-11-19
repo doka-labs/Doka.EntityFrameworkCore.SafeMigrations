@@ -128,12 +128,18 @@ public sealed class SqlServerSafeMigrationSqlExpressionRendererTests
         string sql
     )
     {
+        // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var renderer = CreateRenderer(context);
-        Assert.True(SafeMigrationSqlExpressionParser.TryParseCapturedSource(sql, out var expression));
 
-        var rendered = renderer.Render(expression);
+        // Act
+        var parsed = SafeMigrationSqlExpressionParser.TryParseCapturedSource(sql, out var expression);
+        var rendered = expression is null
+            ? null
+            : renderer.Render(expression);
 
+        // Assert
+        Assert.True(parsed);
         Assert.Equal(sql, rendered);
     }
 
@@ -141,24 +147,36 @@ public sealed class SqlServerSafeMigrationSqlExpressionRendererTests
     [Fact]
     public void CaseRendersTypedConversionWithPredicateAndScalarRoles()
     {
+        // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var renderer = CreateRenderer(context);
-        Assert.True(
-            SafeMigrationSqlExpressionParser.TryParse(
-                "CONVERT(bit, CASE WHEN [right_bound] > [left_bound] THEN 1 ELSE 0 END)",
-                out var expression));
+        const string source = "CONVERT(bit, CASE WHEN [right_bound] > [left_bound] THEN 1 ELSE 0 END)";
 
-        var sql = renderer.Render(expression);
+        // Act
+        var parsed = SafeMigrationSqlExpressionParser.TryParse(
+            source,
+            out var expression);
 
+        var sql = expression is null
+            ? null
+            : renderer.Render(expression);
+
+        var unsupported = expression is null
+            ? null
+            : renderer.GetUnsupportedFeature(expression);
+
+        // Assert
+        Assert.True(parsed);
         Assert.Equal("CAST(CASE WHEN ([right_bound] > [left_bound]) THEN 1 ELSE 0 END AS bit)", sql);
         Assert.DoesNotContain("[bit]", sql, StringComparison.Ordinal);
-        Assert.Null(renderer.GetUnsupportedFeature(expression));
+        Assert.Null(unsupported);
     }
 
     /// <summary>Predicates selected by CASE retain UNKNOWN rather than silently mapping it to false.</summary>
     [Fact]
     public void PredicateResultsUseNullableScalarConversion()
     {
+        // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var renderer = CreateRenderer(context);
         var expression = SafeMigrationSql.Case(
@@ -171,8 +189,10 @@ public sealed class SqlServerSafeMigrationSqlExpressionRendererTests
                     SafeMigrationSql.Literal(0))),
         ]);
 
+        // Act
         var sql = renderer.Render(expression);
 
+        // Assert
         Assert.Equal(
             "CASE WHEN ([enabled] = CAST(1 AS bit)) THEN CASE WHEN ([value] > 0) "
             + "THEN CAST(1 AS bit) WHEN NOT ([value] > 0) THEN CAST(0 AS bit) ELSE NULL END END",
@@ -190,9 +210,14 @@ public sealed class SqlServerSafeMigrationSqlExpressionRendererTests
         bool unsupported
     )
     {
+        // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var renderer = CreateRenderer(context);
         var expression = SafeMigrationSql.Literal(1);
+
+        // WHY: Constructs the exact fixture depth without recursively building the test input.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < depth; index++)
         {
             expression = SafeMigrationSql.Case(
@@ -202,8 +227,10 @@ public sealed class SqlServerSafeMigrationSqlExpressionRendererTests
             ]);
         }
 
+        // Act
         var feature = renderer.GetUnsupportedFeature(expression);
 
+        // Assert
         Assert.Equal(
             unsupported
                 ? "structured_case_nesting"
@@ -221,6 +248,7 @@ public sealed class SqlServerSafeMigrationSqlExpressionRendererTests
         int role
     )
     {
+        // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var renderer = CreateRenderer(context);
         var unsupported = SafeMigrationSql.Opaque("unknown_sql");
@@ -238,10 +266,13 @@ public sealed class SqlServerSafeMigrationSqlExpressionRendererTests
                 ? unsupported
                 : SafeMigrationSql.Literal(0));
 
+        // Act
         var feature = renderer.GetUnsupportedFeature(expression);
+        var failure = Record.Exception(() => renderer.Render(expression));
 
+        // Assert
         Assert.Equal("opaque_sql_expression", feature);
-        Assert.Throws<NotSupportedException>(() => renderer.Render(expression));
+        Assert.IsType<NotSupportedException>(failure);
     }
 
     /// <summary>BETWEEN validation checks its operand and both bounds, allowing only fully supported trees.</summary>

@@ -16,6 +16,7 @@ public sealed class PostgreSqlLifecycleMissingSnapshotIntegrationTests : Postgre
         PostgreSqlContainerFixture fixture
     ) : base(fixture) { }
 
+    /// <summary>Missing Snapshot Analyzes And Verifies The Design Time Model.</summary>
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -23,6 +24,7 @@ public sealed class PostgreSqlLifecycleMissingSnapshotIntegrationTests : Postgre
         bool requireExpectedFingerprint
     )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateSnapshotFreeContext(connectionString);
         var assembly = context.GetService<IMigrationsAssembly>();
@@ -36,38 +38,18 @@ public sealed class PostgreSqlLifecycleMissingSnapshotIntegrationTests : Postgre
                 ? fingerprint
                 : null);
 
-        Assert.Equal(
-            "Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationMigrationsAssembly",
-            assembly.GetType()
-                .FullName);
-
-        Assert.Null(assembly.ModelSnapshot);
-        Assert.Null(assembly.ModelSnapshot);
-        Assert.Empty(assembly.Migrations);
-        Assert.Single(model.GetEntityTypes());
-
         var builder = CreateSnapshotFreeOperations(context);
         var runner = context.GetService<ISafeMigrationRunner>();
+
+        // Act
         var preflight = await runner.AnalyzeAsync(context, builder.Operations, options, CancellationToken.None);
-        var preflightAssessment = Assert.Single(preflight.Assessments);
+        var preflightConnectionState = context.Database.GetDbConnection()
+            .State;
 
-        Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
-        Assert.Equal(SafeMigrationReportMode.Preflight, preflight.Mode);
-        Assert.Equal(fingerprint, preflight.ModelFingerprint);
-        Assert.Equal(SafeMigrationObservedState.Missing, preflightAssessment.ObservedState);
-        Assert.Equal(SafeMigrationAction.Apply, preflightAssessment.Action);
-        Assert.False(preflightAssessment.PostconditionSatisfied);
-        Assert.Equal(
-            ConnectionState.Closed,
-            context.Database.GetDbConnection()
-                .State);
-
-        Assert.Equal(
-            0,
-            await ScalarIntAsync(
-                connectionString,
-                SnapshotFreeCatalogCountSql,
-                cancellationToken: CancellationToken.None));
+        var preflightCatalogCount = await ScalarIntAsync(
+            connectionString,
+            SnapshotFreeCatalogCountSql,
+            cancellationToken: CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
@@ -78,6 +60,30 @@ public sealed class PostgreSqlLifecycleMissingSnapshotIntegrationTests : Postgre
             .CloseAsync();
 
         var postflight = await runner.VerifyAsync(context, builder.Operations, options, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(
+            "Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationMigrationsAssembly",
+            assembly.GetType()
+                .FullName);
+
+        Assert.Null(assembly.ModelSnapshot);
+        Assert.Null(assembly.ModelSnapshot);
+        Assert.Empty(assembly.Migrations);
+        Assert.Single(model.GetEntityTypes());
+
+        var preflightAssessment = Assert.Single(preflight.Assessments);
+
+        Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
+        Assert.Equal(SafeMigrationReportMode.Preflight, preflight.Mode);
+        Assert.Equal(fingerprint, preflight.ModelFingerprint);
+        Assert.Equal(SafeMigrationObservedState.Missing, preflightAssessment.ObservedState);
+        Assert.Equal(SafeMigrationAction.Apply, preflightAssessment.Action);
+        Assert.False(preflightAssessment.PostconditionSatisfied);
+        Assert.Equal(ConnectionState.Closed, preflightConnectionState);
+
+        Assert.Equal(0, preflightCatalogCount);
+
         var postflightAssessment = Assert.Single(postflight.Assessments);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
@@ -100,6 +106,7 @@ public sealed class PostgreSqlLifecycleMissingSnapshotIntegrationTests : Postgre
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Missing Snapshot Rejects A Different Model Fingerprint Before Opening The Connection.</summary>
     [Theory]
     [InlineData(SafeMigrationReportMode.Preflight)]
     [InlineData(SafeMigrationReportMode.Postflight)]
@@ -107,6 +114,7 @@ public sealed class PostgreSqlLifecycleMissingSnapshotIntegrationTests : Postgre
         SafeMigrationReportMode mode
     )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateSnapshotFreeContext(connectionString);
         await using var differentModelContext = CreateContext(connectionString);
@@ -130,6 +138,13 @@ public sealed class PostgreSqlLifecycleMissingSnapshotIntegrationTests : Postgre
         connection.StateChange += (_,
             _) => connectionTransitions++;
 
+        // Act
+        var failure = await Record.ExceptionAsync(() =>
+            mode == SafeMigrationReportMode.Preflight
+                ? runner.AnalyzeAsync(context, builder.Operations, options, CancellationToken.None)
+                : runner.VerifyAsync(context, builder.Operations, options, CancellationToken.None));
+
+        // Assert
         Assert.Null(
             context.GetService<IMigrationsAssembly>()
                 .ModelSnapshot);
@@ -137,11 +152,7 @@ public sealed class PostgreSqlLifecycleMissingSnapshotIntegrationTests : Postgre
         Assert.NotEqual(expected, actual);
         Assert.Equal(ConnectionState.Closed, connection.State);
 
-        var exception = await Assert.ThrowsAsync<SafeMigrationModelMismatchException>(() =>
-            mode == SafeMigrationReportMode.Preflight
-                ? runner.AnalyzeAsync(context, builder.Operations, options, CancellationToken.None)
-                : runner.VerifyAsync(context, builder.Operations, options, CancellationToken.None));
-
+        var exception = Assert.IsType<SafeMigrationModelMismatchException>(failure);
         Assert.Equal(expected, exception.ExpectedFingerprint);
         Assert.Equal(actual, exception.ActualFingerprint);
         Assert.Equal(0, connectionTransitions);

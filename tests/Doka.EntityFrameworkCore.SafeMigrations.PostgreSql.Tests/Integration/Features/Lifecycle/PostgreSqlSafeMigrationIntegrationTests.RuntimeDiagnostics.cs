@@ -138,7 +138,9 @@ public sealed class PostgreSqlRuntimeDiagnosticsIntegrationTests : PostgreSqlSaf
         Assert.All(native.MessageText, static character => Assert.InRange(character, 32, 126));
     }
 
-    /// <summary>Hostile identity endpoints cannot terminate the anonymous block before the owned guard executes.</summary>
+    /// <summary>
+    /// Hostile identity endpoints cannot terminate the anonymous block before the owned guard executes.
+    /// </summary>
     /// <param name="placement">The owner, member, principal or rename endpoint receiving delimiter candidates.</param>
     [Theory]
     [InlineData("owner")]

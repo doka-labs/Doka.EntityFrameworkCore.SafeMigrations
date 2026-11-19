@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations;
 
 /// <summary>Classifies the known execution shape of an accepted automatic repair.</summary>
+[PublicAPI]
 public enum SafeMigrationOperationalImpact
 {
     /// <summary>No automatic repair is planned for the assessment.</summary>
@@ -14,6 +15,7 @@ public enum SafeMigrationOperationalImpact
 }
 
 /// <summary>Describes one bounded, typed difference between live and expected metadata.</summary>
+[PublicAPI]
 public sealed class SafeMigrationFacetDifference
 {
     internal const int MaximumDifferenceCount = 16;
@@ -81,6 +83,7 @@ public sealed class SafeMigrationFacetDifference
 }
 
 /// <summary>Represents a blocked SafeMigrations preflight with its complete immutable report.</summary>
+[PublicAPI]
 public sealed class SafeMigrationPreflightException : InvalidOperationException
 {
     /// <summary>Initializes a blocked-preflight exception.</summary>
@@ -114,8 +117,14 @@ public sealed class SafeMigrationPreflightException : InvalidOperationException
 
         SafeMigrationAssessment? first = null;
         var blockedCount = 0;
-        foreach (var assessment in report.Assessments)
+
+        // WHY: This immutable definition snapshot is indexed; retain its authored order without interface enumeration.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var assessmentIndex = 0; assessmentIndex < report.Assessments.Count; assessmentIndex++)
         {
+            var assessment = report.Assessments[assessmentIndex];
+
             if (assessment.Action is not { } action
                 || !action.RejectsExecution())
             {

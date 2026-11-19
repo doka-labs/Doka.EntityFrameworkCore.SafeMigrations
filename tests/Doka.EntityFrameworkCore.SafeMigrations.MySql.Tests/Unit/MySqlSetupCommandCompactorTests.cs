@@ -45,6 +45,9 @@ public sealed class MySqlSetupCommandCompactorTests
         string[] setup = ["DO 0;", "DO 1;", blank, "DO 3;", "DO 4;"];
         var fragments = setup
             .Select(static sql => new MySqlSafeMigrationSetupFragment(sql))
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var body = new string(' ', 100) + "DO 0;";
@@ -87,7 +90,7 @@ public sealed class MySqlSetupCommandCompactorTests
     {
         // Arrange
         const string value = "\u20ac";
-        var statement = $$"""
+        const string statement = $$"""
             SET @a = '{0}';
             SET @b = '{{value}}';
             """;
@@ -173,6 +176,9 @@ public sealed class MySqlSetupCommandCompactorTests
         // Arrange
         string[] setup = ["DO 1;", "DO 2;"];
         string[] cleanup = ["SELECT missing_cleanup;", "SET @guard = NULL;"];
+
+        // WHY: Retain this explicit materialization/copy path and its collection lowering.
+        // ReSharper disable once UseCollectionExpression
         var expectedCleanup = cleanup.ToArray();
 
         // Act
@@ -236,6 +242,9 @@ public sealed class MySqlSetupCommandCompactorTests
         // Arrange
         var setup = Enumerable
             .Repeat("DO 0;", setupCount)
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         // Act
@@ -276,6 +285,9 @@ public sealed class MySqlSetupCommandCompactorTests
         // Arrange
         var setup = Enumerable
             .Repeat("DO 0;", 125)
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var body = new string('x', 100);
@@ -321,6 +333,9 @@ public sealed class MySqlSetupCommandCompactorTests
         // Arrange
         var setup = Enumerable
             .Repeat("DO 0;", 125 - fusedFragments)
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var body = new string('x', 100);
@@ -361,6 +376,9 @@ public sealed class MySqlSetupCommandCompactorTests
 
         var setup = Enumerable
             .Repeat("DO 0;", count)
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         // Act

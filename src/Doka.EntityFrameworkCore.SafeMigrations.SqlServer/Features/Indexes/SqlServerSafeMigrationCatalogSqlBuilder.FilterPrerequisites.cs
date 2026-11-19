@@ -31,6 +31,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         // ReSharper disable once LoopCanBeConvertedToQuery
         for (var position = 0; position < sql.Length; position++)
         {
+            // WHY: Reject foreign quoting before the independent delimiter scan mutates the shared UTF-16 offset.
+            // ReSharper disable once ConvertIfStatementToSwitchStatement
             if (sql[position] == '`')
             {
                 return null;
@@ -155,7 +157,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         SafeMigrationSqlLiteralExpression literal
     )
     {
-        var predicates = new List<string>();
+        List<string> predicates = [];
         string[] scalarTypes =
         [
             "bigint", "bit", "date", "datetime", "float", "int", "money", "real",
@@ -167,7 +169,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             Add(type, type);
         }
 
-        foreach (var type in new[] { "datetime2", "datetimeoffset", "time" })
+        string[] temporalTypes = ["datetime2", "datetimeoffset", "time"];
+        foreach (var type in temporalTypes)
         {
             // WHY: Cover every native temporal scale in its finite supported domain.
             // ReSharper disable once ForCanBeConvertedToForeach
@@ -181,15 +184,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             }
         }
 
-        foreach (var type in new[]
-            {
-                "char",
-                "varchar",
-                "nchar",
-                "nvarchar",
-                "binary",
-                "varbinary",
-            })
+        string[] sizedTypes = ["char", "varchar", "nchar", "nvarchar", "binary", "varbinary"];
+        foreach (var type in sizedTypes)
         {
             var canonical = type is "char" or "nchar" or "binary"
                 ? type + "(8000)"
@@ -360,20 +356,18 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         out decimal numeric
     )
     {
-        if (value is string text)
+        switch (value)
         {
-            return decimal.TryParse(text, NumberStyles.Number, CultureInfo.InvariantCulture, out numeric);
+            case string text:
+                return decimal.TryParse(text, NumberStyles.Number, CultureInfo.InvariantCulture, out numeric);
+            case bool or byte or sbyte or short or ushort or int or uint or long or ulong or decimal or Enum:
+                numeric = Convert.ToDecimal(value, CultureInfo.InvariantCulture);
+
+                return true;
+            default:
+                numeric = 0;
+
+                return false;
         }
-
-        if (value is bool or byte or sbyte or short or ushort or int or uint or long or ulong or decimal or Enum)
-        {
-            numeric = Convert.ToDecimal(value, CultureInfo.InvariantCulture);
-
-            return true;
-        }
-
-        numeric = 0;
-
-        return false;
     }
 }

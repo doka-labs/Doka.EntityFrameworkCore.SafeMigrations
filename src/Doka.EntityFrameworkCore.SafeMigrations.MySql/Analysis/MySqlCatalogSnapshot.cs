@@ -1,5 +1,3 @@
-using System.Data;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql;
 
 /// <summary>Holds a session-scoped copy of the catalog views batched classification reads.</summary>
@@ -147,7 +145,9 @@ internal sealed class MySqlCatalogSnapshot : IAsyncDisposable
     /// <param name="connection">The open analysis connection.</param>
     /// <param name="commandTimeout">The configured command timeout.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
-    /// <returns>The snapshot, or null when temporary-table creation or reliable session cleanup is unavailable.</returns>
+    /// <returns>
+    /// The snapshot, or null when temporary-table creation or reliable session cleanup is unavailable.
+    /// </returns>
     public static async Task<MySqlCatalogSnapshot?> TryCreateAsync(
         DbConnection connection,
         int? commandTimeout,
@@ -247,7 +247,10 @@ internal sealed class MySqlCatalogSnapshot : IAsyncDisposable
         {
             // WHY: Keep secondary diagnostics available without replacing cancellation, timeout, or
             // the original catalog failure with a less useful error from the cleanup command.
-            primaryException.Data["SafeMigrations.CatalogSnapshotCleanupException"] = cleanupException;
+            SafeMigrationAnalysisCleanup.RetainFailure(
+                primaryException,
+                cleanupException,
+                "SafeMigrations.CatalogSnapshotCleanupException");
 
             return false;
         }
@@ -279,7 +282,10 @@ internal sealed class MySqlCatalogSnapshot : IAsyncDisposable
             }
             catch (Exception clearException)
             {
-                primaryException.Data["SafeMigrations.CatalogSnapshotPoolException"] = clearException;
+                SafeMigrationAnalysisCleanup.RetainFailure(
+                    primaryException,
+                    clearException,
+                    "SafeMigrations.CatalogSnapshotPoolException");
             }
         }
 
@@ -289,7 +295,10 @@ internal sealed class MySqlCatalogSnapshot : IAsyncDisposable
         }
         catch (Exception closeException)
         {
-            primaryException.Data["SafeMigrations.CatalogSnapshotCloseException"] = closeException;
+            SafeMigrationAnalysisCleanup.RetainFailure(
+                primaryException,
+                closeException,
+                "SafeMigrations.CatalogSnapshotCloseException");
         }
     }
 
@@ -370,7 +379,10 @@ internal sealed class MySqlCatalogSnapshot : IAsyncDisposable
         {
             // WHY: await-using would replace the execution failure with the disposal failure.
             // Retain secondary diagnostics without changing the failure that determines fallback.
-            primaryException.Data["SafeMigrations.CatalogSnapshotCommandCleanupException"] = cleanupException;
+            SafeMigrationAnalysisCleanup.RetainFailure(
+                primaryException,
+                cleanupException,
+                "SafeMigrations.CatalogSnapshotCommandCleanupException");
 
             return false;
         }

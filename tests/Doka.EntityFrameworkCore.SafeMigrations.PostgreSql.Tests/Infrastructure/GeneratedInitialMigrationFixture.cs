@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
 /// <summary>Applies each externally provisioned tooling schema once without imposing test-method order.</summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public sealed class GeneratedInitialMigrationFixture
 {
     private readonly Lazy<Task<GeneratedInitialMigrationObservation>> _legacy;

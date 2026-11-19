@@ -3,9 +3,14 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Benchmarks;
 public partial class SqlServerColumnAttribution
 {
     /// <summary>Checks fresh classification and preceding gates in direct and delayed batches.</summary>
-    private static void ProbeMatchingBinding(
+    /// <param name="connection">The owned diagnostic connection.</param>
+    /// <param name="output">The owned evidence directory.</param>
+    /// <param name="cancellationToken">The token controlling commands and artifact persistence.</param>
+    /// <returns>The asynchronous live binding control verification.</returns>
+    private static async Task ProbeMatchingBindingAsync(
         SqlConnection connection,
-        string output
+        string output,
+        CancellationToken cancellationToken
     )
     {
         const string poisonState = "(SELECT TOP (1) CONVERT(nvarchar(32), value) "
@@ -148,11 +153,15 @@ public partial class SqlServerColumnAttribution
                         ? "_delayed"
                         : "_direct");
 
-                File.WriteAllText(Path.Combine(output, "matching-binding-" + name + ".sql"), sql);
+                await File.WriteAllTextAsync(
+                    Path.Combine(output, "matching-binding-" + name + ".sql"),
+                    sql,
+                    cancellationToken);
+
                 var errorNumber = 0;
                 try
                 {
-                    Execute(connection, sql);
+                    await ExecuteAsync(connection, sql, cancellationToken);
                 }
                 catch (SqlException exception) when (exception.Number is 208 or 51001 or 51002 or 51003 or 51004)
                 {
@@ -174,7 +183,7 @@ public partial class SqlServerColumnAttribution
             }
         }
 
-        WriteJson(Path.Combine(output, "matching-binding-probes.json"), results);
+        await WriteJsonAsync(Path.Combine(output, "matching-binding-probes.json"), results, cancellationToken);
         if (!contractsSatisfied)
         {
             throw new InvalidOperationException("A runtime classifier violated a live binding contract.");

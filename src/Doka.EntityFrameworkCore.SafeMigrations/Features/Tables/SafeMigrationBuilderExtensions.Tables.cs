@@ -11,6 +11,10 @@ public static partial class SafeMigrationBuilderExtensions
     /// <param name="mode">The table-definition comparison mode.</param>
     /// <param name="policy">The conflict policy for the operation.</param>
     /// <returns>A builder for annotations on the created SafeMigrations operation.</returns>
+
+    // WHY: C# 14 extension blocks fail RS0016 in the current public API analyzer;
+    // retain the published static-call and XML member identities.
+    // ReSharper disable once ConvertToExtensionBlock
     public static OperationBuilder<SafeMigrationOperation> EnsureTable(
         this MigrationBuilder migrationBuilder,
         ExpectedTableDefinition definition,
@@ -44,6 +48,10 @@ public static partial class SafeMigrationBuilderExtensions
     /// <exception cref="InvalidOperationException">
     /// EF Core does not append exactly one table operation for the supplied definition.
     /// </exception>
+
+    // WHY: C# 14 extension blocks fail RS0016 in the current public API analyzer;
+    // retain the published static-call and XML member identities.
+    // ReSharper disable once ConvertToExtensionBlock
     public static OperationBuilder<SafeMigrationOperation> CreateTableIfNotExists<TColumns>(
         this MigrationBuilder migrationBuilder,
         string name,
@@ -90,6 +98,10 @@ public static partial class SafeMigrationBuilderExtensions
     /// <exception cref="InvalidOperationException">
     /// EF Core does not append exactly one table operation for the supplied definition.
     /// </exception>
+
+    // WHY: C# 14 extension blocks fail RS0016 in the current public API analyzer;
+    // retain the published static-call and XML member identities.
+    // ReSharper disable once ConvertToExtensionBlock
     public static OperationBuilder<SafeMigrationOperation> ConvergeTableFromModel<TColumns>(
         this MigrationBuilder migrationBuilder,
         string name,
@@ -116,6 +128,10 @@ public static partial class SafeMigrationBuilderExtensions
     /// <param name="indexes">The expected indexes.</param>
     /// <param name="policy">The conflict policy for the operation.</param>
     /// <returns>The same migration builder after all convergence operations have been appended.</returns>
+
+    // WHY: C# 14 extension blocks fail RS0016 in the current public API analyzer;
+    // retain the published static-call and XML member identities.
+    // ReSharper disable once ConvertToExtensionBlock
     public static MigrationBuilder ConvergeTable(
         this MigrationBuilder migrationBuilder,
         ExpectedTableDefinition definition,
@@ -152,8 +168,13 @@ public static partial class SafeMigrationBuilderExtensions
             SafeMigrationTableMode.ConvergenceContainer,
             SafeMigrationPolicy.ExistenceOnly);
 
-        foreach (var column in definition.Columns)
+        // WHY: This immutable definition snapshot is indexed; retain its authored order without interface enumeration.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var columnIndex = 0; columnIndex < definition.Columns.Count; columnIndex++)
         {
+            var column = definition.Columns[columnIndex];
+
             _ = migrationBuilder.EnsureColumn(definition.Table, column, policy, definition.Schema);
         }
 
@@ -162,18 +183,33 @@ public static partial class SafeMigrationBuilderExtensions
             _ = migrationBuilder.EnsurePrimaryKey(definition.PrimaryKey, policy);
         }
 
-        foreach (var constraint in definition.UniqueConstraints)
+        // WHY: This immutable definition snapshot is indexed; retain its authored order without interface enumeration.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var constraintIndex = 0; constraintIndex < definition.UniqueConstraints.Count; constraintIndex++)
         {
+            var constraint = definition.UniqueConstraints[constraintIndex];
+
             _ = migrationBuilder.EnsureUniqueConstraint(constraint, policy);
         }
 
-        foreach (var constraint in definition.CheckConstraints)
+        // WHY: This immutable definition snapshot is indexed; retain its authored order without interface enumeration.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var constraintIndex1 = 0; constraintIndex1 < definition.CheckConstraints.Count; constraintIndex1++)
         {
+            var constraint = definition.CheckConstraints[constraintIndex1];
+
             _ = migrationBuilder.EnsureCheckConstraint(constraint, policy);
         }
 
-        foreach (var constraint in definition.ForeignKeys)
+        // WHY: This immutable definition snapshot is indexed; retain its authored order without interface enumeration.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var constraintIndex2 = 0; constraintIndex2 < definition.ForeignKeys.Count; constraintIndex2++)
         {
+            var constraint = definition.ForeignKeys[constraintIndex2];
+
             _ = migrationBuilder.EnsureForeignKey(constraint, policy);
         }
 
@@ -227,6 +263,10 @@ public static partial class SafeMigrationBuilderExtensions
     /// <param name="name">The table name.</param>
     /// <param name="schema">The schema name, or null for the provider default.</param>
     /// <returns>A builder for annotations on the created SafeMigrations operation.</returns>
+
+    // WHY: C# 14 extension blocks fail RS0016 in the current public API analyzer;
+    // retain the published static-call and XML member identities.
+    // ReSharper disable once ConvertToExtensionBlock
     public static OperationBuilder<SafeMigrationOperation> DropTableIfExists(
         this MigrationBuilder migrationBuilder,
         string name,
@@ -240,6 +280,10 @@ public static partial class SafeMigrationBuilderExtensions
     /// <param name="schema">The schema name, or null for the provider default.</param>
     /// <param name="newSchema">The target schema name, or null when unchanged.</param>
     /// <returns>A builder for annotations on the created SafeMigrations operation.</returns>
+
+    // WHY: C# 14 extension blocks fail RS0016 in the current public API analyzer;
+    // retain the published static-call and XML member identities.
+    // ReSharper disable once ConvertToExtensionBlock
     public static OperationBuilder<SafeMigrationOperation> RenameTableIfExists(
         this MigrationBuilder migrationBuilder,
         string name,

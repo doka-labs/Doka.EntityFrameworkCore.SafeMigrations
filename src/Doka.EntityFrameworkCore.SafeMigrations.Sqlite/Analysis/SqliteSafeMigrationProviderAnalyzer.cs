@@ -138,10 +138,16 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrati
 
         var targetModels = Enumerable
             .Repeat<IModel?>(targetModel, operations.Count)
+
+            // WHY: Preserve explicit fluent materialization for the ordered snapshot.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var migrationOperations = operations
             .Cast<MigrationOperation>()
+
+            // WHY: Preserve explicit fluent materialization for the ordered snapshot.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         return AnalyzeAsync(context, migrationOperations, targetModels, cancellationToken);
@@ -426,14 +432,12 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrati
             && targetTable.Sql.StartsWith("CREATE VIRTUAL TABLE", StringComparison.OrdinalIgnoreCase))
         {
             var invariantUnsupported = InvariantUnsupportedFeature(operation.Intent);
-            if (invariantUnsupported is not null)
-            {
-                // WHY: Raw SQL may replace a virtual table with an ordinary
-                // table, but cannot repair an unsupported target definition.
-                return InvariantUnsupported(invariantUnsupported);
-            }
 
-            return Unsupported("virtual_table");
+            // WHY: Raw SQL may replace a virtual table with an ordinary
+            // table, but cannot repair an unsupported target definition.
+            return invariantUnsupported is not null
+                ? InvariantUnsupported(invariantUnsupported)
+                : Unsupported("virtual_table");
         }
 
         var analysis = operation.Intent switch

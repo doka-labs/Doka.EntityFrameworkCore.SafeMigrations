@@ -9,9 +9,11 @@ public sealed class PostgreSqlIndexesReplacementIntegrationTests : PostgreSqlSaf
         PostgreSqlContainerFixture fixture
     ) : base(fixture) { }
 
+    /// <summary>Provider Drop Then Unique Create Preserves Data Blocked Classification And Existing Index.</summary>
     [Fact]
     public async Task ProviderDropThenUniqueCreate_PreservesDataBlockedClassificationAndExistingIndex()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -32,6 +34,7 @@ public sealed class PostgreSqlIndexesReplacementIntegrationTests : PostgreSqlSaf
             ["code"],
             unique: true);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -40,7 +43,9 @@ public sealed class PostgreSqlIndexesReplacementIntegrationTests : PostgreSqlSaf
                 new SafeMigrationRunOptions("blocked-index-replacement"),
                 CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
+        Assert.Equal(2, report.Assessments.Count);
         Assert.Equal(SafeMigrationObservedState.DataBlocked, report.Assessments[1].ObservedState);
         Assert.Equal(SafeMigrationAction.RejectDataBlocked, report.Assessments[1].Action);
         Assert.Equal(

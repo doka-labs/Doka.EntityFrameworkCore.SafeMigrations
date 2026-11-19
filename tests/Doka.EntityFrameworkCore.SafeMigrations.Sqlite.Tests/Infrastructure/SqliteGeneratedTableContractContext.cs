@@ -1,25 +1,37 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 
 /// <summary>Owns an isolated generated-column model for real migration and rebuild execution.</summary>
-internal sealed class SqliteGeneratedTableContractContext(
-    DbConnection connection,
-    IServiceProvider internalServices
-) : DbContext
+internal sealed class SqliteGeneratedTableContractContext : DbContext
 {
+    private readonly DbConnection _connection;
+    private readonly IServiceProvider _internalServices;
+
+    /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+    /// <param name="connection">The supplied connection for this fixture.</param>
+    /// <param name="internalServices">The supplied internal services for this fixture.</param>
+    public SqliteGeneratedTableContractContext(
+        DbConnection connection,
+        IServiceProvider internalServices
+    )
+    {
+        _connection = connection;
+        _internalServices = internalServices;
+    }
+
     /// <inheritdoc />
     protected override void OnConfiguring(
         DbContextOptionsBuilder optionsBuilder
     )
     {
         optionsBuilder.UseSqlite(
-            connection,
+            _connection,
             options => options.MigrationsAssembly(typeof(SqliteGeneratedTableContractContext).Assembly.FullName));
 
         optionsBuilder.UseSqliteSafeMigrations();
 
         // WHY: These fixed test models share class-owned services instead of
         // growing EF's process-wide provider cache as the matrix runs in parallel.
-        optionsBuilder.UseInternalServiceProvider(internalServices);
+        optionsBuilder.UseInternalServiceProvider(_internalServices);
     }
 
     /// <inheritdoc />
@@ -63,6 +75,8 @@ internal sealed class SqliteGeneratedTableContractContext(
         });
     }
 
+    // WHY: EF binds this fixture entity through writable property metadata.
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class Node
     {
         public int Id { get; set; }
@@ -80,6 +94,8 @@ internal sealed class SqliteGeneratedTableContractContext(
 /// <summary>Executes the same typed helper shape emitted for a fresh safe generated table.</summary>
 [DbContext(typeof(SqliteGeneratedTableContractContext))]
 [Migration(MigrationIdentifier)]
+// WHY: EF migration discovery constructs this fixture from its attributed migration identity.
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public sealed class SqliteGeneratedTableContractMigration : Migration
 {
     /// <summary>Gets the isolated fixture's EF-valid migration identity.</summary>
@@ -120,6 +136,8 @@ public sealed class SqliteGeneratedTableContractMigration : Migration
 /// <summary>Proves that generated NULL rejection rolls back DDL and does not advance migration history.</summary>
 [DbContext(typeof(SqliteGeneratedTableContractContext))]
 [Migration(MigrationIdentifier)]
+// WHY: EF migration discovery constructs this fixture from its attributed migration identity.
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public sealed class SqliteGeneratedNullRejectionMigration : Migration
 {
     /// <summary>Gets the isolated fixture's EF-valid migration identity.</summary>

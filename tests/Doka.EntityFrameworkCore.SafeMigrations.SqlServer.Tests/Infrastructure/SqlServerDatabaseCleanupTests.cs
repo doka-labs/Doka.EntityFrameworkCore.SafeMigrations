@@ -253,7 +253,7 @@ public sealed class SqlServerDatabaseCleanupTests
         // Assert
         Assert.Equal(
             cancellation.Token,
-            Assert.IsAssignableFrom<OperationCanceledException>(observed)
+            Assert.IsType<OperationCanceledException>(observed, exactMatch: false)
                 .CancellationToken);
 
         Assert.Equal(["sm_owned"], ownershipAfterCancellation);
@@ -277,7 +277,7 @@ public sealed class SqlServerDatabaseCleanupTests
         // Arrange
         var databases = new List<string> { "sm_owned" };
         using var cancellation = new CancellationTokenSource();
-        cancellation.Cancel();
+        await cancellation.CancelAsync();
         var attempts = 0;
 
         Task DropAsync(
@@ -447,7 +447,7 @@ public sealed class SqlServerDatabaseCleanupTests
         // Assert
         Assert.Equal(
             cancellation.Token,
-            Assert.IsAssignableFrom<OperationCanceledException>(observed)
+            Assert.IsType<OperationCanceledException>(observed, exactMatch: false)
                 .CancellationToken);
 
         Assert.Equal(["sm_second", "sm_third"], ownershipAfterCancellation);

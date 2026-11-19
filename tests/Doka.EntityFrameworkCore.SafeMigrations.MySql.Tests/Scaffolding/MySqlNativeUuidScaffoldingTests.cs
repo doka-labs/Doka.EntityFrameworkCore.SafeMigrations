@@ -28,11 +28,14 @@ public sealed class MySqlNativeUuidScaffoldingTests : IDisposable
         SafeMigrationScaffoldingMode mode
     )
     {
+        // Arrange
         using var context = CreateContext();
         var original = CreateTableOperation(context);
 
+        // Act
         var result = GenerateAndReload(context, mode, original);
 
+        // Assert
         var operation = Assert.Single(
             result.Operations.OfType<SafeMigrationOperation>(),
             value => value.Intent is EnsureTableIntent);
@@ -80,6 +83,7 @@ public sealed class MySqlNativeUuidScaffoldingTests : IDisposable
         bool nullable
     )
     {
+        // Arrange
         using var context = CreateContext();
         var table = CreateTableOperation(context);
         var original = table.Columns.Single(value =>
@@ -88,8 +92,10 @@ public sealed class MySqlNativeUuidScaffoldingTests : IDisposable
                 ? nameof(NativeRecord.OptionalId)
                 : nameof(NativeRecord.DefaultId)));
 
+        // Act
         var result = GenerateAndReload(context, mode, original);
 
+        // Assert
         var operation = Assert.IsType<SafeMigrationOperation>(Assert.Single(result.Operations));
         var intent = Assert.IsType<EnsureColumnIntent>(operation.Intent);
 
@@ -210,8 +216,14 @@ public sealed class MySqlNativeUuidScaffoldingTests : IDisposable
     );
 
     /// <summary>Supplies required, optional, and defaulted UUIDs to the real provider model differ.</summary>
-    private sealed class NativeContext(DbContextOptions<NativeContext> options) : DbContext(options)
+    private sealed class NativeContext : DbContext
     {
+        /// <summary>Initializes the explicit dependencies of this isolated test helper.</summary>
+        /// <param name="options">The isolated model and provider options.</param>
+        public NativeContext(
+            DbContextOptions<NativeContext> options
+        ) : base(options) { }
+
         /// <inheritdoc />
         protected override void OnModelCreating(
             ModelBuilder modelBuilder
@@ -235,6 +247,7 @@ public sealed class MySqlNativeUuidScaffoldingTests : IDisposable
     }
 
     /// <summary>Represents the three native UUID authoring shapes.</summary>
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class NativeRecord
     {
         /// <summary>Gets or sets the native primary key.</summary>

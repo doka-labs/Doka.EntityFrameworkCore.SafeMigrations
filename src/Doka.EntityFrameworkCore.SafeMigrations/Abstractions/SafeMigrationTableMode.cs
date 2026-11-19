@@ -3,6 +3,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// <summary>
 /// Defines how an existing table is compared.
 /// </summary>
+[PublicAPI]
 public enum SafeMigrationTableMode
 {
     /// <summary>

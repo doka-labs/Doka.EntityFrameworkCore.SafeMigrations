@@ -9,9 +9,11 @@ public sealed class PostgreSqlDiagnosticsIntegrationTests : PostgreSqlSafeMigrat
         PostgreSqlContainerFixture fixture
     ) : base(fixture) { }
 
+    /// <summary>Preflight Diagnostics Distinguish Foreign Key Actions And Index Order.</summary>
     [Fact]
     public async Task PreflightDiagnostics_DistinguishForeignKeyActionsAndIndexOrder()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -50,6 +52,7 @@ public sealed class PostgreSqlDiagnosticsIntegrationTests : PostgreSqlSafeMigrat
                 ]),
             SafeMigrationPolicy.ThrowIfDifferent);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -58,6 +61,7 @@ public sealed class PostgreSqlDiagnosticsIntegrationTests : PostgreSqlSafeMigrat
                 new SafeMigrationRunOptions("typed-diagnostics"),
                 CancellationToken.None);
 
+        // Assert
         var foreignKey = Assert.Single(
             report.Assessments,
             assessment => assessment.OperationKind == SafeMigrationOperationKind.EnsureForeignKey);
@@ -74,9 +78,11 @@ public sealed class PostgreSqlDiagnosticsIntegrationTests : PostgreSqlSafeMigrat
         Assert.Contains(index.Differences, difference => difference.Facet == "index_key_order");
     }
 
+    /// <summary>Preflight Diagnostics Bound Long Composite Identity Values.</summary>
     [Fact]
     public async Task PreflightDiagnostics_BoundLongCompositeIdentityValues()
     {
+        // Arrange
         var principalColumns = Enumerable
             .Range(1, 8)
             .Select(ordinal => $"principal_column_{ordinal:00}_{new string('p', 24)}")
@@ -136,6 +142,7 @@ public sealed class PostgreSqlDiagnosticsIntegrationTests : PostgreSqlSafeMigrat
                 dependentColumns.Select(column => new ExpectedIndexKeyDefinition(column: column))),
             SafeMigrationPolicy.ThrowIfDifferent);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -150,6 +157,7 @@ public sealed class PostgreSqlDiagnosticsIntegrationTests : PostgreSqlSafeMigrat
             .Where(static difference => difference.Facet is "foreign_key_column_order" or "index_key_order")
             .ToArray();
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(2, differences.Length);
         Assert.All(
@@ -164,9 +172,11 @@ public sealed class PostgreSqlDiagnosticsIntegrationTests : PostgreSqlSafeMigrat
             });
     }
 
+    /// <summary>Preflight Diagnostics Hash Different Defaults Without Disclosing Their Content.</summary>
     [Fact]
     public async Task PreflightDiagnostics_HashDifferentDefaultsWithoutDisclosingTheirContent()
     {
+        // Arrange
         const string liveDefault = "private-live-default";
         const string targetDefault = "private-target-default";
 
@@ -189,6 +199,7 @@ public sealed class PostgreSqlDiagnosticsIntegrationTests : PostgreSqlSafeMigrat
                 defaultValue: SafeMigrationDefaultValue.Literal(targetDefault)),
             SafeMigrationPolicy.ThrowIfDifferent);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -197,13 +208,15 @@ public sealed class PostgreSqlDiagnosticsIntegrationTests : PostgreSqlSafeMigrat
                 new SafeMigrationRunOptions("private-default-diagnostic"),
                 CancellationToken.None);
 
+        var json = Encoding.UTF8.GetString(SafeMigrationReportJson.SerializeToUtf8Bytes(report));
+        var failure = Record.Exception(report.ThrowIfBlocked);
+
+        // Assert
+        var exception = Assert.IsType<SafeMigrationPreflightException>(failure);
         var assessment = Assert.Single(report.Assessments);
         var difference = Assert.Single(
             assessment.Differences,
             static candidate => candidate.Facet == "column_default_digest");
-
-        var json = Encoding.UTF8.GetString(SafeMigrationReportJson.SerializeToUtf8Bytes(report));
-        var exception = Assert.Throws<SafeMigrationPreflightException>(report.ThrowIfBlocked);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.DoesNotContain(assessment.Differences, static candidate => candidate.Facet == "column_default_kind");

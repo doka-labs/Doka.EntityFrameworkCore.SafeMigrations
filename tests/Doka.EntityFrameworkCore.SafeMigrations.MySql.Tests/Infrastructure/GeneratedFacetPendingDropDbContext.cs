@@ -127,6 +127,7 @@ public sealed class GeneratedFacetPendingDropDbContext : DbContext
 }
 
 /// <summary>Exposes only the retained target members, not the physically existing unrelated column.</summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public sealed class GeneratedFacetPendingDropRow
 {
     /// <summary>Gets or sets the stable native row identifier.</summary>

@@ -1,25 +1,48 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 
+/// <summary>
+/// Provides the SQLite tooling db context fixture contract.
+/// </summary>
 public sealed class SqliteToolingDbContext : SqliteToolingDbContextBase<SqliteToolingDbContext>
 {
+    /// <summary>
+    /// Initializes the fixture with explicitly supplied dependencies and ownership.
+    /// </summary>
+    /// <param name="connectionString">The connection string defining this isolated fixture case.</param>
     public SqliteToolingDbContext(
         string connectionString
     ) : base(connectionString, SafeMigrationScaffoldingMode.Strict) { }
 }
 
+/// <summary>
+/// Provides the SQLite legacy tooling db context fixture contract.
+/// </summary>
 public sealed class SqliteLegacyToolingDbContext : SqliteToolingDbContextBase<SqliteLegacyToolingDbContext>
 {
+    /// <summary>
+    /// Initializes the fixture with explicitly supplied dependencies and ownership.
+    /// </summary>
+    /// <param name="connectionString">The connection string defining this isolated fixture case.</param>
     public SqliteLegacyToolingDbContext(
         string connectionString
     ) : base(connectionString, SafeMigrationScaffoldingMode.LegacyConvergence) { }
 }
 
+/// <summary>
+/// Provides the SQLite tooling db context base fixture contract.
+/// </summary>
+/// <typeparam name="TContext">The concrete tooling context that owns this fixture's EF options.</typeparam>
 public abstract class SqliteToolingDbContextBase<TContext> : DbContext
     where TContext : DbContext
 {
     private readonly string _connectionString;
     private readonly SafeMigrationScaffoldingMode _mode;
 
+    /// <summary>
+    /// Initializes the fixture with explicitly supplied dependencies and ownership.
+    /// </summary>
+    /// <param name="connectionString">The connection string defining this isolated fixture case.</param>
+    /// <param name="mode">The mode defining this isolated fixture case.</param>
     protected SqliteToolingDbContextBase(
         string connectionString,
         SafeMigrationScaffoldingMode mode
@@ -31,6 +54,7 @@ public abstract class SqliteToolingDbContextBase<TContext> : DbContext
         _mode = mode;
     }
 
+    /// <inheritdoc />
     protected override void OnConfiguring(
         DbContextOptionsBuilder optionsBuilder
     )
@@ -49,6 +73,7 @@ public abstract class SqliteToolingDbContextBase<TContext> : DbContext
         });
     }
 
+    /// <inheritdoc />
     protected override void OnModelCreating(
         ModelBuilder modelBuilder
     )
@@ -126,6 +151,8 @@ public abstract class SqliteToolingDbContextBase<TContext> : DbContext
         });
     }
 
+    // WHY: EF binds this fixture entity through writable property metadata.
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class ToolingEntity
     {
         public int Id { get; set; }
@@ -134,8 +161,14 @@ public abstract class SqliteToolingDbContextBase<TContext> : DbContext
     }
 }
 
+/// <summary>
+/// Provides the SQLite tooling db context factory fixture contract.
+/// </summary>
+// WHY: EF tooling discovers this factory to create its design-time context.
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public sealed class SqliteToolingDbContextFactory : IDesignTimeDbContextFactory<SqliteToolingDbContext>
 {
+    /// <inheritdoc />
     public SqliteToolingDbContext CreateDbContext(
         string[] args
     ) => new(ReadConnectionString());
@@ -146,8 +179,14 @@ public sealed class SqliteToolingDbContextFactory : IDesignTimeDbContextFactory<
                 "SAFE_MIGRATIONS_SQLITE_CONNECTION_STRING is required for SQLite tooling qualification.");
 }
 
+/// <summary>
+/// Provides the SQLite legacy tooling db context factory fixture contract.
+/// </summary>
+// WHY: EF tooling discovers this factory to create its design-time context.
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public sealed class SqliteLegacyToolingDbContextFactory : IDesignTimeDbContextFactory<SqliteLegacyToolingDbContext>
 {
+    /// <inheritdoc />
     public SqliteLegacyToolingDbContext CreateDbContext(
         string[] args
     ) => new(SqliteToolingDbContextFactory.ReadConnectionString());

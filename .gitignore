@@ -1,6 +1,7 @@
 # Build outputs
 **/bin/
 **/obj/
+**/BenchmarkDotNet.Artifacts/
 
 # NuGet packages and local pack output
 **/*.nupkg

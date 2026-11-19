@@ -1,5 +1,6 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
+/// <summary>Holds the SqlServerGuardRenderingAllocationTests test contracts for this focused fixture topic.</summary>
 public sealed partial class SqlServerGuardRenderingAllocationTests
 {
     /// <summary>Retains every guard byte across direct, deferred, preamble and repair-policy paths.</summary>

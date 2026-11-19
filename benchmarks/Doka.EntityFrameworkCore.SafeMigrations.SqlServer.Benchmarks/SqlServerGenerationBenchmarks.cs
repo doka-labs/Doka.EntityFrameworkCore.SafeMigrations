@@ -2,6 +2,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Benchmarks;
 
 /// <summary>Measures full SQL Server generation against preconstructed column operations.</summary>
 [MemoryDiagnoser]
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public class SqlServerGenerationBenchmarks : IDisposable
 {
     private SqlServerGenerationContext? _context;
@@ -59,6 +60,7 @@ public class SqlServerGenerationBenchmarks : IDisposable
 
 /// <summary>Measures catalog-plan construction independently of SQL rendering.</summary>
 [MemoryDiagnoser]
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public class SqlServerAnalyzerBenchmarks : IDisposable
 {
     private SqlServerSafeMigrationCatalogSqlBuilder? _catalogBuilder;
@@ -113,6 +115,7 @@ public class SqlServerAnalyzerBenchmarks : IDisposable
 
 /// <summary>Measures generation and catalog construction for 1000 supported safe column repairs.</summary>
 [MemoryDiagnoser]
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public class SqlServerRepairBenchmarks : IDisposable
 {
     private SqlServerSafeMigrationCatalogSqlBuilder? _catalogBuilder;
@@ -140,9 +143,12 @@ public class SqlServerRepairBenchmarks : IDisposable
         _ = _context.Model;
         _operations = SqlServerColumnBenchmarkWorkload.CreateRepairOperations(1000);
 
+        // WHY: Qualify each stable prepared slot before any measured generation runs.
+        // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
-        foreach (var operation in _operations.Cast<SafeMigrationOperation>())
+        for (var index = 0; index < _operations.Count; index++)
         {
+            var operation = (SafeMigrationOperation)_operations[index];
             var plan = _catalogBuilder.Build(operation);
             if (operation is not { Policy: SafeMigrationPolicy.RepairIfSafe, Intent: AlterColumnIntent }
                 || plan.IsStaticallyUnsupported
@@ -188,6 +194,7 @@ public class SqlServerRepairBenchmarks : IDisposable
 
 /// <summary>Measures the 384-operation model-managed data workload without fixture construction.</summary>
 [MemoryDiagnoser]
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public class SqlServerModelManagedDataBenchmarks : IDisposable
 {
     private SqlServerSafeMigrationCatalogSqlBuilder? _catalogBuilder;
@@ -253,6 +260,7 @@ public class SqlServerModelManagedDataBenchmarks : IDisposable
 
 /// <summary>Measures canonical model validation and fingerprint creation.</summary>
 [MemoryDiagnoser]
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public class SqlServerCanonicalModelBenchmarks : IDisposable
 {
     private SqlServerGenerationContext? _context;
@@ -317,8 +325,12 @@ internal static class SqlServerBenchmarkPlans
         IReadOnlyList<MigrationOperation> operations
     )
     {
-        foreach (var operation in operations.Cast<SafeMigrationOperation>())
+        // WHY: The immutable operation list is indexable for this complete measured invocation.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var index = 0; index < operations.Count; index++)
         {
+            var operation = (SafeMigrationOperation)operations[index];
             _ = catalogBuilder.Build(operation);
         }
 
@@ -342,6 +354,7 @@ internal sealed class SqlServerGenerationContext : DbContext
 }
 
 /// <summary>Provides the empty canonical model snapshot required by the validation benchmark.</summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 [DbContext(typeof(SqlServerGenerationContext))]
 internal sealed class SqlServerGenerationContextModelSnapshot : ModelSnapshot
 {

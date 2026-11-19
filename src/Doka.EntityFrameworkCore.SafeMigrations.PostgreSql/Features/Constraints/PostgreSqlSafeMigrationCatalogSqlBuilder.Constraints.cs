@@ -302,10 +302,14 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     {
         var rows = required
             .Select(value => $"(CAST({Literal(value.Name)} AS pg_catalog.name), {NameArray(value.Columns)})")
+
+            // WHY: Keep explicit fluent materialization and its existing
+            // ownership/evaluation boundary instead of an implicit spread.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var rowSource = ConstraintRowsWithoutName(table, schema, 'u');
-        var columnsMatch = """
+        const string columnsMatch = """
              AND ARRAY(SELECT a.attname FROM unnest(co.conkey) WITH ORDINALITY AS key(attnum, ord)
             JOIN pg_catalog.pg_attribute a ON a.attrelid = co.conrelid AND a.attnum = key.attnum
             ORDER BY key.ord) = required.columns
