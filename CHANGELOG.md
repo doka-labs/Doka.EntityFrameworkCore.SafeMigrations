@@ -62,6 +62,10 @@ Updating packages alone requires no schema migration or history rewrite.
 
 ### Fixed
 
+- Verify canonical database images by their immutable repository/digest address
+  before qualification, without following republished version tags. Preserve
+  the original tagged-pinned image for consumers and reject unavailable pins
+  before exporting them to native or merged-coverage jobs.
 - Run test bodies and shared-fixture cleanup outside the collection admission
   lock while retaining ownership before execution. Synchronous callbacks no
   longer hold the global gate; cancellation, bounded parallelism and drain-before-cleanup remain enforced.

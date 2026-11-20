@@ -125,14 +125,17 @@ class CanonicalImageAdmissionTests(unittest.TestCase):
         images = {row.split()[3]: row.split()[1] for row in
                   (ROOT / "docker/database-images.Dockerfile").read_text(encoding="ascii").splitlines()
                   if row.startswith("FROM ")}
-        steps = {"Resolve canonical coverage images": ("mysql84", "postgres18", "sqlserver2022"),
+        inspected = {target: image.partition("@")[0].rpartition(":")[0] + "@" + image.partition("@")[2]
+                     for target, image in images.items()}
+        steps = {"Resolve canonical coverage images": ("mariadb123", "postgres18", "sqlserver2022"),
                  "Resolve canonical MySQL or MariaDB image": ("mysql84",),
                  "Resolve canonical PostgreSQL image": ("postgres18",),
                  "Resolve canonical SQL Server image": ("sqlserver2022",)}
-        variables = {"mysql84": "SAFE_MIGRATIONS_MYSQL_IMAGE", "postgres18": "SAFE_MIGRATIONS_POSTGRES_IMAGE",
+        variables = {"mysql84": "SAFE_MIGRATIONS_MYSQL_IMAGE", "mariadb123": "SAFE_MIGRATIONS_MYSQL_IMAGE",
+                     "postgres18": "SAFE_MIGRATIONS_POSTGRES_IMAGE",
                      "sqlserver2022": "SAFE_MIGRATIONS_SQLSERVER_IMAGE"}
         for name, targets in steps.items():
-            for failing in (None, *dict.fromkeys((targets[0], targets[-1]))):
+            for failing in (None, *targets):
                 with self.subTest(step=name, failing=failing), tempfile.TemporaryDirectory() as directory:
                     # Arrange
                     root = Path(directory)
@@ -147,6 +150,8 @@ class CanonicalImageAdmissionTests(unittest.TestCase):
                         '#!/usr/bin/env bash\nset -euo pipefail\n'
                         '[[ "$#" == 3 && "$1 $2" == "manifest inspect" && "$3" == *@sha256:* ]] || exit 86\n'
                         'printf "%s\\n" "$3" >> "$IMAGE_LOG"\n'
+                        'repository="${3%@*}"\n'
+                        '[[ "${repository##*/}" != *:* ]] || exit 86\n'
                         '[[ "$3" != "$FAIL_IMAGE" ]] || exit 7\n', encoding="ascii")
                     (native / "docker").chmod(0o755)
                     log = root / "images.log"
@@ -155,17 +160,17 @@ class CanonicalImageAdmissionTests(unittest.TestCase):
                     step = source.split(f"- name: {name}\n", 1)[1].split("\n      - name:", 1)[0]
                     command = textwrap.dedent(step.split("        run: |\n", 1)[1])
                     stop = len(targets) if failing is None else targets.index(failing)
-                    env = {**os.environ, **{value: key for key, value in variables.items()},
+                    env = {**os.environ, **{variables[target]: target for target in targets},
                            "PATH": str(native) + os.pathsep + os.environ["PATH"], "GITHUB_ENV": str(exported),
-                           "IMAGE_LOG": str(log), "FAIL_IMAGE": images[failing] if failing else ""}
+                           "IMAGE_LOG": str(log), "FAIL_IMAGE": inspected[failing] if failing else ""}
 
                     # Act
                     result = subprocess.run(["bash", "-euo", "pipefail", "-c", command], cwd=root, env=env,
-                                            capture_output=True, text=True, check=False, timeout=5)
+                                            capture_output=True, text=True, check=False)
 
                     # Assert
                     self.assertEqual(0 if failing is None else 7, result.returncode, result.stderr)
-                    self.assertEqual([images[target] for target in targets[:stop + (failing is not None)]],
+                    self.assertEqual([inspected[target] for target in targets[:stop + (failing is not None)]],
                                      log.read_text(encoding="ascii").splitlines() if log.exists() else [])
                     self.assertEqual([f"{variables[target]}={images[target]}" for target in targets[:stop]],
                                      exported.read_text(encoding="ascii").splitlines())

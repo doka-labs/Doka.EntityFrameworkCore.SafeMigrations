@@ -270,7 +270,10 @@ jobs:
         run: |
           for variable in SAFE_MIGRATIONS_MYSQL_IMAGE SAFE_MIGRATIONS_POSTGRES_IMAGE SAFE_MIGRATIONS_SQLSERVER_IMAGE; do
             image="$(bash eng/select-database-image.sh "${!variable}")"
-            docker manifest inspect "$image" >/dev/null
+            # WHY: manifest inspect follows a tag before a digest; admit the immutable address only.
+            tagged_image="${image%@*}"
+            digest_image="${tagged_image%:*}@${image##*@}"
+            docker manifest inspect "$digest_image" >/dev/null
             printf '%s=%s\n' "$variable" "$image" >> "$GITHUB_ENV"
           done
 
@@ -392,7 +395,10 @@ jobs:
       - name: Resolve canonical MySQL or MariaDB image
         run: |
           image="$(bash eng/select-database-image.sh "$SAFE_MIGRATIONS_MYSQL_IMAGE")"
-          docker manifest inspect "$image" >/dev/null
+          # WHY: manifest inspect follows a tag before a digest; admit the immutable address only.
+          tagged_image="${image%@*}"
+          digest_image="${tagged_image%:*}@${image##*@}"
+          docker manifest inspect "$digest_image" >/dev/null
           printf 'SAFE_MIGRATIONS_MYSQL_IMAGE=%s\n' "$image" >> "$GITHUB_ENV"
 
       - name: Setup .NET
@@ -473,7 +479,10 @@ jobs:
       - name: Resolve canonical PostgreSQL image
         run: |
           image="$(bash eng/select-database-image.sh "$SAFE_MIGRATIONS_POSTGRES_IMAGE")"
-          docker manifest inspect "$image" >/dev/null
+          # WHY: manifest inspect follows a tag before a digest; admit the immutable address only.
+          tagged_image="${image%@*}"
+          digest_image="${tagged_image%:*}@${image##*@}"
+          docker manifest inspect "$digest_image" >/dev/null
           printf 'SAFE_MIGRATIONS_POSTGRES_IMAGE=%s\n' "$image" >> "$GITHUB_ENV"
 
       - name: Setup .NET
@@ -604,7 +613,10 @@ jobs:
       - name: Resolve canonical SQL Server image
         run: |
           image="$(bash eng/select-database-image.sh "$SAFE_MIGRATIONS_SQLSERVER_IMAGE")"
-          docker manifest inspect "$image" >/dev/null
+          # WHY: manifest inspect follows a tag before a digest; admit the immutable address only.
+          tagged_image="${image%@*}"
+          digest_image="${tagged_image%:*}@${image##*@}"
+          docker manifest inspect "$digest_image" >/dev/null
           printf 'SAFE_MIGRATIONS_SQLSERVER_IMAGE=%s\n' "$image" >> "$GITHUB_ENV"
 
       - name: Setup .NET

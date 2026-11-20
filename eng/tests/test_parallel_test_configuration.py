@@ -426,7 +426,9 @@ class DatabaseImageCatalogTests(unittest.TestCase):
         executable = Path(directory) / "docker"
         executable.write_text('#!/usr/bin/env bash\nset -euo pipefail\n'
                               '[[ "$#" == 3 && "$1 $2" == "manifest inspect" && "$3" == *@sha256:* ]] || exit 86\n'
-                              'printf "%s\\n" "$3" >> "$IMAGE_ADMISSION_LOG"\n', encoding="ascii")
+                              'printf "%s\\n" "$3" >> "$IMAGE_ADMISSION_LOG"\n'
+                              'repository="${3%@*}"\n'
+                              '[[ "${repository##*/}" != *:* ]] || exit 86\n', encoding="ascii")
         executable.chmod(0o755)
 
         return dict(os.environ, PATH=directory + os.pathsep + os.environ["PATH"],
@@ -528,12 +530,18 @@ class DatabaseImageCatalogTests(unittest.TestCase):
                 self.assertEqual("", result.stdout)
 
     def test_native_workflow_steps_export_resolved_digest_references(self) -> None:
-        """Run actual job commands so a literal stage cannot accidentally reach Testcontainers or EF tooling."""
-        cases = (("mysql-engine", "SAFE_MIGRATIONS_MYSQL_IMAGE", "mysql84"),
-                 ("postgresql-engine", "SAFE_MIGRATIONS_POSTGRES_IMAGE", "postgres18"),
-                 ("sqlserver-engine", "SAFE_MIGRATIONS_SQLSERVER_IMAGE", "sqlserver2022"))
-        for job, variable, target in cases:
-            with self.subTest(job=job), tempfile.TemporaryDirectory() as directory:
+        """Every real pin is checked without its mutable tag, then exported unchanged to actual consumers."""
+        manifest = (REPOSITORY_ROOT / "docker/database-images.Dockerfile").read_text(encoding="ascii")
+        entries = re.findall(r"^FROM (\S+) AS ([a-z][a-z0-9]*)$", manifest, re.M)
+        cases = [(job, variable, target, image)
+                 for prefix, job, variable in (
+                     (("mysql", "mariadb"), "mysql-engine", "SAFE_MIGRATIONS_MYSQL_IMAGE"),
+                     (("postgres",), "postgresql-engine", "SAFE_MIGRATIONS_POSTGRES_IMAGE"),
+                     (("sqlserver",), "sqlserver-engine", "SAFE_MIGRATIONS_SQLSERVER_IMAGE"))
+                 for image, target in entries if target.startswith(prefix)]
+        self.assertEqual(14, len(cases))
+        for job, variable, target, image in cases:
+            with self.subTest(job=job, target=target), tempfile.TemporaryDirectory() as directory:
                 # Arrange
                 command = self.workflow_resolution(job)
                 output = Path(directory) / "environment"
@@ -547,8 +555,8 @@ class DatabaseImageCatalogTests(unittest.TestCase):
                 # Assert
                 self.assertEqual(0, result.returncode, result.stderr)
                 exported = output.read_text(encoding="ascii")
-                self.assertRegex(exported, "^" + variable + r"=.+@sha256:[0-9a-f]{64}\n$")
-                self.assertEqual(exported.split("=", 1)[1].strip(),
+                self.assertEqual(f"{variable}={image}\n", exported)
+                self.assertEqual(image.partition("@")[0].rpartition(":")[0] + "@" + image.partition("@")[2],
                                  (Path(directory) / "images.log").read_text(encoding="ascii").strip())
                 self.assertEqual("", result.stdout)
 
@@ -582,6 +590,15 @@ class DatabaseImageCatalogTests(unittest.TestCase):
                                                 SAFE_MIGRATIONS_MYSQL_IMAGE="mariadb123",
                                                 SAFE_MIGRATIONS_POSTGRES_IMAGE="postgres18",
                                                 SAFE_MIGRATIONS_SQLSERVER_IMAGE="sqlserver2022")
+            images = {row.split()[3]: row.split()[1] for row in
+                      (REPOSITORY_ROOT / "docker/database-images.Dockerfile").read_text(encoding="ascii").splitlines()
+                      if row.startswith("FROM ")}
+            targets = (("SAFE_MIGRATIONS_MYSQL_IMAGE", "mariadb123"),
+                       ("SAFE_MIGRATIONS_POSTGRES_IMAGE", "postgres18"),
+                       ("SAFE_MIGRATIONS_SQLSERVER_IMAGE", "sqlserver2022"))
+            expected = [f"{variable}={images[target]}" for variable, target in targets]
+            inspected = [images[target].partition("@")[0].rpartition(":")[0] + "@" + images[target].partition("@")[2]
+                         for _, target in targets]
 
             # Act
             result = subprocess.run(["bash", "-euo", "pipefail", "-c", command], cwd=REPOSITORY_ROOT,
@@ -590,11 +607,26 @@ class DatabaseImageCatalogTests(unittest.TestCase):
             # Assert
             self.assertEqual(0, result.returncode, result.stderr)
             exports = output.read_text(encoding="ascii").splitlines()
-            self.assertEqual(3, len(exports))
-            self.assertEqual([value.split("=", 1)[1] for value in exports],
+            self.assertEqual(expected, exports)
+            self.assertEqual(inspected,
                              (Path(directory) / "images.log").read_text(encoding="ascii").splitlines())
-            self.assertTrue(all(re.fullmatch(r"SAFE_MIGRATIONS_[A-Z]+_IMAGE=.+@sha256:[0-9a-f]{64}", value)
-                                for value in exports))
+
+    def test_registry_double_distinguishes_moved_tags_from_immutable_addresses(self) -> None:
+        """A moved tag is rejected by the transport counterprobe while the same immutable address remains valid."""
+        for reference, expected_status in (("example.invalid/team/database:1.2@sha256:", 86),
+                                           ("example.invalid/team/database@sha256:", 0)):
+            with self.subTest(reference=reference), tempfile.TemporaryDirectory() as directory:
+                # Arrange
+                image = reference + "a" * 64
+                environment = self.offline_registry(directory)
+
+                # Act
+                result = subprocess.run(["docker", "manifest", "inspect", image], env=environment,
+                                        capture_output=True, text=True, check=False)
+
+                # Assert
+                self.assertEqual(expected_status, result.returncode, result.stderr)
+                self.assertEqual([image], (Path(directory) / "images.log").read_text(encoding="ascii").splitlines())
 
 
 if __name__ == "__main__":

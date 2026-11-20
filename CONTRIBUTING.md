@@ -113,12 +113,17 @@ add hardware-dependent duration gates. Local elapsed times are informational;
 test discovery, overlap, database isolation and cleanup are verified contracts.
 Native SQL Server qualification still requires the declared x86-64 engine cells.
 
-When changing an image pin, verify the complete `tag@sha256:digest` reference
-with `docker manifest inspect`, not only a tag's HTTP HEAD or digest header.
+When changing an image pin, verify `repository@sha256:digest` with
+`docker manifest inspect`, not only a tag's HTTP HEAD or digest header.
+That command follows the tag first when given `tag@sha256:digest`; a
+republished tag would incorrectly reject the still-valid pinned manifest.
+Omit only the tag for admission, then retain the complete original
+`tag@sha256:digest` reference for Testcontainers and native tooling.
 MCR can translate an OCI manifest into Docker-v2 bytes whose advertised digest
 is not independently addressable. Use the stored native manifest identity;
-the exact pinned reference must resolve before qualification starts. CI performs
-this read-only admission before exporting each image, without a floating fallback.
+the exact repository and pinned digest must resolve before qualification starts.
+CI performs this read-only admission before exporting each image unchanged,
+without a floating fallback.
 
 The default local engines are MariaDB 12.3.3 and PostgreSQL
 18.6. Select another qualified image with:
