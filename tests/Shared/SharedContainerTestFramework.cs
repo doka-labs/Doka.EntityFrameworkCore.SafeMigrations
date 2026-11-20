@@ -117,14 +117,36 @@ internal sealed class SharedContainerTestAssemblyRunner<TFixture> : XunitTestAss
 
     public IReadOnlyList<Exception> FixtureFailures => _lifecycle.Failures;
 
+    /// <summary>
+    /// Drains every admitted collection and shares one cleanup task without running callbacks under the gate.
+    /// </summary>
+    /// <returns>The cached, deliberately non-cancelable fixture cleanup task.</returns>
     public Task EnsureFixtureDisposedAsync()
     {
+        TaskCompletionSource<Task> completion;
+        Task<RunSummary>[] runs;
+        Task finish;
+
         lock (_collectionGate)
         {
+            if (_finish is not null)
+            {
+                return _finish;
+            }
+
+            // WHY: Publish cleanup ownership before invoking fixture code, which can complete synchronously.
+            completion = new TaskCompletionSource<Task>(TaskCreationOptions.RunContinuationsAsynchronously);
+            finish = completion.Task.Unwrap();
+            _finish = finish;
+
             // WHY: Snapshot the owned pending runs before cleanup; keep explicit fluent materialization.
             // ReSharper disable once UseCollectionExpression
-            return _finish ??= FinishAsync(_collectionRuns.ToArray());
+            runs = _collectionRuns.ToArray();
         }
+
+        completion.SetResult(FinishAsync(runs));
+
+        return finish;
     }
 
     public override void Dispose()
@@ -164,6 +186,10 @@ internal sealed class SharedContainerTestAssemblyRunner<TFixture> : XunitTestAss
         CancellationTokenSource cancellationTokenSource
     )
     {
+        TaskCompletionSource<Task<RunSummary>> admission;
+        Task<RunSummary> run;
+        CancellationToken cancellationToken;
+
         lock (_collectionGate)
         {
             // WHY: Upstream scheduling can still have queued continuations
@@ -174,28 +200,36 @@ internal sealed class SharedContainerTestAssemblyRunner<TFixture> : XunitTestAss
                 return Task.FromResult(new RunSummary());
             }
 
-            var run = _scheduler.RunAsync(
-                token =>
-                {
-                    token.ThrowIfCancellationRequested();
+            // WHY: A disposed framework source can throw synchronously; read it before publishing pending work.
+            cancellationToken = cancellationTokenSource.Token;
 
-                    // WHY: xUnit owns the source; the scheduler forwards this same source's token.
-                    return new SharedContainerTestCollectionRunner<TFixture>(
-                        testCollection,
-                        testCases,
-                        DiagnosticMessageSink,
-                        messageBus,
-                        TestCaseOrderer,
-                        new ExceptionAggregator(Aggregator),
-                        cancellationTokenSource,
-                        _lifecycle.Fixture).RunAsync();
-                },
-                cancellationTokenSource.Token);
-
+            // WHY: Register the owned run before releasing the gate, so concurrent cleanup cannot miss it.
+            admission = new TaskCompletionSource<Task<RunSummary>>(TaskCreationOptions.RunContinuationsAsynchronously);
+            run = admission.Task.Unwrap();
             _collectionRuns.Add(run);
-
-            return run;
         }
+
+        // WHY: An available scheduler can invoke synchronous tests inline. Never hold the admission lock
+        // across test code: a blocking parallel query would also block admission and runner continuations.
+        admission.SetResult(_scheduler.RunAsync(
+            callbackCancellationToken =>
+            {
+                callbackCancellationToken.ThrowIfCancellationRequested();
+
+                // WHY: xUnit owns the source; the scheduler forwards this same source's token.
+                return new SharedContainerTestCollectionRunner<TFixture>(
+                    testCollection,
+                    testCases,
+                    DiagnosticMessageSink,
+                    messageBus,
+                    TestCaseOrderer,
+                    new ExceptionAggregator(Aggregator),
+                    cancellationTokenSource,
+                    _lifecycle.Fixture).RunAsync();
+            },
+            cancellationToken));
+
+        return run;
     }
 
     private async Task FinishAsync(

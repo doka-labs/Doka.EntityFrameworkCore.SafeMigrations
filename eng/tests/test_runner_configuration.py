@@ -52,6 +52,21 @@ class HostedRunnerConfigurationTests(unittest.TestCase):
         self.assertTrue(runners)
         self.assertTrue(all(label == "ubuntu-26.04" for _, label in runners), runners)
 
+    def test_database_version_literals_remain_text_in_matrix_and_environment(self):
+        """YAML numeric coercion must not turn a native version such as 15.20 into 15.2."""
+        # Arrange
+        source = (ROOT / ".github/workflows/quality-gates.yml").read_text(encoding="ascii")
+
+        # Act
+        values = re.findall(r"^\s*(?:-\s+)?(?:version|SAFE_MIGRATIONS_[A-Z]+_VERSION):\s*([^\n]+)$",
+                            source, re.MULTILINE)
+        literals = [value for value in values if not value.startswith("${{")]
+
+        # Assert
+        self.assertEqual(17, len(literals))
+        for value in literals:
+            self.assertRegex(value, r"^(['\"])[0-9]+(?:\.[0-9]+)*\1$")
+
     def test_exact_runner_is_accepted_across_independent_workflows(self):
         """The gate accepts more than one owned workflow without SDK evaluation."""
         # Arrange

@@ -3,6 +3,145 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 /// <summary>Exercises the actual xUnit runner chain with fake test cases and container-free fixtures.</summary>
 public sealed class SharedContainerRunnerTests
 {
+    /// <summary>Neither synchronous test bodies nor fixture cleanup execute under the admission lock.</summary>
+    /// <param name="observeCleanup">Whether the callback belongs to cleanup instead of collection execution.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RunnerCallbacksExecuteOutsideTheAdmissionLock(
+        bool observeCleanup
+    )
+    {
+        // Arrange
+        Lock? gate = null;
+        var observations = new ConcurrentQueue<bool>();
+        var fixture = new RunnerFixture
+        {
+            Cleanup = () =>
+            {
+                ObserveCallback(observeCleanup);
+
+                return Task.CompletedTask;
+            },
+        };
+
+        var lifecycle = new SharedContainerFixtureLifecycle<RunnerFixture>(() => fixture);
+        var assembly = CreateAssembly();
+        var sink = new RecordingSink();
+        var testCase = CreateCase<FirstConsumer>(
+            assembly,
+            observeArguments: (_, cancellationToken) =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                ObserveCallback(!observeCleanup);
+
+                return Task.FromResult(new RunSummary { Total = 1 });
+            });
+
+        using var runner = new SharedContainerTestAssemblyRunner<RunnerFixture>(
+            assembly,
+            [testCase],
+            sink,
+            sink,
+            new RunnerOptions(),
+            lifecycle);
+
+        var field = runner
+            .GetType()
+            .GetField("_collectionGate", BindingFlags.Instance | BindingFlags.NonPublic);
+
+        Assert.NotNull(field);
+        gate = Assert.IsType<Lock>(field.GetValue(runner));
+        using var cancellation = new CancellationTokenSource();
+        using var messageBus = new SynchronousMessageBus(sink, stopOnFail: false);
+        await InvokeStartingHookAsync(runner, cancellation.Token);
+
+        // Act
+        var summary = await InvokeCollectionRunner(runner, testCase, messageBus, cancellation, cancellation.Token);
+        await runner.EnsureFixtureDisposedAsync();
+
+        // Assert
+        Assert.Equal(1, summary.Total);
+        Assert.Equal(1, fixture.DisposeCount);
+        Assert.False(Assert.Single(observations));
+
+        void ObserveCallback(
+            bool observe
+        )
+        {
+            if (observe)
+            {
+                // WHY: Reflection needs the constructed runner; the capture is assigned once
+                // before either callback runs.
+                // ReSharper disable once AccessToModifiedClosure
+                var admissionGate = gate
+                    ?? throw new InvalidOperationException(
+                        "The admission lock must be captured before callback execution.");
+
+                observations.Enqueue(admissionGate.IsHeldByCurrentThread);
+            }
+        }
+    }
+
+    /// <summary>Cleanup requested by an inline test body still owns and drains that admitted collection.</summary>
+    [Fact]
+    public async Task InlineCollectionIsOwnedBeforeItsCallbackCanRequestCleanup()
+    {
+        // Arrange
+        var fixture = new RunnerFixture();
+        var lifecycle = new SharedContainerFixtureLifecycle<RunnerFixture>(() => fixture);
+        var assembly = CreateAssembly();
+        var sink = new RecordingSink();
+        SharedContainerTestAssemblyRunner<RunnerFixture>? runner = null;
+        Task? cleanup = null;
+        var cleanupCompletedInline = true;
+        var inlineDisposeCount = -1;
+        var testCase = CreateCase<FirstConsumer>(
+            assembly,
+            observeArguments: (_, cancellationToken) =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                // WHY: The case precedes runner construction; admission happens only after
+                // this capture is assigned once.
+                // ReSharper disable once AccessToModifiedClosure
+                var activeRunner = runner
+                    ?? throw new InvalidOperationException("The runner must exist before admission.");
+
+                cleanup = activeRunner.EnsureFixtureDisposedAsync();
+                cleanupCompletedInline = cleanup.IsCompleted;
+                inlineDisposeCount = fixture.DisposeCount;
+
+                return Task.FromResult(new RunSummary { Total = 1 });
+            });
+
+        using var ownedRunner = new SharedContainerTestAssemblyRunner<RunnerFixture>(
+            assembly,
+            [testCase],
+            sink,
+            sink,
+            new RunnerOptions(),
+            lifecycle);
+
+        runner = ownedRunner;
+        using var cancellation = new CancellationTokenSource();
+        using var messageBus = new SynchronousMessageBus(sink, stopOnFail: false);
+        await InvokeStartingHookAsync(runner, cancellation.Token);
+
+        // Act
+        var summary = await InvokeCollectionRunner(runner, testCase, messageBus, cancellation, cancellation.Token);
+        await runner.EnsureFixtureDisposedAsync();
+
+        // Assert
+        Assert.Equal(1, summary.Total);
+        Assert.NotNull(cleanup);
+        Assert.Same(cleanup, runner.EnsureFixtureDisposedAsync());
+        Assert.True(cleanup.IsCompletedSuccessfully);
+        Assert.False(cleanupCompletedInline);
+        Assert.Equal(0, inlineDisposeCount);
+        Assert.Equal(1, fixture.DisposeCount);
+    }
+
     /// <summary>An owned bridge cannot accept a token different from the framework source it will invoke.</summary>
     /// <param name="matching">Whether the supplied token belongs to the actual framework cancellation source.</param>
     [Theory]

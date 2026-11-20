@@ -212,7 +212,7 @@ class MaintenanceTests(unittest.TestCase):
         """A declared source patch change changes the observed required producer."""
         # Arrange
         source = (ROOT / ".github/workflows/quality-gates.yml").read_text(encoding="ascii")
-        changed = source.replace("version: 12.3.3", "version: 12.3.99")
+        changed = source.replace("version: '12.3.3'", "version: '12.3.99'")
 
         # Act
         names = maintenance.qualification_producers(changed)

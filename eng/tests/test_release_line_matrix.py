@@ -83,7 +83,8 @@ class NativeMatrixTests(unittest.TestCase):
         changed = source.replace(original, mapping_row(fields, ("version", "engine", "image")), 1)
         all_names = maintenance.qualification_producers(source)
         expected = maintenance.qualification_producers(changed)
-        blocked = f"Full qualification / {fields['engine']} {fields['version']}"
+        version = fields["version"].strip("\"'")
+        blocked = f"Full qualification / {fields['engine']} {version}"
         jobs = [{"id": index + 1, "name": name, "status": "completed",
                  "conclusion": "skipped" if name == blocked else "success"}
                 for index, name in enumerate(all_names)]

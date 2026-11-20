@@ -251,9 +251,9 @@ jobs:
     timeout-minutes: 45
     env:
       SAFE_MIGRATIONS_MYSQL_ENGINE: mariadb
-      SAFE_MIGRATIONS_MYSQL_VERSION: 12.3.3
+      SAFE_MIGRATIONS_MYSQL_VERSION: '12.3.3'
       SAFE_MIGRATIONS_MYSQL_IMAGE: mariadb123
-      SAFE_MIGRATIONS_POSTGRES_VERSION: 18.7
+      SAFE_MIGRATIONS_POSTGRES_VERSION: '18.7'
       SAFE_MIGRATIONS_POSTGRES_IMAGE: postgres18
       SAFE_MIGRATIONS_SQLSERVER_VERSION: '2022'
       SAFE_MIGRATIONS_SQLSERVER_IMAGE: sqlserver2022
@@ -362,22 +362,22 @@ jobs:
       matrix:
         include:
           - engine: mysql
-            version: 8.4.13
+            version: '8.4.13'
             image: mysql84
           - engine: mysql
-            version: 9.7.4
+            version: '9.7.4'
             image: mysql97
           - engine: mariadb
-            version: 10.11.19
+            version: '10.11.19'
             image: mariadb1011
           - engine: mariadb
-            version: 11.4.13
+            version: '11.4.13'
             image: mariadb114
           - engine: mariadb
-            version: 11.8.9
+            version: '11.8.9'
             image: mariadb118
           - engine: mariadb
-            version: 12.3.3
+            version: '12.3.3'
             image: mariadb123
     env:
       SAFE_MIGRATIONS_MYSQL_ENGINE: ${{ matrix.engine }}
@@ -450,15 +450,16 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - version: 14.25
+          # WHY: Bare numeric YAML loses version identity: 15.20 becomes 15.2.
+          - version: '14.25'
             image: postgres14
-          - version: 15.20
+          - version: '15.20'
             image: postgres15
-          - version: 16.16
+          - version: '16.16'
             image: postgres16
-          - version: 17.12
+          - version: '17.12'
             image: postgres17
-          - version: 18.7
+          - version: '18.7'
             image: postgres18
     env:
       SAFE_MIGRATIONS_POSTGRES_IMAGE: ${{ matrix.image }}

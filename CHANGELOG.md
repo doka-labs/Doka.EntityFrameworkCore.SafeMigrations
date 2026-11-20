@@ -62,6 +62,12 @@ Updating packages alone requires no schema migration or history rewrite.
 
 ### Fixed
 
+- Run test bodies and shared-fixture cleanup outside the collection admission
+  lock while retaining ownership before execution. Synchronous callbacks no
+  longer hold the global gate; cancellation, bounded parallelism and drain-before-cleanup remain enforced.
+- Preserve database version identity as quoted YAML text in qualification
+  matrices and fixed environment values, so PostgreSQL 15.20 is not coerced
+  to 15.2 before strict native tooling validation.
 - Correct the SQL Server 2019/2022/2025 image pins to their addressable native
   OCI manifest identities. Verify exact pinned image references before native
   and merged-coverage qualification, without tag fallback or weaker test gates.
