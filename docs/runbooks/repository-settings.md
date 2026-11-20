@@ -52,7 +52,7 @@ Dependency Review is a separate supply-chain decision rather than another
 product matrix cell. GitHub Automatic Dependency Submission owns the resolved
 NuGet snapshots. The read-only `dependency-review` workflow uses the official
 action's bounded retry and rejects new high-or-critical vulnerabilities and
-dependencies outside the approved license set. Action v5.0.0 itself proceeds
+dependencies outside the approved license set. Action v5.0.1 itself proceeds
 after its retry timeout when snapshot warnings remain; the following header
 verification therefore requires GitHub's warning header to be present and
 empty. The public REST reference did not specify this header on 2026-08-28;

@@ -18,7 +18,7 @@ internal static class DatabaseImageCatalog
     internal const string DefaultMySqlVersion = "12.3.3";
 
     /// <summary>Identifies the existing default PostgreSQL qualification version.</summary>
-    internal const string DefaultPostgreSqlVersion = "18.6";
+    internal const string DefaultPostgreSqlVersion = "18.7";
 
     /// <summary>Identifies the existing default supported x64 SQL Server target.</summary>
     internal const string DefaultSqlServerTarget = "sqlserver2022";

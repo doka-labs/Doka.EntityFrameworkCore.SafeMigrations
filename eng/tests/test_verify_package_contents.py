@@ -43,7 +43,7 @@ def write_packages(
     """Create the exact five-package fixture without restoring or loading code."""
     for suffix, provider in PROVIDER_DEPENDENCIES.items():
         package_id = CORE_ID + suffix
-        dependencies = [(provider, "[10.0.14,10.1.0)")]
+        dependencies = [(provider, "[10.0.15,10.1.0)")]
         if suffix:
             core_version = (core_versions or {}).get(suffix, f"[{package_version}]")
             if core_version is not None:
@@ -61,7 +61,7 @@ def write_packages(
             dependencies.append((transport_leak[1], minimum))
 
         if (suffix == ".SqlServer" and pkcs_version is not None) or suffix == leak:
-            dependencies.append((PKCS_ID, pkcs_version or "9.0.22"))
+            dependencies.append((PKCS_ID, pkcs_version or "10.0.15"))
 
         if benchmark_leak is not None and suffix == benchmark_leak[0]:
             dependencies.append((benchmark_leak[1], "0.15.8"))
@@ -164,7 +164,7 @@ class VerifyPackageContentsTests(unittest.TestCase):
                 package_version = version
 
                 # Act
-                result = verify("9.0.22", package_version=package_version)
+                result = verify("10.0.15", package_version=package_version)
 
                 # Assert
                 self.assertEqual(0, result.returncode, result.stderr)
@@ -178,7 +178,7 @@ class VerifyPackageContentsTests(unittest.TestCase):
                     versions = {suffix: core_version}
 
                     # Act
-                    result = verify("9.0.22", core_versions=versions)
+                    result = verify("10.0.15", core_versions=versions)
 
                     # Assert
                     self.assertNotEqual(0, result.returncode)
@@ -193,7 +193,7 @@ class VerifyPackageContentsTests(unittest.TestCase):
                     leak = (suffix, kind)
 
                     # Act
-                    result = verify("9.0.22", annotation_leak=leak)
+                    result = verify("10.0.15", annotation_leak=leak)
 
                     # Assert
                     self.assertNotEqual(0, result.returncode)
@@ -208,7 +208,7 @@ class VerifyPackageContentsTests(unittest.TestCase):
                     leak = (suffix, name)
 
                     # Act
-                    result = verify("9.0.22", benchmark_leak=leak)
+                    result = verify("10.0.15", benchmark_leak=leak)
 
                     # Assert
                     self.assertNotEqual(0, result.returncode)
@@ -216,7 +216,7 @@ class VerifyPackageContentsTests(unittest.TestCase):
 
     def test_accepts_published_fixed_minimum(self) -> None:
         """Keep the patched minimum compatible with the full five-package contract."""
-        result = verify("9.0.22")
+        result = verify("10.0.15")
 
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertIn("package contents verified", result.stdout)
@@ -230,7 +230,8 @@ class VerifyPackageContentsTests(unittest.TestCase):
 
     def test_rejects_outdated_or_exactly_locked_published_minimum(self) -> None:
         """Reject stale servicing floors and exact locks that reject future patches."""
-        for version in ("9.0.11", "9.0.20", "9.0.21", "[9.0.11,10.0.0)", "[9.0.22]"):
+        for version in ("9.0.11", "9.0.20", "9.0.21", "9.0.22", "9.0.23", "10.0.13", "10.0.14",
+                        "[9.0.11,10.0.0)", "[9.0.22]", "[9.0.23]", "[10.0.15]"):
             with self.subTest(version=version):
                 result = verify(version)
 
@@ -241,7 +242,7 @@ class VerifyPackageContentsTests(unittest.TestCase):
         """Central pinning must not introduce SQL Server assets into sibling packages."""
         for suffix in ("", ".MySql", ".PostgreSql", ".Sqlite"):
             with self.subTest(provider=CORE_ID + suffix):
-                result = verify("9.0.22", leak=suffix)
+                result = verify("10.0.15", leak=suffix)
 
                 self.assertNotEqual(0, result.returncode)
                 self.assertIn("SQL Server-only PKCS dependency", result.stderr)
@@ -256,7 +257,7 @@ class VerifyPackageContentsTests(unittest.TestCase):
                     versions = {name: version}
 
                     # Act
-                    result = verify("9.0.22", transport_versions=versions)
+                    result = verify("10.0.15", transport_versions=versions)
 
                     # Assert
                     self.assertNotEqual(0, result.returncode)
@@ -274,7 +275,7 @@ class VerifyPackageContentsTests(unittest.TestCase):
                     leak = (suffix, name)
 
                     # Act
-                    result = verify("9.0.22", transport_leak=leak)
+                    result = verify("10.0.15", transport_leak=leak)
 
                     # Assert
                     self.assertNotEqual(0, result.returncode)
@@ -291,13 +292,13 @@ class VerifyPackageContentsTests(unittest.TestCase):
 
         for schema in schemas:
             with self.subTest(schema=schema):
-                result = verify("9.0.22", omitted_schema=schema)
+                result = verify("10.0.15", omitted_schema=schema)
 
                 self.assertNotEqual(0, result.returncode)
 
     def test_accepts_fixed_isolated_consumer_package(self) -> None:
         """The consumer guard must accept the patched package identity and kind."""
-        libraries = {f"{PKCS_ID}/9.0.22": {"type": "package"}}
+        libraries = {f"{PKCS_ID}/10.0.15": {"type": "package"}}
 
         result = verify_consumer_graph(libraries)
 
@@ -309,7 +310,13 @@ class VerifyPackageContentsTests(unittest.TestCase):
             {},
             {f"{PKCS_ID}/9.0.11": {"type": "package"}},
             {f"{PKCS_ID}/9.0.21": {"type": "package"}},
+            {f"{PKCS_ID}/9.0.22": {"type": "package"}},
+            {f"{PKCS_ID}/9.0.23": {"type": "package"}},
+            {f"{PKCS_ID}/10.0.13": {"type": "package"}},
+            {f"{PKCS_ID}/10.0.14": {"type": "package"}},
             {f"{PKCS_ID}/9.0.22": {"type": "project"}},
+            {f"{PKCS_ID}/9.0.23": {"type": "project"}},
+            {f"{PKCS_ID}/10.0.15": {"type": "project"}},
         )
 
         for libraries in variants:

@@ -326,9 +326,13 @@ Restoring repository access is distinct from restoring a consumer database.
   retrieved 2026-08-28; the published response contract does not specify the
   snapshot-warning header consumed by the official action.
 - [Dependency Review Action v5.0.0](https://github.com/actions/dependency-review-action/tree/a1d282b36b6f3519aa1f3fc636f609c47dddb294),
-  retrieved 2026-08-28; the workflow uses the exact tagged commit and checks
+  retrieved 2026-08-28; the historical workflow used the exact tagged commit and checked
   the comparison warning header read in the pinned
   `src/dependency-graph.ts` implementation after its bounded retry.
+- [Action v5.0.1](https://github.com/actions/dependency-review-action/tree/bbc44d14a204704ccc493733616cd1e93a0321ec),
+  retrieved 2026-11-20; the current workflow uses this tagged commit. Its
+  PURL comparison still ignores versions and its retry can retain snapshot
+  warnings, so the independent exact-license and completeness guards remain.
 - [OpenSSF Passing criteria](https://www.bestpractices.dev/en/criteria/0),
   retrieved 2026-08-28; analysis and response evidence must be measured.
 - [GitHub private vulnerability reporting](https://docs.github.com/en/code-security/how-tos/report-and-fix-vulnerabilities/configure-vulnerability-reporting/configure-for-a-repository),

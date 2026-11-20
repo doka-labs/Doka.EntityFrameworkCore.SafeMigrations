@@ -7,7 +7,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 public sealed class RepositoryWorkflowContractTests
 {
     private const string DependencyReviewAction =
-        "actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0";
+        "actions/dependency-review-action@bbc44d14a204704ccc493733616cd1e93a0321ec # v5.0.1";
 
     /// <summary>
     /// Keeps untrusted restore separate from snapshot writes and binds verdicts to the PR head.

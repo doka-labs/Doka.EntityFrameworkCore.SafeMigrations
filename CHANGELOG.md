@@ -8,6 +8,12 @@ the shared release identity described in [Release process](docs/release-process.
 
 ### Changed
 
+- Refresh SDK 10.0.404, EF Core/DI/dotnet-ef 10.0.15, Testcontainers 4.17.0,
+  test SDK 18.12.0, Roslyn analyzers 5.12.0 and the pinned Dependency Review
+  5.0.1/Scorecard 2.6.0 Actions. SQL Server publishes PKCS minimum 10.0.15
+  because EF Core SQL Server 10.0.15 now requires PKCS 10.x. Refresh existing
+  database-line patches and image digests without adding rolling series;
+  retain SqlClient 6.1.8 and MySqlConnector 2.6.2 with opt-in 3.0.0 support.
 - Raise the MySQL/MariaDB adapter's Doka range to `[10.7.0,10.8.0)` and
   restore the public 10.7.0 package with System.IO.Hashing minimum 10.0.15.
   Retain .NET/EF Core 10, explicit MySqlConnector minimum 2.6.2, provider
