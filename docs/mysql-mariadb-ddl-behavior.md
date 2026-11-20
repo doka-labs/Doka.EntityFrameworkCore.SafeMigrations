@@ -1,11 +1,13 @@
 # MySQL and MariaDB DDL behavior
 
-Version 10.7.2 corrects native nested Boolean, temporal and expression-index
-comparisons while retaining explicit InnoDB contracts, certified generated/CHECK
-boundaries and native independent DROP proofs. Review the
-[current upgrade notes](support-and-qualification.md#upgrade-to-1072) for captured
-numeric-default approvals, required cancellation arguments and dependency floors,
-and the earlier
+Version 10.7.3 preserves the native nested Boolean, temporal and expression-index
+corrections from 10.7.2 and fixes owned asynchronous work/cleanup lifetimes.
+Explicit InnoDB contracts, certified generated/CHECK boundaries and native
+independent DROP proofs remain. Review the
+[current upgrade notes](support-and-qualification.md#upgrade-to-1073) for
+ownership, cleanup and dependency floors, the
+[10.7.2 upgrade](support-and-qualification.md#upgrade-to-1072) for affected
+captured numeric-default approvals, and the earlier
 [10.6.0 contract changes](support-and-qualification.md#upgrade-to-1060) for
 conditional fingerprint approvals and conservative boundaries.
 

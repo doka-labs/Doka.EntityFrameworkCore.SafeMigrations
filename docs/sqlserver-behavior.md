@@ -1,10 +1,14 @@
 # SQL Server behavior
 
-Version 10.7.2 corrects scalar predicate rendering and CHECK dependency parsing
-while retaining UNKNOWN, certified computed/CHECK contracts and ordered native
-DROP blockers. Review the
-[current upgrade notes](support-and-qualification.md#upgrade-to-1072) for expression
-corrections, required cancellation arguments and dependency floors, and the earlier
+Version 10.7.3 fixes unproven application-lock results and owned scope cleanup
+without taking ownership of caller transactions or hiding primary failures.
+The scalar-predicate and CHECK parsing corrections from 10.7.2, UNKNOWN,
+certified computed/CHECK contracts and ordered native DROP blockers remain.
+Review the
+[current upgrade notes](support-and-qualification.md#upgrade-to-1073) for
+ownership, cleanup and SQL Server dependency floors, the
+[10.7.2 upgrade](support-and-qualification.md#upgrade-to-1072) for expression
+corrections, and the earlier
 [10.6.0 contract changes](support-and-qualification.md#upgrade-to-1060) for
 conditional fingerprint approvals and conservative boundaries.
 

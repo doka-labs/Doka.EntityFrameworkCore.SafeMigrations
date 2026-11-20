@@ -5,16 +5,18 @@ untagged authorized source-line commit first, then waits at the protected `nuget
 Only after that wait begins does the operator create the signed tag and approve
 publication. Run every command separately and stop on the first failure.
 
-The release target is stable 10.7.2 for all five package IDs, retaining the
+The release target is stable 10.7.3 for all five package IDs, retaining the
 inventory introduced in 10.4.6. Review the
-[10.7.2 compatibility notes](../../CHANGELOG.md#1072---2026-11-11) and
-[upgrade procedure](../support-and-qualification.md#upgrade-to-1072), including
-native expression/catalog corrections, renewed affected numeric-default
-approvals, unchanged public APIs, and the
-Doka 10.6.5, MySqlConnector 2.6.2, EF 10.0.14, SqlClient 6.1.8 and PKCS
-9.0.22 floors and retained strict release audits. Review the
+[10.7.3 compatibility notes](../../CHANGELOG.md#1073---2026-11-20) and
+[upgrade procedure](../support-and-qualification.md#upgrade-to-1073), including
+asynchronous ownership/cleanup corrections, exact matching Core dependencies,
+unchanged public APIs and the Doka 10.7.0, MySqlConnector 2.6.2, EF/DI 10.0.15,
+SqlClient 6.1.8 and SQL Server-only PKCS 10.0.15 floors. Explicit connector
+3.0.0 remains supported; strict release audits are unchanged. Review the
 [transport rollout boundaries](../efcore-provider-upgrade-risk.md#sql-server-boundary),
 including corrected explicit certificate-name validation.
+Applications upgrading from before 10.7.2 must also review its
+[expression/catalog corrections and affected numeric-default approvals](../support-and-qualification.md#upgrade-to-1072).
 Applications upgrading from before 10.7.0 must also review its
 [explicit-token source break and approved SemVer exception](../support-and-qualification.md#upgrade-to-1070).
 Applications upgrading from before 10.6.0 must also review its
@@ -26,13 +28,30 @@ evidence failures remain blocking. Do not publish a subset or treat preparation,
 earlier engine runs or native ARM skips as proof that this candidate's complete
 qualification or public readback has succeeded.
 
-As of 2026-11-11, 10.7.2 is a local release target, not a completed publication.
+As of 2026-11-20, 10.7.3 is the local release target, not a completed publication.
+Public NuGet and GitHub readback identify 10.7.2 as the latest stable release.
 The changelog date identifies release notes, not qualification or public readback.
-Functional evidence at source `5e729211a010` covers Core/SQLite, native MariaDB
-12.3.3, MySQL 8.4.13 and 9.7.4, PostgreSQL 18.6, and offline SQL Server. It
-precedes the 10.7.2 metadata/documentation changes and does not qualify the final
-stable package bytes or every supported server version. Build and qualify fresh
-10.7.2 packages, including their embedded README and isolated consumers.
+Functional evidence at source `335d914e9f87` covers Core/SQLite, native MariaDB
+12.3.3, MySQL 8.4.13, PostgreSQL 18.7 and managed SQL Server tests on ARM.
+The additional packaged-byte MariaDB run qualifies explicit MySqlConnector 3.0.0
+for that pre-metadata source. These results precede the 10.7.3 release changes
+and do not qualify its final stable package bytes or every supported server
+version. Build and qualify fresh 10.7.3 packages, including their embedded README,
+exact matching Core dependency and isolated consumers. Retain local evidence
+under `artifacts/release-10.7.3`; do not reuse an earlier package hash or native
+run as evidence for a new artifact.
+
+Local 10.7.3 preparation completed strict locked restore, a warning-free Release
+build, style/import verification, 501 engineering tests and 775 local Markdown
+link/anchor checks. Fresh Core/SQLite/ARM-managed SQL Server suites passed
+8,995 cases, with 376 native SQL Server platform skips. All five primary/symbol
+package pairs passed byte-identical double-pack, contents, isolation and
+design/scaffolding consumer checks. An additional isolated consumer of these
+10.7.3 packages with explicit MySqlConnector 3.0.0 also passed. Logs, TRXs and
+package hashes are retained under `artifacts/release-10.7.3`. This evidence
+describes the local, uncommitted release-metadata candidate, not a published or
+hosted-qualified commit.
+
 Local success does not complete the required hosted matrix, native x64 SQL Server
 2019/2022/2025, merged coverage, SBOM, attestations or public readback. No candidate
 workflow or publication is started by this preparation. The complete candidate

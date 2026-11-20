@@ -6,6 +6,16 @@ the shared release identity described in [Release process](docs/release-process.
 
 ## [Unreleased]
 
+## [10.7.3] - 2026-11-20
+
+Version 10.7.3 corrects asynchronous resource ownership, cleanup and native
+tooling identity through the existing five packages. Public APIs, migration
+policies, report schemas, fingerprint formats and .NET/EF Core 10 remain
+unchanged. Dependency floors advance; keep all installed SafeMigrations
+packages aligned and review the
+[upgrade notes](docs/support-and-qualification.md#upgrade-to-1073).
+Updating packages alone requires no schema migration or history rewrite.
+
 ### Changed
 
 - Refresh SDK 10.0.404, EF Core/DI/dotnet-ef 10.0.15, Testcontainers 4.17.0,
@@ -48,7 +58,7 @@ the shared release identity described in [Release process](docs/release-process.
   exact options, reachable references and explicit historical evidence limits.
   Verify the runnable sample's real streams, output, native SQLite constraints,
   replay and blocked end state through an internal shared entrypoint; no new
-  public product API or version is introduced.
+  public product API is introduced.
 
 ### Fixed
 
@@ -2618,7 +2628,8 @@ in [Support and qualification](docs/support-and-qualification.md).
   dedicated legacy safe constraint operation subclasses.
 - Any promise that preflight can be recorded as an applied EF migration.
 
-[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.7.2...HEAD
+[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.7.3...HEAD
+[10.7.3]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.7.2...v10.7.3
 [10.7.2]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.7.1...v10.7.2
 [10.7.1]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.7.0...v10.7.1
 [10.7.0]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.6.1...v10.7.0

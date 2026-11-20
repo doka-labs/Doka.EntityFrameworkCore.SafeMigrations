@@ -44,7 +44,7 @@ The declared release-qualification matrix is:
 | Provider package | Engines |
 | --- | --- |
 | `.MySql` | MySQL 8.4 and 9.7; MariaDB 10.11, 11.4, 11.8, and 12.3 |
-| `.PostgreSql` | PostgreSQL 14 through 18, with one release-gate cell per supported major |
+| `.PostgreSql` | PostgreSQL 14 through 18, with one release-gate cell per declared major; 14 is compatibility coverage after upstream EOL |
 | `.Sqlite` | SQLite 3.46.1 or later through locked `Microsoft.EntityFrameworkCore.Sqlite.Core`; applications select and reference their native SQLite bundle, while qualification covers the default bundle in-memory and against asserted file databases |
 | `.SqlServer` | SQL Server 2019, 2022, and 2025; three separately pinned Linux/x86-64 container cells in CI |
 
@@ -55,36 +55,36 @@ evidence. See [Support and qualification](docs/support-and-qualification.md).
 ## Installation
 
 Install one provider package. The core package is included transitively. The
-examples target version 10.7.2 and select that version exactly, so
+examples target version 10.7.3 and select that version exactly, so
 restore does not move to another version implicitly. Release changes and
-compatibility notes belong in the [10.7.2 changelog](CHANGELOG.md#1072---2026-11-11)
-and [upgrade notes](docs/support-and-qualification.md#upgrade-to-1072).
+compatibility notes belong in the [10.7.3 changelog](CHANGELOG.md#1073---2026-11-20)
+and [upgrade notes](docs/support-and-qualification.md#upgrade-to-1073).
 Applications upgrading from before 10.7.0 must also review its
 [explicit cancellation-token requirement](docs/support-and-qualification.md#upgrade-to-1070).
 
 ```bash
-package_version='10.7.2'
+package_version='10.7.3'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.MySql --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.7.2'
+package_version='10.7.3'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.PostgreSql --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.7.2'
+package_version='10.7.3'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.Sqlite --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.7.2'
+package_version='10.7.3'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.SqlServer --version "$package_version"
 ```
 

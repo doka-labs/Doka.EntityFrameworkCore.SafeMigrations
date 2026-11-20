@@ -2,16 +2,17 @@
 
 ## Support contract
 
-Version 10.7.2 corrects native expression identity, temporal values and catalog
-comparison through the existing public APIs. It retains .NET/EF Core 10,
-dependency floors, public signatures, report schemas and fingerprint formats.
-Review the [10.7.2 upgrade](#upgrade-to-1072), including affected numeric-default
-fingerprint approvals and the existing provider-specific rejection boundaries.
+Version 10.7.3 corrects asynchronous ownership, cancellation propagation,
+cleanup failure handling, SQL Server application-lock validation and EF tooling
+server identity checks through the existing public APIs. It retains .NET/EF
+Core 10, public signatures, report schemas and fingerprint formats while
+updating dependency floors. Review the [10.7.3 upgrade](#upgrade-to-1073),
+including aligned SafeMigrations package versions and provider-owned dependencies.
 
 Version 10.7.0 introduced required cancellation tokens on owned asynchronous
 APIs and BenchmarkDotNet for engineering measurements. Removing public optional-
 token defaults was an intentional source-breaking exception within 10.x, not a
-strictly SemVer-compatible change. Version 10.7.2 retains those requirements.
+strictly SemVer-compatible change. Version 10.7.3 retains those requirements.
 
 Version 10.6.0 introduced public CASE expressions, certified generated-column
 and CHECK support, lossless signed-integer upgrades, ordered projection/DROP
@@ -28,10 +29,51 @@ see [diagnostic compatibility](diagnostics.md#runtime-provider-differences).
 Native qualification still requires the complete blocking matrix; ARM SQL Server
 skips and offline SQL-shape tests are not substitutes for its x64 cells.
 
-## Unreleased dependency update
+## Upgrade to 10.7.3
+
+Keep every installed SafeMigrations package on version 10.7.3 and install only
+the adapters needed by the application. Each adapter requires its exact matching
+Core package, `[10.7.3]`, because it consumes Core internals; mixing own-package
+versions is not supported. Candidate versions follow the same exact-identity
+rule. External provider dependencies retain their separately bounded ranges.
+
+Public APIs and their shipped baseline are unchanged from 10.7.2. Required
+operation tokens introduced in 10.7.0 remain required; framework overrides keep
+their framework signatures. Protected cleanup remains non-cancellable where
+cancellation could abandon an owned resource or leave session state unsafe.
+
+The fixes retain ownership until actual analysis, recovery and disposal work
+has finished. Cancellation does not release a command, transaction or connection
+while that work still uses it. The original work or cancellation failure remains
+primary if cleanup also fails; cleanup-only failures and secondary cleanup
+evidence remain observable. Removing observer-only deadlines does not change
+native command timeouts or permit detached work after resource disposal.
+
+SQL Server rejects unproven application-lock status and quarantines failed
+scope release without disposing caller-owned transactions or hiding the primary
+failure. EF tooling validates native server identity before selecting its provider
+profile or scaffolding migrations; missing, malformed and mismatched identities
+are rejected rather than used to select an incompatible engine profile.
+
+The dependency update below requires EF Core and dependency-injection
+abstractions at least 10.0.15, Doka `[10.7.0,10.8.0)` for MySQL/MariaDB,
+and PKCS at least 10.0.15 only for SQL Server. SqlClient remains at minimum
+6.1.8. MySqlConnector remains at minimum 2.6.2 with explicit 3.0.0 selection
+allowed; the default profile does not force a connector-major upgrade.
+
+Report schema 4, view schema 3, diagnostic codes, fingerprint formats, authored
+migration policies and history remain unchanged. Updating packages alone needs
+no database schema migration, history rewrite or fingerprint approval renewal.
+Applications upgrading from an older release must still apply the inherited
+[10.7.2 catalog/default corrections](#upgrade-to-1072) and
+[10.7.0 explicit-token requirements](#upgrade-to-1070).
+The complete native, CLI/script/bundle, isolated-package, coverage and release
+evidence gates remain required; ARM SQL Server skips do not qualify native x64.
+
+## Stable 10.7.3 dependency update
 
 The current repository requires Doka `[10.7.0,10.8.0)` for MySQL/MariaDB.
-This changes the dependency floor after SafeMigrations 10.7.2; the released
+This changes the dependency floor from SafeMigrations 10.7.2; the historical
 version notes below retain their original dependency contracts. The target
 remains .NET/EF Core 10. Doka's new feature APIs are opt-in: this update does
 not enable them, change application models or rewrite historical migrations.
@@ -49,8 +91,8 @@ and dotnet-ef advance to 10.0.15. SQL Server also requires PKCS minimum
 10.0.15: EF Core SQL Server 10.0.15 now declares PKCS at least 10.0.13, so
 retaining a 9.x minimum would create a dependency downgrade. This remains a
 SQL Server-only dependency; Core and the other adapters do not acquire it.
-SqlClient remains on the separately reviewed 6.1.8 line. These declarations
-do not claim completion of the candidate's required qualification matrix.
+SqlClient remains on the separately reviewed 6.1.8 line. Native, tooling and
+isolated-package qualification requirements remain unchanged.
 
 ## Upgrade to 10.7.2
 
@@ -380,20 +422,22 @@ Bounded package ranges describe external compatibility. All 24 repository
 projects retain default source-mode locks for exact reviewed identities and
 content hashes; they do not prescribe the graph selected by an application.
 The four adapters additionally require their matching own-Core version because
-they share a private ABI. External dependency floors remain provider-owned;
+they share a private ABI: stable 10.7.3 requires Core `[10.7.3]`, while candidate
+adapters require the exact corresponding Core candidate identity.
+External dependency floors remain provider-owned;
 the Doka update above advances its independently bounded range. Historical
 releases keep their original package inventories.
 
 The five-package set began with stable 10.4.6, including the optional SQL Server
-provider. Version 10.7.2 retains that inventory and the SQL Server-only PKCS
-minimum of 9.0.22. The Core API baseline includes the additive
+provider. Version 10.7.3 retains that inventory and advances the SQL Server-only
+PKCS minimum to 10.0.15. The Core API baseline includes the additive
 CASE surface introduced in 10.6.0; the diagnostic surface began in 10.5.0.
 Version 10.7.0 replaces ten optional-token declarations with required-token
 declarations in the shipped baseline; it does not add an overload or restore
-the removed defaults. Version 10.7.2 retains that shipped baseline exactly;
-its expression/catalog corrections add no public declaration.
-The current Doka
-dependency contract is the 10.7 line above. Qualification requires the blocking
+the removed defaults. Version 10.7.3 retains that shipped baseline exactly;
+its ownership, cancellation and tooling corrections add no public declaration.
+The current Doka dependency contract is the 10.7 line above.
+Qualification requires the blocking
 workflow, including all three native x86-64 SQL Server cells. The
 [publication runbook](operations/release-publication.md) owns the five-package
 readback procedure and release evidence.

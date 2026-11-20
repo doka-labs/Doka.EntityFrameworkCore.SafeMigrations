@@ -1,7 +1,7 @@
 ---
 id: D-006
 status: implemented
-date: 2026-11-19
+date: 2026-11-20
 decision-makers: ["Dominic Kalkbrenner"]
 consulted: []
 informed: ["@doka-labs/core-maintainers"]
@@ -381,6 +381,18 @@ owns independent consumer readback.
   benchmark execution now requires explicit opt-in, including Dry.
   The original record starts at implemented; earlier proposed/accepted transition
   evidence is not recorded and is not reconstructed by this profile migration.
+
+- 2026-11-20: Set the shared five-package stable identity to 10.7.3 for
+  internal asynchronous ownership, cleanup, application-lock and native tooling
+  identity fixes without changing the public API, report or fingerprint formats.
+  Include current dependency/image pins and explicit matching-Core private ABI;
+  retain MySqlConnector 2.6.2 with optional 3.0.0 and .NET/EF Core 10.
+  Qualify exact 10.7.3 package/README bytes and preserve earlier native evidence
+  at its original source identity. Product documentation states the stable
+  contract; only the runbook and exact release evidence record publication
+  status. Existing protected publication, hosted matrix, x64 SQL Server,
+  coverage, SBOM and readback gates remain. No tag, package upload, additional
+  release line or .NET 11 support is authorized by preparation.
 
 ### Implementation References
 

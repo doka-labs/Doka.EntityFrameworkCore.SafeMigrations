@@ -16,17 +16,19 @@ SafeMigrations publishes these package IDs at one version:
 - `Doka.EntityFrameworkCore.SafeMigrations.SqlServer`.
 
 Stable 10.4.6 introduced this five-package inventory; releases 10.4.2 through
-10.4.5 retain their historical four-package set. Version 10.7.2 keeps the shared
-.NET/EF Core 10 identity and corrects native expression/catalog comparison
-internally, without changing existing public APIs or dependency floors. Explicit
-cancellation arguments and BenchmarkDotNet engineering measurements remain. The
-[changelog](../CHANGELOG.md#1072---2026-11-11) and
-[upgrade notes](support-and-qualification.md#upgrade-to-1072) record current
+10.4.5 retain their historical four-package set. Version 10.7.3 keeps the shared
+.NET/EF Core 10 identity and corrects asynchronous work, cleanup and native
+tooling identity internally, without changing existing public APIs. Dependency
+floors advance, including SQL Server-only PKCS 10.0.15. Explicit cancellation
+arguments and opt-in BenchmarkDotNet engineering measurements remain. The
+[changelog](../CHANGELOG.md#1073---2026-11-20) and
+[upgrade notes](support-and-qualification.md#upgrade-to-1073) record current
 consumer requirements. The earlier removal of public optional-token defaults in
 10.7.0 is a deliberate source-breaking exception within 10.x, not a strictly
 SemVer-compatible minor change. Existing CLR method signatures, migration
-policies, report schemas and fingerprint formats remain. Corrected captured
-numeric-default identities require renewed affected approvals, not an old digest
+policies, report schemas and fingerprint formats remain. When upgrading from
+before 10.7.2, corrected captured numeric-default identities require renewed
+affected approvals, not an old digest
 or history rewrite. Applications upgrading from before 10.6.0 must still review its
 [computed/CHECK approval boundaries](support-and-qualification.md#upgrade-to-1060).
 Do not carry an obsolete contract approval forward or rewrite historical
