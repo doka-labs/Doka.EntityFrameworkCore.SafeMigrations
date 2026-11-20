@@ -9,9 +9,13 @@ public sealed class MySqlTablesIntegrationTests : MySqlSafeMigrationIntegrationT
         MySqlEngineContainerFixture fixture
     ) : base(fixture) { }
 
+    /// <summary>
+    /// Accepts a generated check contract in analysis and execution and verifies its native enforcement.
+    /// </summary>
     [Fact]
     public async Task GeneratedCheckConstraint_IsAcceptedByPreflightRuntimeAndPostflight()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -27,13 +31,12 @@ public sealed class MySqlTablesIntegrationTests : MySqlSafeMigrationIntegrationT
 
         var runner = context.GetService<ISafeMigrationRunner>();
 
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
             new SafeMigrationRunOptions("generated-check-preflight"),
             CancellationToken.None);
-
-        Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
@@ -44,10 +47,14 @@ public sealed class MySqlTablesIntegrationTests : MySqlSafeMigrationIntegrationT
             new SafeMigrationRunOptions("generated-check-postflight"),
             CancellationToken.None);
 
-        var exception = await Assert.ThrowsAsync<MySqlException>(() => ExecuteSqlAsync(
+        var capturedException = await Record.ExceptionAsync(() => ExecuteSqlAsync(
             connectionString,
             "INSERT INTO `generated_check_orders` (`amount`) VALUES (-1);",
             cancellationToken: CancellationToken.None));
+
+        // Assert
+        var exception = Assert.IsType<MySqlException>(capturedException);
+        Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
         Assert.True(Assert.Single(postflight.Assessments)
@@ -56,9 +63,13 @@ public sealed class MySqlTablesIntegrationTests : MySqlSafeMigrationIntegrationT
         Assert.Contains("ck_generated_check_orders_amount", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// Completes a partial legacy table without losing its already-installed columns or replay safety.
+    /// </summary>
     [Fact]
     public async Task GranularConvergence_CompletesExistingPartialTableAndIsIdempotent()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -86,9 +97,11 @@ public sealed class MySqlTablesIntegrationTests : MySqlSafeMigrationIntegrationT
 
         builder.CreateIndexIfNotExists("ix_module_state_display_name", "module_state", ["display_name"]);
 
+        // Act
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
+        // Assert
         Assert.Equal(
             1,
             await ScalarIntAsync(
@@ -115,9 +128,13 @@ public sealed class MySqlTablesIntegrationTests : MySqlSafeMigrationIntegrationT
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>
+    /// Distinguishes an existing container from strict shape equality without rewriting its drifted columns.
+    /// </summary>
     [Fact]
     public async Task ExistenceOnly_AcceptsAnExistingTableContainerWithoutMutatingShapeDrift()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -135,6 +152,7 @@ public sealed class MySqlTablesIntegrationTests : MySqlSafeMigrationIntegrationT
             },
             policy: SafeMigrationPolicy.ExistenceOnly);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -144,41 +162,55 @@ public sealed class MySqlTablesIntegrationTests : MySqlSafeMigrationIntegrationT
                 CancellationToken.None);
 
         var assessment = Assert.Single(report.Assessments);
-        Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
-        Assert.Equal(SafeMigrationAction.NoOp, assessment.Action);
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
-        Assert.Equal(
-            20,
-            await ScalarIntAsync(
-                connectionString,
-                """
-                SELECT CHARACTER_MAXIMUM_LENGTH
-                FROM INFORMATION_SCHEMA.COLUMNS
-                WHERE TABLE_SCHEMA = DATABASE()
-                AND TABLE_NAME = 'existence_shape'
-                AND COLUMN_NAME = 'id';
-                """,
-                cancellationToken: CancellationToken.None));
+        var preservedIdLength = await ScalarIntAsync(
+            connectionString,
+            """
+            SELECT CHARACTER_MAXIMUM_LENGTH
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'existence_shape'
+            AND COLUMN_NAME = 'id';
+            """,
+            cancellationToken: CancellationToken.None);
 
-        Assert.Equal(
-            0,
-            await ScalarIntAsync(
-                connectionString,
-                """
-                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
-                WHERE TABLE_SCHEMA = DATABASE()
-                AND TABLE_NAME = 'existence_shape'
-                AND COLUMN_NAME = 'Payload';
-                """,
-                cancellationToken: CancellationToken.None));
+        var unexpectedPayloadColumns = await ScalarIntAsync(
+            connectionString,
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'existence_shape'
+            AND COLUMN_NAME = 'Payload';
+            """,
+            cancellationToken: CancellationToken.None);
+
+        // Assert
+        Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
+        Assert.Equal(SafeMigrationAction.NoOp, assessment.Action);
+
+        Assert.Equal(20, preservedIdLength);
+
+        Assert.Equal(0, unexpectedPayloadColumns);
     }
 
-    [Fact]
-    public async Task PairwiseLegacyStates_ConvergeOrBlockWithoutPreflightMutation()
+    /// <summary>Exposes every fixed-seed legacy-state vector as an independently discoverable test case.</summary>
+    /// <returns>The serializable index of each unchanged pairwise-generated input vector.</returns>
+    public static TheoryData<int> PairwiseLegacyStateCases()
     {
-        var scenarios = SafeMigrationStateSpaceGenerator.GeneratePairwise(
+        var cases = new TheoryData<int>();
+        var scenarios = CreatePairwiseLegacyScenarios();
+        foreach (var scenario in scenarios)
+        {
+            cases.Add(scenario.Index);
+        }
+
+        return cases;
+    }
+
+    private static IReadOnlyList<SafeMigrationStateScenario> CreatePairwiseLegacyScenarios()
+        => SafeMigrationStateSpaceGenerator.GeneratePairwise(
             [
                 new SafeMigrationStateDimension("column", ["missing", "matching", "different"]),
                 new SafeMigrationStateDimension("index", ["missing", "matching", "different"]),
@@ -188,169 +220,187 @@ public sealed class MySqlTablesIntegrationTests : MySqlSafeMigrationIntegrationT
             ],
             seed: 0x5AFE2026);
 
-        foreach (var scenario in scenarios)
+    /// <summary>Either converges or safely blocks each partial legacy shape without preflight mutation.</summary>
+    /// <param name="scenarioIndex">The reproducible pairwise input vector selected by the fixed seed.</param>
+    [Theory]
+    [MemberData(nameof(PairwiseLegacyStateCases))]
+    public async Task PairwiseLegacyStates_ConvergeOrBlockWithoutPreflightMutation(
+        int scenarioIndex
+    )
+    {
+        // Arrange
+        var scenario = CreatePairwiseLegacyScenarios()[scenarioIndex];
+        var table = $"state_matrix_{scenario.Index.ToString(CultureInfo.InvariantCulture)}";
+        var index = $"ix_{table}_id";
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
+        var columnSql = scenario.Values["column"] switch
         {
-            var table = $"state_matrix_{scenario.Index.ToString(CultureInfo.InvariantCulture)}";
-            var index = $"ix_{table}_id";
-            var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-            var columnSql = scenario.Values["column"] switch
-            {
-                "missing" => string.Empty,
-                "matching" => ", `payload` varchar(40) NULL",
-                "different" => ", `payload` varchar(20) NULL",
-                _ => throw new InvalidOperationException("Unknown generated column state."),
-            };
+            "missing" => string.Empty,
+            "matching" => ", `payload` varchar(40) NULL",
+            "different" => ", `payload` varchar(20) NULL",
+            _ => throw new InvalidOperationException("Unknown generated column state."),
+        };
+
+        await ExecuteSqlAsync(
+            connectionString,
+            $"CREATE TABLE `{table}` (`id` int NOT NULL, `alternate_id` int NOT NULL{columnSql});",
+            cancellationToken: CancellationToken.None);
+
+        if (scenario.Values["index"] != "missing")
+        {
+            var indexColumn = scenario.Values["index"] == "matching"
+                ? "id"
+                : "alternate_id";
 
             await ExecuteSqlAsync(
                 connectionString,
-                $"CREATE TABLE `{table}` (`id` int NOT NULL, `alternate_id` int NOT NULL{columnSql});",
+                $"CREATE INDEX `{index}` ON `{table}` (`{indexColumn}`);",
                 cancellationToken: CancellationToken.None);
+        }
 
-            if (scenario.Values["index"] != "missing")
+        if (scenario.Values["data"] == "populated")
+        {
+            var insertColumns = scenario.Values["column"] == "missing"
+                ? "`id`, `alternate_id`"
+                : "`id`, `alternate_id`, `payload`";
+
+            var insertValues = scenario.Values["column"] == "missing"
+                ? "1, 2"
+                : "1, 2, 'legacy'";
+
+            await ExecuteSqlAsync(
+                connectionString,
+                $"INSERT INTO `{table}` ({insertColumns}) VALUES ({insertValues});",
+                cancellationToken: CancellationToken.None);
+        }
+
+        if (scenario.Values["extras"] == "unknown")
+        {
+            await ExecuteSqlAsync(
+                connectionString,
+                $"ALTER TABLE `{table}` ADD COLUMN `legacy_extra` int NULL;",
+                cancellationToken: CancellationToken.None);
+        }
+
+        if (scenario.Values["history"] == "legacy")
+        {
+            await ExecuteSqlAsync(
+                connectionString,
+                """
+                CREATE TABLE `__LegacyMigrationsHistory` (`MigrationId` varchar(150) NOT
+                NULL); INSERT INTO `__LegacyMigrationsHistory` VALUES ('legacy-unchanged');
+                """,
+                cancellationToken: CancellationToken.None);
+        }
+
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.CreateTableIfNotExists(
+            table,
+            columns => new
             {
-                var indexColumn = scenario.Values["index"] == "matching"
-                    ? "id"
-                    : "alternate_id";
+                Id = columns.Column<int>(type: "int", nullable: false),
+                AlternateId = columns.Column<int>(name: "alternate_id", type: "int", nullable: false),
+            },
+            mode: SafeMigrationTableMode.ConvergenceContainer,
+            policy: SafeMigrationPolicy.ExistenceOnly);
 
-                await ExecuteSqlAsync(
-                    connectionString,
-                    $"CREATE INDEX `{index}` ON `{table}` (`{indexColumn}`);",
-                    cancellationToken: CancellationToken.None);
-            }
+        builder.AddColumnIfNotExists<string>("payload", table, type: "varchar(40)", maxLength: 40, nullable: true);
+        builder.CreateIndexIfNotExists(index, table, ["id"]);
 
-            if (scenario.Values["data"] == "populated")
-            {
-                var insertColumns = scenario.Values["column"] == "missing"
-                    ? "`id`, `alternate_id`"
-                    : "`id`, `alternate_id`, `payload`";
+        var shouldBlock = scenario.Values["column"] == "different" || scenario.Values["index"] == "different";
 
-                var insertValues = scenario.Values["column"] == "missing"
-                    ? "1, 2"
-                    : "1, 2, 'legacy'";
+        var beforeColumnLength = await ScalarIntAsync(
+            connectionString,
+            $"""
+            SELECT COALESCE(MAX(CHARACTER_MAXIMUM_LENGTH), 0)
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = '{table}'
+            AND COLUMN_NAME = 'payload';
+            """,
+            cancellationToken: CancellationToken.None);
 
-                await ExecuteSqlAsync(
-                    connectionString,
-                    $"INSERT INTO `{table}` ({insertColumns}) VALUES ({insertValues});",
-                    cancellationToken: CancellationToken.None);
-            }
+        // Act
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions($"pairwise-{scenario.Index}"),
+                CancellationToken.None);
 
-            if (scenario.Values["extras"] == "unknown")
-            {
-                await ExecuteSqlAsync(
-                    connectionString,
-                    $"ALTER TABLE `{table}` ADD COLUMN `legacy_extra` int NULL;",
-                    cancellationToken: CancellationToken.None);
-            }
+        var afterPreflightColumnLength = await ScalarIntAsync(
+            connectionString,
+            $"""
+            SELECT COALESCE(MAX(CHARACTER_MAXIMUM_LENGTH), 0)
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = '{table}'
+            AND COLUMN_NAME = 'payload';
+            """,
+            cancellationToken: CancellationToken.None);
 
-            if (scenario.Values["history"] == "legacy")
-            {
-                await ExecuteSqlAsync(
-                    connectionString,
-                    """
-                    CREATE TABLE `__LegacyMigrationsHistory` (`MigrationId` varchar(150) NOT
-                    NULL); INSERT INTO `__LegacyMigrationsHistory` VALUES ('legacy-unchanged');
-                    """,
-                    cancellationToken: CancellationToken.None);
-            }
+        if (!shouldBlock)
+        {
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        }
 
-            await using var context = CreateContext(connectionString);
-            var builder = new MigrationBuilder(context.Database.ProviderName!);
-            builder.CreateTableIfNotExists(
-                table,
-                columns => new
-                {
-                    Id = columns.Column<int>(type: "int", nullable: false),
-                    AlternateId = columns.Column<int>(name: "alternate_id", type: "int", nullable: false),
-                },
-                mode: SafeMigrationTableMode.ConvergenceContainer,
-                policy: SafeMigrationPolicy.ExistenceOnly);
+        // Assert
+        Assert.Equal(beforeColumnLength, afterPreflightColumnLength);
+        Assert.Equal(
+            shouldBlock
+                ? SafeMigrationReportStatus.Blocked
+                : SafeMigrationReportStatus.Ready,
+            report.Status);
 
-            builder.AddColumnIfNotExists<string>("payload", table, type: "varchar(40)", maxLength: 40, nullable: true);
-            builder.CreateIndexIfNotExists(index, table, ["id"]);
+        if (shouldBlock)
+        {
+            Assert.Contains(
+                report.Assessments,
+                assessment => assessment.ObservedState == SafeMigrationObservedState.Different);
 
-            var beforeColumnLength = await ScalarIntAsync(
+            return;
+        }
+
+        Assert.Equal(
+            40,
+            await ScalarIntAsync(
                 connectionString,
                 $"""
-                SELECT COALESCE(MAX(CHARACTER_MAXIMUM_LENGTH), 0)
+                SELECT CHARACTER_MAXIMUM_LENGTH
                 FROM INFORMATION_SCHEMA.COLUMNS
                 WHERE TABLE_SCHEMA = DATABASE()
                 AND TABLE_NAME = '{table}'
                 AND COLUMN_NAME = 'payload';
                 """,
-                cancellationToken: CancellationToken.None);
+                cancellationToken: CancellationToken.None));
 
-            var report = await context
-                .GetService<ISafeMigrationRunner>()
-                .AnalyzeAsync(
-                    context,
-                    builder.Operations,
-                    new SafeMigrationRunOptions($"pairwise-{scenario.Index}"),
-                    CancellationToken.None);
-
-            Assert.Equal(
-                beforeColumnLength,
-                await ScalarIntAsync(
-                    connectionString,
-                    $"""
-                    SELECT COALESCE(MAX(CHARACTER_MAXIMUM_LENGTH), 0)
-                    FROM INFORMATION_SCHEMA.COLUMNS
-                    WHERE TABLE_SCHEMA = DATABASE()
-                    AND TABLE_NAME = '{table}'
-                    AND COLUMN_NAME = 'payload';
-                    """,
-                    cancellationToken: CancellationToken.None));
-
-            var shouldBlock = scenario.Values["column"] == "different" || scenario.Values["index"] == "different";
-
-            Assert.Equal(
-                shouldBlock
-                    ? SafeMigrationReportStatus.Blocked
-                    : SafeMigrationReportStatus.Ready,
-                report.Status);
-
-            if (shouldBlock)
-            {
-                Assert.Contains(
-                    report.Assessments,
-                    assessment => assessment.ObservedState == SafeMigrationObservedState.Different);
-
-                continue;
-            }
-
-            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-
-            Assert.Equal(
-                40,
-                await ScalarIntAsync(
-                    connectionString,
-                    $"""
-                    SELECT CHARACTER_MAXIMUM_LENGTH
-                    FROM INFORMATION_SCHEMA.COLUMNS
-                    WHERE TABLE_SCHEMA = DATABASE()
-                    AND TABLE_NAME = '{table}'
-                    AND COLUMN_NAME = 'payload';
-                    """,
-                    cancellationToken: CancellationToken.None));
-
-            Assert.Equal(
-                1,
-                await ScalarIntAsync(
-                    connectionString,
-                    $"""
-                    SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
-                    WHERE TABLE_SCHEMA = DATABASE()
-                    AND TABLE_NAME = '{table}'
-                    AND INDEX_NAME = '{index}'
-                    AND COLUMN_NAME = 'id';
-                    """,
-                    cancellationToken: CancellationToken.None));
-        }
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                $"""
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = '{table}'
+                AND INDEX_NAME = '{index}'
+                AND COLUMN_NAME = 'id';
+                """,
+                cancellationToken: CancellationToken.None));
     }
 
-    [Fact]
-    public async Task StrictTableDefinition_RejectsUnexpectedColumnsAndConstraints()
+    /// <summary>Rejects unexpected columns and constraints when strict table equality is required.</summary>
+    /// <param name="unexpectedUniqueKey">Whether drift adds an independent unique key rather than a column.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task StrictTableDefinition_RejectsUnexpectedColumnsAndConstraints(
+        bool unexpectedUniqueKey
+    )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var definition = new ExpectedTableDefinition(
@@ -373,11 +423,14 @@ public sealed class MySqlTablesIntegrationTests : MySqlSafeMigrationIntegrationT
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureTable(definition, SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
 
+        // Act
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "ALTER TABLE `strict_table` ADD `legacy` int NULL;",
+            unexpectedUniqueKey
+                ? "ALTER TABLE `strict_table` ADD CONSTRAINT `uq_strict_unexpected` UNIQUE (`id`, `code`);"
+                : "ALTER TABLE `strict_table` ADD `legacy` int NULL;",
             cancellationToken: CancellationToken.None);
 
         var report = await context
@@ -388,26 +441,7 @@ public sealed class MySqlTablesIntegrationTests : MySqlSafeMigrationIntegrationT
                 new SafeMigrationRunOptions("test-instance"),
                 CancellationToken.None);
 
-        Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.Equal(
-            SafeMigrationObservedState.Different,
-            Assert.Single(report.Assessments)
-                .ObservedState);
-
-        await ExecuteSqlAsync(
-            connectionString,
-            "ALTER TABLE `strict_table` DROP COLUMN `legacy`, "
-            + "ADD CONSTRAINT `uq_strict_unexpected` UNIQUE (`id`, `code`);",
-            cancellationToken: CancellationToken.None);
-
-        report = await context
-            .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(
-                context,
-                builder.Operations,
-                new SafeMigrationRunOptions("test-instance"),
-                CancellationToken.None);
-
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(
             SafeMigrationObservedState.Different,
@@ -415,9 +449,11 @@ public sealed class MySqlTablesIntegrationTests : MySqlSafeMigrationIntegrationT
                 .ObservedState);
     }
 
+    /// <summary>Recognizes an expected unique index without accepting an unrelated unknown unique key.</summary>
     [Fact]
     public async Task StrictTableDefinition_NormalizesExpectedUniqueIndexWithoutAcceptingUnknownUniqueKeys()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var options = new DbContextOptionsBuilder<StrictUniqueIndexContext>()
             .UseMySql(connectionString, Fixture.ServerVersion)
@@ -448,6 +484,7 @@ public sealed class MySqlTablesIntegrationTests : MySqlSafeMigrationIntegrationT
         builder.EnsureTable(definition, SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
         builder.EnsureIndex(expectedIndex, SafeMigrationPolicy.ThrowIfDifferent);
 
+        // Act
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
@@ -464,16 +501,6 @@ public sealed class MySqlTablesIntegrationTests : MySqlSafeMigrationIntegrationT
             new SafeMigrationRunOptions("strict-unique-index-postflight"),
             CancellationToken.None);
 
-        Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
-        Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
-        Assert.All(
-            preflight.Assessments,
-            static assessment =>
-                Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState));
-
-        Assert.Empty(preflight.UnexpectedObjects);
-        Assert.Empty(postflight.UnexpectedObjects);
-
         await ExecuteSqlAsync(
             connectionString,
             "ALTER TABLE `strict_unique_index` RENAME INDEX "
@@ -485,14 +512,6 @@ public sealed class MySqlTablesIntegrationTests : MySqlSafeMigrationIntegrationT
             builder.Operations,
             new SafeMigrationRunOptions("strict-unique-index-alias"),
             CancellationToken.None);
-
-        Assert.Equal(SafeMigrationReportStatus.Ready, alias.Status);
-        Assert.All(
-            alias.Assessments,
-            static assessment =>
-                Assert.Equal(SafeMigrationAction.NoOp, assessment.Action));
-
-        Assert.Empty(alias.UnexpectedObjects);
 
         await ExecuteSqlAsync(
             connectionString,
@@ -511,6 +530,25 @@ public sealed class MySqlTablesIntegrationTests : MySqlSafeMigrationIntegrationT
             new SafeMigrationRunOptions("strict-unique-index-drift"),
             CancellationToken.None);
 
+        // Assert
+        Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
+        Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
+        Assert.All(
+            preflight.Assessments,
+            static assessment =>
+                Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState));
+
+        Assert.Empty(preflight.UnexpectedObjects);
+        Assert.Empty(postflight.UnexpectedObjects);
+
+        Assert.Equal(SafeMigrationReportStatus.Ready, alias.Status);
+        Assert.All(
+            alias.Assessments,
+            static assessment =>
+                Assert.Equal(SafeMigrationAction.NoOp, assessment.Action));
+
+        Assert.Empty(alias.UnexpectedObjects);
+
         Assert.Contains("doka_sm_different", runtimeException.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(SafeMigrationReportStatus.Blocked, drift.Status);
         Assert.Equal(
@@ -527,9 +565,11 @@ public sealed class MySqlTablesIntegrationTests : MySqlSafeMigrationIntegrationT
             });
     }
 
+    /// <summary>Does not substitute an unknown unique shape for a missing expected unique index.</summary>
     [Fact]
     public async Task StrictTableDefinition_DoesNotTradeMissingExpectedUniqueIndexForUnknownShape()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -563,6 +603,7 @@ public sealed class MySqlTablesIntegrationTests : MySqlSafeMigrationIntegrationT
                 unique: true),
             SafeMigrationPolicy.ThrowIfDifferent);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -571,6 +612,7 @@ public sealed class MySqlTablesIntegrationTests : MySqlSafeMigrationIntegrationT
                 new SafeMigrationRunOptions("strict-unique-substitution"),
                 CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationObservedState.Different, report.Assessments[0].ObservedState);
         Assert.Equal(SafeMigrationObservedState.Missing, report.Assessments[1].ObservedState);
@@ -584,9 +626,13 @@ public sealed class MySqlTablesIntegrationTests : MySqlSafeMigrationIntegrationT
             });
     }
 
+    /// <summary>
+    /// Allows an explicitly pending standalone foreign key while rejecting unrelated transition-shape drift.
+    /// </summary>
     [Fact]
     public async Task StrictTableDefinition_AllowsPendingStandaloneForeignKeyAndRejectsUnexpectedTransitionShape()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -627,17 +673,12 @@ public sealed class MySqlTablesIntegrationTests : MySqlSafeMigrationIntegrationT
 
         var runner = context.GetService<ISafeMigrationRunner>();
 
+        // Act
         var pending = await runner.AnalyzeAsync(
             context,
             builder.Operations,
             new SafeMigrationRunOptions("standalone-fk-pending"),
             CancellationToken.None);
-
-        Assert.Equal(SafeMigrationReportStatus.Ready, pending.Status);
-        Assert.Equal(SafeMigrationObservedState.Matching, pending.Assessments[0].ObservedState);
-        Assert.Equal(SafeMigrationObservedState.Missing, pending.Assessments[1].ObservedState);
-        Assert.Equal(SafeMigrationAction.NoOp, pending.Assessments[0].Action);
-        Assert.Equal(SafeMigrationAction.Apply, pending.Assessments[1].Action);
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
@@ -646,15 +687,6 @@ public sealed class MySqlTablesIntegrationTests : MySqlSafeMigrationIntegrationT
             builder.Operations,
             new SafeMigrationRunOptions("standalone-fk-replay"),
             CancellationToken.None);
-
-        Assert.Equal(SafeMigrationReportStatus.Ready, replay.Status);
-        Assert.All(
-            replay.Assessments,
-            static assessment =>
-            {
-                Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState);
-                Assert.Equal(SafeMigrationAction.NoOp, assessment.Action);
-            });
 
         await ExecuteSqlAsync(
             connectionString,
@@ -672,14 +704,32 @@ public sealed class MySqlTablesIntegrationTests : MySqlSafeMigrationIntegrationT
             new SafeMigrationRunOptions("standalone-fk-drift"),
             CancellationToken.None);
 
+        // Assert
+        Assert.Equal(SafeMigrationReportStatus.Ready, pending.Status);
+        Assert.Equal(SafeMigrationObservedState.Matching, pending.Assessments[0].ObservedState);
+        Assert.Equal(SafeMigrationObservedState.Missing, pending.Assessments[1].ObservedState);
+        Assert.Equal(SafeMigrationAction.NoOp, pending.Assessments[0].Action);
+        Assert.Equal(SafeMigrationAction.Apply, pending.Assessments[1].Action);
+
+        Assert.Equal(SafeMigrationReportStatus.Ready, replay.Status);
+        Assert.All(
+            replay.Assessments,
+            static assessment =>
+            {
+                Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState);
+                Assert.Equal(SafeMigrationAction.NoOp, assessment.Action);
+            });
+
         Assert.Equal(SafeMigrationReportStatus.Blocked, drift.Status);
         Assert.Equal(SafeMigrationObservedState.Different, drift.Assessments[0].ObservedState);
         Assert.Equal(SafeMigrationObservedState.Missing, drift.Assessments[1].ObservedState);
     }
 
+    /// <summary>Does not hide a native unique constraint behind an expected nonunique index.</summary>
     [Fact]
     public async Task UnexpectedObjectInventory_DoesNotAliasUniqueConstraintToExpectedNonUniqueIndex()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -710,6 +760,7 @@ public sealed class MySqlTablesIntegrationTests : MySqlSafeMigrationIntegrationT
                 [new ExpectedIndexKeyDefinition(column: "code")]),
             SafeMigrationPolicy.ThrowIfDifferent);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -718,6 +769,7 @@ public sealed class MySqlTablesIntegrationTests : MySqlSafeMigrationIntegrationT
                 new SafeMigrationRunOptions("non-unique-alias"),
                 CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationObservedState.Different, report.Assessments[^1].ObservedState);
         Assert.Contains(
@@ -733,10 +785,16 @@ public sealed class MySqlTablesIntegrationTests : MySqlSafeMigrationIntegrationT
 
 public abstract partial class MySqlSafeMigrationIntegrationTests
 {
-    protected sealed class StrictUniqueIndexContext(
-        DbContextOptions<StrictUniqueIndexContext> options
-    ) : DbContext(options)
+    /// <summary>Defines an independently owned unique index for strict table-contract projection.</summary>
+    protected sealed class StrictUniqueIndexContext : DbContext
     {
+        /// <summary>Initializes the explicit dependencies of this isolated test helper.</summary>
+        /// <param name="options">The isolated model and provider options.</param>
+        public StrictUniqueIndexContext(
+            DbContextOptions<StrictUniqueIndexContext> options
+        ) : base(options) { }
+
+        /// <inheritdoc />
         protected override void OnModelCreating(
             ModelBuilder modelBuilder
         )
@@ -777,10 +835,16 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
         public string? Email { get; init; }
     }
 
-    protected sealed class StandaloneForeignKeyContext(
-        DbContextOptions<StandaloneForeignKeyContext> options
-    ) : DbContext(options)
+    /// <summary>Defines an independently owned foreign key for pending table-contract projection.</summary>
+    protected sealed class StandaloneForeignKeyContext : DbContext
     {
+        /// <summary>Initializes the explicit dependencies of this isolated test helper.</summary>
+        /// <param name="options">The isolated model and provider options.</param>
+        public StandaloneForeignKeyContext(
+            DbContextOptions<StandaloneForeignKeyContext> options
+        ) : base(options) { }
+
+        /// <inheritdoc />
         protected override void OnModelCreating(
             ModelBuilder modelBuilder
         )

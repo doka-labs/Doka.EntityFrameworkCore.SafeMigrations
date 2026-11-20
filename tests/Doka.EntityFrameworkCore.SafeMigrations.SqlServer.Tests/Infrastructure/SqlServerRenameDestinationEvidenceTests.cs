@@ -233,6 +233,7 @@ public sealed class SqlServerRenameDestinationEvidenceTests
         static (_, _) => "1=1",
         static (_, _) => true,
         static (_, _) => true,
+        null,
         cancellationToken);
 
     private static CatalogStatementTestConnection Connection(

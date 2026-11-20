@@ -9,7 +9,9 @@ public sealed class MySqlSharedEngineIsolationTests : MySqlIntegrationTestBase
         MySqlEngineContainerFixture fixture
     ) : base(fixture) { }
 
-    /// <summary>Two distinct class owners must see their own identical table names and retain independent cleanup.</summary>
+    /// <summary>
+    /// Two distinct class owners must see their own identical table names and retain independent cleanup.
+    /// </summary>
     [Fact]
     public async Task TwoConcurrentClassOwnersHaveDistinctDatabaseAndLeastPrivilegeBoundaries()
     {
@@ -96,7 +98,7 @@ public sealed class MySqlSharedEngineIsolationTests : MySqlIntegrationTestBase
                     .Number);
 
             Assert.IsType<ArgumentException>(rejectedLease);
-            Assert.IsAssignableFrom<OperationCanceledException>(cancelledRelease);
+            Assert.IsType<OperationCanceledException>(cancelledRelease, exactMatch: false);
             Assert.Equal(11, retainedValue);
             Assert.Equal(22, survivingValue);
             Assert.Equal(0, released);
@@ -136,14 +138,22 @@ public sealed class MySqlSharedEngineIsolationTests : MySqlIntegrationTestBase
         }
 
         // Assert
-        var canceled = Assert.IsAssignableFrom<OperationCanceledException>(failure);
+        var canceled = Assert.IsType<OperationCanceledException>(failure, exactMatch: false);
         Assert.Equal(cancellation.Token, canceled.CancellationToken);
         Assert.Equal(2, arrivals);
         Assert.True(peerWasReleased);
     }
 
-    private abstract class DatabaseOwner(MySqlEngineContainerFixture fixture) : MySqlIntegrationTestBase(fixture)
+    private abstract class DatabaseOwner : MySqlIntegrationTestBase
     {
+        /// <summary>
+        /// Binds this database owner to the assembly-owned native engine without taking its lifetime.
+        /// </summary>
+        /// <param name="fixture">The initialized shared engine.</param>
+        protected DatabaseOwner(
+            MySqlEngineContainerFixture fixture
+        ) : base(fixture) { }
+
         /// <summary>Performs the seed and observe test operation with explicit cancellation.</summary>
         /// <param name="value">The value for this operation.</param>
         /// <param name="rendezvous">The rendezvous for this operation.</param>
@@ -189,9 +199,23 @@ public sealed class MySqlSharedEngineIsolationTests : MySqlIntegrationTestBase
         }
     }
 
-    private sealed class FirstDatabaseOwner(MySqlEngineContainerFixture fixture) : DatabaseOwner(fixture);
+    private sealed class FirstDatabaseOwner : DatabaseOwner
+    {
+        /// <summary>Initializes the explicit dependencies of this isolated test helper.</summary>
+        /// <param name="fixture">The assembly-owned native engine without transferring its lifetime.</param>
+        public FirstDatabaseOwner(
+            MySqlEngineContainerFixture fixture
+        ) : base(fixture) { }
+    }
 
-    private sealed class SecondDatabaseOwner(MySqlEngineContainerFixture fixture) : DatabaseOwner(fixture);
+    private sealed class SecondDatabaseOwner : DatabaseOwner
+    {
+        /// <summary>Initializes the explicit dependencies of this isolated test helper.</summary>
+        /// <param name="fixture">The assembly-owned native engine without transferring its lifetime.</param>
+        public SecondDatabaseOwner(
+            MySqlEngineContainerFixture fixture
+        ) : base(fixture) { }
+    }
 
     private sealed record DatabaseObservation(
         string ConnectionString,

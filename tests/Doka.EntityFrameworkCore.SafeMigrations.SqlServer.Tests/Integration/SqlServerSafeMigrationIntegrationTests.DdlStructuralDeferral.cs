@@ -9,7 +9,9 @@ public sealed class SqlServerSafeMigrationDdlStructuralDeferralIntegrationTests 
         SqlServerContainerFixture fixture
     ) : base(fixture) { }
 
-    /// <summary>DDL-trigger-created dependencies invalidate captured widening certificates before their runtime guard.</summary>
+    /// <summary>
+    /// DDL-trigger-created dependencies invalidate captured widening certificates before their runtime guard.
+    /// </summary>
     /// <param name="dependency">The physical dependency introduced by DROP_INDEX.</param>
     /// <param name="disabled">Whether the trigger is disabled and emits no side effects.</param>
     [SqlServerLiveTheory]
@@ -85,7 +87,8 @@ public sealed class SqlServerSafeMigrationDdlStructuralDeferralIntegrationTests 
                 .Database
                 .SqlQueryRaw<int>(
                     dependency == "index"
-                        ? "SELECT COUNT(*) AS [Value] FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.ddl_structure_values') "
+                        ? "SELECT COUNT(*) AS [Value] FROM sys.indexes "
+                        + "WHERE object_id=OBJECT_ID(N'dbo.ddl_structure_values') "
                         + "AND name=N'IX_new'"
                         : """
                         SELECT COUNT(*) AS [Value] FROM sys.check_constraints
@@ -152,7 +155,9 @@ public sealed class SqlServerSafeMigrationDdlStructuralDeferralIntegrationTests 
         Assert.Equal(1, source);
     }
 
-    /// <summary>A trigger can remove unrelated matching metadata, which is recreated only by the fresh runtime guard.</summary>
+    /// <summary>
+    /// A trigger can remove unrelated matching metadata, which is recreated only by the fresh runtime guard.
+    /// </summary>
     [SqlServerLiveFact]
     public async Task MatchingIndex_TriggerRemovedMetadataCannotRemainPreflightNoOp()
     {

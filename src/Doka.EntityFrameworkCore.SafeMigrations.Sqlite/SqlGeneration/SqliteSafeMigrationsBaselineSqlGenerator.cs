@@ -36,7 +36,8 @@ internal sealed class SqliteSafeMigrationsBaselineSqlGenerator : SqliteMigration
         var couldContainGenerated = CouldContainGeneratedColumns(operations, model);
         if (!couldContainGenerated
             && (snapshot is null
-                || !operations.Any(SqliteSafeMigrationOperationClassifier.RequiresTableRebuild)))
+                || operations.All(static operation =>
+                    !SqliteSafeMigrationOperationClassifier.RequiresTableRebuild(operation))))
         {
             return base.Generate(operations, model, options);
         }
@@ -76,8 +77,13 @@ internal sealed class SqliteSafeMigrationsBaselineSqlGenerator : SqliteMigration
             _ownership = ownership;
             Options = options;
             var builder = new MigrationCommandListBuilder(Dependencies);
-            foreach (var operation in rewritten)
+
+            // WHY: Traverse the stable ordered source by ordinal without materializing another collection.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var operationIndex = 0; operationIndex < rewritten.Count; operationIndex++)
             {
+                var operation = rewritten[operationIndex];
                 base.Generate(operation, model, builder);
             }
 
@@ -135,8 +141,12 @@ internal sealed class SqliteSafeMigrationsBaselineSqlGenerator : SqliteMigration
         IModel? model
     )
     {
-        foreach (var operation in operations)
+        // WHY: Traverse the stable ordered source by ordinal without materializing another collection.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var operationIndex = 0; operationIndex < operations.Count; operationIndex++)
         {
+            var operation = operations[operationIndex];
             if (operation is ColumnOperation { ComputedColumnSql: not null }
                 || (operation is CreateTableOperation creator
                     && creator.Columns.Any(static column => column.ComputedColumnSql is not null)))

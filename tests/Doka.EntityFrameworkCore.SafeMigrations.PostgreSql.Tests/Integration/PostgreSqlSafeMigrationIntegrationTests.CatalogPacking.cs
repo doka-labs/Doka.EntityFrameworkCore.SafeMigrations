@@ -13,6 +13,7 @@ public sealed class PostgreSqlCatalogPackingIntegrationTests : PostgreSqlSafeMig
     [Fact]
     public async Task Analyzer_PacksAcrossShortCircuitGapsAndCaptureBoundariesWithoutMixingResults()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -50,6 +51,7 @@ public sealed class PostgreSqlCatalogPackingIntegrationTests : PostgreSqlSafeMig
             .Cast<SafeMigrationOperation>()
             .ToArray();
 
+        // Act
         var results = await context
             .GetService<ISafeMigrationProviderAnalyzer>()
             .AnalyzeAsync(
@@ -57,6 +59,7 @@ public sealed class PostgreSqlCatalogPackingIntegrationTests : PostgreSqlSafeMig
                 operations,
                 CancellationToken.None);
 
+        // Assert
         Assert.False(connection.CanCreateBatch);
         Assert.Equal(10, connection.ClassificationStatementCount);
         Assert.Equal(operations.Length, results.Count);
@@ -73,6 +76,9 @@ public sealed class PostgreSqlCatalogPackingIntegrationTests : PostgreSqlSafeMig
     }
 
     /// <summary>The actual provider reader rejects unowned or missing classifier results.</summary>
+    /// <param name="missingRows">
+    /// Whether submitted classifier rows are missing instead of carrying an unowned ordinal.
+    /// </param>
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -80,6 +86,7 @@ public sealed class PostgreSqlCatalogPackingIntegrationTests : PostgreSqlSafeMig
         bool missingRows
     )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -107,7 +114,8 @@ public sealed class PostgreSqlCatalogPackingIntegrationTests : PostgreSqlSafeMig
             .Cast<SafeMigrationOperation>()
             .ToArray();
 
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        // Act
+        var observed = await Record.ExceptionAsync(() =>
             context
                 .GetService<ISafeMigrationProviderAnalyzer>()
                 .AnalyzeAsync(
@@ -115,6 +123,8 @@ public sealed class PostgreSqlCatalogPackingIntegrationTests : PostgreSqlSafeMig
                     operations,
                     CancellationToken.None));
 
+        // Assert
+        var exception = Assert.IsType<InvalidOperationException>(observed);
         Assert.True(connection.FaultWasInjected);
         Assert.Equal(1, connection.ClassificationStatementCount);
         Assert.Equal(ConnectionState.Closed, connection.State);

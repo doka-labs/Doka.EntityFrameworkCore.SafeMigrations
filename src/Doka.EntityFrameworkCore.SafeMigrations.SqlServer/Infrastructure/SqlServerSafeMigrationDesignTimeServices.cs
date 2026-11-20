@@ -4,6 +4,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer;
 /// Registers the SafeMigrations scaffolder and SQL Server's supported index
 /// metadata projection for EF Core design-time operations.
 /// </summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 internal sealed class SqlServerSafeMigrationDesignTimeServices : IDesignTimeServices
 {
     /// <summary>

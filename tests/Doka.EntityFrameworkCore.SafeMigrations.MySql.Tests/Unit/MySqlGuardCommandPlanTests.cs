@@ -1,5 +1,8 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
+/// <summary>
+/// Protects guarded SQL ordering, owner identity, scoped cleanup, and physical prerequisite preservation.
+/// </summary>
 public sealed class MySqlGuardCommandPlanTests
 {
     /// <summary>Reserved PRIMARY endpoints cannot reach native rename after a successful source lookup.</summary>
@@ -172,6 +175,9 @@ public sealed class MySqlGuardCommandPlanTests
         using var lease = capture.Begin(builder
             .Operations
             .Cast<SafeMigrationOperation>()
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray());
 
         using var command = new MySqlCommand();
@@ -214,6 +220,7 @@ public sealed class MySqlGuardCommandPlanTests
         Assert.DoesNotContain("'items'", sql, StringComparison.Ordinal);
     }
 
+    /// <summary>Rejects dropping a column that still has a known live index before generating native DDL.</summary>
     [Fact]
     public void RuntimeSqlGenerator_RejectsKnownIndexBeforeColumnDropWithoutEnsureTable()
     {
@@ -233,6 +240,7 @@ public sealed class MySqlGuardCommandPlanTests
         Assert.Contains("Drop the index explicitly", invalidOperation.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>Accepts an explicit ordered index removal before the guarded source-column drop.</summary>
     [Fact]
     public void RuntimeSqlGenerator_AcceptsExplicitIndexDropBeforeColumnDropWithoutEnsureTable()
     {
@@ -252,9 +260,13 @@ public sealed class MySqlGuardCommandPlanTests
         Assert.Equal(3, commands.Count);
     }
 
+    /// <summary>
+    /// Checks the database qualifier before catalog access while retaining the authored qualified target DDL.
+    /// </summary>
     [Fact]
     public void DatabaseQualifiedOperationGuardsIdentityBeforeCatalogAccessAndPreservesQualifiedDdl()
     {
+        // Arrange
         var options = new DbContextOptionsBuilder<DbContext>();
         options.UseMySql(
             "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=application;Allow User Variables=true",
@@ -270,10 +282,14 @@ public sealed class MySqlGuardCommandPlanTests
                 "application"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
-        var command = Assert.Single(
+        // Act
+        var commands =
             context
                 .GetService<IMigrationsSqlGenerator>()
-                .Generate([operation], context.Model));
+                .Generate([operation], context.Model);
+
+        // Assert
+        var command = Assert.Single(commands);
 
         var payloads = DecodeHexPayloads(command.CommandText);
         var identityGuard = command.CommandText.IndexOf("CAST(DATABASE() AS BINARY) = CAST(", StringComparison.Ordinal);
@@ -288,9 +304,11 @@ public sealed class MySqlGuardCommandPlanTests
                 StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <summary>Avoids adding an unnecessary explicit-database identity guard to an unqualified operation.</summary>
     [Fact]
     public void UnqualifiedOperationDoesNotAddDatabaseIdentityGuard()
     {
+        // Arrange
         var options = new DbContextOptionsBuilder<DbContext>();
         options.UseMySql(
             "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=application;Allow User Variables=true",
@@ -305,14 +323,21 @@ public sealed class MySqlGuardCommandPlanTests
                 new ExpectedColumnDefinition("value", typeof(int), isNullable: true, storeType: "int")),
             SafeMigrationPolicy.ThrowIfDifferent);
 
-        var command = Assert.Single(
+        // Act
+        var commands =
             context
                 .GetService<IMigrationsSqlGenerator>()
-                .Generate([operation], context.Model));
+                .Generate([operation], context.Model);
+
+        // Assert
+        var command = Assert.Single(commands);
 
         Assert.DoesNotContain("CAST(DATABASE() AS BINARY) = CAST(", command.CommandText, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Applies a stream qualifier guard to earlier unqualified operations, not only the later qualified member.
+    /// </summary>
     [Fact]
     public void StreamQualifierGuardsEveryEarlierUnqualifiedOperation()
     {
@@ -348,6 +373,9 @@ public sealed class MySqlGuardCommandPlanTests
             });
     }
 
+    /// <summary>
+    /// Uses an unsatisfiable conjunction when the operation stream names distinct explicit database identities.
+    /// </summary>
     [Fact]
     public void DistinctStreamQualifiersGuardEveryOperationWithAnImpossibleConjunction()
     {
@@ -432,9 +460,11 @@ public sealed class MySqlGuardCommandPlanTests
             StringComparison.Ordinal);
     }
 
+    /// <summary>Avoids deferred state commands for a single catalog-only provider baseline.</summary>
     [Fact]
     public void CatalogOnlySingleBaselineOperation_AvoidsLazyStateCommands()
     {
+        // Arrange
         var options = new DbContextOptionsBuilder<DbContext>();
         options.UseMySql(
             "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test;Allow User Variables=true",
@@ -449,10 +479,12 @@ public sealed class MySqlGuardCommandPlanTests
                 new ExpectedColumnDefinition("value", typeof(int), isNullable: true, storeType: "int")),
             SafeMigrationPolicy.ThrowIfDifferent);
 
+        // Act
         var commands = context
             .GetService<IMigrationsSqlGenerator>()
             .Generate([operation], context.Model);
 
+        // Assert
         var command = Assert.Single(commands);
 
         AssertNativeScopedCommandIsPreserved(command);
@@ -534,9 +566,11 @@ public sealed class MySqlGuardCommandPlanTests
         Assert.True(guardCleanupIndex > cleanupIndex);
     }
 
+    /// <summary>Keeps apply and safe-repair DDL distinct in the guarded column command.</summary>
     [Fact]
     public void RepairableEnsureColumn_EmbedsDistinctProviderApplyAndRepairDdl()
     {
+        // Arrange
         var options = new DbContextOptionsBuilder<DbContext>();
         options.UseMySql(
             "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test;Allow User Variables=true",
@@ -558,10 +592,14 @@ public sealed class MySqlGuardCommandPlanTests
                     defaultValue: SafeMigrationDefaultValue.Literal("canonical"))),
             SafeMigrationPolicy.RepairIfSafe);
 
-        var command = Assert.Single(
+        // Act
+        var commands =
             context
                 .GetService<IMigrationsSqlGenerator>()
-                .Generate([operation], context.Model));
+                .Generate([operation], context.Model);
+
+        // Assert
+        var command = Assert.Single(commands);
 
         var payloads = DecodeHexPayloads(command.CommandText);
 
@@ -629,9 +667,13 @@ public sealed class MySqlGuardCommandPlanTests
         Assert.Equal(4, Count(command.CommandText, "DEALLOCATE PREPARE doka_sm_statement"));
     }
 
+    /// <summary>
+    /// Requires strict SQL mode for narrowing and never emits an IGNORE operation that could discard data.
+    /// </summary>
     [Fact]
     public void VarcharNarrowing_RequiresStrictSessionModeAndNeverRendersIgnore()
     {
+        // Arrange
         var options = new DbContextOptionsBuilder<DbContext>();
         options.UseMySql(
             "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test;Allow User Variables=true",
@@ -651,10 +693,14 @@ public sealed class MySqlGuardCommandPlanTests
                     maxLength: 5)),
             SafeMigrationPolicy.RepairIfSafe);
 
-        var command = Assert.Single(
+        // Act
+        var commands =
             context
                 .GetService<IMigrationsSqlGenerator>()
-                .Generate([operation], context.Model));
+                .Generate([operation], context.Model);
+
+        // Assert
+        var command = Assert.Single(commands);
 
         var payloads = DecodeHexPayloads(command.CommandText);
 
@@ -671,9 +717,11 @@ public sealed class MySqlGuardCommandPlanTests
             payload => payload.Contains("ALTER IGNORE TABLE", StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <summary>Uses CLR-aware typed compare-and-set predicates behind the managed-update guard.</summary>
     [Fact]
     public void ModelManagedUpdateUsesTypedCompareAndSetBehindTheGuard()
     {
+        // Arrange
         var options = new DbContextOptionsBuilder<DbContext>();
         options.UseMySql(
             "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test;Allow User Variables=true",
@@ -696,10 +744,14 @@ public sealed class MySqlGuardCommandPlanTests
                 uniqueKeys: null),
             SafeMigrationPolicy.ThrowIfDifferent);
 
-        var command = Assert.Single(
+        // Act
+        var commands =
             context
                 .GetService<IMigrationsSqlGenerator>()
-                .Generate([operation], context.Model));
+                .Generate([operation], context.Model);
+
+        // Assert
+        var command = Assert.Single(commands);
 
         var payloads = DecodeHexPayloads(command.CommandText);
 
@@ -756,6 +808,9 @@ public sealed class MySqlGuardCommandPlanTests
         using var lease = capture.Begin(builder
             .Operations
             .Cast<SafeMigrationOperation>()
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray());
 
         using var command = new MySqlCommand();
@@ -837,9 +892,8 @@ public sealed class MySqlGuardCommandPlanTests
             ClrType = typeof(int),
             ColumnType = "int",
             IsNullable = false,
+            ["Doka:MySql:ValueGenerationStrategy"] = MySqlValueGenerationStrategy.AutoIncrement,
         };
-
-        operation["Doka:MySql:ValueGenerationStrategy"] = MySqlValueGenerationStrategy.AutoIncrement;
 
         return SafeMigrationExpectedDefinitionFactory.From(operation);
     }
@@ -903,7 +957,7 @@ public sealed class MySqlGuardCommandPlanTests
         const string prefix = "CONVERT(0x";
         const string suffix = " USING utf8mb4)";
 
-        var result = new List<string>();
+        List<string> result = [];
         var offset = 0;
         while ((offset = sql.IndexOf(prefix, offset, StringComparison.Ordinal)) >= 0)
         {

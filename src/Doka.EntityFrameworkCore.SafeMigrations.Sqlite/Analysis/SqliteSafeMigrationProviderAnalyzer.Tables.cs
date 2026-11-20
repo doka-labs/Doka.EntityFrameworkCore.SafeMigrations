@@ -103,8 +103,12 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
         var targetOccupied = targetExists;
         if (!targetOccupied)
         {
-            foreach (var schemaObject in snapshot.OtherObjects)
+            // WHY: Traverse the stable ordered source by ordinal without materializing another collection.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var schemaObjectIndex = 0; schemaObjectIndex < snapshot.OtherObjects.Count; schemaObjectIndex++)
             {
+                var schemaObject = snapshot.OtherObjects[schemaObjectIndex];
                 if (schemaObject.Type is "view" or "index"
                     && s_identifierComparer.Equals(schemaObject.Name, targetName))
                 {
@@ -170,7 +174,7 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
         // postconditions independently require the terminal constraint.
         if ((table.PrimaryKeyColumns.Count == 0
                 ? !primaryKeyMayBeAbsent
-                : !primaryKeys.Any(definition => SqliteCatalogEquivalence.KeyMatchesDeclaredColumns(
+                : primaryKeys.All(definition => !SqliteCatalogEquivalence.KeyMatchesDeclaredColumns(
                     table,
                     table.PrimaryKeyKeys,
                     definition.Columns,
@@ -236,8 +240,12 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
             return "table_comments";
         }
 
-        foreach (var column in definition.Columns)
+        // WHY: Traverse the stable ordered source by ordinal without materializing another collection.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var columnIndex = 0; columnIndex < definition.Columns.Count; columnIndex++)
         {
+            var column = definition.Columns[columnIndex];
             var unsupported = ColumnUnsupportedFeature(column);
             if (unsupported is not null)
             {
@@ -245,8 +253,12 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
             }
         }
 
-        foreach (var check in definition.CheckConstraints)
+        // WHY: Traverse the stable ordered source by ordinal without materializing another collection.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var checkIndex = 0; checkIndex < definition.CheckConstraints.Count; checkIndex++)
         {
+            var check = definition.CheckConstraints[checkIndex];
             if (!CapturedSourceDialectCompatible(check.CapturedSql))
             {
                 return "check_expression";

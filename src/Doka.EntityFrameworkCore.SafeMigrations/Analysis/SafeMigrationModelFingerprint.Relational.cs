@@ -1,5 +1,3 @@
-using IColumnMapping = Microsoft.EntityFrameworkCore.Metadata.IColumnMapping;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations;
 
 public static partial class SafeMigrationModelFingerprint
@@ -80,7 +78,7 @@ public static partial class SafeMigrationModelFingerprint
         writer.Add(property.GetScale());
         writer.Add(property.IsUnicode());
         writer.Add(property.IsFixedLength());
-        writer.Add(property.IsConcurrencyToken && property.ValueGenerated == ValueGenerated.OnAddOrUpdate);
+        writer.Add(property is { IsConcurrencyToken: true, ValueGenerated: ValueGenerated.OnAddOrUpdate });
         writer.Add(property.GetCollation());
         writer.Add(property.GetComment());
         writer.Add(property.GetColumnOrder());
@@ -355,6 +353,8 @@ public static partial class SafeMigrationModelFingerprint
         IEnumerable<string> names
     )
     {
+        // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+        // ReSharper disable once UseCollectionExpression
         var values = names.ToArray();
         writer.Add(values.Length);
         foreach (var value in values)
@@ -372,6 +372,9 @@ public static partial class SafeMigrationModelFingerprint
     {
         var ordered = values
             .OrderBy(keySelector, StringComparer.Ordinal)
+
+            // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         writer.Add(ordered.Length);

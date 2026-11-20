@@ -42,6 +42,9 @@ internal static class SafeMigrationCatalogWorkOrder
         cancellationToken.ThrowIfCancellationRequested();
 
         return selected[..selectedCount]
+
+            // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
     }
 
@@ -53,7 +56,13 @@ internal static class SafeMigrationCatalogWorkOrder
     /// The result is duplicated, reordered, extra, or not owned by this batch.
     /// </exception>
     public static void ValidateResultOrdinal(
+
+        // WHY: Comparing the returned ordinal is the ownership guard's purpose, not an unused input.
+        // ReSharper disable once ParameterOnlyUsedForPreconditionCheck.Global
         int ordinal,
+
+        // WHY: Submitted identities reject extra or reordered rows before advancing the consumed count.
+        // ReSharper disable once ParameterOnlyUsedForPreconditionCheck.Global
         IReadOnlyList<int> submittedOrdinals,
         ref int consumed
     )

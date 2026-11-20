@@ -8,8 +8,14 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     {
         var fixedBytes = 0;
         var bitColumns = 0;
-        foreach (var column in definition.Columns)
+
+        // WHY: Immutable columns retain their authored order while the first unsupported facet is selected.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var columnIndex = 0; columnIndex < definition.Columns.Count; columnIndex++)
         {
+            var column = definition.Columns[columnIndex];
+
             if (!TryGetColumnStorageLayout(column, out var storage))
             {
                 return false;
@@ -47,23 +53,28 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         // WHY: The analysis-only occupancy probe proves absence, not a matching definition. Avoid
         // compiling the full matcher for thousands of missing tables. A concurrent new occupant
         // is still Different; every schema, authored-facet and inline-FK guard remains in the plan.
-        var matching = targetTableKnownAbsent
-            ? "1 = 0"
-            : intent.Mode == SafeMigrationTableMode.ConvergenceContainer
-                ? table
-                : TableMatches(definition, expectedTableConstraints);
+        var matching = targetTableKnownAbsent switch
+        {
+            true => "1 = 0",
+            false when intent.Mode == SafeMigrationTableMode.ConvergenceContainer => table,
+            false => TableMatches(definition, expectedTableConstraints),
+        };
 
-        var execution = targetTableKnownAbsent
-            ? matching
-            : intent.Mode == SafeMigrationTableMode.ConvergenceContainer
-                ? table
-                : TableMatches(definition, expectedTableConstraints: null);
+        var execution = targetTableKnownAbsent switch
+        {
+            true => matching,
+            false when intent.Mode == SafeMigrationTableMode.ConvergenceContainer => table,
+            false => TableMatches(definition, expectedTableConstraints: null),
+        };
 
         var stamps = definition
             .Columns
             .Where(static column => column.DefaultValue.Kind != SafeMigrationDefaultValueKind.None)
             .Select(column => BuildDefaultStampSql(definition.Table, definition.Schema, column))
             .Concat(definition.CheckConstraints.Select(BuildCheckStampSql))
+
+            // WHY: Retain this explicit fluent snapshot instead of a collection-spread rewrite.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var preamble = SqlServerForeignKeySafety.BuildCatalogPreamble(
@@ -78,8 +89,13 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             && definition.CheckConstraints.Count == 0
             && definition.ForeignKeys.Count == 0;
 
-        foreach (var column in definition.Columns)
+        // WHY: Immutable columns retain order through generated-dependency qualification.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var columnIndex = 0; columnIndex < definition.Columns.Count; columnIndex++)
         {
+            var column = definition.Columns[columnIndex];
+
             var isComputed = SqlServerComputedColumnContract.IsComputed(column);
             simpleAbsentClassifier &= !isComputed
                 && column.Collation is null
@@ -157,11 +173,12 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 && preamble is null
                 && computedPreamble is null,
                 ExecutionPostcondition = Bit(execution),
-                CatalogPreambleSql = computedPreamble is null
-                    ? preamble
-                    : preamble is null
-                        ? computedPreamble
-                        : preamble + "\n" + computedPreamble,
+                CatalogPreambleSql = computedPreamble switch
+                {
+                    null => preamble,
+                    _ when preamble is null => computedPreamble,
+                    _ => preamble + "\n" + computedPreamble,
+                },
                 PostconditionPreambleSql = computedPreamble,
                 ClassificationCodeExpression = $"""
                 CASE WHEN ({computedIdentityFailure})
@@ -186,14 +203,19 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         ExpectedTableDefinition definition
     )
     {
-        var predicates = new List<string>();
+        List<string> predicates = [];
         if (definition.PrimaryKey is { } primary)
         {
             Add(primary.Columns, isPrimaryKey: true);
         }
 
-        foreach (var unique in definition.UniqueConstraints)
+        // WHY: Immutable unique contracts retain their declaration order in generated SQL.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var uniqueIndex = 0; uniqueIndex < definition.UniqueConstraints.Count; uniqueIndex++)
         {
+            var unique = definition.UniqueConstraints[uniqueIndex];
+
             Add(unique.Columns, isPrimaryKey: false);
         }
 
@@ -209,8 +231,13 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             bool isPrimaryKey
         )
         {
-            foreach (var name in names)
+            // WHY: Stable indexed contracts retain their exact declared ordering.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var columnIndex = 0; columnIndex < names.Count; columnIndex++)
             {
+                var name = names[columnIndex];
+
                 var column = definition.Columns.First(value => value.Name == name);
                 if (!SqlServerComputedColumnContract.IsComputed(column))
                 {
@@ -365,8 +392,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         var requiredForeignKeys = expectedTableConstraints?.RequiredForeignKeys
             ?? definition.ForeignKeys;
 
-        var conditions = new List<string>
-        {
+        List<string> conditions =
+        [
             TableExists(definition.Table, definition.Schema),
             $"(SELECT COUNT(*) FROM sys.columns c WHERE c.object_id = {TableId(definition.Table, definition.Schema)}) "
             + $"= {definition.Columns.Count.ToString(CultureInfo.InvariantCulture)}",
@@ -395,10 +422,15 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 "sys.foreign_keys",
                 "1 = 1",
                 allowedForeignKeys.Select(static value => value.Name)),
-        };
+        ];
 
-        foreach (var primaryKey in allowedPrimaryKeys)
+        // WHY: Stable indexed contracts retain their exact declared ordering.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var primaryIndex = 0; primaryIndex < allowedPrimaryKeys.Count; primaryIndex++)
         {
+            var primaryKey = allowedPrimaryKeys[primaryIndex];
+
             var matching = KeyMatches(
                 definition.Table,
                 definition.Schema,
@@ -412,8 +444,13 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                     : matching);
         }
 
-        foreach (var unique in allowedUnique)
+        // WHY: Stable indexed contracts retain their exact declared ordering.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var uniqueIndex = 0; uniqueIndex < allowedUnique.Count; uniqueIndex++)
         {
+            var unique = allowedUnique[uniqueIndex];
+
             var matching = KeyMatches(definition.Table, definition.Schema, unique.Name, unique.Columns, "UQ");
             conditions.Add(
                 requiredUnique.Any(value => value.Name == unique.Name)
@@ -421,8 +458,13 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                     : $"(NOT {KeyExists(definition.Table, definition.Schema, unique.Name, "UQ")} OR {matching})");
         }
 
-        foreach (var foreignKey in allowedForeignKeys)
+        // WHY: Stable indexed contracts retain their exact declared ordering.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var foreignKeyIndex = 0; foreignKeyIndex < allowedForeignKeys.Count; foreignKeyIndex++)
         {
+            var foreignKey = allowedForeignKeys[foreignKeyIndex];
+
             var matching = ForeignKeyMatches(foreignKey);
             conditions.Add(
                 requiredForeignKeys.Any(value => value.Name == foreignKey.Name)
@@ -430,8 +472,13 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                     : $"(NOT {ForeignKeyExists(definition.Table, definition.Schema, foreignKey.Name)} OR {matching})");
         }
 
-        foreach (var check in allowedChecks)
+        // WHY: Stable indexed contracts retain their exact declared ordering.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var checkIndex = 0; checkIndex < allowedChecks.Count; checkIndex++)
         {
+            var check = allowedChecks[checkIndex];
+
             var matching = CheckMatches(check);
             conditions.Add(
                 requiredChecks.Any(value => value.Name == check.Name)

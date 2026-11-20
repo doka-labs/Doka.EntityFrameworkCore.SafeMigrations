@@ -634,9 +634,9 @@ public sealed class MySqlRequiredColumnAddCatalogTests
             ClrType = typeof(int),
             ColumnType = "int",
             IsNullable = false,
+            ["Doka:MySql:ValueGenerationStrategy"] = MySqlValueGenerationStrategy.AutoIncrement,
         };
 
-        operation["Doka:MySql:ValueGenerationStrategy"] = MySqlValueGenerationStrategy.AutoIncrement;
         var definition = SafeMigrationExpectedDefinitionFactory.From(operation);
 
         // Act
@@ -829,6 +829,9 @@ public sealed class MySqlRequiredColumnAddCatalogTests
         // Act
         var plans = policies
             .Select(policy => Capture(context, intent, policy))
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         // Assert
@@ -1059,6 +1062,7 @@ public sealed class MySqlRequiredColumnAddCatalogTests
             "CAST(t.TABLE_SCHEMA AS BINARY) = CAST(DATABASE()\nAS BINARY)",
             state,
             StringComparison.Ordinal);
+
         Assert.Contains(
             "CAST(t.TABLE_NAME AS BINARY) = CAST('MixedItems'\nAS BINARY)",
             prerequisite,
@@ -1991,6 +1995,9 @@ public sealed class MySqlRequiredColumnAddCatalogTests
                     : source.FindMapping(value.Value.GetType())
                     ?? throw new InvalidOperationException("The catalog value has no provider mapping."))
                 .GenerateSqlLiteral(value.Value))
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
     }
 
@@ -2032,11 +2039,10 @@ public sealed class MySqlRequiredColumnAddCatalogTests
             IsFixedLength = true,
             MaxLength = 36,
             IsNullable = false,
+            ["Doka:MySql:GuidFormat"] = DokaMySqlGuidFormat.Char36,
+            ["Doka:MySql:ValueGenerationStrategy"] = MySqlValueGenerationStrategy.ClientGuid,
+            ["Doka:MySql:RequiresExplicitBackfill"] = true,
         };
-
-        operation["Doka:MySql:GuidFormat"] = DokaMySqlGuidFormat.Char36;
-        operation["Doka:MySql:ValueGenerationStrategy"] = MySqlValueGenerationStrategy.ClientGuid;
-        operation["Doka:MySql:RequiresExplicitBackfill"] = true;
 
         return operation;
     }

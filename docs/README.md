@@ -1,14 +1,17 @@
 # Documentation
 
-This is the task-oriented entry point for SafeMigrations 10.7.2 documentation
+This is the task-oriented entry point for SafeMigrations 10.7.3 documentation
 covering all five packages. Start with the task table
 below; release changes and consumer upgrade notes belong in the
 [changelog](../CHANGELOG.md). The [diagnostics guide](diagnostics.md) explains
 readable errors, affected owners, text summaries and report-schema compatibility;
 [support and qualification](support-and-qualification.md) owns dependency and
 native UUID and lossless signed-integer upgrade boundaries. Review the
-[10.7.2 upgrade](support-and-qualification.md#upgrade-to-1072) for expression/catalog
-corrections and affected captured numeric-default fingerprint approvals.
+[10.7.3 upgrade](support-and-qualification.md#upgrade-to-1073) for resource
+ownership, cleanup and dependency-floor changes. Applications upgrading from
+before 10.7.2 must also review its
+[expression/catalog corrections](support-and-qualification.md#upgrade-to-1072)
+and affected captured numeric-default fingerprint approvals.
 The earlier [10.7.0 upgrade](support-and-qualification.md#upgrade-to-1070)
 retains its explicit cancellation-token source-compatibility boundary.
 Existing ordered proofs, concurrency guards and verified
@@ -51,6 +54,8 @@ OpenSSF status is established by its linked external registry.
   1.0 on MADR 4.0.0, with named decision authority and explicit review status.
 - [Contributing](../CONTRIBUTING.md): development setup, positive/negative
   tests, package verification, coding standards, and pull requests.
+- [Engineering standards application](engineering-standards-application.md):
+  project-specific compatibility, cleanup, dependency and evidence decisions.
 - [Security design and assurance](security/security-design.md): assets, trust
   boundaries, abuse cases, controls, and evidence limitations.
 - [Secure development](security/secure-development.md): review, analysis,

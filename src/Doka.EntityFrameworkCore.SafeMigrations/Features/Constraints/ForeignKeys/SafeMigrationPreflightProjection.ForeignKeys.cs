@@ -23,12 +23,8 @@ internal sealed partial class SafeMigrationPreflightProjection
         if (IsProjectedTableStructureUnknown(intent.Definition.Table, intent.Definition.Schema)
             || IsProjectedTableStructureUnknown(
                 intent.Definition.PrincipalTable,
-                intent.Definition.PrincipalSchema))
-        {
-            return StructureStateUnknown();
-        }
-
-        if (!ForeignKeyProjectedColumnsAllowSetNull(intent.Definition))
+                intent.Definition.PrincipalSchema)
+            || !ForeignKeyProjectedColumnsAllowSetNull(intent.Definition))
         {
             return StructureStateUnknown();
         }

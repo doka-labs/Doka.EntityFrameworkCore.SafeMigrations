@@ -9,9 +9,11 @@ public sealed class MySqlIndexesReplacementIntegrationTests : MySqlSafeMigration
         MySqlEngineContainerFixture fixture
     ) : base(fixture) { }
 
+    /// <summary>Projects an ordinary provider index drop before evaluating its guarded replacement.</summary>
     [Fact]
     public async Task ProviderDropThenSafeCreateIndex_ProjectsTheOrderedReplacement()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -29,36 +31,40 @@ public sealed class MySqlIndexesReplacementIntegrationTests : MySqlSafeMigration
 
         var runner = context.GetService<ISafeMigrationRunner>();
 
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
             new SafeMigrationRunOptions("provider-index-replacement"),
             CancellationToken.None);
 
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+
+        var replacementIndexCount = await ScalarIntAsync(
+            connectionString,
+            """
+            SELECT COUNT(DISTINCT INDEX_NAME)
+            FROM INFORMATION_SCHEMA.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'provider_index_replacement'
+            AND INDEX_NAME = 'ix_provider_index_replacement'
+            AND COLUMN_NAME = 'code';
+            """,
+            cancellationToken: CancellationToken.None);
+
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.ReadyWithProviderOperations, preflight.Status);
         Assert.Equal(SafeMigrationObservedState.Missing, preflight.Assessments[1].ObservedState);
         Assert.Equal(SafeMigrationAction.Apply, preflight.Assessments[1].Action);
 
-        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-
-        Assert.Equal(
-            1,
-            await ScalarIntAsync(
-                connectionString,
-                """
-                SELECT COUNT(DISTINCT INDEX_NAME)
-                FROM INFORMATION_SCHEMA.STATISTICS
-                WHERE TABLE_SCHEMA = DATABASE()
-                AND TABLE_NAME = 'provider_index_replacement'
-                AND INDEX_NAME = 'ix_provider_index_replacement'
-                AND COLUMN_NAME = 'code';
-                """,
-                cancellationToken: CancellationToken.None));
+        Assert.Equal(1, replacementIndexCount);
     }
 
+    /// <summary>Projects a guarded index drop before evaluating its guarded replacement.</summary>
     [Fact]
     public async Task SafeDropThenSafeCreateIndex_ProjectsTheOrderedReplacement()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -76,37 +82,41 @@ public sealed class MySqlIndexesReplacementIntegrationTests : MySqlSafeMigration
 
         var runner = context.GetService<ISafeMigrationRunner>();
 
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
             new SafeMigrationRunOptions("safe-index-replacement"),
             CancellationToken.None);
 
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+
+        var replacementIndexCount = await ScalarIntAsync(
+            connectionString,
+            """
+            SELECT COUNT(DISTINCT INDEX_NAME)
+            FROM INFORMATION_SCHEMA.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'safe_index_replacement'
+            AND INDEX_NAME = 'ix_safe_index_replacement'
+            AND COLUMN_NAME = 'code';
+            """,
+            cancellationToken: CancellationToken.None);
+
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
         Assert.Equal(SafeMigrationAction.Apply, preflight.Assessments[0].Action);
         Assert.Equal(SafeMigrationObservedState.Missing, preflight.Assessments[1].ObservedState);
         Assert.Equal(SafeMigrationAction.Apply, preflight.Assessments[1].Action);
 
-        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-
-        Assert.Equal(
-            1,
-            await ScalarIntAsync(
-                connectionString,
-                """
-                SELECT COUNT(DISTINCT INDEX_NAME)
-                FROM INFORMATION_SCHEMA.STATISTICS
-                WHERE TABLE_SCHEMA = DATABASE()
-                AND TABLE_NAME = 'safe_index_replacement'
-                AND INDEX_NAME = 'ix_safe_index_replacement'
-                AND COLUMN_NAME = 'code';
-                """,
-                cancellationToken: CancellationToken.None));
+        Assert.Equal(1, replacementIndexCount);
     }
 
+    /// <summary>Retains the ordered target prefix contract across intervening accepted metadata alterations.</summary>
     [Fact]
     public async Task SafeDropThenMetadataAlterationsAndPrefixReplacement_ProjectsTheOrderedState()
     {
+        // Arrange
         const string indexName = "ix_annotation_records_tenant_id_code";
         const string tableName = "annotation_records";
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
@@ -171,15 +181,12 @@ public sealed class MySqlIndexesReplacementIntegrationTests : MySqlSafeMigration
         var runner = context.GetService<ISafeMigrationRunner>();
         var options = new SafeMigrationRunOptions("metadata-prefix-index-replacement");
 
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
             options,
             CancellationToken.None);
-
-        var replacement = Assert.Single(
-            preflight.Assessments,
-            static assessment => assessment.OperationKind == SafeMigrationOperationKind.EnsureIndex);
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
@@ -189,6 +196,19 @@ public sealed class MySqlIndexesReplacementIntegrationTests : MySqlSafeMigration
             options,
             CancellationToken.None);
 
+        var replay = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            options,
+            CancellationToken.None);
+
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+
+        // Assert
+        var replacement = Assert.Single(
+            preflight.Assessments,
+            static assessment => assessment.OperationKind == SafeMigrationOperationKind.EnsureIndex);
+
         var postflightDrop = Assert.Single(
             postflight.Assessments,
             static assessment => assessment.OperationKind == SafeMigrationOperationKind.DropIndex);
@@ -197,17 +217,9 @@ public sealed class MySqlIndexesReplacementIntegrationTests : MySqlSafeMigration
             postflight.Assessments,
             static assessment => assessment.OperationKind == SafeMigrationOperationKind.EnsureIndex);
 
-        var replay = await runner.AnalyzeAsync(
-            context,
-            builder.Operations,
-            options,
-            CancellationToken.None);
-
         var replayReplacement = Assert.Single(
             replay.Assessments,
             static assessment => assessment.OperationKind == SafeMigrationOperationKind.EnsureIndex);
-
-        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.ReadyWithProviderOperations, preflight.Status);
         Assert.Equal(SafeMigrationObservedState.Missing, replacement.ObservedState);
@@ -247,9 +259,11 @@ public sealed class MySqlIndexesReplacementIntegrationTests : MySqlSafeMigration
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Keeps duplicate-row rejection ahead of replacing an existing index with a unique target.</summary>
     [Fact]
     public async Task ProviderDropThenUniqueCreate_PreservesDataBlockedClassificationAndExistingIndex()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -269,6 +283,7 @@ public sealed class MySqlIndexesReplacementIntegrationTests : MySqlSafeMigration
             ["code"],
             unique: true);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -277,6 +292,7 @@ public sealed class MySqlIndexesReplacementIntegrationTests : MySqlSafeMigration
                 new SafeMigrationRunOptions("blocked-index-replacement"),
                 CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationObservedState.DataBlocked, report.Assessments[1].ObservedState);
         Assert.Equal(SafeMigrationAction.RejectDataBlocked, report.Assessments[1].Action);
@@ -294,9 +310,13 @@ public sealed class MySqlIndexesReplacementIntegrationTests : MySqlSafeMigration
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>
+    /// Treats an equivalent foreign-key support index as matching without recreating it under a different name.
+    /// </summary>
     [Fact]
     public async Task ForeignKeySupportIndexWithEquivalentShape_IsAnIdempotentNoOp()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -313,20 +333,12 @@ public sealed class MySqlIndexesReplacementIntegrationTests : MySqlSafeMigration
         builder.CreateIndexIfNotExists("ix_index_child_parent_id", "index_child", ["parent_id"]);
         var runner = context.GetService<ISafeMigrationRunner>();
 
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
             new SafeMigrationRunOptions("foreign-key-support-index"),
             CancellationToken.None);
-
-        var assessment = Assert.Single(preflight.Assessments);
-
-        Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
-        Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState);
-        Assert.Equal(SafeMigrationAction.NoOp, assessment.Action);
-        Assert.DoesNotContain(
-            preflight.UnexpectedObjects,
-            static unexpected => unexpected.ObjectKind == SafeMigrationDatabaseObjectKind.Index);
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
@@ -337,28 +349,40 @@ public sealed class MySqlIndexesReplacementIntegrationTests : MySqlSafeMigration
             new SafeMigrationRunOptions("foreign-key-support-index-postflight"),
             CancellationToken.None);
 
+        var supportIndexCount = await ScalarIntAsync(
+            connectionString,
+            """
+            SELECT COUNT(DISTINCT INDEX_NAME)
+            FROM INFORMATION_SCHEMA.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'index_child'
+            AND INDEX_NAME = 'ix_index_child_parent_id';
+            """,
+            cancellationToken: CancellationToken.None);
+
+        // Assert
+        var assessment = Assert.Single(preflight.Assessments);
+
+        Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
+        Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState);
+        Assert.Equal(SafeMigrationAction.NoOp, assessment.Action);
+        Assert.DoesNotContain(
+            preflight.UnexpectedObjects,
+            static unexpected => unexpected.ObjectKind == SafeMigrationDatabaseObjectKind.Index);
+
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
         Assert.Equal(SafeMigrationAction.NoOp,
             Assert.Single(postflight.Assessments)
                 .Action);
 
-        Assert.Equal(
-            0,
-            await ScalarIntAsync(
-                connectionString,
-                """
-                SELECT COUNT(DISTINCT INDEX_NAME)
-                FROM INFORMATION_SCHEMA.STATISTICS
-                WHERE TABLE_SCHEMA = DATABASE()
-                AND TABLE_NAME = 'index_child'
-                AND INDEX_NAME = 'ix_index_child_parent_id';
-                """,
-                cancellationToken: CancellationToken.None));
+        Assert.Equal(0, supportIndexCount);
     }
 
+    /// <summary>Retains a matching unique support index while preserving the existing foreign key.</summary>
     [Fact]
     public async Task EquivalentUniqueIndexWithForeignKey_IsAnIdempotentNoOp()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -380,6 +404,7 @@ public sealed class MySqlIndexesReplacementIntegrationTests : MySqlSafeMigration
             ["parent_id"],
             unique: true);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -388,10 +413,11 @@ public sealed class MySqlIndexesReplacementIntegrationTests : MySqlSafeMigration
                 new SafeMigrationRunOptions("foreign-key-unique-index-conflict"),
                 CancellationToken.None);
 
-        var assessment = Assert.Single(report.Assessments);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        // Assert
+        var assessment = Assert.Single(report.Assessments);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
         Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState);

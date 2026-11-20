@@ -43,17 +43,24 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             new EnsureColumnIntent("items", computed),
             SafeMigrationPolicy.ThrowIfDifferent);
 
+        var native = new HashSet<string>(StringComparer.Ordinal);
+        var original = new HashSet<string>(StringComparer.Ordinal);
+
         // Act
         var exists = ((ISafeMigrationProjectedColumnSource)projection)
             .TryGetProjectedColumn("items", null, "computed_value", out var stored);
 
         var replay = projection.Project(operation, Live(SafeMigrationObservedState.Missing));
+        if (stored is not null)
+        {
+            SafeMigrationSqlExpressionInspector.CollectIdentifiers(stored.ComputedExpression!, native);
+        }
+
+        SafeMigrationSqlExpressionInspector.CollectIdentifiers(computed.ComputedExpression!, original);
 
         // Assert
         Assert.True(exists);
         Assert.NotNull(stored);
-        var native = new HashSet<string>(StringComparer.Ordinal);
-        SafeMigrationSqlExpressionInspector.CollectIdentifiers(stored.ComputedExpression!, native);
         Assert.Equal(
             quoted
                 ? "Left_Bound"
@@ -61,8 +68,6 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             Assert.Single(native));
 
         Assert.Same(sql, stored.CapturedComputedSql);
-        var original = new HashSet<string>(StringComparer.Ordinal);
-        SafeMigrationSqlExpressionInspector.CollectIdentifiers(computed.ComputedExpression!, original);
         Assert.Equal("Left_Bound", Assert.Single(original));
         Assert.Equal(SafeMigrationObservedState.Matching, replay.ObservedState);
     }
@@ -171,8 +176,19 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         ) => false;
     }
 
-    private sealed class CapturedReferenceGuard(bool reject) : ISafeMigrationProjectedDependencyAnalyzer
+    private sealed class CapturedReferenceGuard : ISafeMigrationProjectedDependencyAnalyzer
     {
+        private readonly bool _reject;
+
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="reject">The supplied reject for this fixture.</param>
+        public CapturedReferenceGuard(
+            bool reject
+        )
+        {
+            _reject = reject;
+        }
+
         public SafeMigrationOperation? Expected { get; set; }
         public bool CapturedReferenceRetained { get; private set; }
         public bool ProjectedReferenceRetained { get; private set; }
@@ -209,7 +225,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             // WHY: This is intentionally reference-bound. Replacing the
             // provider's captured operation would skip its real rejection,
             // making this regression fail instead of silently passing.
-            return reject && ProjectedReferenceRetained
+            return _reject && ProjectedReferenceRetained
                 ? new SafeMigrationProviderAnalysis(
                     SafeMigrationObservedState.Unsupported,
                     SafeMigrationRepairCapability.None,

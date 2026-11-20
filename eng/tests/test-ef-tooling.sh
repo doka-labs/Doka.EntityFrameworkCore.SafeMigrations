@@ -6,6 +6,13 @@ fixture_root="$(mktemp -d)"
 trap 'rm -rf -- "$fixture_root"' EXIT
 shared_script="$repository_root/eng/verify-ef-tooling.sh"
 
+for tooling_script in "$shared_script" "$repository_root/eng/verify-sqlserver-ef-tooling.sh"; do
+    if [[ ! -x "$tooling_script" ]]; then
+        echo "Native tooling entrypoint is not executable: $tooling_script" >&2
+        exit 1
+    fi
+done
+
 # WHY: Exercise the actual small shell boundaries, not a second implementation
 # of migrations, containers or the CLI. Native engine gates test their behavior.
 load_function() {
@@ -78,6 +85,138 @@ readback_case() {
 
 expect_status 0 readback_case 1
 expect_status 1 readback_case 0
+
+server_identity_case() {
+    local engine="$1"
+    local version="$2"
+    local native_identity="$3"
+    local native_status="$4"
+    local image=fixture/native:1
+    local container_name=safe-migrations-tooling-identity-test
+    local repository_root="$fixture_root"
+    local startup
+    export image
+    load_function "$shared_script" run_query
+    load_function "$shared_script" wait_for_mysql
+    if grep -q '^verify_server_identity() {$' "$shared_script"; then
+        load_function "$shared_script" verify_server_identity
+    fi
+
+    # WHY: Execute the real startup/exports, not a second identity validator.
+    # A wrong native identity must stop before database setup or provider selection.
+    startup="$(awk '
+        /^if \[\[ "\$\{engine\}" == "postgres" \]\]; then$/ { capture = 1 }
+        capture { print }
+        capture && /^cd "\$\{repository_root\}"$/ { exit }
+    ' "$shared_script")"
+    [[ -n "$startup" ]]
+
+    # WHY: The actual extracted startup and run_query invoke this scoped native-client double through eval.
+    # shellcheck disable=SC2329
+    docker() {
+        local arguments=" $* "
+        local query="${!#}"
+        if [[ "$1" == port ]]; then
+            printf '127.0.0.1:5544\n'
+        elif [[ "$query" == 'SELECT VERSION(), @@version_comment;' || "$query" == 'SELECT version();' ]]; then
+            [[ "$arguments" == *" --connect-timeout=10 "* || "$arguments" == *" PGCONNECT_TIMEOUT=10 "* ]]
+            if [[ "$engine" == postgres ]]; then
+                [[ "$arguments" == *" psql -X "* && "$arguments" == *" ON_ERROR_STOP=1 "* ]]
+            else
+                [[ "$arguments" == *" ${client} "* && "$arguments" == *" --default-character-set=utf8mb4 "* ]]
+            fi
+
+            printf 'readback\n' >>"$fixture_root/identity-readback"
+            printf '%s\n' "$native_identity"
+
+            return "$native_status"
+        elif [[ "$arguments" == *" createdb "* || "$query" == 'CREATE DATABASE '* ]]; then
+            printf 'database\n' >>"$fixture_root/identity-database-setup"
+        fi
+    }
+
+    unset SAFE_MIGRATIONS_MYSQL_ENGINE SAFE_MIGRATIONS_MYSQL_VERSION
+    eval "$startup"
+    if [[ "$engine" != postgres ]]; then
+        [[ "$SAFE_MIGRATIONS_MYSQL_ENGINE" == "$engine" && "$SAFE_MIGRATIONS_MYSQL_VERSION" == "$version" ]]
+    fi
+}
+
+expect_identity_rejection() {
+    local expected_status=1
+    if [[ "$4" != 0 ]]; then
+        expected_status="$4"
+    fi
+
+    : >"$fixture_root/identity-readback"
+    : >"$fixture_root/identity-database-setup"
+    expect_status "$expected_status" server_identity_case "$@"
+    grep -Fxq readback "$fixture_root/identity-readback"
+    [[ ! -s "$fixture_root/identity-database-setup" ]]
+}
+
+mysql_identity=$'9.7.4\tMySQL Community Server - GPL'
+mariadb_identity=$'12.3.3-MariaDB-ubu2404\tUbuntu 24.04'
+postgres_identity='PostgreSQL 18.4 (Debian 18.4-1.pgdg13+1) on aarch64-unknown-linux-gnu, 64-bit'
+
+# WHY: These first cases are nonvacuous against the old script: it reaches
+# provider export and accepts a mismatched patch or a different native family.
+expect_identity_rejection mysql 9.7.0 "$mysql_identity" 0
+expect_identity_rejection mariadb 12.3.0 "$mariadb_identity" 0
+expect_identity_rejection postgres 18.3 "$postgres_identity" 0
+expect_identity_rejection mysql 12.3.3 "$mariadb_identity" 0
+expect_identity_rejection mariadb 9.7.4 "$mysql_identity" 0
+expect_identity_rejection postgres 9.7.4 "$mysql_identity" 0
+expect_identity_rejection mysql 9.7.4 $'9.7.4\tPercona Server' 0
+expect_identity_rejection mysql 9.7.4 $'9.7.4-unknown\tMySQL Community Server - GPL' 0
+expect_identity_rejection mysql 9.7.4 $'invalid\tMySQL Community Server - GPL' 0
+expect_identity_rejection mariadb 12.3.3 $'12.3.3-unknown\tUbuntu 24.04' 0
+expect_identity_rejection postgres 18.4 'PostgreSQL 18.4invalid' 0
+expect_identity_rejection mysql 9.7.4 "$mysql_identity"$'\n'"$mysql_identity" 0
+expect_identity_rejection mysql 9.7.4 $'9.7.4\t' 0
+expect_identity_rejection mysql 9.7.4 $'\tMySQL Community Server - GPL' 0
+expect_identity_rejection mysql 9.7.4 "$mysql_identity"$'\textra' 0
+expect_identity_rejection mysql 9.7.4 "$mysql_identity"$'\033[31m' 0
+expect_identity_rejection postgres 18.4 $'PostgreSQL\t18.4' 0
+for engine in mysql mariadb postgres; do
+    expect_identity_rejection "$engine" 9.7.4 '' 0
+    expect_identity_rejection "$engine" 9.7.4 "$mysql_identity" 53
+done
+
+for accepted in mysql mariadb postgres; do
+    case "$accepted" in
+        mysql) observed="$mysql_identity"; pinned=9.7.4 ;;
+        mariadb) observed="$mariadb_identity"; pinned=12.3.3 ;;
+        postgres) observed="$postgres_identity"; pinned=18.4 ;;
+    esac
+
+    : >"$fixture_root/identity-readback"
+    : >"$fixture_root/identity-database-setup"
+    expect_status 0 server_identity_case "$accepted" "$pinned" "$observed" 0
+    grep -Fxq readback "$fixture_root/identity-readback"
+    grep -Fxq database "$fixture_root/identity-database-setup"
+done
+
+# WHY: Native banners are untrusted metadata, not safe diagnostic payloads.
+assert_no_native_banner_leak() {
+    if grep -Fq 'do-not-log-secret' "$fixture_root/stdout" "$fixture_root/stderr"; then
+        echo 'Native identity diagnostics disclosed the banner canary.' >&2
+        exit 1
+    fi
+}
+
+for requested_version in 9.7.4 9.7.0; do
+    expected_status=1
+    if [[ "$requested_version" == 9.7.4 ]]; then
+        expected_status=0
+    fi
+
+    expect_status "$expected_status" server_identity_case mysql "$requested_version" \
+        $'9.7.4\tMySQL do-not-log-secret' 0
+    assert_no_native_banner_leak
+done
+expect_identity_rejection mysql 9.7.4 $'9.7.4\tMySQL do-not-log-secret\033[31m' 0
+assert_no_native_banner_leak
 
 unowned_reset_case() {
     load_function "$shared_script" reset_owned_database

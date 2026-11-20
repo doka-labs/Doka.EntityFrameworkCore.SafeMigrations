@@ -87,6 +87,43 @@ cleanup() {
 
 trap 'cleanup "$?"' EXIT
 
+verify_server_identity() {
+    local expected_major
+    local observation
+    local readback_status
+    case "$version" in
+        2019) expected_major=15 ;;
+        2022) expected_major=16 ;;
+        2025) expected_major=17 ;;
+        *)
+            echo "Unknown SQL Server identity profile: $version." >&2
+            return 1
+            ;;
+    esac
+
+    # WHY: Annual profile labels are not native evidence. The image pin owns
+    # the exact build; its observed full product version must agree with the major.
+    if observation="$(docker exec "$container_name" "$sqlcmd_path" \
+        -S localhost -U sa -P 'SafeMigrationsTooling123!' -C -b -I -l 120 -t 120 -d master -h -1 -W \
+        -Q "SET NOCOUNT ON; /* doka_tooling_server_identity */
+            SELECT CONCAT(CONVERT(varchar(10), SERVERPROPERTY('ProductMajorVersion')), ':',
+                CONVERT(varchar(30), SERVERPROPERTY('ProductVersion')));")"; then
+        :
+    else
+        readback_status=$?
+        echo "SQL Server identity readback failed for profile $version." >&2
+        return "$readback_status"
+    fi
+
+    if [[ ! "$observation" =~ ^([0-9]+):([0-9]+)\.[0-9]+\.[0-9]+\.[0-9]+$
+        || "${BASH_REMATCH[1]}" != "$expected_major" || "${BASH_REMATCH[2]}" != "$expected_major" ]]; then
+        echo "SQL Server identity is missing, malformed or inconsistent with profile $version." >&2
+        return 1
+    fi
+
+    printf 'Verified native SQL Server profile %s: %s\n' "$version" "$observation"
+}
+
 mkdir -p "$artifacts_dir"
 repository_root="$work_dir/source"
 mkdir -p "$repository_root"
@@ -137,6 +174,8 @@ if [[ "$ready" != true ]]; then
     docker logs "$container_name" >&2 || true
     exit 1
 fi
+
+verify_server_identity
 
 port="$(docker port "$container_name" 1433/tcp | head -n 1 | awk -F: '{print $NF}')"
 project='tests/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests.csproj'

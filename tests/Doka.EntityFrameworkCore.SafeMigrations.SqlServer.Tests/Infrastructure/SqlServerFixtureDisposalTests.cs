@@ -14,6 +14,9 @@ public sealed class SqlServerFixtureDisposalTests
         var databaseFailure = new InvalidOperationException("Injected database cleanup failure.");
         var containerFailure = new InvalidOperationException("Injected container cleanup failure.");
         var attempts = new List<string>();
+
+        // WHY: Act owns async fixture teardown; this using only releases its synchronizer on early exit.
+        // ReSharper disable once UseAwaitUsing
         using var fixture = new SqlServerContainerFixture(
             RootConnectionString,
             (_, _) =>
@@ -64,6 +67,9 @@ public sealed class SqlServerFixtureDisposalTests
         // Arrange
         var expected = new InvalidOperationException("Injected single cleanup failure.");
         var attempts = new List<string>();
+
+        // WHY: Act owns async fixture teardown; this using only releases its synchronizer on early exit.
+        // ReSharper disable once UseAwaitUsing
         using var fixture = new SqlServerContainerFixture(
             RootConnectionString,
             (_, _) => Task.CompletedTask,
@@ -106,6 +112,9 @@ public sealed class SqlServerFixtureDisposalTests
         var droppedNames = new List<string>();
         var databasesAtContainerDisposal = -1;
         var containerDisposals = 0;
+
+        // WHY: Act owns async fixture teardown; this using only releases its synchronizer on early exit.
+        // ReSharper disable once UseAwaitUsing
         using var fixture = new SqlServerContainerFixture(
             RootConnectionString,
             (database, _) =>

@@ -78,7 +78,7 @@ public sealed class SqlServerServiceCompositionTests
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropTableIfExists("absent_table");
         using var cancellation = new CancellationTokenSource();
-        cancellation.Cancel();
+        await cancellation.CancelAsync();
 
         // Act
         var exception = await Record.ExceptionAsync(() =>
@@ -91,6 +91,6 @@ public sealed class SqlServerServiceCompositionTests
                     cancellation.Token));
 
         // Assert
-        Assert.IsAssignableFrom<OperationCanceledException>(exception);
+        Assert.IsType<OperationCanceledException>(exception, exactMatch: false);
     }
 }

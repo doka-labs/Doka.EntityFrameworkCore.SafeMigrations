@@ -25,9 +25,11 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < operations.Count; ordinal++)
         {
+            // WHY: Keep prefix mutation separate from conditional later-DROP snapshot admission.
+            // ReSharper disable once ConvertIfStatementToSwitchStatement
             if (operations[ordinal].Intent is DropIndexIntent index)
             {
-                predecessors ??= new Dictionary<(string Schema, string Table), ComputedDropIndexPrefix>();
+                predecessors ??= [];
                 var key = (index.Schema ?? "dbo", index.Table);
                 if (!predecessors.TryGetValue(key, out var indexes))
                 {
@@ -75,15 +77,21 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
     )
     {
         _columnDropConstraintCandidates = null;
-        if (!operations.Any(static operation => operation.Intent is DropColumnIntent)
-            || !operations.Any(static operation => ConstraintDropIdentity(operation.Intent) is not null))
+        if (operations.All(static operation => operation.Intent is not DropColumnIntent)
+            || operations.All(static operation => ConstraintDropIdentity(operation.Intent) is null))
         {
             return;
         }
 
-        var owners = new Dictionary<(string Schema, string Table), DropColumnIntent>();
-        foreach (var operation in operations)
+        Dictionary<(string Schema, string Table), DropColumnIntent> owners = [];
+
+        // WHY: The stable indexed snapshot preserves operation and declaration order.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var operationIndex0 = 0; operationIndex0 < operations.Count; operationIndex0++)
         {
+            var operation = operations[operationIndex0];
+
             if (operation.Intent is DropColumnIntent source)
             {
                 owners.TryAdd((source.Schema ?? "dbo", source.Table), source);
@@ -113,8 +121,13 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
 
             if (nativeOwners is not null)
             {
-                foreach (var operation in operations)
+                // WHY: The stable indexed snapshot preserves operation and declaration order.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
+                for (var operationIndex1 = 0; operationIndex1 < operations.Count; operationIndex1++)
                 {
+                    var operation = operations[operationIndex1];
+
                     if (operation.Intent is DropTableIntent table
                         && graph.GetNativeTableIdentity(table.Table, table.Schema) is { } identity)
                     {
@@ -136,7 +149,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             }
         }
 
-        var prefixes = new Dictionary<(string Schema, string Table), ColumnDropConstraintPrefix>();
+        Dictionary<(string Schema, string Table), ColumnDropConstraintPrefix> prefixes = [];
 
         // WHY: Observe only dependency removals preceding the current column DROP.
         // ReSharper disable once ForCanBeConvertedToForeach
@@ -146,6 +159,8 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             var operation = operations[ordinal];
             if (ConstraintDropIdentity(operation.Intent) is { } identity)
             {
+                // WHY: FK endpoint routing and table-deletion routing have different lazy native prerequisites.
+                // ReSharper disable once ConvertIfStatementToSwitchStatement
                 if (operation.Intent is DropForeignKeyIntent foreignKey)
                 {
                     if (_dependencyGraph?.GetNativeForeignKeyDropEndpoints(foreignKey) is { } endpoints)
@@ -185,6 +200,8 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                         ReferenceEqualityComparer.Instance)).TryAdd(operation, prefix.Snapshot(operations));
             }
         }
+
+        return;
 
         void Route(
             int identity,
@@ -226,6 +243,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
     ) => _computedDropIndexCandidates?.TryGetValue(operation, out var candidates) == true
         ? candidates
             .Select(index => ((DropIndexIntent)operations[index].Intent).Name)
+
+            // WHY: Retain this explicit fluent snapshot instead of a collection-spread rewrite.
+            // ReSharper disable once UseCollectionExpression
             .ToArray()
         : null;
 
@@ -369,6 +389,8 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             }
         }
 
+        return;
+
         void BindOwner(
             string table,
             string? schema,
@@ -415,8 +437,13 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             return null;
         }
 
-        foreach (var (_, proof) in routes)
+        // WHY: Routes are fully registered before qualification; only their proof state may change here.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var routeIndex = 0; routeIndex < routes.Count; routeIndex++)
         {
+            var proof = routes[routeIndex].Proof;
+
             if (proof.Invalidated)
             {
                 continue;
@@ -464,8 +491,13 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             return null;
         }
 
-        foreach (var (_, proof) in routes)
+        // WHY: Routes are fully registered before qualification and retain their original priority.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var routeIndex = 0; routeIndex < routes.Count; routeIndex++)
         {
+            var proof = routes[routeIndex].Proof;
+
             if (proof.Invalidated)
             {
                 continue;
@@ -556,6 +588,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             or "column_drop_candidate_dependency";
 
         var acceptedRemovals = proof.Indexes.Length + proof.Constraints.Length > 0;
+
+        // WHY: Retain the non-short-circuit array scan before evaluating each index's live identity.
+        // ReSharper disable once LoopCanBeConvertedToQuery
         foreach (var constraint in proof.Constraints)
         {
             acceptedRemovals &= constraint.AcceptedRemoval;
@@ -680,14 +715,25 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                 break;
             case EnsureTableIntent table:
                 Route(table.Definition.Table, table.Definition.Schema);
-                foreach (var foreignKey in table.Definition.ForeignKeys)
+
+                // WHY: The stable indexed snapshot preserves declaration order without mutating the source.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
+                for (var foreignKeyIndex0 = 0;
+                    foreignKeyIndex0 < table.Definition.ForeignKeys.Count;
+                    foreignKeyIndex0++)
                 {
+                    var foreignKey = table.Definition.ForeignKeys[foreignKeyIndex0];
+
                     Route(foreignKey.PrincipalTable, foreignKey.PrincipalSchema);
                 }
 
                 break;
             default:
                 var owner = ComputedDropMutationOwner(operation.Intent);
+
+                // WHY: A resolved mutation owner takes precedence over all syntactic DROP fallback routes.
+                // ReSharper disable once ConvertIfStatementToSwitchStatement
                 if (owner is { } mutation)
                 {
                     Route(mutation.Table, mutation.Schema);
@@ -708,6 +754,8 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                 break;
         }
 
+        return;
+
         void Route(
             string table,
             string? schema
@@ -723,8 +771,13 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             List<(SafeMigrationOperation Operation, NativeComputedDropProof Proof)> routes
         )
         {
-            foreach (var (sourceOperation, proof) in routes)
+            // WHY: This observer changes proof state, never the already registered route slots.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var routeIndex = 0; routeIndex < routes.Count; routeIndex++)
             {
+                var (sourceOperation, proof) = routes[routeIndex];
+
                 if (proof.LastObservedEpoch != epoch)
                 {
                     proof.LastObservedEpoch = epoch;
@@ -769,6 +822,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             }
 
             var source = (DropColumnIntent)sourceOperation.Intent;
+
+            // WHY: Table deletion updates FK ownership before the independent exact source-column observation.
+            // ReSharper disable once ConvertIfStatementToSwitchStatement
             if (operation.Intent is DropTableIntent removedOwner)
             {
                 foreach (var constraint in proof.Constraints)
@@ -799,6 +855,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                 && operation.Intent is EnsureIndexIntent createdIndex)
             {
                 var dependsOnSource = ClassifyNewIndexDropDependency(createdIndex.Definition, source);
+
+                // WHY: False removes a proven-independent owner; null records uncertainty without a true-case action.
+                // ReSharper disable once ConvertIfStatementToSwitchStatement
                 if (dependsOnSource == false)
                 {
                     // WHY: Positive native column ids prove this new index
@@ -848,8 +907,14 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
     {
         _projectedColumnLayouts.TryGetValue((source.Schema ?? "dbo", source.Table), out var layout);
         var known = true;
-        foreach (var key in index.Keys)
+
+        // WHY: The stable indexed snapshot preserves declaration order without mutating the source.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var keyIndex0 = 0; keyIndex0 < index.Keys.Count; keyIndex0++)
         {
+            var key = index.Keys[keyIndex0];
+
             if (key.Column is not { } column)
             {
                 known = false;
@@ -867,8 +932,13 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             }
         }
 
-        foreach (var column in index.IncludedColumns)
+        // WHY: The stable indexed snapshot preserves declaration order without mutating the source.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var includedIndex0 = 0; includedIndex0 < index.IncludedColumns.Count; includedIndex0++)
         {
+            var column = index.IncludedColumns[includedIndex0];
+
             if (References(column) is not { } referenced)
             {
                 known = false;
@@ -997,8 +1067,13 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                 continue;
             }
 
-            foreach (var proof in proofs)
+            // WHY: The stable indexed snapshot preserves declaration order without mutating the source.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var proofIndex0 = 0; proofIndex0 < proofs.Count; proofIndex0++)
             {
+                var proof = proofs[proofIndex0];
+
                 if (!proof.Matches(columns, drop.Table, drop.Schema))
                 {
                     continue;
@@ -1039,7 +1114,13 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         /// <summary>Gets stable immutable operations and ordinals without a per-DROP array copy.</summary>
         internal ColumnDropConstraintSnapshot Snapshot(
             IReadOnlyList<SafeMigrationOperation> operations
-        ) => _snapshot ??= new ColumnDropConstraintSnapshot(_latest.Values.ToArray(), operations);
+        ) => _snapshot ??= new ColumnDropConstraintSnapshot(
+            _latest.Values
+
+                // WHY: Preserve one immutable fluent snapshot until this owner's predecessor prefix changes.
+                // ReSharper disable once UseCollectionExpression
+                .ToArray(),
+            operations);
 
         /// <summary>Expires only this owner's next snapshot; prior captures keep their exact predecessors.</summary>
         internal void Observe(
@@ -1089,7 +1170,11 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         private int[]? _snapshot;
 
         /// <summary>Gets one stable immutable snapshot without copying it for every unchanged later DROP.</summary>
-        internal int[] Snapshot => _snapshot ??= _latest.Values.ToArray();
+        internal int[] Snapshot => _snapshot ??= _latest.Values
+
+            // WHY: Preserve one immutable fluent snapshot until this owner's predecessor prefix changes.
+            // ReSharper disable once UseCollectionExpression
+            .ToArray();
 
         /// <summary>Records a new exact predecessor and expires only the next snapshot, never prior captures.</summary>
         internal void Observe(
@@ -1106,20 +1191,33 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         }
     }
 
-    private sealed class NativeComputedDropProof(
-        string code,
-        ComputedDropIndexIdentity[] indexes,
-        ColumnDropConstraintIdentity[] constraints
-    )
+    private sealed class NativeComputedDropProof
     {
+        /// <summary>
+        /// Captures an invocation-owned dependency proof without copying immutable predecessor identities.
+        /// </summary>
+        /// <param name="code">The exact native blocker classification.</param>
+        /// <param name="indexes">The verified original index-removal identities.</param>
+        /// <param name="constraints">The verified original typed constraint-removal identities.</param>
+        internal NativeComputedDropProof(
+            string code,
+            ComputedDropIndexIdentity[] indexes,
+            ColumnDropConstraintIdentity[] constraints
+        )
+        {
+            Code = code;
+            Indexes = indexes;
+            Constraints = constraints;
+        }
+
         /// <summary>Gets the exact native blocker family certified by this invocation.</summary>
-        internal string Code { get; } = code;
+        internal string Code { get; }
 
         /// <summary>Gets only original matching physical predecessor index identities.</summary>
-        internal ComputedDropIndexIdentity[] Indexes { get; } = indexes;
+        internal ComputedDropIndexIdentity[] Indexes { get; }
 
         /// <summary>Gets exact original typed native constraint-removal predecessors.</summary>
-        internal ColumnDropConstraintIdentity[] Constraints { get; } = constraints;
+        internal ColumnDropConstraintIdentity[] Constraints { get; }
 
         /// <summary>
         /// Gets or sets whether an accepted native source removal ended its original member lifetime.
@@ -1142,35 +1240,59 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         internal int? InvalidatedOriginOrdinal { get; set; }
     }
 
-    private sealed class ColumnDropConstraintIdentity(
-        SafeMigrationOperation operation,
-        SafeMigrationProviderAnalysis native
-    )
+    private sealed class ColumnDropConstraintIdentity
     {
+        /// <summary>
+        /// Retains an exact predecessor operation together with its independently captured native proof.
+        /// </summary>
+        /// <param name="operation">The exact authored removal predecessor.</param>
+        /// <param name="native">The original permission-qualified native classification.</param>
+        internal ColumnDropConstraintIdentity(
+            SafeMigrationOperation operation,
+            SafeMigrationProviderAnalysis native
+        )
+        {
+            Operation = operation;
+            Native = native;
+        }
+
         /// <summary>Gets the exact typed predecessor whose native identity was independently captured.</summary>
-        internal SafeMigrationOperation Operation { get; } = operation;
+        internal SafeMigrationOperation Operation { get; }
 
         /// <summary>Gets the original native kind and permission-qualified state.</summary>
-        internal SafeMigrationProviderAnalysis Native { get; } = native;
+        internal SafeMigrationProviderAnalysis Native { get; }
 
         /// <summary>Gets or sets whether exact accepted history currently proves physical absence.</summary>
         internal bool AcceptedRemoval { get; set; }
     }
 
-    private sealed class ComputedDropIndexIdentity(
-        SafeMigrationOperation operation,
-        ExpectedIndexDefinition identity,
-        SafeMigrationProviderAnalysis native
-    )
+    private sealed class ComputedDropIndexIdentity
     {
+        /// <summary>
+        /// Retains one original physical index identity independently from later authored name reuse.
+        /// </summary>
+        /// <param name="operation">The exact original removal predecessor.</param>
+        /// <param name="identity">The immutable native-qualified name query.</param>
+        /// <param name="native">The original native index classification.</param>
+        internal ComputedDropIndexIdentity(
+            SafeMigrationOperation operation,
+            ExpectedIndexDefinition identity,
+            SafeMigrationProviderAnalysis native
+        )
+        {
+            Operation = operation;
+            Identity = identity;
+            Native = native;
+        }
+
         /// <summary>Gets the exact original predecessor, not a same-name authored substitute.</summary>
-        internal SafeMigrationOperation Operation { get; } = operation;
+        internal SafeMigrationOperation Operation { get; }
 
         /// <summary>Gets the native-qualified physical-name query, without claiming the index key shape.</summary>
-        internal ExpectedIndexDefinition Identity { get; } = identity;
+        internal ExpectedIndexDefinition Identity { get; }
 
         /// <summary>Gets the genuine original index classification and physical name.</summary>
-        internal SafeMigrationProviderAnalysis Native { get; } = native;
+        internal SafeMigrationProviderAnalysis Native { get; }
 
         /// <summary>Gets or sets whether this exact predecessor established accepted current absence.</summary>
         internal bool AcceptedRemoval { get; set; }

@@ -17,9 +17,12 @@ public sealed class MySqlRequiredColumnAddStagingContractTests
     )
     {
         // Arrange
-        var annotated = new AddColumnOperation();
-        annotated["Doka:MySql:RequiresExplicitBackfill"] = true;
-        annotated["Doka:MySql:ValueGenerationStrategy"] = MySqlValueGenerationStrategy.None;
+        var annotated = new AddColumnOperation
+        {
+            ["Doka:MySql:RequiresExplicitBackfill"] = true,
+            ["Doka:MySql:ValueGenerationStrategy"] = MySqlValueGenerationStrategy.None,
+        };
+
         var definition = new ExpectedColumnDefinition(
             name: "complete_value",
             clrType: typeof(string),

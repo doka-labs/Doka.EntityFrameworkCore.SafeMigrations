@@ -1,15 +1,15 @@
 ---
 id: D-011
 status: implemented
-date: 2026-09-05
-decision-makers: [Dominic Kalkbrenner]
+date: 2026-11-19
+decision-makers: ["Dominic Kalkbrenner"]
 consulted: []
 informed: ["@doka-labs/core-maintainers"]
 scope: "Provider-proven lossless column repair and bounded actionable preflight evidence"
 supersedes: []
 superseded-by: []
 amends: [D-002, D-004, D-005]
-amended-by: []
+amended-by: [D-012]
 madr-version: "4.0.0"
 doka-profile-version: "1.0"
 ---
@@ -203,11 +203,13 @@ recovery. D-005 remains authoritative for evidence bounds and privacy.
 ### Decision History
 
 - 2026-09-05: Decision recorded with status proposed.
+- 2026-09-05: Status changed from proposed to accepted.
 - 2026-09-05: Dominic Kalkbrenner selected the provider-proven allowlist and
-  bounded typed diagnostics; status changed from proposed to accepted.
+  bounded typed diagnostics.
+- 2026-09-05: Status changed from accepted to implemented.
 - 2026-09-05: Implemented provider proofs, grouped runtime guards, ordered
   projection, report schema version 2, live tests, scale qualification, public
-  APIs, and operator documentation; status changed from accepted to implemented.
+  APIs, and operator documentation.
 - 2026-09-26: Re-evaluated the report-consumer trigger. Schema v3 adds a
   nullable raw-SQL deferral origin and explicit runtime-validation values
   without expanding typed facet differences or exposing managed values.
@@ -242,6 +244,10 @@ recovery. D-005 remains authoritative for evidence bounds and privacy.
   with native old-source, storage and dependency checks; SQLite retains physical
   INTEGER matches without adding a store-conversion contract. SQL Server keeps
   its separate exact-dependency transition system and native qualification gate.
+- 2026-11-19: Aligned last-update metadata, reciprocal amendments, option titles
+  and source/navigation format with the current documentation profile. Retained
+  the recorded status and historical approval evidence; this migration grants no
+  new architectural acceptance or publication authority.
 
 ### Implementation References
 
@@ -266,9 +272,8 @@ recovery. D-005 remains authoritative for evidence bounds and privacy.
 - [PostgreSQL event-trigger activation](https://www.postgresql.org/docs/18/catalog-pg-event-trigger.html) (primary source; retrieved 2026-10-08)
 - [PostgreSQL DML-trigger catalog](https://www.postgresql.org/docs/18/catalog-pg-trigger.html) (primary source; retrieved 2026-10-08)
 - [SQL Server SQL/CLR trigger catalog](https://learn.microsoft.com/en-us/sql/relational-databases/system-catalog-views/sys-triggers-transact-sql?view=sql-server-ver17) (primary source; retrieved 2026-10-08)
-
-- MySQL 8.4 ALTER TABLE (`https://dev.mysql.com/doc/refman/8.4/en/alter-table.html`; primary source; retrieved 2026-10-06)
-- MariaDB ALTER TABLE (`https://mariadb.com/docs/server/reference/sql-statements/data-definition/alter/alter-table`; primary source; retrieved 2026-10-06)
+- [MySQL 8.4 ALTER TABLE](https://dev.mysql.com/doc/refman/8.4/en/alter-table.html) (primary source; retrieved 2026-10-06)
+- [MariaDB ALTER TABLE](https://mariadb.com/docs/server/reference/sql-statements/data-definition/alter/alter-table) (primary source; retrieved 2026-10-06)
 - [MySQL 8.4 online DDL operations](https://dev.mysql.com/doc/refman/8.4/en/innodb-online-ddl-operations.html) (primary source; retrieved 2026-09-05)
 - [MySQL 8.4 string functions](https://dev.mysql.com/doc/refman/8.4/en/string-functions.html) (primary source; retrieved 2026-09-05)
 - [MySQL 8.4 BIT type](https://dev.mysql.com/doc/refman/8.4/en/bit-type.html) (primary source; retrieved 2026-09-05)

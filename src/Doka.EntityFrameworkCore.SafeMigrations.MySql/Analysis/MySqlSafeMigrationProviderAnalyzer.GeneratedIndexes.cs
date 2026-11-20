@@ -22,8 +22,14 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         ClearGeneratedIndexIdentityFacts();
         Dictionary<(string? Schema, string Table, string Column), SafeMigrationOperation>? generated = null;
         HashSet<(string? Schema, string Table)>? memberChanges = null;
-        foreach (var operation in operations)
+
+        // WHY: Index this stable list while preserving its order and ownership.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var operationIndex = 0; operationIndex < operations.Count; operationIndex++)
         {
+            var operation = operations[operationIndex];
+
             var changedOwner = operation.Intent switch
             {
                 DropColumnIntent drop => (drop.Schema, drop.Table),
@@ -57,8 +63,14 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             }
 
             List<SafeMigrationOperation>? sources = null;
-            foreach (var key in index.Definition.Keys)
+
+            // WHY: Index this stable list while preserving its order and ownership.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var keyIndex = 0; keyIndex < index.Definition.Keys.Count; keyIndex++)
             {
+                var key = index.Definition.Keys[keyIndex];
+
                 if (generated.TryGetValue(
                     (NormalizeProofSchema(index.Definition.Schema), index.Definition.Table, key.Column!),
                     out var source))
@@ -72,10 +84,19 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                 (_generatedIndexIdentityProofs ??=
                         new Dictionary<SafeMigrationOperation, GeneratedIndexIdentityProof>(
                             ReferenceEqualityComparer.Instance))[operation] =
+
+                    // WHY: Retain fluent materialization and its existing snapshot
+                    // ownership rather than replacing this boundary with a spread.
+                    // ReSharper disable once UseCollectionExpression
                     new GeneratedIndexIdentityProof(sources.ToArray());
 
-                foreach (var source in sources)
+                // WHY: Index this stable list while preserving its order and ownership.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
+                for (var sourceIndex = 0; sourceIndex < sources.Count; sourceIndex++)
                 {
+                    var source = sources[sourceIndex];
+
                     var target = (EnsureColumnIntent)source.Intent;
                     (_generatedIndexDroppedMembers ??=
                             new Dictionary<(string? Schema, string Table, string Column), bool>(PhysicalMemberComparer))
@@ -265,8 +286,13 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             hasDroppedPhysicalGeneratedKey |= wasDropped;
         }
 
-        foreach (var key in index.Definition.Keys)
+        // WHY: Index this stable list while preserving its order and ownership.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var keyIndex = 0; keyIndex < index.Definition.Keys.Count; keyIndex++)
         {
+            var key = index.Definition.Keys[keyIndex];
+
             if (!columns.TryGetProjectedColumn(index.Definition.Table, index.Definition.Schema, key.Column!, out _)
                 && (_changedGeneratedColumnSources?.Contains(
                         (NormalizeProofSchema(index.Definition.Schema), index.Definition.Table, key.Column!))
@@ -297,16 +323,17 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         // only while its key lifetime survives. DROP/reADD can remove that
         // native index; an accepted DropIndex supplies a separate tombstone.
         // An exact-name clash never becomes Missing without such evidence.
-        identity ??= proof.NamespaceState == SafeMigrationObservedState.Matching
-            ? !hasDroppedPhysicalGeneratedKey
-            && live is { ObservedState: SafeMigrationObservedState.Matching, PostconditionSatisfied: true }
-                ? live
-                : null
-            : new SafeMigrationProviderAnalysis(
+        identity ??= proof.NamespaceState switch
+        {
+            SafeMigrationObservedState.Matching when !hasDroppedPhysicalGeneratedKey
+                && live is { ObservedState: SafeMigrationObservedState.Matching, PostconditionSatisfied: true } => live,
+            SafeMigrationObservedState.Matching => null,
+            _ => new SafeMigrationProviderAnalysis(
                 proof.NamespaceState.Value,
                 SafeMigrationRepairCapability.None,
                 false,
-                "projected_index_namespace_qualified");
+                "projected_index_namespace_qualified"),
+        };
 
         if (identity?.ObservedState == SafeMigrationObservedState.Missing
             && !hasNewPhysicalGeneratedKey)
@@ -335,23 +362,22 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             return;
         }
 
-        if (operation.Intent is DropColumnIntent drop
-            && _generatedIndexDroppedMembers is { } droppedMembers)
+        switch (operation.Intent)
         {
-            var key = (NormalizeProofSchema(drop.Schema), drop.Table, drop.Name);
-            if (droppedMembers.ContainsKey(key))
-            {
-                droppedMembers[key] = true;
-            }
-        }
+            case DropColumnIntent drop when _generatedIndexDroppedMembers is { } droppedMembers:
+                var key = (NormalizeProofSchema(drop.Schema), drop.Table, drop.Name);
+                if (droppedMembers.ContainsKey(key))
+                {
+                    droppedMembers[key] = true;
+                }
 
-        if (operation.Intent is RenameColumnIntent rename
-            && _generatedIndexDroppedMembers is { } renamedMembers)
-        {
-            // WHY: Renaming an existing member can carry its native indexes
-            // into a formerly dropped spelling; it is not a fresh ADD lifetime.
-            renamedMembers.Remove((NormalizeProofSchema(rename.Schema), rename.Table, rename.Name));
-            renamedMembers.Remove((NormalizeProofSchema(rename.Schema), rename.Table, rename.NewName));
+                break;
+            case RenameColumnIntent rename when _generatedIndexDroppedMembers is { } renamedMembers:
+                // WHY: Renaming an existing member can carry its native indexes
+                // into a formerly dropped spelling; it is not a fresh ADD lifetime.
+                renamedMembers.Remove((NormalizeProofSchema(rename.Schema), rename.Table, rename.Name));
+                renamedMembers.Remove((NormalizeProofSchema(rename.Schema), rename.Table, rename.NewName));
+                break;
         }
 
         var owner = operation.Intent switch
@@ -372,9 +398,18 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
     }
 
     /// <summary>Retains source identities and catalog namespace/storage evidence, without application data.</summary>
-    private sealed class GeneratedIndexIdentityProof(SafeMigrationOperation[] generatedSources)
+    private sealed class GeneratedIndexIdentityProof
     {
-        internal SafeMigrationOperation[] GeneratedSources { get; } = generatedSources;
+        /// <summary>Retains the exact captured sources whose dependency proof must stay aligned.</summary>
+        /// <param name="generatedSources">The capture-owned source operation identities.</param>
+        internal GeneratedIndexIdentityProof(
+            SafeMigrationOperation[] generatedSources
+        )
+        {
+            GeneratedSources = generatedSources;
+        }
+
+        internal SafeMigrationOperation[] GeneratedSources { get; }
         internal SafeMigrationObservedState? NamespaceState { get; set; }
         internal SafeMigrationProviderAnalysis? LiveAnalysis { get; set; }
     }

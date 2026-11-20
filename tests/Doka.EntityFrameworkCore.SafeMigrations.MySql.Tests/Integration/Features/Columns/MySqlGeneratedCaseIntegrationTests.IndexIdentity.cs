@@ -781,6 +781,9 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
                 builder
                     .Operations
                     .Take(builder.Operations.Count - 1)
+
+                    // WHY: Retain this explicit materialization/copy path and its collection lowering.
+                    // ReSharper disable once UseCollectionExpression
                     .ToArray(),
                 CancellationToken.None));
 
@@ -882,6 +885,9 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
                 builder
                     .Operations
                     .Take(builder.Operations.Count - 1)
+
+                    // WHY: Retain this explicit materialization/copy path and its collection lowering.
+                    // ReSharper disable once UseCollectionExpression
                     .ToArray(),
                 CancellationToken.None));
 

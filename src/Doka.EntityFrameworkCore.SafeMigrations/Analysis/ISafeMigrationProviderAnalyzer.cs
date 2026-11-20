@@ -4,6 +4,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// Classifies ordered safe-operation batches against the live provider catalog
 /// without executing target DDL or writing EF migration history.
 /// </summary>
+[PublicAPI]
 public interface ISafeMigrationProviderAnalyzer
 {
     /// <summary>Gets the stable provider identifier.</summary>

@@ -73,7 +73,7 @@ public sealed class PostgreSqlIntegerWideningRoleIntegrationTests : PostgreSqlIn
                 new SafeMigrationRunOptions("integer-dependent-native-role"),
                 CancellationToken.None);
 
-        var failure = await Assert.ThrowsAsync<PostgresException>(() => ExecuteOperationsAsync(
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
             context,
             builder.Operations,
             CancellationToken.None));
@@ -85,22 +85,25 @@ public sealed class PostgreSqlIntegerWideningRoleIntegrationTests : PostgreSqlIn
 
         await transaction.RollbackAsync(CancellationToken.None);
 
+        var storedValue = await ScalarIntAsync(
+            connectionString,
+            "SELECT value FROM role_integer_rows;",
+            cancellationToken: CancellationToken.None);
+
         // Assert
         Assert.Equal(SafeMigrationAction.RejectDifferent,
             Assert.Single(report.Assessments)
                 .Action);
 
-        Assert.Equal("P1001", failure.SqlState);
+        Assert.Equal("P1001",
+            Assert.IsType<PostgresException>(failure)
+                .SqlState);
+
         Assert.Equal("0A000",
             Assert.IsType<PostgresException>(nativeFailure)
                 .SqlState);
 
-        Assert.Equal(
-            7,
-            await ScalarIntAsync(
-                connectionString,
-                "SELECT value FROM role_integer_rows;",
-                cancellationToken: CancellationToken.None));
+        Assert.Equal(7, storedValue);
     }
 
     /// <summary>Does not turn safe owner-level or unrelated roles into source-column dependencies.</summary>
@@ -167,28 +170,27 @@ public sealed class PostgreSqlIntegerWideningRoleIntegrationTests : PostgreSqlIn
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
+        var storedValues = await ScalarStringAsync(
+            connectionString,
+            "SELECT value::text || ':' || unrelated::text FROM independent_integer_rows;",
+            cancellationToken: CancellationToken.None);
+
+        var storedType = await ScalarStringAsync(
+            connectionString,
+            """
+            SELECT data_type FROM information_schema.columns
+            WHERE table_schema='public' AND table_name='independent_integer_rows'
+            AND column_name='value';
+            """,
+            cancellationToken: CancellationToken.None);
+
         // Assert
         Assert.Equal(SafeMigrationAction.Repair,
             Assert.Single(report.Assessments)
                 .Action);
 
-        Assert.Equal(
-            "7:9",
-            await ScalarStringAsync(
-                connectionString,
-                "SELECT value::text || ':' || unrelated::text FROM independent_integer_rows;",
-                cancellationToken: CancellationToken.None));
-
-        Assert.Equal(
-            "bigint",
-            await ScalarStringAsync(
-                connectionString,
-                """
-                SELECT data_type FROM information_schema.columns
-                WHERE table_schema='public' AND table_name='independent_integer_rows'
-                AND column_name='value';
-                """,
-                cancellationToken: CancellationToken.None));
+        Assert.Equal("7:9", storedValues);
+        Assert.Equal("bigint", storedType);
     }
 
     /// <summary>Rejects whole-row predicates whose truth is not preserved by an integer range proof.</summary>
@@ -251,7 +253,7 @@ public sealed class PostgreSqlIntegerWideningRoleIntegrationTests : PostgreSqlIn
                 new SafeMigrationRunOptions("integer-whole-row-check"),
                 CancellationToken.None);
 
-        var failure = await Assert.ThrowsAsync<PostgresException>(() => ExecuteOperationsAsync(
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
             context,
             builder.Operations,
             CancellationToken.None));
@@ -274,30 +276,32 @@ public sealed class PostgreSqlIntegerWideningRoleIntegrationTests : PostgreSqlIn
         var nativePreservesCheck = await nativeCheckQuery.SingleAsync(CancellationToken.None);
         await transaction.RollbackAsync(CancellationToken.None);
 
+        var storedType = await ScalarStringAsync(
+            connectionString,
+            """
+            SELECT data_type FROM information_schema.columns
+            WHERE table_schema='public' AND table_name='whole_integer_rows'
+            AND column_name='value';
+            """,
+            cancellationToken: CancellationToken.None);
+
+        var storedValue = await ScalarIntAsync(
+            connectionString,
+            "SELECT value FROM whole_integer_rows;",
+            cancellationToken: CancellationToken.None);
+
         // Assert
         Assert.Equal(SafeMigrationAction.RejectDifferent,
             Assert.Single(report.Assessments)
                 .Action);
 
-        Assert.Equal("P1001", failure.SqlState);
-        Assert.False(nativePreservesCheck);
-        Assert.Equal(
-            "integer",
-            await ScalarStringAsync(
-                connectionString,
-                """
-                SELECT data_type FROM information_schema.columns
-                WHERE table_schema='public' AND table_name='whole_integer_rows'
-                AND column_name='value';
-                """,
-                cancellationToken: CancellationToken.None));
+        Assert.Equal("P1001",
+            Assert.IsType<PostgresException>(failure)
+                .SqlState);
 
-        Assert.Equal(
-            7,
-            await ScalarIntAsync(
-                connectionString,
-                "SELECT value FROM whole_integer_rows;",
-                cancellationToken: CancellationToken.None));
+        Assert.False(nativePreservesCheck);
+        Assert.Equal("integer", storedType);
+        Assert.Equal(7, storedValue);
     }
 
     /// <summary>Preserves direct whole-row NULL predicates with exact ordinary or quoted owner identity.</summary>
@@ -363,28 +367,27 @@ public sealed class PostgreSqlIntegerWideningRoleIntegrationTests : PostgreSqlIn
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
+        var matchingRows = await ScalarIntAsync(
+            connectionString,
+            "SELECT count(*) FROM " + owner + " WHERE " + predicate + ";",
+            cancellationToken: CancellationToken.None);
+
+        var storedType = await ScalarStringAsync(
+            connectionString,
+            $"""
+            SELECT data_type FROM information_schema.columns
+            WHERE table_schema='public' AND table_name='{table}'
+            AND column_name='value';
+            """,
+            cancellationToken: CancellationToken.None);
+
         // Assert
         Assert.Equal(SafeMigrationAction.Repair,
             Assert.Single(report.Assessments)
                 .Action);
 
-        Assert.Equal(
-            1,
-            await ScalarIntAsync(
-                connectionString,
-                "SELECT count(*) FROM " + owner + " WHERE " + predicate + ";",
-                cancellationToken: CancellationToken.None));
-
-        Assert.Equal(
-            "bigint",
-            await ScalarStringAsync(
-                connectionString,
-                $"""
-                SELECT data_type FROM information_schema.columns
-                WHERE table_schema='public' AND table_name='{table}'
-                AND column_name='value';
-                """,
-                cancellationToken: CancellationToken.None));
+        Assert.Equal(1, matchingRows);
+        Assert.Equal("bigint", storedType);
     }
 
     /// <summary>Retains a constant-false contract on an empty owner without inventing a row proof.</summary>
@@ -419,28 +422,27 @@ public sealed class PostgreSqlIntegerWideningRoleIntegrationTests : PostgreSqlIn
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
+        var storedRows = await ScalarIntAsync(
+            connectionString,
+            "SELECT count(*) FROM empty_integer_rows;",
+            cancellationToken: CancellationToken.None);
+
+        var storedType = await ScalarStringAsync(
+            connectionString,
+            """
+            SELECT data_type FROM information_schema.columns
+            WHERE table_schema='public' AND table_name='empty_integer_rows'
+            AND column_name='value';
+            """,
+            cancellationToken: CancellationToken.None);
+
         // Assert
         Assert.Equal(SafeMigrationAction.Repair,
             Assert.Single(report.Assessments)
                 .Action);
 
-        Assert.Equal(
-            0,
-            await ScalarIntAsync(
-                connectionString,
-                "SELECT count(*) FROM empty_integer_rows;",
-                cancellationToken: CancellationToken.None));
-
-        Assert.Equal(
-            "bigint",
-            await ScalarStringAsync(
-                connectionString,
-                """
-                SELECT data_type FROM information_schema.columns
-                WHERE table_schema='public' AND table_name='empty_integer_rows'
-                AND column_name='value';
-                """,
-                cancellationToken: CancellationToken.None));
+        Assert.Equal(0, storedRows);
+        Assert.Equal("bigint", storedType);
     }
 
     /// <summary>Checks rebuilt whole-row index keys and predicates against a forced sequential native result.</summary>
@@ -530,6 +532,11 @@ public sealed class PostgreSqlIntegerWideningRoleIntegrationTests : PostgreSqlIn
         command.CommandText = "SELECT count(*) FROM indexed_integer_rows WHERE " + predicate;
         var indexedCount = (long)(await command.ExecuteScalarAsync())!;
 
+        var storedValues = await ScalarStringAsync(
+            connectionString,
+            "SELECT value::text || ':' || unrelated::text FROM indexed_integer_rows;",
+            cancellationToken: CancellationToken.None);
+
         // Assert
         Assert.Equal(SafeMigrationAction.Repair,
             Assert.Single(report.Assessments)
@@ -543,12 +550,7 @@ public sealed class PostgreSqlIntegerWideningRoleIntegrationTests : PostgreSqlIn
             sequentialCount);
 
         Assert.Equal(sequentialCount, indexedCount);
-        Assert.Equal(
-            "7:9",
-            await ScalarStringAsync(
-                connectionString,
-                "SELECT value::text || ':' || unrelated::text FROM indexed_integer_rows;",
-                cancellationToken: CancellationToken.None));
+        Assert.Equal("7:9", storedValues);
     }
 
     /// <summary>Distinguishes column-filter publications from harmless whole-owner membership.</summary>
@@ -591,6 +593,11 @@ public sealed class PostgreSqlIntegerWideningRoleIntegrationTests : PostgreSqlIn
             builder.Operations,
             CancellationToken.None));
 
+        var storedValue = await ScalarIntAsync(
+            connectionString,
+            "SELECT value FROM published_integer_rows;",
+            cancellationToken: CancellationToken.None);
+
         // Assert
         Assert.Equal(
             filtered
@@ -610,11 +617,6 @@ public sealed class PostgreSqlIntegerWideningRoleIntegrationTests : PostgreSqlIn
             Assert.Null(failure);
         }
 
-        Assert.Equal(
-            7,
-            await ScalarIntAsync(
-                connectionString,
-                "SELECT value FROM published_integer_rows;",
-                cancellationToken: CancellationToken.None));
+        Assert.Equal(7, storedValue);
     }
 }

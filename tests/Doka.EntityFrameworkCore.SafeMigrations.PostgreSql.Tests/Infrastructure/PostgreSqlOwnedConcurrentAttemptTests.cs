@@ -113,7 +113,7 @@ public sealed class PostgreSqlOwnedConcurrentAttemptTests
         var cancellationObserved = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var primary = new InvalidOperationException("observer failed");
         var nativeFailure = new InvalidOperationException("native work failed after observation");
-        using var registration = cancellation.Token.Register(() => cancellationObserved.SetResult());
+        using var registration = cancellation.Token.Register(cancellationObserved.SetResult);
 
         // Act
         var attempt = PostgreSqlOwnedConcurrentAttempt.RunAsync(
@@ -209,7 +209,7 @@ public sealed class PostgreSqlOwnedConcurrentAttemptTests
     {
         // Arrange
         using var cancellation = new CancellationTokenSource();
-        cancellation.Cancel();
+        await cancellation.CancelAsync();
         var started = false;
         var released = false;
 

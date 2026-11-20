@@ -9,12 +9,11 @@ internal sealed class MySqlRuntimeCommandInterceptor : DbCommandInterceptor
         + "EXECUTE doka_sm_statement;DEALLOCATE PREPARE doka_sm_statement;";
 
     private readonly Dictionary<string, CommandCategory> _categories = new(StringComparer.Ordinal);
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
     private bool _injectCompactedPrepareGroup;
     private bool _injectDataProbeGroup;
     private bool _injectNullabilityProbeGroup;
     private string? _setupInjection;
-    private Action? _setupStarted;
 
     /// <summary>Gets the number of started commands across all observed categories.</summary>
     public long CommandCount { get; private set; }
@@ -42,14 +41,11 @@ internal sealed class MySqlRuntimeCommandInterceptor : DbCommandInterceptor
 
     /// <summary>Injects SQL once after assertion setup to probe failure cleanup on the actual migration path.</summary>
     /// <param name="sql">The test-owned failure or delay statement.</param>
-    /// <param name="setupStarted">An optional action scheduled only after the targeted setup command starts.</param>
     public void InjectFirstSetup(
-        string sql,
-        Action? setupStarted = null
+        string sql
     )
     {
         _setupInjection = sql;
-        _setupStarted = setupStarted;
         _injectCompactedPrepareGroup = false;
         _injectDataProbeGroup = false;
         _injectNullabilityProbeGroup = false;
@@ -57,14 +53,11 @@ internal sealed class MySqlRuntimeCommandInterceptor : DbCommandInterceptor
 
     /// <summary>Injects SQL after acquired PREPARE within a real compacted setup command.</summary>
     /// <param name="sql">The test-owned failure or blocking statements followed by their sentinel.</param>
-    /// <param name="setupStarted">An optional cancellation action scheduled at the targeted command dispatch.</param>
     public void InjectFirstCompactedPrepareGroup(
-        string sql,
-        Action? setupStarted = null
+        string sql
     )
     {
         _setupInjection = sql;
-        _setupStarted = setupStarted;
         _injectCompactedPrepareGroup = true;
         _injectDataProbeGroup = false;
         _injectNullabilityProbeGroup = false;
@@ -72,14 +65,11 @@ internal sealed class MySqlRuntimeCommandInterceptor : DbCommandInterceptor
 
     /// <summary>Interrupts the fused data probe after PREPARE acquires its session resources.</summary>
     /// <param name="sql">The test-owned failure or blocking statements followed by their sentinel.</param>
-    /// <param name="setupStarted">An optional cancellation action scheduled at the targeted command dispatch.</param>
     public void InjectFirstCompactedDataProbeGroup(
-        string sql,
-        Action? setupStarted = null
+        string sql
     )
     {
         _setupInjection = sql;
-        _setupStarted = setupStarted;
         _injectCompactedPrepareGroup = true;
         _injectDataProbeGroup = true;
         _injectNullabilityProbeGroup = false;
@@ -87,14 +77,11 @@ internal sealed class MySqlRuntimeCommandInterceptor : DbCommandInterceptor
 
     /// <summary>Interrupts the NULL-proof group after its prepared statement is acquired.</summary>
     /// <param name="sql">The test-owned failure or blocking statements followed by their sentinel.</param>
-    /// <param name="setupStarted">An optional cancellation action scheduled at the targeted dispatch.</param>
     public void InjectFirstCompactedNullabilityProbeGroup(
-        string sql,
-        Action? setupStarted = null
+        string sql
     )
     {
         _setupInjection = sql;
-        _setupStarted = setupStarted;
         _injectCompactedPrepareGroup = true;
         _injectDataProbeGroup = false;
         _injectNullabilityProbeGroup = true;
@@ -393,8 +380,6 @@ internal sealed class MySqlRuntimeCommandInterceptor : DbCommandInterceptor
         _setupInjection = null;
         SetupWasInjected = true;
         InjectedCommandTimeout = command.CommandTimeout;
-        _setupStarted?.Invoke();
-        _setupStarted = null;
     }
 
     /// <summary>Records provider execution time for successful or aborted command executions.</summary>

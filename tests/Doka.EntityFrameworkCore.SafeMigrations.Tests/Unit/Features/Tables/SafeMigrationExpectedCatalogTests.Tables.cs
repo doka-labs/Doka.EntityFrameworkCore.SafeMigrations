@@ -2,9 +2,13 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
 public sealed partial class SafeMigrationExpectedCatalogTests
 {
+    /// <summary>
+    /// Folds member and index renames/removals into one final owner inventory without reviving removed constraints.
+    /// </summary>
     [Fact]
     public void Catalog_FoldsGranularOperationsIntoFinalOwnedShape()
     {
+        // Arrange
         var table = new ExpectedTableDefinition(
             "items",
             [new ExpectedColumnDefinition("id", typeof(int), false)],
@@ -42,7 +46,11 @@ public sealed partial class SafeMigrationExpectedCatalogTests
             Envelope(new DropUniqueConstraintIntent("uq_items_id", "items")),
         ];
 
-        var inventory = Assert.Single(SafeMigrationExpectedCatalog.Create(operations));
+        // Act
+        var result = SafeMigrationExpectedCatalog.Create(operations);
+
+        // Assert
+        var inventory = Assert.Single(result);
 
         Assert.Equal(["id", "name"], inventory.Columns.Order());
         Assert.Null(inventory.ColumnStoreTypes["id"]);
@@ -62,9 +70,14 @@ public sealed partial class SafeMigrationExpectedCatalogTests
                 .Value);
     }
 
+    /// <summary>
+    /// Rebinds index owner and key names across schema/table/member renames while retaining the exact prefix
+    /// length.
+    /// </summary>
     [Fact]
     public void Catalog_ProjectsIndexDefinitionsAcrossColumnAndTableRenames()
     {
+        // Arrange
         IReadOnlyList<MigrationOperation> operations =
         [
             Envelope(
@@ -91,7 +104,11 @@ public sealed partial class SafeMigrationExpectedCatalogTests
                     newSchema: "app")),
         ];
 
-        var inventory = Assert.Single(SafeMigrationExpectedCatalog.Create(operations));
+        // Act
+        var result = SafeMigrationExpectedCatalog.Create(operations);
+
+        // Assert
+        var inventory = Assert.Single(result);
         var index = Assert.Single(inventory.IndexDefinitions.Values);
 
         Assert.Equal("items", index.Table);
@@ -103,9 +120,14 @@ public sealed partial class SafeMigrationExpectedCatalogTests
         Assert.Equal(32, index.Keys[0].PrefixLength);
     }
 
+    /// <summary>
+    /// Retains the captured json storage type under the renamed member so provider inventory rules use the right
+    /// domain.
+    /// </summary>
     [Fact]
     public void Catalog_PreservesColumnStoreTypeAcrossRenameForProviderInventoryRules()
     {
+        // Arrange
         IReadOnlyList<MigrationOperation> operations =
         [
             Envelope(
@@ -117,15 +139,23 @@ public sealed partial class SafeMigrationExpectedCatalogTests
             Envelope(new RenameColumnIntent("legacy_payload", "documents", "payload")),
         ];
 
-        var inventory = Assert.Single(SafeMigrationExpectedCatalog.Create(operations));
+        // Act
+        var result = SafeMigrationExpectedCatalog.Create(operations);
+
+        // Assert
+        var inventory = Assert.Single(result);
 
         Assert.False(inventory.ColumnStoreTypes.ContainsKey("legacy_payload"));
         Assert.Equal("json", inventory.ColumnStoreTypes["payload"]);
     }
 
+    /// <summary>
+    /// Removes the final table inventory after its accepted schema rename and subsequent schema removal.
+    /// </summary>
     [Fact]
     public void Catalog_AppliesTableSchemaAndDropTransitions()
     {
+        // Arrange
         var table = new ExpectedTableDefinition(
             "old_items",
             [new ExpectedColumnDefinition("id", typeof(int), false)],
@@ -138,9 +168,16 @@ public sealed partial class SafeMigrationExpectedCatalogTests
             Envelope(new DropSchemaIntent("app")),
         ];
 
-        Assert.Empty(SafeMigrationExpectedCatalog.Create(operations));
+        // Act
+        var result = SafeMigrationExpectedCatalog.Create(operations);
+
+        // Assert
+        Assert.Empty(result);
     }
 
+    /// <summary>
+    /// Rejects removal of a directly indexed member and identifies the explicit index-removal prerequisite.
+    /// </summary>
     [Fact]
     public void Catalog_ColumnDropWithDirectIndexDependencyFailsClosed()
     {
@@ -161,6 +198,9 @@ public sealed partial class SafeMigrationExpectedCatalogTests
         Assert.Contains("Drop the index explicitly", invalidOperation.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Rejects removal of an included index member even when the key column itself is unrelated.
+    /// </summary>
     [Fact]
     public void Catalog_ColumnDropWithIncludedColumnDependencyFailsClosed()
     {
@@ -180,6 +220,9 @@ public sealed partial class SafeMigrationExpectedCatalogTests
         Assert.IsType<InvalidOperationException>(exception);
     }
 
+    /// <summary>
+    /// Rejects removal of a member referenced by a typed functional index expression.
+    /// </summary>
     [Fact]
     public void Catalog_ColumnDropWithStructuredExpressionDependencyFailsClosed()
     {
@@ -198,6 +241,9 @@ public sealed partial class SafeMigrationExpectedCatalogTests
         Assert.IsType<InvalidOperationException>(exception);
     }
 
+    /// <summary>
+    /// Rejects speculative column removal when an opaque index expression cannot prove independence.
+    /// </summary>
     [Fact]
     public void Catalog_ColumnDropWithOpaqueExpressionFailsClosedWhenDependencyIsUnknown()
     {
@@ -216,6 +262,9 @@ public sealed partial class SafeMigrationExpectedCatalogTests
         Assert.IsType<InvalidOperationException>(exception);
     }
 
+    /// <summary>
+    /// Rejects removal of a member referenced only by the index's structured filter predicate.
+    /// </summary>
     [Fact]
     public void Catalog_ColumnDropWithStructuredFilterDependencyFailsClosed()
     {
@@ -238,6 +287,9 @@ public sealed partial class SafeMigrationExpectedCatalogTests
         Assert.IsType<InvalidOperationException>(exception);
     }
 
+    /// <summary>
+    /// Rejects speculative removal when an opaque index filter hides its complete member dependencies.
+    /// </summary>
     [Fact]
     public void Catalog_ColumnDropWithOpaqueFilterFailsClosedWhenDependencyIsUnknown()
     {
@@ -257,6 +309,9 @@ public sealed partial class SafeMigrationExpectedCatalogTests
         Assert.IsType<InvalidOperationException>(exception);
     }
 
+    /// <summary>
+    /// Retains the surviving member inventory after its dependent index is explicitly removed before the column.
+    /// </summary>
     [Fact]
     public void Catalog_ColumnDropAfterExplicitIndexDropRemovesOnlyTheColumn()
     {
@@ -269,14 +324,19 @@ public sealed partial class SafeMigrationExpectedCatalogTests
         var operations = CreateColumnDropOperations(index, dropIndexFirst: true);
 
         // Act
-        var inventory = Assert.Single(SafeMigrationExpectedCatalog.Create(operations));
+        var result = SafeMigrationExpectedCatalog.Create(operations);
 
         // Assert
+        var inventory = Assert.Single(result);
+
         Assert.Equal(["id"], inventory.Columns);
         Assert.Empty(inventory.Indexes);
         Assert.Empty(inventory.IndexDefinitions);
     }
 
+    /// <summary>
+    /// Keeps the exact independent index name and definition when another table member is removed.
+    /// </summary>
     [Fact]
     public void Catalog_ColumnDropPreservesUnrelatedStructuredIndex()
     {
@@ -293,9 +353,11 @@ public sealed partial class SafeMigrationExpectedCatalogTests
         var operations = CreateColumnDropOperations(index);
 
         // Act
-        var inventory = Assert.Single(SafeMigrationExpectedCatalog.Create(operations));
+        var result = SafeMigrationExpectedCatalog.Create(operations);
 
         // Assert
+        var inventory = Assert.Single(result);
+
         Assert.Equal(["id"], inventory.Columns);
         Assert.Equal("ix_items_id", Assert.Single(inventory.Indexes));
         Assert.Equal("ix_items_id",
@@ -303,6 +365,9 @@ public sealed partial class SafeMigrationExpectedCatalogTests
                 .Key);
     }
 
+    /// <summary>
+    /// Retains a known index dependency even without an earlier complete owned table definition.
+    /// </summary>
     [Fact]
     public void Catalog_ColumnDropWithoutOwnedTableStillRejectsKnownIndexDependency()
     {
@@ -326,6 +391,9 @@ public sealed partial class SafeMigrationExpectedCatalogTests
         Assert.Contains("index 'ix_items_legacy' may depend on it", invalidOperation.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Allows removal after the separately known index dependency is explicitly removed in the same stream.
+    /// </summary>
     [Fact]
     public void Catalog_ColumnDropWithoutOwnedTableAcceptsAnExplicitEarlierIndexDrop()
     {
@@ -349,6 +417,10 @@ public sealed partial class SafeMigrationExpectedCatalogTests
         Assert.Null(exception);
     }
 
+    /// <summary>
+    /// Carries included-member dependencies through member and owner renames before rejecting the later unsafe
+    /// drop.
+    /// </summary>
     [Fact]
     public void Catalog_ColumnAndTableRenamesPreserveKnownIndexDependencies()
     {
@@ -379,6 +451,9 @@ public sealed partial class SafeMigrationExpectedCatalogTests
             StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Rejects member renaming when an opaque index expression cannot preserve its original binding safely.
+    /// </summary>
     [Fact]
     public void Catalog_ColumnRenameWithOpaqueIndexExpressionFailsClosed()
     {
@@ -402,6 +477,9 @@ public sealed partial class SafeMigrationExpectedCatalogTests
         Assert.Contains("may depend on it through an expression", invalidOperation.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Allows a member rename when the typed functional index proves its source role is a different member.
+    /// </summary>
     [Fact]
     public void Catalog_ColumnRenamePreservesAnUnrelatedStructuredIndex()
     {

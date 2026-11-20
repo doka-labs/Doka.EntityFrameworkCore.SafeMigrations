@@ -107,9 +107,14 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var keys = definition
             .Columns
             .Select(Delimited)
+
+            // WHY: Retain fluent materialization and its existing snapshot
+            // ownership rather than replacing this boundary with a spread.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var nonNull = string.Join(" AND ", keys.Select(static key => $"{key} IS NOT NULL"));
+
         return DuplicateDataExists(definition.Table, definition.Schema, keys, nonNull);
     }
 }

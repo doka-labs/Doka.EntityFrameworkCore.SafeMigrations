@@ -1,12 +1,6 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations;
 
-internal interface IModelManagedDataScaffoldingOperation
-{
-    ModelManagedDataIntent Intent { get; }
-}
-
-internal sealed class EnsureModelManagedDataScaffoldingOperation : InsertDataOperation,
-    IModelManagedDataScaffoldingOperation
+internal sealed class EnsureModelManagedDataScaffoldingOperation : InsertDataOperation
 {
     public EnsureModelManagedDataScaffoldingOperation(
         EnsureModelManagedDataIntent intent
@@ -15,7 +9,13 @@ internal sealed class EnsureModelManagedDataScaffoldingOperation : InsertDataOpe
         Intent = intent;
         Table = intent.Table;
         Schema = intent.Schema;
+
+        // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+        // ReSharper disable once UseCollectionExpression
         Columns = intent.Columns.ToArray();
+
+        // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+        // ReSharper disable once UseCollectionExpression
         ColumnTypes = intent.ColumnTypes.ToArray();
         Values = ModelManagedDataScaffoldingValues.Copy(intent.Values);
     }
@@ -23,8 +23,7 @@ internal sealed class EnsureModelManagedDataScaffoldingOperation : InsertDataOpe
     public ModelManagedDataIntent Intent { get; }
 }
 
-internal sealed class UpdateModelManagedDataScaffoldingOperation : UpdateDataOperation,
-    IModelManagedDataScaffoldingOperation
+internal sealed class UpdateModelManagedDataScaffoldingOperation : UpdateDataOperation
 {
     public UpdateModelManagedDataScaffoldingOperation(
         UpdateModelManagedDataIntent intent
@@ -33,10 +32,22 @@ internal sealed class UpdateModelManagedDataScaffoldingOperation : UpdateDataOpe
         Intent = intent;
         Table = intent.Table;
         Schema = intent.Schema;
+
+        // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+        // ReSharper disable once UseCollectionExpression
         KeyColumns = intent.KeyColumns.ToArray();
+
+        // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+        // ReSharper disable once UseCollectionExpression
         KeyColumnTypes = intent.KeyColumnTypes.ToArray();
         KeyValues = ModelManagedDataScaffoldingValues.Copy(intent.KeyValues);
+
+        // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+        // ReSharper disable once UseCollectionExpression
         Columns = intent.Columns.ToArray();
+
+        // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+        // ReSharper disable once UseCollectionExpression
         ColumnTypes = intent.ColumnTypes.ToArray();
         Values = ModelManagedDataScaffoldingValues.Copy(intent.NewValues);
     }
@@ -44,8 +55,7 @@ internal sealed class UpdateModelManagedDataScaffoldingOperation : UpdateDataOpe
     public ModelManagedDataIntent Intent { get; }
 }
 
-internal sealed class DeleteModelManagedDataScaffoldingOperation : DeleteDataOperation,
-    IModelManagedDataScaffoldingOperation
+internal sealed class DeleteModelManagedDataScaffoldingOperation : DeleteDataOperation
 {
     public DeleteModelManagedDataScaffoldingOperation(
         DeleteModelManagedDataIntent intent
@@ -54,7 +64,13 @@ internal sealed class DeleteModelManagedDataScaffoldingOperation : DeleteDataOpe
         Intent = intent;
         Table = intent.Table;
         Schema = intent.Schema;
+
+        // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+        // ReSharper disable once UseCollectionExpression
         KeyColumns = intent.KeyColumns.ToArray();
+
+        // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+        // ReSharper disable once UseCollectionExpression
         KeyColumnTypes = intent.KeyColumnTypes.ToArray();
         KeyValues = ModelManagedDataScaffoldingValues.Copy(intent.KeyValues);
     }

@@ -125,6 +125,7 @@ internal sealed class CanonicalHashWriter : IDisposable
         }
 
         _completed = true;
+
         return Convert.ToHexStringLower(_hash.GetHashAndReset());
     }
 

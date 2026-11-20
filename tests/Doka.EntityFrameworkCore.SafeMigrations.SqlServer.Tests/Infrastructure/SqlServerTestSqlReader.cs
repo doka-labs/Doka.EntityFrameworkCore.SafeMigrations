@@ -32,7 +32,8 @@ internal ref struct SqlServerTestSqlReader
     /// <exception cref="InvalidOperationException">A quoted token or block comment is unterminated.</exception>
     public bool Read()
     {
-        while (Position < _sql.Length && char.IsWhiteSpace(_sql[Position]))
+        while (Position < _sql.Length
+            && char.IsWhiteSpace(_sql[Position]))
         {
             Position++;
         }
@@ -47,29 +48,39 @@ internal ref struct SqlServerTestSqlReader
 
         var character = _sql[Position++];
 
-        if (character == '-' && Position < _sql.Length && _sql[Position] == '-')
+        if (character == '-'
+            && Position < _sql.Length
+            && _sql[Position] == '-')
         {
             IsComment = true;
 
-            while (Position < _sql.Length && _sql[Position] is not ('\r' or '\n'))
+            while (Position < _sql.Length
+                && _sql[Position] is not ('\r' or '\n'))
             {
                 Position++;
             }
         }
-        else if (character == '/' && Position < _sql.Length && _sql[Position] == '*')
+        else if (character == '/'
+            && Position < _sql.Length
+            && _sql[Position] == '*')
         {
             IsComment = true;
             Position++;
             var depth = 1;
 
-            while (Position < _sql.Length && depth > 0)
+            while (Position < _sql.Length
+                && depth > 0)
             {
-                if (Position + 1 < _sql.Length && _sql[Position] == '/' && _sql[Position + 1] == '*')
+                if (Position + 1 < _sql.Length
+                    && _sql[Position] == '/'
+                    && _sql[Position + 1] == '*')
                 {
                     depth++;
                     Position += 2;
                 }
-                else if (Position + 1 < _sql.Length && _sql[Position] == '*' && _sql[Position + 1] == '/')
+                else if (Position + 1 < _sql.Length
+                    && _sql[Position] == '*'
+                    && _sql[Position + 1] == '/')
                 {
                     depth--;
                     Position += 2;
@@ -93,7 +104,8 @@ internal ref struct SqlServerTestSqlReader
         }
         else if (IsWordCharacter(character))
         {
-            while (Position < _sql.Length && IsWordCharacter(_sql[Position]))
+            while (Position < _sql.Length
+                && IsWordCharacter(_sql[Position]))
             {
                 Position++;
             }
@@ -121,14 +133,17 @@ internal ref struct SqlServerTestSqlReader
             }
 
             if (!candidate.Token.Equals(expected,
-                    ignoreCase
-                        ? StringComparison.OrdinalIgnoreCase
-                        : StringComparison.Ordinal))
+                ignoreCase
+                    ? StringComparison.OrdinalIgnoreCase
+                    : StringComparison.Ordinal))
             {
                 return false;
             }
 
-            this = candidate;
+            // WHY: Commit only cursor state; the immutable source span never changes during speculative reads.
+            Position = candidate.Position;
+            TokenStart = candidate.TokenStart;
+            IsComment = candidate.IsComment;
 
             return true;
         }
@@ -149,13 +164,16 @@ internal ref struct SqlServerTestSqlReader
         while (expected.Read())
         {
             if (!candidate.TryRead(expected.Token,
-                    ignoreCase: expected.Token[0] is not ('@' or '[' or '"' or '\'')))
+                ignoreCase: expected.Token[0] is not ('@' or '[' or '"' or '\'')))
             {
                 return false;
             }
         }
 
-        this = candidate;
+        // WHY: A successful pattern commits cursor state without assigning the readonly source span.
+        Position = candidate.Position;
+        TokenStart = candidate.TokenStart;
+        IsComment = candidate.IsComment;
 
         return true;
     }
@@ -188,7 +206,8 @@ internal ref struct SqlServerTestSqlReader
                 continue;
             }
 
-            if (Position < _sql.Length && _sql[Position] == closing)
+            if (Position < _sql.Length
+                && _sql[Position] == closing)
             {
                 Position++;
 

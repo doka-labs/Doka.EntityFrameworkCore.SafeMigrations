@@ -175,6 +175,8 @@ internal static partial class SafeMigrationModelManagedDataPairer
                 throw new InvalidOperationException("Inverse delete rows for one table use inconsistent key columns.");
             }
 
+            // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+            // ReSharper disable once UseCollectionExpression
             _deleteKeyShapes.TryAdd(table, operation.KeyColumns.ToArray());
             Add(
                 _deleteRows,
@@ -362,6 +364,9 @@ internal static partial class SafeMigrationModelManagedDataPairer
 
         private readonly record struct LookupShape(
             TableIdentity Table,
+
+            // WHY: Generated record equality partitions cached row lookups by the exact ordered column signature.
+            // ReSharper disable once NotAccessedPositionalProperty.Local
             string Columns
         );
     }

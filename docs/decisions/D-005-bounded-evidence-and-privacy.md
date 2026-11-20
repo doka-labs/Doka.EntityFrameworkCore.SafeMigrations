@@ -1,15 +1,15 @@
 ---
 id: D-005
 status: implemented
-date: 2026-08-26
-decision-makers: [Dominic Kalkbrenner]
+date: 2026-11-19
+decision-makers: ["Dominic Kalkbrenner"]
 consulted: []
 informed: ["@doka-labs/core-maintainers"]
 scope: "Catalog-query resource bounds, immutable reports, fingerprints, and diagnostic privacy"
 supersedes: []
 superseded-by: []
 amends: []
-amended-by: [D-009]
+amended-by: [D-009, D-010, D-011, D-012, D-013]
 madr-version: "4.0.0"
 doka-profile-version: "1.0"
 ---
@@ -112,7 +112,7 @@ review cover that separate boundary. Unknown migration-relevant annotation
 value shapes fail closed instead of silently disappearing from identity.
 Relational column fingerprinting distinguishes EF Core's two public shapes.
 Ordinary scalar columns use their existing property mapping so established
-digests and allocation budgets remain stable. Property-less `ToJson` container
+digests and structural ownership contracts remain stable. Property-less `ToJson` container
 columns use the public `IColumn` facets instead of assuming that a scalar
 mapping exists.
 
@@ -153,9 +153,10 @@ parameterization, multiple result sets, cancellation, configured command
 timeouts, and 100,000 deterministically ordered mixed live operations on every
 qualified server-provider engine profile. The large-scale workload must exercise every
 observed state and planned action rather than repeating one matching object.
-SQLite must retain its 50,000-row live apply/replay gate and allocation budgets
-for both a 200-table catalog and a 1,000-table catalog with indexes and foreign
-keys.
+SQLite must retain its 50,000-row live apply/replay gate and functional catalog
+coverage for both 200-table and 1,000-table catalogs with indexes and foreign keys.
+Managed-allocation measurements remain informational BenchmarkDotNet diagnostics,
+not sampled byte-count assertions in functional tests.
 Serialization and telemetry tests must prove that changes to protected report
 detail do not add it to telemetry tags.
 
@@ -163,21 +164,21 @@ Run every provider fingerprint suite and PostgreSQL facet-isolation cases
 under the qualified dependency profiles. A stable digest in one provider or
 runtime process does not prove all relational facets are represented.
 
-Run all five benchmark projects using the BenchmarkDotNet commands in CONTRIBUTING.
-Require all selected cases and native full JSON evidence for construction,
-planning, SQL generation, model comparison, fingerprinting and serialization as
-applicable. CI's all-case `Dry` job is execution/export smoke, not statistical
-performance qualification. Numeric values are informational; invalid
-configuration, build, execution, missing/failed cases and missing/invalid
-evidence remain blocking.
+Run BenchmarkDotNet only through the explicitly requested commands in CONTRIBUTING
+or the workflow's measurement opt-in, including Dry. Requested execution must
+retain all selected cases and full JSON for construction, planning, SQL generation,
+model comparison, fingerprinting and serialization as applicable. Ordinary tests
+verify deterministic workload/configuration contracts without starting measurement.
+Numeric values are informational; invalid requested execution or evidence still fails.
 
 The live provider suites also verify multi-chunk ordering and noisy catalog
-behavior. The provider tests use the shared evidence collector for 20 pooled
-runner samples with 100 expected tables and 1,000 additional foreign tables in
-the noisy case. The tests assert counts and the relative p95 rule of
-noisy <= 2 * clean + 250 ms; the collector persists the measurements.
-These measured test conditions are not a global production latency or
-catalog-size guarantee.
+behavior. Ordinary tests retain one pooled runner call per clean/noisy state
+with 100 expected tables and 1,000 additional foreign tables. Assertions retain
+counts, identity and foreign-child exclusion. The November 19, 2026 standards
+adoption replaces the former 20-sample collector with explicitly selected native
+BenchmarkDotNet workloads, not another custom percentile schema. Native runtime
+measurement remains distinct from prepared client-only generation. These
+diagnostic fixtures are not a global production latency or catalog-size guarantee.
 
 ## Pros and Cons of the Options
 
@@ -213,6 +214,22 @@ trade bounded per-item allocations for stable ownership.
 
 D-002 defines what the fingerprinted target means. D-004 defines the observed
 window. Neither a hash nor a report proves the database server is honest.
+
+The dispatch choices above are repository contracts, not conclusions about
+SQL Server's cost model. Microsoft's [plan-cache documentation][sqlserver-plan-cache]
+describes reuse for compatible query text and execution contexts.
+[SIMPLE recovery][sqlserver-simple-recovery]
+governs log recovery and space reclamation; it is not an exemption from
+[file initialization][sqlserver-file-initialization].
+An explicit [command timeout][sqlserver-command-timeout]
+changes the wait budget, not the diagnosis of an exceeded budget or performance
+qualification. Native SQL Server 2019/2022/2025 qualification remains required.
+
+Microsoft documents that [EXECUTE AS][sqlserver-execute-as]
+changes the current session's permission context without replacing its connection.
+Fresh [database principal][sqlserver-database-principal]
+and [login SID][sqlserver-login-sid]
+stamps therefore gate proof reuse; they are neither report fields nor log payloads.
 
 ### Re-evaluation Triggers
 
@@ -276,23 +293,11 @@ window. Neither a hash nor a report proves the database server is honest.
   caller cannot mutate an established SQL or fingerprint contract. Trusted
   internal consumers borrow the owned snapshot without repeated array copies.
 
-[bdn-gc]: https://raw.githubusercontent.com/dotnet/BenchmarkDotNet/v0.15.8/src/BenchmarkDotNet/Engines/GcStats.cs
 
-The dispatch choices above are repository contracts, not conclusions about
-SQL Server's cost model. Microsoft's [plan-cache documentation](https://learn.microsoft.com/en-us/sql/relational-databases/query-processing-architecture-guide?view=sql-server-ver17#execution-plan-caching-and-reuse)
-describes reuse for compatible query text and execution contexts.
-[SIMPLE recovery](https://learn.microsoft.com/en-us/sql/relational-databases/backup-restore/recovery-models-sql-server?view=sql-server-ver17)
-governs log recovery and space reclamation; it is not an exemption from
-[file initialization](https://learn.microsoft.com/en-us/sql/relational-databases/databases/database-instant-file-initialization?view=sql-server-ver17).
-An explicit [command timeout](https://learn.microsoft.com/en-us/dotnet/api/microsoft.data.sqlclient.sqlcommand.commandtimeout?view=sqlclient-dotnet-core-6.1)
-changes the wait budget, not the diagnosis of an exceeded budget or performance
-qualification. Native SQL Server 2019/2022/2025 qualification remains required.
-
-Microsoft documents that [EXECUTE AS](https://learn.microsoft.com/en-us/sql/t-sql/statements/execute-as-transact-sql?view=sql-server-ver17)
-changes the current session's permission context without replacing its connection.
-Fresh [database principal](https://learn.microsoft.com/en-us/sql/t-sql/functions/database-principal-id-transact-sql?view=sql-server-ver17)
-and [login SID](https://learn.microsoft.com/en-us/sql/t-sql/functions/suser-sid-transact-sql?view=sql-server-ver17)
-stamps therefore gate proof reuse; they are neither report fields nor log payloads.
+- 2026-11-19: Aligned last-update metadata, reciprocal amendments, option titles
+  and source/navigation format with the current documentation profile. Retained
+  the recorded status and historical approval evidence; this migration grants no
+  new architectural acceptance or publication authority.
 
 ### Implementation References
 
@@ -317,15 +322,46 @@ stamps therefore gate proof reuse; they are neither report fields nor log payloa
 - [JSON writer](../../src/Doka.EntityFrameworkCore.SafeMigrations/Analysis/SafeMigrationReportJson.cs)
 - [Run-contract tests](../../tests/Doka.EntityFrameworkCore.SafeMigrations.Tests/Unit/Features/Lifecycle/SafeMigrationRunContractTests.cs)
 - [Telemetry implementation](../../src/Doka.EntityFrameworkCore.SafeMigrations/Diagnostics/SafeMigrationTelemetry.cs)
-- [Live performance evidence](../../tests/Shared/LivePerformanceEvidence.cs)
+- [Native benchmark commands](../../CONTRIBUTING.md#native-catalog-and-migration-measurements)
 - [Benchmark workloads and evidence](../support-and-qualification.md#performance-and-memory)
 - [Observability and measurement boundaries](../runbooks/observability.md)
 
 ### Sources
 
-- [.NET 10 `DbBatch`](https://learn.microsoft.com/en-us/dotnet/api/system.data.common.dbbatch?view=net-10.0) (standard batch, command, timeout, and provider-specific execution contract; retrieved 2026-09-02)
-- [.NET 10 `DbConnection.CanCreateBatch`](https://learn.microsoft.com/en-us/dotnet/api/system.data.common.dbconnection.cancreatebatch?view=net-10.0) (default false and provider capability contract; retrieved 2026-09-02)
-- [Npgsql batching](https://www.npgsql.org/doc/basic-usage.html#batching) (parameterized multi-command batching and result-set behavior; retrieved 2026-09-02)
-- [MySqlConnector `MySqlBatch`](https://mysqlconnector.net/api/mysqlconnector/mysqlbatchtype/) (MariaDB batching behavior, timeout, and multi-result reader contract; retrieved 2026-09-02)
-- [EF Core 10 `GetCommandTimeout`](https://learn.microsoft.com/en-us/dotnet/api/microsoft.entityframeworkcore.relationaldatabasefacadeextensions.getcommandtimeout?view=efcore-10.0) (configured context command-timeout contract; retrieved 2026-09-02)
-- SQLite table-valued PRAGMAs (`https://www.sqlite.org/pragma.html#pragfunc`; primary source; retrieved 2026-10-02)
+- [.NET 10 `DbBatch`](https://learn.microsoft.com/en-us/dotnet/api/system.data.common.dbbatch?view=net-10.0) (primary source; retrieved 2026-09-02)
+- [.NET 10 `DbConnection.CanCreateBatch`](https://learn.microsoft.com/en-us/dotnet/api/system.data.common.dbconnection.cancreatebatch?view=net-10.0) (primary source; retrieved 2026-09-02)
+- [Npgsql batching](https://www.npgsql.org/doc/basic-usage.html#batching) (primary source; retrieved 2026-09-02)
+- [MySqlConnector `MySqlBatch`](https://mysqlconnector.net/api/mysqlconnector/mysqlbatchtype/) (primary source; retrieved 2026-09-02)
+- [EF Core 10 `GetCommandTimeout`](https://learn.microsoft.com/en-us/dotnet/api/microsoft.entityframeworkcore.relationaldatabasefacadeextensions.getcommandtimeout?view=efcore-10.0) (primary source; retrieved 2026-09-02)
+- [SQLite table-valued PRAGMAs](https://www.sqlite.org/pragma.html#pragfunc) (primary source; retrieved 2026-10-02)
+- [BenchmarkDotNet 0.15.8 allocation counter](https://raw.githubusercontent.com/dotnet/BenchmarkDotNet/v0.15.8/src/BenchmarkDotNet/Engines/GcStats.cs) (primary source; retrieved 2026-11-19)
+
+[bdn-gc]: https://raw.githubusercontent.com/dotnet/BenchmarkDotNet/v0.15.8/src/BenchmarkDotNet/Engines/GcStats.cs
+
+- [SQL Server plan-cache documentation](https://learn.microsoft.com/en-us/sql/relational-databases/query-processing-architecture-guide?view=sql-server-ver17#execution-plan-caching-and-reuse) (primary source; retrieved 2026-11-19)
+
+[sqlserver-plan-cache]: https://learn.microsoft.com/en-us/sql/relational-databases/query-processing-architecture-guide?view=sql-server-ver17#execution-plan-caching-and-reuse
+
+- [SQL Server SIMPLE recovery](https://learn.microsoft.com/en-us/sql/relational-databases/backup-restore/recovery-models-sql-server?view=sql-server-ver17) (primary source; retrieved 2026-11-19)
+
+[sqlserver-simple-recovery]: https://learn.microsoft.com/en-us/sql/relational-databases/backup-restore/recovery-models-sql-server?view=sql-server-ver17
+
+- [SQL Server file initialization](https://learn.microsoft.com/en-us/sql/relational-databases/databases/database-instant-file-initialization?view=sql-server-ver17) (primary source; retrieved 2026-11-19)
+
+[sqlserver-file-initialization]: https://learn.microsoft.com/en-us/sql/relational-databases/databases/database-instant-file-initialization?view=sql-server-ver17
+
+- [SQL Server command timeout](https://learn.microsoft.com/en-us/dotnet/api/microsoft.data.sqlclient.sqlcommand.commandtimeout?view=sqlclient-dotnet-core-6.1) (primary source; retrieved 2026-11-19)
+
+[sqlserver-command-timeout]: https://learn.microsoft.com/en-us/dotnet/api/microsoft.data.sqlclient.sqlcommand.commandtimeout?view=sqlclient-dotnet-core-6.1
+
+- [SQL Server EXECUTE AS](https://learn.microsoft.com/en-us/sql/t-sql/statements/execute-as-transact-sql?view=sql-server-ver17) (primary source; retrieved 2026-11-19)
+
+[sqlserver-execute-as]: https://learn.microsoft.com/en-us/sql/t-sql/statements/execute-as-transact-sql?view=sql-server-ver17
+
+- [SQL Server database principal](https://learn.microsoft.com/en-us/sql/t-sql/functions/database-principal-id-transact-sql?view=sql-server-ver17) (primary source; retrieved 2026-11-19)
+
+[sqlserver-database-principal]: https://learn.microsoft.com/en-us/sql/t-sql/functions/database-principal-id-transact-sql?view=sql-server-ver17
+
+- [SQL Server login SID](https://learn.microsoft.com/en-us/sql/t-sql/functions/suser-sid-transact-sql?view=sql-server-ver17) (primary source; retrieved 2026-11-19)
+
+[sqlserver-login-sid]: https://learn.microsoft.com/en-us/sql/t-sql/functions/suser-sid-transact-sql?view=sql-server-ver17

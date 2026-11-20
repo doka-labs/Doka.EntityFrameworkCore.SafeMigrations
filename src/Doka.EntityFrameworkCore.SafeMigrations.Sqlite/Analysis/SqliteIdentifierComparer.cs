@@ -142,7 +142,7 @@ internal sealed class SqliteIdentifierComparer : StringComparer
     /// <summary>Folds an ASCII uppercase character to lowercase.</summary>
     /// <param name="value">The character to fold.</param>
     /// <returns>The folded character.</returns>
-    public static char FoldAscii(
+    private static char FoldAscii(
         char value
     ) => value is >= 'A' and <= 'Z'
         ? (char)(value + ('a' - 'A'))

@@ -52,11 +52,15 @@ internal sealed class SqliteConstraintDropTestContext : DbContext
         });
     }
 
+    // WHY: EF binds this fixture entity through writable property metadata.
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class ConstraintDropParent
     {
         public int Id { get; set; }
     }
 
+    // WHY: EF binds this fixture entity through writable property metadata.
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class ConstraintDropEntity
     {
         public int Id { get; set; }
@@ -97,6 +101,8 @@ internal sealed class SqlitePrimaryKeyDropTestContext : DbContext
         });
     }
 
+    // WHY: EF binds this fixture entity through writable property metadata.
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class PrimaryKeyDropEntity
     {
         public int Id { get; set; }
@@ -155,6 +161,8 @@ internal sealed class SqliteSelfReferenceRebuildTestContext : DbContext
         });
     }
 
+    // WHY: EF binds this fixture entity through writable property metadata.
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class SelfReferenceEntity
     {
         public int Id { get; set; }
@@ -200,6 +208,8 @@ internal sealed class SqliteProviderRewriteTestContext : DbContext
         });
     }
 
+    // WHY: EF binds this fixture entity through writable property metadata.
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class ProviderRewriteEntity
     {
         public int Id { get; set; }
@@ -248,6 +258,8 @@ internal sealed class SqliteStructuralSequenceTestContext : DbContext
         });
     }
 
+    // WHY: EF binds this fixture entity through writable property metadata.
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class StructuralPost
     {
         public int Id { get; set; }
@@ -305,6 +317,8 @@ internal sealed class SqliteRebuildShapeTestContext : DbContext
         });
     }
 
+    // WHY: EF binds this fixture entity through writable property metadata.
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class RebuildShapeEntity
     {
         public string Code { get; set; } = string.Empty;
@@ -352,6 +366,8 @@ internal sealed class SqliteEscapedIdentifierRebuildTestContext : DbContext
         });
     }
 
+    // WHY: EF binds this fixture entity through writable property metadata.
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class EscapedIdentifierEntity
     {
         public int Id { get; set; }
@@ -397,6 +413,8 @@ internal sealed class SqliteAddColumnCheckTestContext : DbContext
         });
     }
 
+    // WHY: EF binds this fixture entity through writable property metadata.
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class AddColumnCheckEntity
     {
         public string? Description { get; set; }
@@ -450,6 +468,8 @@ internal sealed class SqliteAddColumnReferencedCheckTestContext : DbContext
         });
     }
 
+    // WHY: EF binds this fixture entity through writable property metadata.
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class AddColumnReferencedCheckEntity
     {
         public string Description { get; set; } = string.Empty;
@@ -501,6 +521,8 @@ internal sealed class SqliteBackfillDefaultRebuildTestContext : DbContext
         });
     }
 
+    // WHY: EF binds this fixture entity through writable property metadata.
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class BackfillDefaultEntity
     {
         public int Id { get; set; }
@@ -585,6 +607,8 @@ internal sealed class SqliteForeignKeyCollationTestContext : DbContext
         });
     }
 
+    // WHY: EF binds this fixture entity through writable property metadata.
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class CollationParent
     {
         public string Code { get; set; } = string.Empty;
@@ -592,6 +616,8 @@ internal sealed class SqliteForeignKeyCollationTestContext : DbContext
         public int Id { get; set; }
     }
 
+    // WHY: EF binds this fixture entity through writable property metadata.
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class CollationChild
     {
         public int Id { get; set; }
@@ -646,6 +672,8 @@ internal sealed class SqliteConvertedBackfillDefaultRebuildTestContext : DbConte
         });
     }
 
+    // WHY: EF binds this fixture entity through writable property metadata.
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class ConvertedBackfillEntity
     {
         public int Id { get; set; }
@@ -653,6 +681,8 @@ internal sealed class SqliteConvertedBackfillDefaultRebuildTestContext : DbConte
         public ConvertedBackfillState State { get; set; }
     }
 
+    // WHY: EF's string enum conversion persists and reads these named values through metadata.
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private enum ConvertedBackfillState
     {
         Unknown = 0,
@@ -699,6 +729,8 @@ internal sealed class SqliteHighByteIdentifierRebuildTestContext : DbContext
         });
     }
 
+    // WHY: EF binds this fixture entity through writable property metadata.
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class HighByteIdentifierEntity
     {
         public int Id { get; set; }
@@ -767,11 +799,15 @@ internal sealed class SqliteMissingPrincipalForeignKeyTestContext : DbContext
         });
     }
 
+    // WHY: EF binds this fixture entity through writable property metadata.
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class MissingPrincipal
     {
         public int Id { get; set; }
     }
 
+    // WHY: EF binds this fixture entity through writable property metadata.
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class MissingPrincipalChild
     {
         public int Id { get; set; }
@@ -823,6 +859,8 @@ internal sealed class SqliteCheckLiteralRebuildTestContext : DbContext
         });
     }
 
+    // WHY: EF binds this fixture entity through writable property metadata.
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class CheckLiteralEntity
     {
         public int Id { get; set; }

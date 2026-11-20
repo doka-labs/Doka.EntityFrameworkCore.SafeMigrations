@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Applies each externally provisioned tooling schema once without imposing test-method order.</summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public sealed class GeneratedInitialMigrationFixture
 {
     private readonly Lazy<Task<GeneratedInitialMigrationObservation>> _legacy;
@@ -160,6 +161,9 @@ public sealed class GeneratedInitialMigrationFixture
                 $"{assessment.Ordinal}: {assessment.OperationKind} {assessment.ObjectName}; "
                 + $"state={assessment.ObservedState}; action={assessment.Action}; "
                 + $"analysis={assessment.AnalysisCode}; decision={assessment.DecisionCode}")
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         Assert.Fail(

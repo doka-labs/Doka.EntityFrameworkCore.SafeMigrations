@@ -1,6 +1,8 @@
 """Behavioral contracts for exact, independently qualified release lines."""
 
+import copy
 import json
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -8,14 +10,61 @@ from eng.release import lines
 
 
 def policy():
-    """Return independent policy data, never mutate the checked-in authority."""
-    return lines.load_policy()
+    """Return the fixed main/10 scenario independently of checked-in activation."""
+    return {"schemaVersion": 1, "revision": "test-main-10", "repository":
+            "doka-labs/Doka.EntityFrameworkCore.SafeMigrations", "authorityRef": "refs/heads/main",
+            "lines": [{"sourceRef": "refs/heads/main", "role": "main", "packageMajor": 10,
+                       "channel": "stable-and-prerelease", "upstreamStage": "ga", "state": "active",
+                       "workflowPath": lines.WORKFLOW_PATH, "publisherEnvironment": "nuget"},
+                      {"sourceRef": "refs/heads/maintenance/10.x", "role": "maintenance", "packageMajor": 10,
+                       "channel": "stable-and-prerelease", "upstreamStage": "ga", "state": "inactive",
+                       "workflowPath": lines.WORKFLOW_PATH, "publisherEnvironment": "nuget"}]}
+
+
+def toolchain(major=10):
+    """Return a synthetic coherent GA toolchain, not the current source patches."""
+    return {"approvedDotnetSdk": f"{major}.0.100", "targetFramework": f"net{major}.0",
+            "efCoreVersion": f"[{major}.0.0,{major}.1.0)", "testRunner": "VSTest", "upstreamStage": "ga"}
+
+
+def write_toolchain(root, major=10):
+    """Own minimal source contracts and five product locks for the real inspector."""
+    value = toolchain(major)
+    (root / "global.json").write_text(json.dumps({"sdk": {
+        "version": value["approvedDotnetSdk"], "rollForward": "disable", "allowPrerelease": False}}),
+        encoding="ascii")
+    for name, key, path in (("TargetFramework", "targetFramework", "Directory.Build.props"),
+                            ("EfCorePackageVersion", "efCoreVersion", "Directory.Packages.props")):
+        (root / path).write_text(f"<Project><PropertyGroup><{name}>{value[key]}</{name}>"
+                                 "</PropertyGroup></Project>\n", encoding="ascii")
+
+    packages = {name: {"resolved": f"{major}.0.15"} for name in (
+        "Microsoft.EntityFrameworkCore.Design", "Microsoft.EntityFrameworkCore.Relational")}
+    for name in ("Core", "MySql", "PostgreSql", "Sqlite", "SqlServer"):
+        project = root / "src" / name
+        project.mkdir(parents=True)
+        (project / "packages.lock.json").write_text(json.dumps({
+            "dependencies": {value["targetFramework"]: packages}}), encoding="ascii")
+
+
+def inspect_declared_toolchains(root, actual, version):
+    """Inspect source contracts without turning local lifecycle data into permission."""
+    probe = copy.deepcopy(lines.validate_policy(actual))
+    matching = [entry for entry in probe["lines"] if entry["packageMajor"] == lines.parse_version(version).major]
+    for entry in matching:
+        # WHY: Static preparation CI is legal for inactive lines. This private
+        # test copy only creates inspector inputs, never hosted release authority.
+        if entry["state"] == "inactive":
+            entry["state"] = "prepared"
+
+    return [lines.inspect_toolchain(root, lines.freeze_line(probe, entry["sourceRef"], version))
+            for entry in matching]
 
 
 class ReleaseLineTests(unittest.TestCase):
     """Exercise positive identities and fail-closed aliases/lifecycle changes."""
 
-    def test_initial_policy_keeps_only_main_active(self):
+    def test_initial_scenario_keeps_only_main_active(self):
         # Arrange
         value = policy()
 
@@ -139,17 +188,76 @@ class ReleaseLineTests(unittest.TestCase):
             with self.subTest(value=value), self.assertRaises(lines.LinePolicyError):
                 lines.parse_version(value)
 
-    def test_real_branch_toolchain_is_net10(self):
+    def test_checked_in_policy_and_toolchain_match_actual_source(self):
+        """Real source remains checked without pinning tests to today's lifecycle."""
         # Arrange
         root = Path(__file__).resolve().parents[2]
-        frozen = lines.freeze_line(policy(), "refs/heads/main", "10.6.0")
+        actual = lines.load_policy()
+        version = lines._property(root / "src/Directory.Build.props", "VersionPrefix")
+        major = lines.parse_version(version).major
 
         # Act
-        result = lines.inspect_toolchain(root, frozen)
+        results = inspect_declared_toolchains(root, actual, version)
 
         # Assert
-        self.assertEqual("net10.0", result["targetFramework"])
-        self.assertEqual("10.0.403", result["approvedDotnetSdk"])
+        self.assertTrue(results, "Actual source requires a registered own-major line.")
+        for result in results:
+            self.assertEqual(f"net{major}.0", result["targetFramework"])
+            self.assertEqual(lines.read_json(root / "global.json")["sdk"]["version"],
+                             result["approvedDotnetSdk"])
+
+    def test_inactive_preparation_inspects_own_source_without_changing_policy(self):
+        # Arrange
+        value = policy()
+        value["lines"][0]["packageMajor"] = 11
+        original = copy.deepcopy(value)
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        root = Path(directory.name)
+        write_toolchain(root)
+
+        # Act
+        observed = inspect_declared_toolchains(root, value, "10.7.4")
+
+        # Assert
+        self.assertEqual([toolchain()], observed)
+        self.assertEqual(original, value)
+
+    def test_inactive_preparation_never_qualifies_or_publishes_under_future_main(self):
+        for purpose in ("qualification", "publication"):
+            with self.subTest(purpose=purpose):
+                # Arrange
+                value = policy()
+                value["lines"][0]["packageMajor"] = 11
+
+                # Act / Assert
+                with self.assertRaises(lines.LinePolicyError):
+                    lines.select_line(value, "refs/heads/maintenance/10.x", "10.7.4", purpose=purpose)
+
+    def test_future_main_and_maintenance_keep_independent_toolchains(self):
+        # Arrange
+        value = policy()
+        value["lines"][0]["packageMajor"] = 11
+        value["lines"][1]["state"] = "active"
+
+        # Act
+        observed = [lines.validate_toolchain(toolchain(major), lines.freeze_line(value, ref, version))
+                    for major, ref, version in ((11, "refs/heads/main", "11.0.0"),
+                                                (10, "refs/heads/maintenance/10.x", "10.7.4"))]
+
+        # Assert
+        self.assertEqual(["net11.0", "net10.0"], [item["targetFramework"] for item in observed])
+
+    def test_main_toolchain_cannot_substitute_for_maintenance(self):
+        # Arrange
+        value = policy()
+        value["lines"][0]["packageMajor"] = 11
+        value["lines"][1]["state"] = "active"
+        frozen = lines.freeze_line(value, "refs/heads/maintenance/10.x", "10.7.4")
+
+        # Act / Assert
+        with self.assertRaises(lines.LinePolicyError):
+            lines.validate_toolchain(toolchain(11), frozen)
 
     def test_foreign_toolchain_major_is_rejected(self):
         # Arrange
@@ -163,29 +271,27 @@ class ReleaseLineTests(unittest.TestCase):
 
     def test_mixed_resolved_ef_versions_are_rejected(self):
         # Arrange
-        root = Path(__file__).resolve().parents[2]
         frozen = lines.freeze_line(policy(), "refs/heads/main", "10.6.0")
-        toolchain = lines.inspect_toolchain(root, frozen)
-        graph = {"Microsoft.EntityFrameworkCore.Design": "10.0.14",
-                 "Microsoft.EntityFrameworkCore.Relational": "10.0.13"}
+        branch_toolchain = toolchain()
+        graph = {"Microsoft.EntityFrameworkCore.Design": "10.0.15",
+                 "Microsoft.EntityFrameworkCore.Relational": "10.0.14"}
 
         # Act / Assert
         with self.assertRaises(lines.LinePolicyError):
-            lines.validate_toolchain(toolchain, frozen, resolved_packages=graph)
+            lines.validate_toolchain(branch_toolchain, frozen, resolved_packages=graph)
 
     def test_coherent_resolved_ef_graph_matches_branch_bounds(self):
         # Arrange
-        root = Path(__file__).resolve().parents[2]
         frozen = lines.freeze_line(policy(), "refs/heads/main", "10.6.0")
-        toolchain = lines.inspect_toolchain(root, frozen)
-        graph = {"Microsoft.EntityFrameworkCore.Design": "10.0.14",
-                 "Microsoft.EntityFrameworkCore.Relational": "10.0.14"}
+        branch_toolchain = toolchain()
+        graph = {"Microsoft.EntityFrameworkCore.Design": "10.0.15",
+                 "Microsoft.EntityFrameworkCore.Relational": "10.0.15"}
 
         # Act
-        observed = lines.validate_toolchain(toolchain, frozen, resolved_packages=graph)
+        observed = lines.validate_toolchain(branch_toolchain, frozen, resolved_packages=graph)
 
         # Assert
-        self.assertEqual(toolchain, observed)
+        self.assertEqual(branch_toolchain, observed)
 
     def test_schema_bool_is_not_integer(self):
         # Arrange

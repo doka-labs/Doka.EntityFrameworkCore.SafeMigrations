@@ -19,16 +19,12 @@ internal static partial class SafeMigrationSqlExpressionInspector
         SafeMigrationSqlBetweenExpression value when ordinal == 0 => value.Operand,
         SafeMigrationSqlBetweenExpression value when ordinal == 1 => value.Lower,
         SafeMigrationSqlBetweenExpression value when ordinal == 2 => value.Upper,
-        SafeMigrationSqlInExpression value when inValuesFirst => ordinal < value.Values.Count
-            ? value.Values[(int)ordinal]
-            : ordinal == value.Values.Count
-                ? value.Operand
-                : null,
-        SafeMigrationSqlInExpression value => ordinal == 0
-            ? value.Operand
-            : ordinal <= value.Values.Count
-                ? value.Values[(int)(ordinal - 1)]
-                : null,
+        SafeMigrationSqlInExpression value when inValuesFirst && ordinal < value.Values.Count
+            => value.Values[(int)ordinal],
+        SafeMigrationSqlInExpression value when inValuesFirst && ordinal == value.Values.Count => value.Operand,
+        SafeMigrationSqlInExpression when inValuesFirst => null,
+        SafeMigrationSqlInExpression value when ordinal == 0 => value.Operand,
+        SafeMigrationSqlInExpression value when ordinal <= value.Values.Count => value.Values[(int)(ordinal - 1)],
         SafeMigrationSqlFunctionExpression value when ordinal < value.Arguments.Count => value.Arguments[(int)ordinal],
         SafeMigrationSqlCaseExpression value => CaseChildAt(value, ordinal, caseElseFirst),
         _ => null,

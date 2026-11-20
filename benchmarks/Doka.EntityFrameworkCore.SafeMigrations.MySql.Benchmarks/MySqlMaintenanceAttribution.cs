@@ -1,12 +1,11 @@
-using Microsoft.EntityFrameworkCore.Storage;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.Benchmarks;
 
 /// <summary>Attributes prerequisite extraction and native-profile backfill plan generation without a server.</summary>
-public class MySqlMaintenanceAttribution : IDisposable
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
+public class MySqlMaintenanceAttribution : IDisposable, IAsyncDisposable
 {
     private MySqlSafeMigrationCatalogSqlBuilder _catalog = null!;
-    private ProfileContext _context = null!;
+    private ProfileContext? _context;
     private bool _disposed;
     private SafeMigrationOperation _operation = null!;
     private MySqlMigrationOperationContext _operationContext = null!;
@@ -27,6 +26,24 @@ public class MySqlMaintenanceAttribution : IDisposable
         "nullable_fast_path")]
     public string Workload { get; set; } = "ascii";
 
+    /// <inheritdoc />
+    public async ValueTask DisposeAsync()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        // WHY: Setup can fail before publishing its resource; cleanup must still complete the actual acquired work.
+        await SafeMigrationAnalysisCleanup.DisposeAsync(
+            _context,
+            null,
+            "SafeMigrations.MySqlBenchmarkContextDisposeException");
+
+        _disposed = true;
+        GC.SuppressFinalize(this);
+    }
+
     /// <summary>Releases the context owning the native profile services.</summary>
     public void Dispose()
     {
@@ -42,14 +59,16 @@ public class MySqlMaintenanceAttribution : IDisposable
     ) => BenchmarkProgram.Run(args, typeof(MySqlPrerequisiteAttribution), typeof(MySqlMaintenanceAttribution));
 
     /// <summary>Prepares real native mappings and verifies exact producer output before timing.</summary>
+    /// <returns>The asynchronous setup and optional evidence persistence.</returns>
     [GlobalSetup]
-    public void Setup()
+    public async Task Setup()
     {
         _disposed = false;
-        _context = new ProfileContext(MariaDb);
+        var context = new ProfileContext(MariaDb);
+        _context = context;
         _catalog = new MySqlSafeMigrationCatalogSqlBuilder(
-            _context.GetService<IRelationalTypeMappingSource>(),
-            _context.GetService<ISqlGenerationHelper>());
+            context.GetService<IRelationalTypeMappingSource>(),
+            context.GetService<ISqlGenerationHelper>());
 
         object value = Workload switch
         {
@@ -96,7 +115,7 @@ public class MySqlMaintenanceAttribution : IDisposable
             new AlterColumnIntent("maintenance_rows", target, source),
             SafeMigrationPolicy.RepairIfSafe);
 
-        _operationContext = OperationContext(_context, _operation, MariaDb);
+        _operationContext = OperationContext(context, _operation, MariaDb);
         var plan = CreatePlan();
         var charsetGuardPresent = VerifyProducerPath(plan, Workload, nullable);
         if (Workload == "ascii")
@@ -113,7 +132,7 @@ public class MySqlMaintenanceAttribution : IDisposable
         var output = Environment.GetEnvironmentVariable("SAFE_MIGRATIONS_ATTRIBUTION_OUTPUT");
         if (!string.IsNullOrWhiteSpace(output))
         {
-            _ = MaintenanceAttribution.Write(
+            await MaintenanceAttribution.WriteAsync(
                 Path.Combine(output, $"mysql-{MariaDb}-{Workload}.json"),
                 "Functional/source evidence; MySQL/MariaDB client generation only; not timing evidence",
                 [
@@ -141,7 +160,8 @@ public class MySqlMaintenanceAttribution : IDisposable
                             plan.StateExpression.Length + plan.Postcondition.Length + plan.RepairPrecondition.Length,
                         ExactOutput = shape,
                     },
-                ]);
+                ],
+                CancellationToken.None);
         }
     }
 
@@ -159,8 +179,9 @@ public class MySqlMaintenanceAttribution : IDisposable
         includeTransitionEvidence: true);
 
     /// <summary>Disposes the context owning the real native profile services.</summary>
+    /// <returns>The asynchronous, noncancellable release of owned resources.</returns>
     [GlobalCleanup]
-    public void Cleanup() => Dispose();
+    public async Task Cleanup() => await DisposeAsync();
 
     /// <summary>Releases owned managed resources once while supporting generated benchmark subclasses.</summary>
     /// <param name="disposing">Whether managed resources should be released.</param>
@@ -173,7 +194,7 @@ public class MySqlMaintenanceAttribution : IDisposable
             return;
         }
 
-        _context.Dispose();
+        _context?.Dispose();
         _disposed = true;
     }
 
@@ -281,6 +302,9 @@ public class MySqlMaintenanceAttribution : IDisposable
                     proof.InnerStatementName,
                     proof.OuterStatementName,
                 })
+
+                // WHY: Retain fluent materialization and the resulting snapshot ownership.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray(),
             plan.PrerequisiteExpression,
             plan.ExecutionPostcondition,
@@ -406,6 +430,9 @@ public class MySqlMaintenanceAttribution : IDisposable
         var multiple = Enumerable
             .Range(0, 32)
             .Select(static index => $"source_{index:D2}")
+
+            // WHY: Retain fluent materialization and the resulting snapshot ownership.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var deep = identifier;
@@ -505,17 +532,25 @@ public class MySqlMaintenanceAttribution : IDisposable
     }
 
     /// <summary>Provides real type mappings for one explicitly selected generation profile.</summary>
-    /// <param name="mariaDb">Whether MariaDB rather than MySQL is selected.</param>
-    private sealed class ProfileContext(
-        bool mariaDb
-    ) : DbContext
+    private sealed class ProfileContext : DbContext
     {
+        private readonly bool _mariaDb;
+
+        /// <summary>Creates a context for one explicitly selected generation profile.</summary>
+        /// <param name="mariaDb">Whether MariaDB rather than MySQL is selected.</param>
+        internal ProfileContext(
+            bool mariaDb
+        )
+        {
+            _mariaDb = mariaDb;
+        }
+
         /// <inheritdoc />
         protected override void OnConfiguring(
             DbContextOptionsBuilder optionsBuilder
         )
         {
-            var version = mariaDb
+            var version = _mariaDb
                 ? MySqlServerVersion.MariaDb(new Version(11, 8, 8))
                 : MySqlServerVersion.MySql(new Version(8, 4, 11));
 

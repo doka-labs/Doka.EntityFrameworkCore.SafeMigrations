@@ -32,8 +32,14 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
         }
 
         builder.Append("CASE @doka_sm_action ");
-        foreach (var guard in MySqlSafeMigrationRuntimeDiagnostic.GuardCodes)
+
+        // WHY: Index this stable list while preserving its order and ownership.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var guardIndex = 0; guardIndex < MySqlSafeMigrationRuntimeDiagnostic.GuardCodes.Count; guardIndex++)
         {
+            var guard = MySqlSafeMigrationRuntimeDiagnostic.GuardCodes[guardIndex];
+
             if (guard == "doka_sm_postcondition")
             {
                 continue;
@@ -83,8 +89,13 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
             .Append(genericReason)
             .Append(" END AS reasonCode, CASE @doka_sm_action ");
 
-        foreach (var guard in MySqlSafeMigrationRuntimeDiagnostic.GuardCodes)
+        // WHY: Index this stable list while preserving its order and ownership.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var guardIndex = 0; guardIndex < MySqlSafeMigrationRuntimeDiagnostic.GuardCodes.Count; guardIndex++)
         {
+            var guard = MySqlSafeMigrationRuntimeDiagnostic.GuardCodes[guardIndex];
+
             if (guard == "doka_sm_postcondition")
             {
                 continue;
@@ -148,14 +159,22 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
             .ToString();
     }
 
-    /// <summary>Uses the same shared fallback vocabulary as managed errors rather than relabeling raw state as a reason.</summary>
+    /// <summary>
+    /// Uses the shared fallback vocabulary of managed errors without relabeling raw state as a reason.
+    /// </summary>
     private static string BuildGenericReasonCodeExpression(
         MySqlSafeMigrationRuntimeDiagnostic diagnostic
     )
     {
         var builder = new StringBuilder("CASE @doka_sm_action ");
-        foreach (var guard in MySqlSafeMigrationRuntimeDiagnostic.GuardCodes)
+
+        // WHY: Index this stable list while preserving its order and ownership.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var guardIndex = 0; guardIndex < MySqlSafeMigrationRuntimeDiagnostic.GuardCodes.Count; guardIndex++)
         {
+            var guard = MySqlSafeMigrationRuntimeDiagnostic.GuardCodes[guardIndex];
+
             if (guard == "doka_sm_postcondition")
             {
                 continue;

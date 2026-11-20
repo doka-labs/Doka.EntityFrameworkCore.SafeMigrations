@@ -1,18 +1,25 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
+/// <summary>Protects stable canonical fingerprints and provider-specific relational facet sensitivity.</summary>
 public sealed class MySqlModelFingerprintTests
 {
     private const string ProviderContract = "Doka.EntityFrameworkCore.MySql";
 
+    /// <summary>
+    /// Requires relationally identical models to have the same fingerprint despite declaration order.
+    /// </summary>
     [Fact]
     public void Create_IsStableAcrossRelationalDeclarationOrder()
     {
+        // Arrange
         using var first = new FirstOrderContext();
         using var second = new SecondOrderContext();
 
+        // Act
         var firstFingerprint = Fingerprint(first);
         var secondFingerprint = Fingerprint(second);
 
+        // Assert
         Assert.Equal(firstFingerprint, secondFingerprint);
         Assert.StartsWith(
             "safe-relational-model:v1:Doka.EntityFrameworkCore.MySql:sha256:",
@@ -26,18 +33,27 @@ public sealed class MySqlModelFingerprintTests
             firstFingerprint);
     }
 
+    /// <summary>Changes the fingerprint when a provider-specific relational facet changes.</summary>
     [Fact]
     public void Create_ChangesForMySqlRelationalFacets()
     {
+        // Arrange
         using var baseline = new FirstOrderContext();
         using var changed = new ChangedFacetContext();
 
-        Assert.NotEqual(Fingerprint(baseline), Fingerprint(changed));
+        // Act
+        var baselineFingerprint = Fingerprint(baseline);
+        var changedFingerprint = Fingerprint(changed);
+
+        // Assert
+        Assert.NotEqual(baselineFingerprint, changedFingerprint);
     }
 
+    /// <summary>Fingerprints nested JSON containers without requiring nonexistent scalar-property mappings.</summary>
     [Fact]
     public void Create_HandlesNestedJsonContainerWithoutScalarPropertyMappings()
     {
+        // Arrange
         using var context = new JsonArtifactContext();
         var model = context.GetService<IDesignTimeModel>()
             .Model;
@@ -49,9 +65,11 @@ public sealed class MySqlModelFingerprintTests
             .Columns
             .Single(static column => column.Name == "payload");
 
+        // Act
         var first = SafeMigrationModelFingerprint.Create(model, ProviderContract);
         var second = SafeMigrationModelFingerprint.Create(model, ProviderContract);
 
+        // Assert
         Assert.Empty(jsonColumn.PropertyMappings);
         Assert.Equal(first, second);
         Assert.StartsWith(
@@ -171,6 +189,7 @@ public sealed class MySqlModelFingerprintTests
         }
     }
 
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class Alpha
     {
         public int Id { get; set; }
@@ -178,6 +197,7 @@ public sealed class MySqlModelFingerprintTests
         public string Name { get; set; } = string.Empty;
     }
 
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class Beta
     {
         public int Id { get; set; }
@@ -185,6 +205,7 @@ public sealed class MySqlModelFingerprintTests
         public bool Enabled { get; set; }
     }
 
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class JsonArtifact
     {
         public int Id { get; set; }
@@ -192,6 +213,7 @@ public sealed class MySqlModelFingerprintTests
         public JsonArtifactPayload Payload { get; set; } = new();
     }
 
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class JsonArtifactPayload
     {
         public string Name { get; set; } = string.Empty;
@@ -199,6 +221,7 @@ public sealed class MySqlModelFingerprintTests
         public JsonArtifactDetails Details { get; } = new();
     }
 
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class JsonArtifactDetails
     {
         public int Revision { get; set; }

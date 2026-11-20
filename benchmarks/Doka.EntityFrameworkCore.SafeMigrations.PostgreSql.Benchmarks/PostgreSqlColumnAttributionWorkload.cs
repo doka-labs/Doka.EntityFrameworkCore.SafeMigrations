@@ -1,7 +1,8 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Benchmarks;
 
 /// <summary>Records paired column SQL shapes and prepared client generation costs without timing gates.</summary>
-public class PostgreSqlColumnAttributionWorkload : IDisposable
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
+public class PostgreSqlColumnAttributionWorkload : IDisposable, IAsyncDisposable
 {
     private static readonly string[] s_catalogRelations =
     [
@@ -33,6 +34,24 @@ public class PostgreSqlColumnAttributionWorkload : IDisposable
     [Params("table", "required_repairs")]
     public string Kind { get; set; } = "table";
 
+    /// <inheritdoc />
+    public async ValueTask DisposeAsync()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        // WHY: Setup can fail before publishing its resource; cleanup must still complete the actual acquired work.
+        await SafeMigrationAnalysisCleanup.DisposeAsync(
+            _context,
+            null,
+            "SafeMigrations.PostgreSqlColumnBenchmarkContextDisposeException");
+
+        _disposed = true;
+        GC.SuppressFinalize(this);
+    }
+
     /// <summary>Releases the context owning the PostgreSQL generation services.</summary>
     public void Dispose()
     {
@@ -48,8 +67,9 @@ public class PostgreSqlColumnAttributionWorkload : IDisposable
     ) => BenchmarkProgram.Run(args, typeof(PostgreSqlColumnAttributionWorkload));
 
     /// <summary>Prepares ordered contracts and records exact SQL shapes outside timed generation.</summary>
+    /// <returns>The setup and optional asynchronous structural evidence persistence.</returns>
     [GlobalSetup]
-    public void Setup()
+    public async Task Setup()
     {
         _disposed = false;
         _context = new PostgreSqlGenerationContext();
@@ -70,15 +90,21 @@ public class PostgreSqlColumnAttributionWorkload : IDisposable
                     SafeMigrationPolicy.ThrowIfDifferent),
             ],
             "required_repairs" => columns
-                .Select(column => (MigrationOperation)new SafeMigrationOperation(
+                .Select(MigrationOperation (column) => new SafeMigrationOperation(
                     new EnsureColumnIntent("attribution_rows", column),
                     SafeMigrationPolicy.RepairIfSafe))
+
+                // WHY: Retain fluent materialization and the resulting snapshot ownership.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray(),
             _ => throw new ArgumentOutOfRangeException(nameof(Kind)),
         };
 
         _safeOperations = _operations
             .Cast<SafeMigrationOperation>()
+
+            // WHY: Retain fluent materialization and the resulting snapshot ownership.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var plans = _safeOperations
@@ -86,6 +112,9 @@ public class PostgreSqlColumnAttributionWorkload : IDisposable
                 operation,
                 includeAnalysisEvidence: true,
                 includeTransitionEvidence: true))
+
+            // WHY: Retain fluent materialization and the resulting snapshot ownership.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var commands = _generator.Generate(_operations, _context.Model);
@@ -114,7 +143,7 @@ public class PostgreSqlColumnAttributionWorkload : IDisposable
         var output = Environment.GetEnvironmentVariable("SAFE_MIGRATIONS_ATTRIBUTION_OUTPUT");
         if (!string.IsNullOrWhiteSpace(output))
         {
-            _ = MaintenanceAttribution.Write(
+            await MaintenanceAttribution.WriteAsync(
                 Path.Combine(output, $"postgresql-columns-{Kind}-{ColumnCount}-{MixedCollations}.json"),
                 "Functional/source evidence; PostgreSQL client SQL generation; not timing evidence",
                 [
@@ -129,7 +158,8 @@ public class PostgreSqlColumnAttributionWorkload : IDisposable
                         ClassificationSqlHash = MaintenanceAttribution.Hash(classificationSql),
                         RuntimeSqlHash = MaintenanceAttribution.Hash(runtimeSql),
                     },
-                ]);
+                ],
+                CancellationToken.None);
         }
     }
 
@@ -157,8 +187,9 @@ public class PostgreSqlColumnAttributionWorkload : IDisposable
     }
 
     /// <summary>Disposes the context owning the real PostgreSQL generation services.</summary>
+    /// <returns>The asynchronous, noncancellable release of owned resources.</returns>
     [GlobalCleanup]
-    public void Cleanup() => Dispose();
+    public async Task Cleanup() => await DisposeAsync();
 
     /// <summary>Releases owned managed resources once while supporting generated benchmark subclasses.</summary>
     /// <param name="disposing">Whether managed resources should be released.</param>
@@ -201,6 +232,9 @@ public class PostgreSqlColumnAttributionWorkload : IDisposable
                         : "pg_catalog"),
             defaultValue: SafeMigrationDefaultValue.Literal("canonical"),
             comment: "canonical"))
+
+        // WHY: Retain fluent materialization and the resulting snapshot ownership.
+        // ReSharper disable once UseCollectionExpression
         .ToArray();
 
     /// <summary>Keeps exact SQL size and relation occurrences separate from execution-plan claims.</summary>

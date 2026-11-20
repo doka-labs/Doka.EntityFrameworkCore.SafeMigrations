@@ -1,19 +1,18 @@
 <Project>
   <PropertyGroup Label="Central package management">
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
-    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
 
   <PropertyGroup Label="Shared compatibility and qualification versions">
-    <EfCorePackageVersion Condition="'$(EfCorePackageVersion)' == ''">[10.0.14,10.1.0)</EfCorePackageVersion>
-    <DokaMySqlPackageVersion Condition="'$(DokaMySqlPackageVersion)' == ''">[10.6.5,10.7.0)</DokaMySqlPackageVersion>
+    <EfCorePackageVersion Condition="'$(EfCorePackageVersion)' == ''">[10.0.15,10.1.0)</EfCorePackageVersion>
+    <DokaMySqlPackageVersion Condition="'$(DokaMySqlPackageVersion)' == ''">[10.7.0,10.8.0)</DokaMySqlPackageVersion>
     <NpgsqlPackageVersion Condition="'$(NpgsqlPackageVersion)' == ''">[10.0.3,11.0.0)</NpgsqlPackageVersion>
     <DependencyInjectionPackageVersion
       Condition="'$(DependencyInjectionPackageVersion)' == ''"
-    >[10.0.14,10.1.0)</DependencyInjectionPackageVersion>
+    >[10.0.15,10.1.0)</DependencyInjectionPackageVersion>
     <TestcontainersPackageVersion
       Condition="'$(TestcontainersPackageVersion)' == ''"
-    >[4.16.0]</TestcontainersPackageVersion>
+    >[4.17.0]</TestcontainersPackageVersion>
   </PropertyGroup>
 
   <ItemGroup Label="Production">
@@ -39,30 +38,30 @@
   </ItemGroup>
 
   <ItemGroup Label="Provider transport minimums">
-    <!-- WHY: CPM promotes only dependencies already present in each project's
-         graph. These minimums reach the owning provider's nuspec without
-         introducing a transport dependency into Core or sibling providers. -->
+    <!-- WHY: The owning adapters reference these packages explicitly. Central
+         versions remain shared without adding transports to sibling providers. -->
     <PackageVersion Include="MySqlConnector" Version="2.6.2" />
     <PackageVersion Include="Microsoft.Data.SqlClient" Version="6.1.8" />
   </ItemGroup>
 
   <ItemGroup Label="SQL Server transitive security floor">
-    <!-- Transitive pinning promotes the patched SqlClient dependency into the
-         published nuspec; a lockfile-only update would not protect consumers. -->
-    <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="9.0.22" />
+    <!-- WHY: The SQL Server adapter explicitly publishes this minimum; a lockfile
+         or development-only central promotion would not protect consumers. -->
+    <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="10.0.15" />
   </ItemGroup>
 
   <ItemGroup Label="Build analyzers">
+    <PackageVersion Include="JetBrains.Annotations" Version="2026.2.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" Version="5.6.0" />
     <!-- The maintained package identifies dotnet/roslyn, not the retired
          analyzer repository. Keep its assets private in every project so
          updating diagnostics never adds a published runtime dependency. -->
-    <GlobalPackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="5.9.0" PrivateAssets="all" />
+    <GlobalPackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="5.12.0" PrivateAssets="all" />
   </ItemGroup>
 
   <ItemGroup Label="Test tooling">
     <PackageVersion Include="FsCheck.Xunit" Version="3.6.0" />
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.12.0" />
     <PackageVersion Include="xunit" Version="2.9.3" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.1" />
   </ItemGroup>

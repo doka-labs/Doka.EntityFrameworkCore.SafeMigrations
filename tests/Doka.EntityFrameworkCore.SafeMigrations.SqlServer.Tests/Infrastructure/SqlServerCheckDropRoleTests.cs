@@ -22,7 +22,7 @@ public sealed class SqlServerCheckDropRoleTests
     )
     {
         // Arrange
-        using var context = new SafeMigrationDbContext(
+        await using var context = new SafeMigrationDbContext(
             "Server=localhost;Database=drop_roles;Integrated Security=true;");
 
         var analyzer = (SqlServerSafeMigrationProviderAnalyzer)context.GetService<ISafeMigrationProviderAnalyzer>();

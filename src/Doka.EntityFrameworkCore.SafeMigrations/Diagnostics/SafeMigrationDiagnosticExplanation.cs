@@ -2,10 +2,19 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 
 /// <summary>Provides a stable reason identity, understandable explanation and safe next step.</summary>
 /// <remarks>Explanations describe established evidence; they never grant permission to bypass a guard.</remarks>
+[PublicAPI]
 public readonly struct SafeMigrationDiagnosticExplanation
 {
+    // WHY: Explicit nullable storage distinguishes an uninitialized struct from its non-null display fallback.
+    // ReSharper disable once ReplaceWithFieldKeyword
     private readonly string? _reasonCode;
+
+    // WHY: Retain nullable backing storage while the public getter guarantees a non-null default explanation.
+    // ReSharper disable once ReplaceWithFieldKeyword
     private readonly string? _reason;
+
+    // WHY: Default structs must retain the unavailable-evidence fallback instead of an initialized next step.
+    // ReSharper disable once ReplaceWithFieldKeyword
     private readonly string? _nextStep;
 
     /// <summary>Initializes a payload-free explanation from the shared diagnostic vocabulary.</summary>

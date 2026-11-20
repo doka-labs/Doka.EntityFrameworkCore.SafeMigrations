@@ -1,6 +1,3 @@
-using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Compiles generated consumer sources against the exact assemblies restored by the test project.</summary>

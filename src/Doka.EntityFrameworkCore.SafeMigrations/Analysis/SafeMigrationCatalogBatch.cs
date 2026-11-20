@@ -30,16 +30,39 @@ internal sealed class SafeMigrationCatalogBatch : IAsyncDisposable
         _commandTimeout = commandTimeout;
         if (connection.CanCreateBatch)
         {
-            _providerBatch = connection.CreateBatch();
-            if (transaction is not null)
+            var providerBatch = connection.CreateBatch();
+            try
             {
-                _providerBatch.Transaction = transaction;
+                if (transaction is not null)
+                {
+                    providerBatch.Transaction = transaction;
+                }
+
+                if (commandTimeout is not null)
+                {
+                    providerBatch.Timeout = commandTimeout.Value;
+                }
+            }
+            catch (Exception configurationFailure)
+            {
+                try
+                {
+                    // WHY: A throwing virtual setter prevents constructor publication.
+                    // No execution has started, so release this unpublished handle synchronously.
+                    providerBatch.Dispose();
+                }
+                catch (Exception cleanupFailure)
+                {
+                    SafeMigrationAnalysisCleanup.RetainFailure(
+                        configurationFailure,
+                        cleanupFailure,
+                        "SafeMigrations.CatalogBatchDisposeException");
+                }
+
+                throw;
             }
 
-            if (commandTimeout is not null)
-            {
-                _providerBatch.Timeout = commandTimeout.Value;
-            }
+            _providerBatch = providerBatch;
         }
         else
         {
@@ -71,10 +94,38 @@ internal sealed class SafeMigrationCatalogBatch : IAsyncDisposable
             return;
         }
 
-        foreach (var command in _sequentialCommands!)
+        ExceptionDispatchInfo? disposalFailure = null;
+
+        // WHY: This invocation-owned list stays indexable while cleanup awaits
+        // each command and retains ownership after an individual disposal fails.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var index = 0; index < _sequentialCommands!.Count; index++)
         {
-            await command.DisposeAsync();
+            try
+            {
+                await _sequentialCommands[index]
+                    .DisposeAsync();
+            }
+            catch (Exception exception)
+            {
+                if (disposalFailure is null)
+                {
+                    disposalFailure = ExceptionDispatchInfo.Capture(exception);
+                }
+                else
+                {
+                    // WHY: Failure of one command cannot release our ownership of
+                    // the remaining commands or overwrite earlier cleanup evidence.
+                    SafeMigrationAnalysisCleanup.RetainFailure(
+                        disposalFailure.SourceException,
+                        exception,
+                        "SafeMigrations.CatalogCommandDisposeException");
+                }
+            }
         }
+
+        disposalFailure?.Throw();
     }
 
     /// <summary>Creates and registers the next ordered catalog statement.</summary>
@@ -92,17 +143,38 @@ internal sealed class SafeMigrationCatalogBatch : IAsyncDisposable
         }
 
         var sequentialCommand = _connection.CreateCommand();
-        if (_transaction is not null)
+        try
         {
-            sequentialCommand.Transaction = _transaction;
-        }
+            if (_transaction is not null)
+            {
+                sequentialCommand.Transaction = _transaction;
+            }
 
-        if (_commandTimeout is not null)
+            if (_commandTimeout is not null)
+            {
+                sequentialCommand.CommandTimeout = _commandTimeout.Value;
+            }
+
+            _sequentialCommands!.Add(sequentialCommand);
+        }
+        catch (Exception configurationFailure)
         {
-            sequentialCommand.CommandTimeout = _commandTimeout.Value;
-        }
+            try
+            {
+                // WHY: Until registration succeeds, the enclosing batch cannot release
+                // this unexecuted command. Preserve the setter failure if cleanup also fails.
+                sequentialCommand.Dispose();
+            }
+            catch (Exception cleanupFailure)
+            {
+                SafeMigrationAnalysisCleanup.RetainFailure(
+                    configurationFailure,
+                    cleanupFailure,
+                    "SafeMigrations.CatalogCommandDisposeException");
+            }
 
-        _sequentialCommands!.Add(sequentialCommand);
+            throw;
+        }
 
         return new SafeMigrationCatalogCommand(this, sequentialCommand);
     }
@@ -166,7 +238,7 @@ internal sealed class SafeMigrationCatalogBatch : IAsyncDisposable
 
         if (_providerBatch is not null)
         {
-            await using var reader = await _providerBatch.ExecuteReaderAsync(cancellationToken);
+            var reader = await _providerBatch.ExecuteReaderAsync(cancellationToken);
             await ReadResultSetsAsync(reader, readResultSet, cancellationToken);
 
             return;
@@ -176,21 +248,44 @@ internal sealed class SafeMigrationCatalogBatch : IAsyncDisposable
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            var reader = await command.ExecuteReaderAsync(cancellationToken);
             await ReadResultSetsAsync(reader, readResultSet, cancellationToken);
         }
     }
 
+    /// <summary>Consumes and releases one acquired reader without replacing a read or callback failure.</summary>
+    /// <param name="reader">The acquired reader whose actual disposal this method owns.</param>
+    /// <param name="readResultSet">The ordered result-set consumer.</param>
+    /// <param name="cancellationToken">The token forwarded to result-set work, never to protected disposal.</param>
+    /// <returns>Completion of result consumption and actual reader cleanup.</returns>
     private static async Task ReadResultSetsAsync(
         DbDataReader reader,
         Func<DbDataReader, CancellationToken, Task> readResultSet,
         CancellationToken cancellationToken
     )
     {
-        do
+        Exception? readFailure = null;
+
+        try
         {
-            await readResultSet(reader, cancellationToken);
-        } while (await reader.NextResultAsync(cancellationToken));
+            do
+            {
+                await readResultSet(reader, cancellationToken);
+            } while (await reader.NextResultAsync(cancellationToken));
+        }
+        catch (Exception exception)
+        {
+            readFailure = exception;
+
+            throw;
+        }
+        finally
+        {
+            await SafeMigrationAnalysisCleanup.DisposeAsync(
+                reader,
+                readFailure,
+                "SafeMigrations.CatalogReaderDisposeException");
+        }
     }
 }
 

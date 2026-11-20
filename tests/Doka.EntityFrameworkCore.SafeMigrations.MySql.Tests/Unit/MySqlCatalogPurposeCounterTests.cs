@@ -241,12 +241,18 @@ public sealed class MySqlCatalogPurposeCounterTests
         // Act
         await using var reader = await command.ExecuteReaderAsync(CancellationToken.None);
         var hasRow = await reader.ReadAsync(CancellationToken.None);
+        var fieldCount = reader.FieldCount;
+        var firstOrdinal = hasRow
+            ? reader.GetInt32(0)
+            : (int?)null;
+
+        var hasAnotherRow = await reader.ReadAsync(CancellationToken.None);
 
         // Assert
         Assert.True(hasRow);
-        Assert.Equal(3, reader.FieldCount);
-        Assert.Equal(17, reader.GetInt32(0));
-        Assert.False(await reader.ReadAsync(CancellationToken.None));
+        Assert.Equal(3, fieldCount);
+        Assert.Equal(17, firstOrdinal);
+        Assert.False(hasAnotherRow);
         Assert.Equal(guardCount, connection.StateEvaluationGuardStatementCount);
         Assert.Equal(eligibilityCount, connection.NarrowingEligibilityStatementCount);
         Assert.Equal(0, connection.ClassificationStatementCount);

@@ -1,5 +1,3 @@
-using System.Data;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql;
 
 internal sealed partial class MySqlSafeMigrationProviderAnalyzer
@@ -28,8 +26,14 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                 continue;
             }
 
-            foreach (var proof in plans[ordinal].IdentifierReferenceProofs)
+            // WHY: Index this stable list while preserving its order and ownership.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var proofIndex = 0; proofIndex < plans[ordinal].IdentifierReferenceProofs.Count; proofIndex++)
             {
+                var proof = plans[ordinal]
+                    .IdentifierReferenceProofs[proofIndex];
+
                 (unique ??=
                     new Dictionary<string, (MySqlSafeMigrationIdentifierReferenceProof Proof, int OperationOrdinal)>(
                         StringComparer.Ordinal)).TryAdd(proof.RootIdentifier, (proof, ordinal));
@@ -41,16 +45,19 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             return;
         }
 
+        // WHY: Retain fluent materialization and its existing snapshot
+        // ownership rather than replacing this boundary with a spread.
+        // ReSharper disable once UseCollectionExpression
         var pending = unique.Values.ToArray();
         var facts = new Dictionary<string, bool>(pending.Length, StringComparer.Ordinal);
         var offset = 0;
         while (offset < pending.Length)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var selected = new List<MySqlSafeMigrationIdentifierReferenceProof>();
+            List<MySqlSafeMigrationIdentifierReferenceProof> selected = [];
             var setup = new StringBuilder();
             var cleanup = new StringBuilder();
-            var selections = new List<string>();
+            List<string> selections = [];
             var payloadBytes = 0;
             while (offset < pending.Length
                 && selected.Count < SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
@@ -118,8 +125,14 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                 }
 
                 var expected = offset - selected.Count;
-                foreach (var proof in selected)
+
+                // WHY: Index this stable list while preserving its order and ownership.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
+                for (var proofIndex = 0; proofIndex < selected.Count; proofIndex++)
                 {
+                    var proof = selected[proofIndex];
+
                     if (!await reader.ReadAsync(cancellationToken)
                         || reader.GetInt32(0) != expected++
                         || reader.IsDBNull(1))
@@ -172,7 +185,10 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                     }
                     catch (Exception exception) when (failure is not null)
                     {
-                        failure.Data["SafeMigrations.IdentifierReferenceProofCleanupException"] = exception;
+                        SafeMigrationAnalysisCleanup.RetainFailure(
+                            failure,
+                            exception,
+                            "SafeMigrations.IdentifierReferenceProofCleanupException");
                     }
                 }
             }

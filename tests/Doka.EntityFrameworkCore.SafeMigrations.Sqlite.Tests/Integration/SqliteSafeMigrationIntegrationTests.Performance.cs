@@ -4,10 +4,14 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 [Collection(ProcessWideTestGroup.Name)]
 public sealed class SqliteSafeMigrationPerformanceIntegrationTests : SqliteSafeMigrationCatalogIntegrationTests
 {
+    /// <summary>
+    /// Model managed data fifty thousand mixed rows converge and replay idempotently.
+    /// </summary>
     [Fact]
     [Trait("Category", "LargeScale")]
     public async Task ModelManagedData_FiftyThousandMixedRowsConvergeAndReplayIdempotently()
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
@@ -24,6 +28,8 @@ public sealed class SqliteSafeMigrationPerformanceIntegrationTests : SqliteSafeM
             "TEXT");
 
         var runner = context.GetService<ISafeMigrationRunner>();
+
+        // Act
         var commands = context
             .GetService<IMigrationsSqlGenerator>()
             .Generate(builder.Operations, context.Model);
@@ -63,28 +69,35 @@ public sealed class SqliteSafeMigrationPerformanceIntegrationTests : SqliteSafeM
             replayExecution,
             replay.Measurement);
 
+        var observedScalar1 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM large_model_managed_rows;",
+            cancellationToken: CancellationToken.None);
+
+        var observedScalar2 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM large_model_managed_rows WHERE managed_value = 'target';",
+            cancellationToken: CancellationToken.None);
+
+        var observedScalar3 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM large_model_managed_rows WHERE id >= 3000000;",
+            cancellationToken: CancellationToken.None);
+
+        // Assert
         expectation.AssertInitialReport(initial.Result);
         expectation.AssertReplayReport(replay.Result);
         Assert.Equal(
             expectation.FinalRowCount,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM large_model_managed_rows;",
-                cancellationToken: CancellationToken.None));
+            observedScalar1);
 
         Assert.Equal(
             expectation.FinalRowCount,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM large_model_managed_rows WHERE managed_value = 'target';",
-                cancellationToken: CancellationToken.None));
+            observedScalar2);
 
         Assert.Equal(
             0,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM large_model_managed_rows WHERE id >= 3000000;",
-                cancellationToken: CancellationToken.None));
+            observedScalar3);
     }
 
     private static async Task InsertInitialModelManagedRowsAsync(

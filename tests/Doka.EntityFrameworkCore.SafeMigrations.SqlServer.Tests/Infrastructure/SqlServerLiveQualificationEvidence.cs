@@ -75,8 +75,11 @@ internal static class SqlServerLiveQualificationEvidence
     {
         private readonly ActivityListener _listener;
         private readonly string _path;
+
         private readonly Activity _trace;
-        private readonly object _writeLock = new();
+
+        // WHY: This dedicated gate only protects synchronous evidence writes; no Monitor or object aliases participate.
+        private readonly Lock _writeLock = new();
         private Exception? _writeFailure;
 
         /// <summary>Creates a private trace so concurrent workloads never share stage evidence.</summary>

@@ -1618,16 +1618,16 @@ public sealed class MySqlColumnsExplicitBackfillIntegrationTests : MySqlSafeMigr
             "`owner_id` char(36) NULL, CONSTRAINT `fk_explicit_backfill_owner` FOREIGN KEY (`owner_id`) "
             + "REFERENCES `explicit_backfill_owners` (`id`) ON DELETE "}{
             ExplicitBackfillReferentialActionSql(onDelete)} ON UPDATE {
-            ExplicitBackfillReferentialActionSql(onUpdate)}{(secondDependency
-            ? """
-            , CONSTRAINT `fk_explicit_backfill_owner_update` FOREIGN KEY (`owner_id`)
-            REFERENCES `explicit_backfill_owners` (`id`) ON DELETE NO ACTION ON UPDATE
-            SET NULL
-            """
-            : "")}{
-            ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-            + "INSERT INTO `explicit_backfill_owners` (`id`) VALUES ('00000000-0000-0000-0000-000000000002'); "
-            + "INSERT INTO `explicit_backfill_items` (`value`,"}
+                ExplicitBackfillReferentialActionSql(onUpdate)}{(secondDependency
+                    ? """
+                    , CONSTRAINT `fk_explicit_backfill_owner_update` FOREIGN KEY (`owner_id`)
+                    REFERENCES `explicit_backfill_owners` (`id`) ON DELETE NO ACTION ON UPDATE
+                    SET NULL
+                    """
+                    : "")}{
+                    ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
+                    + "INSERT INTO `explicit_backfill_owners` (`id`) VALUES ('00000000-0000-0000-0000-000000000002'); "
+                    + "INSERT INTO `explicit_backfill_items` (`value`,"}
         `owner_id`) VALUES (1, '00000000-0000-0000-0000-000000000002');
         """;
 

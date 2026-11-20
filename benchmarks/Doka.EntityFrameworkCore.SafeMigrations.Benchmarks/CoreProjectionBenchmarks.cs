@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Benchmarks;
 
 /// <summary>Measures prepared accepted-column projection without a functional-test allocation budget.</summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public class CoreProjectionBenchmarks
 {
     // WHY: This fixture input keeps the constructor benchmark instance-bound, as required by BenchmarkDotNet.

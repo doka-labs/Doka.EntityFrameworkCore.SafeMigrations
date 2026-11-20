@@ -48,6 +48,9 @@ internal sealed partial class SafeMigrationExpectedTableConstraints
                 table,
                 constraint.Columns.Select(static column => column.Name),
                 schema))
+
+            // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var checkConstraints = ReadCheckConstraints(relationalTable, table, schema, runtimeCheckConstraints);
@@ -64,6 +67,9 @@ internal sealed partial class SafeMigrationExpectedTableConstraints
                 schema,
                 constraint.PrincipalTable.Schema,
                 onDelete: constraint.OnDeleteAction))
+
+            // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         return new SafeMigrationExpectedTableConstraints(
@@ -113,6 +119,9 @@ internal sealed partial class SafeMigrationExpectedTableConstraints
                 tableName,
                 constraint.Sql,
                 schema))
+
+            // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
     }
 }

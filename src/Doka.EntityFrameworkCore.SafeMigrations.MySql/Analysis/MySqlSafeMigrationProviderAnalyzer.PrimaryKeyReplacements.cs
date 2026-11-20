@@ -36,8 +36,14 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
 
         var valuesPreserved = true;
         int? generatedOrigin = null;
-        foreach (var name in intent.Definition.Columns)
+
+        // WHY: Index this stable list while preserving its order and ownership.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var nameIndex = 0; nameIndex < intent.Definition.Columns.Count; nameIndex++)
         {
+            var name = intent.Definition.Columns[nameIndex];
+
             if (columns.PreservesLiveColumnValues(intent.Definition.Table, intent.Definition.Schema, name))
             {
                 continue;
@@ -117,6 +123,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         // WHY: Both callers retain immutable Unsupported results and qualify
         // current physical feasibility first. An old width rejection must not
         // override that newer proof while the key identity remains deferred.
+        // ReSharper disable once ConvertIfStatementToSwitchStatement
         if (valuesPreserved && live.ObservedState == SafeMigrationObservedState.DataBlocked)
         {
             return live;

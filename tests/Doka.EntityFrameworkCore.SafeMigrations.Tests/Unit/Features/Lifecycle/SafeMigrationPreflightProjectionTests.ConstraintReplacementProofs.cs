@@ -1000,7 +1000,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             ? "renamed_items"
             : "items";
 
-        var source = (ISafeMigrationProjectedColumnSource)projection;
+        ISafeMigrationProjectedColumnSource source = projection;
 
         // Act
         var present = source.IsProjectedPrimaryKeyColumn(table, schema: null, "ID", StringComparer.OrdinalIgnoreCase);
@@ -1320,7 +1320,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                 SafeMigrationObservedState.Matching);
         }
 
-        var source = (ISafeMigrationProjectedColumnSource)projection;
+        ISafeMigrationProjectedColumnSource source = projection;
         var current = renamed
             ? "renamed_items"
             : "items";
@@ -2261,16 +2261,24 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     }
 
     /// <summary>Models provider FK and column-member comparers without folding table or schema identifiers.</summary>
-    /// <param name="ignoreColumnCase">Whether provider columns also use case-insensitive member identity.</param>
-    private sealed class ForeignKeyMemberIdentityNormalizer(
-        bool ignoreColumnCase = false
-    ) : ISafeMigrationProviderObjectIdentityNormalizer
+    private sealed class ForeignKeyMemberIdentityNormalizer : ISafeMigrationProviderObjectIdentityNormalizer
     {
+        private readonly bool _ignoreColumnCase;
+
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="ignoreColumnCase">The supplied ignore column case for this fixture.</param>
+        public ForeignKeyMemberIdentityNormalizer(
+            bool ignoreColumnCase = false
+        )
+        {
+            _ignoreColumnCase = ignoreColumnCase;
+        }
+
         /// <summary>Gets the case-sensitive table and other constraint identity comparer.</summary>
         public StringComparer IdentifierComparer => StringComparer.Ordinal;
 
         /// <summary>Gets the selected physical column-member comparer.</summary>
-        public StringComparer ColumnIdentifierComparer => ignoreColumnCase
+        public StringComparer ColumnIdentifierComparer => _ignoreColumnCase
             ? StringComparer.OrdinalIgnoreCase
             : StringComparer.Ordinal;
 
@@ -2297,11 +2305,19 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     }
 
     /// <summary>Captures physical validation without generating any column or row certificate itself.</summary>
-    /// <param name="result">The independently supplied provider result.</param>
-    private sealed class ConstraintReplacementKeyProbe(
-        SafeMigrationProviderAnalysis result
-    ) : ISafeMigrationProjectedKeyAnalyzer
+    private sealed class ConstraintReplacementKeyProbe : ISafeMigrationProjectedKeyAnalyzer
     {
+        private readonly SafeMigrationProviderAnalysis _result;
+
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="result">The supplied result for this fixture.</param>
+        public ConstraintReplacementKeyProbe(
+            SafeMigrationProviderAnalysis result
+        )
+        {
+            _result = result;
+        }
+
         /// <summary>Gets the physical-validation call count.</summary>
         public int ValidationCount { get; private set; }
 
@@ -2334,7 +2350,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             ProjectedAnalysis = projectedAnalysis;
             ColumnSource = columns;
 
-            return result;
+            return _result;
         }
 
         /// <summary>Leaves unrelated index validation unchanged.</summary>

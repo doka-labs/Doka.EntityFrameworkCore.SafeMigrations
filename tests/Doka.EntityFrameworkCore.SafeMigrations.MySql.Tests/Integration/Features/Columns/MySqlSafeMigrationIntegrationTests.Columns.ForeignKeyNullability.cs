@@ -1,6 +1,8 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-/// <summary>Exercises the ColumnsForeignKeyNullability migration contracts in an independent class collection.</summary>
+/// <summary>
+/// Exercises the ColumnsForeignKeyNullability migration contracts in an independent class collection.
+/// </summary>
 public sealed class MySqlColumnsForeignKeyNullabilityIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
     /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
@@ -195,6 +197,9 @@ public sealed class MySqlColumnsForeignKeyNullabilityIntegrationTests : MySqlSaf
         await using var context = CreateContext(connectionString);
         var operations = ForeignKeyNullabilityOperations()
             .Where(static operation => operation is not SafeMigrationOperation { Intent: AlterColumnIntent })
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         // Act

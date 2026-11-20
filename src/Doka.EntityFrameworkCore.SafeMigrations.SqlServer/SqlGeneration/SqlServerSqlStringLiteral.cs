@@ -26,13 +26,13 @@ internal static class SqlServerSqlStringLiteral
         int newline;
         while ((newline = remaining.IndexOfAny('\r', '\n')) >= 0)
         {
-            AppendEscaped(builder, remaining.Slice(0, newline));
+            AppendEscaped(builder, remaining[..newline]);
             builder.Append(
                 remaining[newline] == '\r'
                     ? "' + NCHAR(13) + N'"
                     : "' + NCHAR(10) + N'");
 
-            remaining = remaining.Slice(newline + 1);
+            remaining = remaining[(newline + 1)..];
         }
 
         AppendEscaped(builder, remaining);
@@ -101,10 +101,10 @@ internal static class SqlServerSqlStringLiteral
         while ((apostrophe = value.IndexOf('\'')) >= 0)
         {
             builder
-                .Append(value.Slice(0, apostrophe))
+                .Append(value[..apostrophe])
                 .Append("''");
 
-            value = value.Slice(apostrophe + 1);
+            value = value[(apostrophe + 1)..];
         }
 
         builder.Append(value);

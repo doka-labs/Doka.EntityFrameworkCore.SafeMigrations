@@ -74,10 +74,21 @@ public sealed class CoreOwnershipRole
     public string Name { get; set; } = string.Empty;
 }
 
-internal sealed class CoreRoleConfiguration(
-    bool targetState
-) : IEntityTypeConfiguration<CoreOwnershipRole>
+/// <summary>Maps the shared lineage using one captured source or target seed state.</summary>
+internal sealed class CoreRoleConfiguration : IEntityTypeConfiguration<CoreOwnershipRole>
 {
+    private readonly bool _targetState;
+
+    /// <summary>Captures the requested immutable seed-state selection.</summary>
+    /// <param name="targetState">Whether to use the target rather than source rows.</param>
+    public CoreRoleConfiguration(
+        bool targetState
+    )
+    {
+        _targetState = targetState;
+    }
+
+    /// <inheritdoc />
     public void Configure(
         EntityTypeBuilder<CoreOwnershipRole> builder
     )
@@ -90,7 +101,7 @@ internal sealed class CoreRoleConfiguration(
             .IsRequired();
 
         builder.HasData(
-            targetState
+            _targetState
                 ? TargetRows()
                 : SourceRows());
     }

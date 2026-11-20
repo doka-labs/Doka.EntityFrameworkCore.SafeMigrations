@@ -1,5 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql;
 
 internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
@@ -643,13 +641,8 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
             return false;
         }
 
-        if ((source == "smallint" && integer is < short.MinValue or > short.MaxValue)
-            || (source == "integer" && integer is < int.MinValue or > int.MaxValue))
-        {
-            return false;
-        }
-
-        return true;
+        return !((source == "smallint" && integer is < short.MinValue or > short.MaxValue)
+            || (source == "integer" && integer is < int.MinValue or > int.MaxValue));
     }
 
     /// <summary>Limits literal folding to uncast, unbounded TEXT or exact native integer inputs.</summary>
@@ -775,12 +768,9 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
         var mapping = directMapping
             ?? _typeMappingSource.FindMapping(expression.BorrowedValue.GetType());
 
-        if (mapping is null)
-        {
-            return "structured_literal_mapping";
-        }
-
-        return PostgreSqlTemporalLiteral.GetUnsupportedFeature(mapping, expression.BorrowedValue);
+        return mapping is null
+            ? "structured_literal_mapping"
+            : PostgreSqlTemporalLiteral.GetUnsupportedFeature(mapping, expression.BorrowedValue);
     }
 
     private static string BinaryOperator(

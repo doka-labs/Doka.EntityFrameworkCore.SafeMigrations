@@ -36,17 +36,15 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                 column.Name,
                 StringComparer.OrdinalIgnoreCase);
 
-            if (primaryMembership == true)
+            switch (primaryMembership)
             {
-                return NullableColumnPrimaryKeyDependency();
-            }
-
-            if (primaryMembership == false)
-            {
-                // WHY: An accepted different key or key removal supersedes
-                // original membership. Unknown absence must instead retain
-                // the captured source check below, not authorize a repair.
-                return null;
+                case true:
+                    return NullableColumnPrimaryKeyDependency();
+                case false:
+                    // WHY: An accepted different key or key removal supersedes
+                    // original membership. Unknown absence must instead retain
+                    // the captured source check below, not authorize a repair.
+                    return null;
             }
 
             if (_foreignKeyReplacementRowsInvalidated
@@ -94,6 +92,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             return null;
         }
 
+        // WHY: Preserve the exact captured dependency walk and fail on its first unreleased physical FK.
+        // ReSharper disable once LoopCanBeConvertedToQuery
         foreach (var name in dependencies)
         {
             if (_acceptedForeignKeyRemovals?.Contains((NormalizeProofSchema(schema), table, name)) != true)

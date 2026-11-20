@@ -24,7 +24,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes,
             commandTimeout,
             (command, offset) => BuildIndexInputPrerequisiteStatement(command, operations, ordinals, names, offset),
-            async (reader, offset, count, token) =>
+            async (reader, offset, count, callbackCancellationToken) =>
             {
                 if (reader.FieldCount != 2)
                 {
@@ -32,7 +32,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                 }
 
                 var next = offset;
-                while (await reader.ReadAsync(token))
+                while (await reader.ReadAsync(callbackCancellationToken))
                 {
                     if (next >= offset + count
                         || reader.GetValue(0) is not int ordinal
@@ -66,7 +66,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                     throw InvalidLivePrerequisiteEvidence();
                 }
             },
-            cancellationToken);
+            transaction: null,
+            maximumParameters: SafeMigrationCatalogQueryLimits.MaximumParameters,
+            cancellationToken: cancellationToken);
     }
 
     /// <summary>
@@ -88,7 +90,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             parameters.Add);
 
         var certificates = new PostgreSqlIndexPrerequisiteCertificates(names);
-        var selections = new List<string>();
+        List<string> selections = [];
         var sqlBytes = Encoding.UTF8.GetByteCount(SafeMigrationCatalogQueryLimits.Trailer);
         while (offset + selections.Count < ordinals.Count
             && selections.Count < SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)

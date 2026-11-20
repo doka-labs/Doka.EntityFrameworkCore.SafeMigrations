@@ -389,8 +389,8 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         var selection = $"""
             {physicalGate}{layoutSetup}{layoutGate}{collationGate}{defaultGate}{
                 indexFilterGate}{BuildDelayedScalarProof(
-                prerequisite, "@doka_prerequisite", "int", definitions, parameterArguments)}{innerDeclaration}{
-                fallbackDeclaration}IF @doka_prerequisite = 1
+                    prerequisite, "@doka_prerequisite", "int", definitions, parameterArguments)}{innerDeclaration}{
+                    fallbackDeclaration}IF @doka_prerequisite = 1
             EXEC sys.sp_executesql {innerArgument},
             N'{definitions}', @doka_ordinal = @doka_ordinal{parameterArguments}
             ELSE EXEC sys.sp_executesql {fallbackArgument},

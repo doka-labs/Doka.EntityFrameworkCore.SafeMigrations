@@ -35,6 +35,18 @@ qualification-only true. It runs the complete reversible qualification and
 attestation but skips the environment-bearing publisher job itself. Do not
 create a tag or approve/request NuGet publication for such a run.
 
+Qualification-only may select an unused canonical version of the source major
+without changing that snapshot's `VersionPrefix` or adding release notes for a
+version that will not be published. For example, qualify an unchanged 10.7.3
+snapshot with `version=10.7.4-rc.1` and `qualification-only=true`. The selected
+version binds all candidate packages and evidence. Foreign majors, existing
+candidate tags and any version already present for any of the five packages remain
+rejected. The protected source, current main authority, SDK/EF graph, full
+qualification and attestation checks remain mandatory. The frozen result is
+nonpublishable; later activation cannot turn it into publication permission.
+Ordinary publication still requires the exact source version and dated
+changelog entry, followed by a new complete qualification.
+
 After the ordinary protected wait, create the personally signed annotated tag on
 the qualified SHA and approve that same run. The publisher independently reads
 current protected-main policy, checks the selected protected source and existing
@@ -54,9 +66,12 @@ This is a separately reviewed operation, not something the feature does now:
 1. Prepare the exact registered branch from its reviewed source, with its own
    unchanged compatible SDK/dependencies and line-aware workflows. Preserve full
    Required Checks, branch protection and the existing signature policy.
-2. Change its policy state to prepared through review. Preparation PRs must pass
+2. Change its state to prepared in the policy on protected main through review.
+   A candidate-local policy is not authority. Preparation PRs must pass
    that branch's full CI and exact-base Dependency Review, including forks and
-   Dependabot. Qualify its own current commit with qualification-only true.
+   Dependabot. Qualify its own current commit with qualification-only true and
+   an unused same-major version. No patch/changelog bump or branch-specific
+   test-fixture patch is needed solely for this rehearsal.
 3. Separately approve activation and the exact branch's deployment permission in
    the existing nuget environment. Retain reviewers, self-review policy,
    administrator bypass and Trusted Publishing identity; do not create a new
@@ -64,6 +79,18 @@ This is a separately reviewed operation, not something the feature does now:
 4. Make a reviewed policy change to active, retaining one active publisher per
    major, and update/check the maintained-line Dependabot targets. Verify real
    hosted schedules, exact child commits, approvals and readbacks independently.
+
+For the main/11 cutover, first finish the intended 10.x release and record its
+exact reviewed commit. Create and protect `maintenance/10.x` from that commit;
+do not copy the new main SDK or framework dependencies onto maintenance. Complete
+the prepared qualification before switching protected main to its qualified
+11.x source. The reviewed activation policy must move main to major 11 and
+activate maintenance/10 together, so there is never a pair of active 10.x
+publishers. Render and check the six existing-ecosystem Dependabot targets
+against that target policy. Approve the exact maintenance deployment grant
+separately; Required Checks and existing reviewers remain in force. Missing
+qualification, source drift, absent permissions or incomplete hosted evidence
+stop the transition; they are not grounds for a bypass.
 
 Use the repository-owned renderer/check for a reviewed target update:
 
@@ -79,10 +106,14 @@ group/cooldown policy or leaving inactive update targets enabled.
 The renderer does not activate policy or open PRs. It reuses the existing three
 ecosystems, groups and cooldowns, retaining framework-major boundaries for SDK,
 EF, Doka, Npgsql EF and framework-coupled Microsoft.Extensions dependencies.
-The generated NuGet ceilings exclude the next major's prereleases too, not only
+Main uses relative SDK/framework `semver-major` exclusions, including while it
+still owns .NET 10. These rules continue protecting the new main major after
+a deliberate cutover; routine servicing and independently versioned tools or
+transport packages remain eligible. Additional maintenance/preview targets use
+absolute NuGet ceilings, which exclude the next major's prereleases too, not only
 its GA version. Paired prerelease floors cover canonical numeric identifiers
 and Dependabot's accepted leading-hyphen ordering; current-major servicing
-remains eligible. Neither these generated targets nor preview lines are active
+remains eligible. Neither additional generated targets nor preview lines are active
 in the current configuration.
 CI checks the result without writing it back to a branch. Do not resurrect
 unrelated Docker-image update targets as part of line setup.

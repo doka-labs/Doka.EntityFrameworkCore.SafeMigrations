@@ -12,7 +12,7 @@ internal sealed partial class SafeMigrationPostflightProjection
     {
         // WHY: Postflight usually has no column renames. Keep that path free
         // of dictionaries, projected definitions and another metadata batch.
-        if (!operations.Any(static operation => operation is SafeMigrationOperation { Intent: RenameColumnIntent }))
+        if (operations.All(static operation => operation is not SafeMigrationOperation { Intent: RenameColumnIntent }))
         {
             return null;
         }
@@ -137,6 +137,9 @@ internal sealed partial class SafeMigrationPostflightProjection
         }
 
         return rewritten is { Count: > 0 }
+
+            // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+            // ReSharper disable once UseCollectionExpression
             ? rewritten.Values.ToList()
             : null;
 
@@ -159,27 +162,25 @@ internal sealed partial class SafeMigrationPostflightProjection
         ISafeMigrationProviderObjectIdentityNormalizer? normalizer
     )
     {
-        if (intent is EnsureIndexIntent or DropIndexIntent or RenameIndexIntent or ModelManagedDataIntent)
+        switch (intent)
         {
-            // WHY: Managed DML changes rows, not declared table facets. Its
-            // separate row contract is reclassified rather than inferred here.
-            return true;
-        }
+            case EnsureIndexIntent or DropIndexIntent or RenameIndexIntent or ModelManagedDataIntent:
+                // WHY: Managed DML changes rows, not declared table facets. Its
+                // separate row contract is reclassified rather than inferred here.
+                return true;
+            case EnsureCheckConstraintIntent check:
+                var targetCheck = SafeMigrationCapturedExpressionNormalization.NormalizeCheck(
+                    check.Definition,
+                    normalizer?.FoldUnquotedCapturedSqlIdentifiers == true);
 
-        if (intent is EnsureCheckConstraintIntent check)
-        {
-            var targetCheck = SafeMigrationCapturedExpressionNormalization.NormalizeCheck(
-                check.Definition,
-                normalizer?.FoldUnquotedCapturedSqlIdentifiers == true);
-
-            // WHY: A certified rename can introduce native member quotes.
-            // The same captured CHECK must retain its complete-table probe;
-            // changed source roles still terminate this exact shape lineage.
-            return table.CheckConstraints.Any(candidate =>
-                SafeMigrationPreflightProjection.AreProjectedCheckSemanticsEquivalent(
-                    candidate,
-                    targetCheck,
-                    normalizer));
+                // WHY: A certified rename can introduce native member quotes.
+                // The same captured CHECK must retain its complete-table probe;
+                // changed source roles still terminate this exact shape lineage.
+                return table.CheckConstraints.Any(candidate =>
+                    SafeMigrationPreflightProjection.AreProjectedCheckSemanticsEquivalent(
+                        candidate,
+                        targetCheck,
+                        normalizer));
         }
 
         if (intent is not EnsureColumnIntent column)

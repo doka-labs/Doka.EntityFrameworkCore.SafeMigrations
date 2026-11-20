@@ -18,8 +18,8 @@ public sealed class SqlServerIdentityInsertPauseTests
     {
         // Arrange
         using var readiness = new CancellationTokenSource();
-        readiness.Cancel();
-        using var observer = new SqlConnection();
+        await readiness.CancelAsync();
+        await using var observer = new SqlConnection();
         var method = typeof(SqlServerIdentityInsertOwnershipIntegrationTests).GetMethod(
             "ReadMarkerIsNullAsync",
             BindingFlags.Static | BindingFlags.NonPublic)!;
@@ -36,7 +36,7 @@ public sealed class SqlServerIdentityInsertPauseTests
         // Assert
         if (reuseReadinessToken)
         {
-            var canceled = Assert.IsAssignableFrom<OperationCanceledException>(exception);
+            var canceled = Assert.IsType<OperationCanceledException>(exception, exactMatch: false);
             Assert.Equal(readiness.Token, canceled.CancellationToken);
         }
         else
@@ -188,7 +188,7 @@ public sealed class SqlServerIdentityInsertPauseTests
             : paused;
 
         var baseline = SqlServerGuardedSqlTestContract.DecodeScope(
-            body.Substring(body.IndexOf("EXEC sys.sp_executesql N'", StringComparison.Ordinal)));
+            body[body.IndexOf("EXEC sys.sp_executesql N'", StringComparison.Ordinal)..]);
 
         var identityOn = body.IndexOf("SET IDENTITY_INSERT [dbo].[identity_roles] ON;", StringComparison.Ordinal);
         var marker = body.IndexOf("EXEC @doka_identity_ready = sys.sp_getapplock", StringComparison.Ordinal);
@@ -312,7 +312,7 @@ public sealed class SqlServerIdentityInsertPauseTests
         var interceptor = new SqlServerIdentityInsertPauseInterceptor("ready_marker");
         var execution = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using var cancellation = new CancellationTokenSource();
-        cancellation.Cancel();
+        await cancellation.CancelAsync();
 
         // Act
         var readinessFailure = await Record.ExceptionAsync(() => interceptor.WaitUntilReadyAsync(

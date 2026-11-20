@@ -3,7 +3,9 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 /// <summary>Guards complete immutable source scans independently from native database execution.</summary>
 public sealed class MySqlDeclaredSourceSnapshotTraversalTests
 {
-    /// <summary>Last, missing, ambiguous and nullable sources retain distinct binding and nullability verdicts.</summary>
+    /// <summary>
+    /// Last, missing, ambiguous and nullable sources retain distinct binding and nullability verdicts.
+    /// </summary>
     /// <param name="width">The number of independently declared ordinary columns.</param>
     /// <param name="missing">Whether the expression references an undeclared source.</param>
     /// <param name="ambiguous">Whether a second case-insensitive source alias exists.</param>
@@ -34,6 +36,9 @@ public sealed class MySqlDeclaredSourceSnapshotTraversalTests
                 typeof(int),
                 index == width - 1 && nullable,
                 "int"))
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var declared = ambiguous

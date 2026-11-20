@@ -19,8 +19,13 @@ internal static partial class SafeMigrationStandardOperationFactory
 
         ApplyProviderAnnotations(operation, definition.ProviderAnnotations);
 
-        foreach (var column in definition.Columns)
+        // WHY: This immutable definition snapshot is indexed; retain its authored order without interface enumeration.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var columnIndex = 0; columnIndex < definition.Columns.Count; columnIndex++)
         {
+            var column = definition.Columns[columnIndex];
+
             operation.Columns.Add(
                 CreateColumn(definition.Table, definition.Schema, column, renderScalarExpression, renderCollation));
         }
@@ -30,18 +35,37 @@ internal static partial class SafeMigrationStandardOperationFactory
             operation.PrimaryKey = CreatePrimaryKey(definition.PrimaryKey);
         }
 
-        foreach (var uniqueConstraint in definition.UniqueConstraints)
+        // WHY: This immutable definition snapshot is indexed; retain its authored order without interface enumeration.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var uniqueConstraintIndex = 0;
+            uniqueConstraintIndex < definition.UniqueConstraints.Count;
+            uniqueConstraintIndex++)
         {
+            var uniqueConstraint = definition.UniqueConstraints[uniqueConstraintIndex];
+
             operation.UniqueConstraints.Add(CreateUniqueConstraint(uniqueConstraint));
         }
 
-        foreach (var checkConstraint in definition.CheckConstraints)
+        // WHY: This immutable definition snapshot is indexed; retain its authored order without interface enumeration.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var checkConstraintIndex = 0;
+            checkConstraintIndex < definition.CheckConstraints.Count;
+            checkConstraintIndex++)
         {
+            var checkConstraint = definition.CheckConstraints[checkConstraintIndex];
+
             operation.CheckConstraints.Add(CreateCheckConstraint(checkConstraint, renderExpression));
         }
 
-        foreach (var foreignKey in definition.ForeignKeys)
+        // WHY: This immutable definition snapshot is indexed; retain its authored order without interface enumeration.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var foreignKeyIndex = 0; foreignKeyIndex < definition.ForeignKeys.Count; foreignKeyIndex++)
         {
+            var foreignKey = definition.ForeignKeys[foreignKeyIndex];
+
             operation.ForeignKeys.Add(CreateForeignKey(foreignKey));
         }
 

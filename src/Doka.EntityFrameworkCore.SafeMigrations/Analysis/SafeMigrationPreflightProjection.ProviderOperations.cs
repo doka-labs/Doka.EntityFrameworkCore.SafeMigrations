@@ -342,6 +342,7 @@ internal sealed partial class SafeMigrationPreflightProjection
             }
 
             _tables[target] = table;
+
             return;
         }
 
@@ -455,6 +456,9 @@ internal sealed partial class SafeMigrationPreflightProjection
             .Where(pair => pair.Value.Keys.Any(indexKey =>
                 indexKey.Column is not null && columnComparer.Equals(indexKey.Column, column)))
             .Select(static pair => pair.Key)
+
+            // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         foreach (var name in names)

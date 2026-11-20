@@ -49,7 +49,7 @@ internal sealed class MySqlProjectedForeignKeySupportingIndexes
             state.CapturedRequests.Add(definition.Name, requests);
         }
 
-        if (!requests.Any(columns => SameColumns(columns, definition.Columns)))
+        if (requests.All(columns => !SameColumns(columns, definition.Columns)))
         {
             requests.Add(definition.Columns);
         }
@@ -64,7 +64,7 @@ internal sealed class MySqlProjectedForeignKeySupportingIndexes
             ArgumentException.ThrowIfNullOrWhiteSpace(alias);
 
             var index = state.GetOrAdd(alias);
-            if (!index.CapturedPrefixes.Any(columns => SameColumns(columns, definition.Columns)))
+            if (index.CapturedPrefixes.All(columns => !SameColumns(columns, definition.Columns)))
             {
                 index.CapturedPrefixes.Add(definition.Columns);
             }
@@ -348,7 +348,7 @@ internal sealed class MySqlProjectedForeignKeySupportingIndexes
             || state.Dropped
             || (!state.Fresh
                 && (!state.CapturedRequests.TryGetValue(definition.Name, out var requests)
-                    || !requests.Any(columns => SameColumns(columns, definition.Columns)))))
+                    || requests.All(columns => !SameColumns(columns, definition.Columns)))))
         {
             return null;
         }
@@ -383,13 +383,23 @@ internal sealed class MySqlProjectedForeignKeySupportingIndexes
             ReplaceColumns(definition.Table, definition.Schema, "PRIMARY", primary.Columns);
         }
 
-        foreach (var unique in definition.UniqueConstraints)
+        // WHY: Index this stable list while preserving its order and ownership.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var uniqueIndex = 0; uniqueIndex < definition.UniqueConstraints.Count; uniqueIndex++)
         {
+            var unique = definition.UniqueConstraints[uniqueIndex];
+
             ReplaceColumns(definition.Table, definition.Schema, unique.Name, unique.Columns);
         }
 
-        foreach (var foreignKey in definition.ForeignKeys)
+        // WHY: Index this stable list while preserving its order and ownership.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var foreignKeyIndex = 0; foreignKeyIndex < definition.ForeignKeys.Count; foreignKeyIndex++)
         {
+            var foreignKey = definition.ForeignKeys[foreignKeyIndex];
+
             ObserveAutomaticIndex(foreignKey);
         }
     }
@@ -408,7 +418,7 @@ internal sealed class MySqlProjectedForeignKeySupportingIndexes
         var state = GetOrAdd(definition.Table, definition.Schema);
         if (!state.Unknown
             && !state.Indexes.ContainsKey(definition.Name)
-            && !state.Indexes.Values.Any(index => index.Covers(definition.Columns, _isMariaDb)))
+            && state.Indexes.Values.All(index => !index.Covers(definition.Columns, _isMariaDb)))
         {
             state
                 .GetOrAdd(definition.Name)
@@ -428,6 +438,10 @@ internal sealed class MySqlProjectedForeignKeySupportingIndexes
         var keys = columns
             ?
             .Select(static column => new ExpectedIndexKeyDefinition(column: column))
+
+            // WHY: Retain fluent materialization and its existing snapshot
+            // ownership rather than replacing this boundary with a spread.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         ReplaceIndex(table, schema, name, keys, definition: null);
@@ -452,6 +466,7 @@ internal sealed class MySqlProjectedForeignKeySupportingIndexes
             // after another covering index is added. STATISTICS does not certify
             // which aliases were automatic, so retaining their old coverage could
             // resurrect a nonexistent index after the replacement is dropped.
+            // ReSharper disable once ForeachCanBePartlyConvertedToQueryUsingAnotherGetEnumerator
             foreach (var index in state.Indexes)
             {
                 if (!StringComparer.OrdinalIgnoreCase.Equals(index.Key, "PRIMARY"))
@@ -498,6 +513,7 @@ internal sealed class MySqlProjectedForeignKeySupportingIndexes
 
         if (state.UnsafeAliasHistory.TryGetValue(name, out var unsafePrefixes))
         {
+            // WHY: Rename can write this same alias history; retain the list's mutation/version checks.
             foreach (var prefix in unsafePrefixes)
             {
                 state.AddUnsafePrefix(newName, prefix);
@@ -553,6 +569,8 @@ internal sealed class MySqlProjectedForeignKeySupportingIndexes
             }
         }
 
+        // WHY: Keep concrete alias-key enumeration while updating the distinct unknown-alias set.
+        // ReSharper disable once ForeachCanBePartlyConvertedToQueryUsingAnotherGetEnumerator
         foreach (var alias in state.UnsafeAliasHistory.Keys)
         {
             if (state.Indexes.ContainsKey(alias))
@@ -663,7 +681,7 @@ internal sealed class MySqlProjectedForeignKeySupportingIndexes
             // WHY: Ordinary coverage cannot waive an MVI's missing child-row
             // records. Retain its alias history even after a precise drop so
             // reoccupation cannot silently inherit the old clean-lifetime proof.
-            if (!prefixes.Any(prefix => SameColumns(prefix, columns)))
+            if (prefixes.All(prefix => !SameColumns(prefix, columns)))
             {
                 prefixes.Add(columns);
             }

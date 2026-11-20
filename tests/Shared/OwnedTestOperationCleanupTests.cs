@@ -34,7 +34,7 @@ public sealed class OwnedTestOperationCleanupTests
     {
         // Arrange
         using var cancellation = new CancellationTokenSource();
-        using var registration = cancellation.Token.Register(static () => throw new InvalidOperationException());
+        await using var registration = cancellation.Token.Register(static () => throw new InvalidOperationException());
 
         // Act
         await OwnedTestOperationCleanup.CompleteAsync(null, Task.CompletedTask, null, cancellation);
@@ -53,7 +53,7 @@ public sealed class OwnedTestOperationCleanupTests
         var order = new List<string>();
         var pending = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using var cancellation = new CancellationTokenSource();
-        using var registration = cancellation.Token.Register(() =>
+        await using var registration = cancellation.Token.Register(() =>
         {
             order.Add("cancel");
             pending.SetResult();
@@ -85,7 +85,7 @@ public sealed class OwnedTestOperationCleanupTests
         var cancellationObserved = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var owner = new BorrowedOwner();
         using var cancellation = new CancellationTokenSource();
-        using var registration = cancellation.Token.Register(() => cancellationObserved.SetResult());
+        await using var registration = cancellation.Token.Register(cancellationObserved.SetResult);
 
         // Act
         var cleanup = OwnedTestOperationCleanup.CompleteAsync(null, pending.Task, null, cancellation);
@@ -116,7 +116,7 @@ public sealed class OwnedTestOperationCleanupTests
         var failure = new InvalidOperationException("release failure");
         var pending = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using var cancellation = new CancellationTokenSource();
-        using var registration = cancellation.Token.Register(() => pending.SetResult());
+        await using var registration = cancellation.Token.Register(pending.SetResult);
         Func<Task> release = synchronous
             ? () => throw failure
             : () => Task.FromException(failure);
@@ -143,7 +143,7 @@ public sealed class OwnedTestOperationCleanupTests
         var pending = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var callbackEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using var cancellation = new CancellationTokenSource();
-        using var registration = cancellation.Token.Register(() =>
+        await using var registration = cancellation.Token.Register(() =>
         {
             callbackEntered.SetResult();
 
@@ -176,8 +176,11 @@ public sealed class OwnedTestOperationCleanupTests
         var pending = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using var cancellation = new CancellationTokenSource();
         var failure = new OperationCanceledException(cancellation.Token);
-        using var registration = cancellation.Token.Register(() =>
+        await using var registration = cancellation.Token.Register(() =>
         {
+            // WHY: CompleteAsync awaits cancellation and actual work; this callback finishes
+            // before either its registration or its token-source owner is disposed.
+            // ReSharper disable once AccessToDisposedClosure
             pending.SetCanceled(cancellation.Token);
             if (!releaseFails)
             {
@@ -279,8 +282,8 @@ public sealed class OwnedTestOperationCleanupTests
         var second = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var pending = Task.WhenAll(first.Task, second.Task);
         using var cancellation = new CancellationTokenSource();
-        using var firstRegistration = cancellation.Token.Register(() => throw firstCallbackFailure);
-        using var secondRegistration = cancellation.Token.Register(() => throw secondCallbackFailure);
+        await using var firstRegistration = cancellation.Token.Register(() => throw firstCallbackFailure);
+        await using var secondRegistration = cancellation.Token.Register(() => throw secondCallbackFailure);
 
         // Act
         var cleanup = OwnedTestOperationCleanup.CompleteAsync(
@@ -348,7 +351,7 @@ public sealed class OwnedTestOperationCleanupTests
         var failure = new InvalidOperationException("same failure");
         var pending = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using var cancellation = new CancellationTokenSource();
-        using var registration = cancellation.Token.Register(() =>
+        await using var registration = cancellation.Token.Register(() =>
         {
             pending.SetException(failure);
 
@@ -380,10 +383,15 @@ public sealed class OwnedTestOperationCleanupTests
         // Arrange
         var pending = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using var cancellation = new CancellationTokenSource();
-        using var registration = cancellation.Token.Register(() => pending.SetCanceled(cancellation.Token));
+        await using var registration = cancellation.Token.Register(() =>
+        {
+            // WHY: The explicit CancelAsync or awaited CompleteAsync drains this callback before scope disposal.
+            // ReSharper disable once AccessToDisposedClosure
+            pending.SetCanceled(cancellation.Token);
+        });
         if (completedBeforeCleanup)
         {
-            cancellation.Cancel();
+            await cancellation.CancelAsync();
         }
 
         // Act
@@ -411,8 +419,8 @@ public sealed class OwnedTestOperationCleanupTests
         // Arrange
         using var owned = new CancellationTokenSource();
         using var unrelated = new CancellationTokenSource();
-        owned.Cancel();
-        unrelated.Cancel();
+        await owned.CancelAsync();
+        await unrelated.CancelAsync();
         var failure = new OperationCanceledException(defaultToken
             ? CancellationToken.None
             : unrelated.Token);
@@ -438,7 +446,7 @@ public sealed class OwnedTestOperationCleanupTests
         var failure = new InvalidOperationException("completed fault");
         var pending = Task.FromException(failure);
         using var cancellation = new CancellationTokenSource();
-        using var registration = cancellation.Token.Register(static () => throw new InvalidOperationException());
+        await using var registration = cancellation.Token.Register(static () => throw new InvalidOperationException());
 
         // Act
         var observed = await Record.ExceptionAsync(() => OwnedTestOperationCleanup.CompleteAsync(
@@ -482,7 +490,7 @@ public sealed class OwnedTestOperationCleanupTests
     {
         // Arrange
         using var cancellation = new CancellationTokenSource();
-        cancellation.Cancel();
+        await cancellation.CancelAsync();
         var pending = Task.FromCanceled(cancellation.Token);
         var primary = await Record.ExceptionAsync(() => pending);
 
@@ -504,7 +512,7 @@ public sealed class OwnedTestOperationCleanupTests
     {
         // Arrange
         using var cancellation = new CancellationTokenSource();
-        cancellation.Cancel();
+        await cancellation.CancelAsync();
         var pending = Task.FromCanceled(cancellation.Token);
         var canceled = await Record.ExceptionAsync(() => pending);
         var primary = new AggregateException(new InvalidOperationException("primary"), canceled!);
@@ -549,7 +557,7 @@ public sealed class OwnedTestOperationCleanupTests
         var finalCleanupRan = false;
         var workWasCompletedAtFinalCleanup = false;
         using var cancellation = new CancellationTokenSource();
-        using var registration = cancellation.Token.Register(() => cancellationObserved.SetResult());
+        await using var registration = cancellation.Token.Register(cancellationObserved.SetResult);
 
         // Act
         var cleanup = OwnedTestOperationCleanup.CompleteAsync(
@@ -592,7 +600,7 @@ public sealed class OwnedTestOperationCleanupTests
         var pending = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var finalCleanupRan = false;
         using var cancellation = new CancellationTokenSource();
-        using var registration = cancellation.Token.Register(() =>
+        await using var registration = cancellation.Token.Register(() =>
         {
             if (failingStage == "work")
             {
@@ -733,7 +741,7 @@ public sealed class OwnedTestOperationCleanupTests
     {
         // Arrange
         using var cancellation = new CancellationTokenSource();
-        cancellation.Cancel();
+        await cancellation.CancelAsync();
         var failure = new OperationCanceledException(cancellation.Token);
         var pending = Task.FromCanceled(cancellation.Token);
 
@@ -905,7 +913,7 @@ public sealed class OwnedTestOperationCleanupTests
     {
         // Arrange
         using var cancellation = new CancellationTokenSource();
-        cancellation.Cancel();
+        await cancellation.CancelAsync();
         var pending = Task.FromCanceled(cancellation.Token);
         var canceled = await Record.ExceptionAsync(() => pending);
         var empty = new AggregateException("primary empty sibling");
@@ -932,7 +940,7 @@ public sealed class OwnedTestOperationCleanupTests
         var failure = new AggregateException("cancellation callback failed");
         var pending = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using var cancellation = new CancellationTokenSource();
-        using var registration = cancellation.Token.Register(() =>
+        await using var registration = cancellation.Token.Register(() =>
         {
             pending.SetResult();
 

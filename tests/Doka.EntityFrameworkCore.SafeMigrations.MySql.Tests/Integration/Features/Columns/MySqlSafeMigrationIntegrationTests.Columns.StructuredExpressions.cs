@@ -1,6 +1,8 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-/// <summary>Exercises the ColumnsStructuredExpressions migration contracts in an independent class collection.</summary>
+/// <summary>
+/// Exercises the ColumnsStructuredExpressions migration contracts in an independent class collection.
+/// </summary>
 public sealed class MySqlColumnsStructuredExpressionsIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
     /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
@@ -9,9 +11,13 @@ public sealed class MySqlColumnsStructuredExpressionsIntegrationTests : MySqlSaf
         MySqlEngineContainerFixture fixture
     ) : base(fixture) { }
 
+    /// <summary>
+    /// Preserves structured integer-cast semantics through rendering, catalog comparison, and execution.
+    /// </summary>
     [Fact]
     public async Task StructuredIntegerCast_ConvergesRoundTripsAndDetectsSemanticDrift()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var definition = StructuredExpressionTable(multiplier: 2);
@@ -19,13 +25,12 @@ public sealed class MySqlColumnsStructuredExpressionsIntegrationTests : MySqlSaf
         builder.ConvergeTable(definition);
         var runner = context.GetService<ISafeMigrationRunner>();
 
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
             new SafeMigrationRunOptions("structured-integer-cast-preflight"),
             CancellationToken.None);
-
-        Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
@@ -40,22 +45,16 @@ public sealed class MySqlColumnsStructuredExpressionsIntegrationTests : MySqlSaf
             new SafeMigrationRunOptions("structured-integer-cast-postflight"),
             CancellationToken.None);
 
-        Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
-        Assert.All(postflight.Assessments, static assessment => Assert.True(assessment.PostconditionSatisfied));
-        Assert.Equal(
-            14,
-            await ScalarIntAsync(
-                connectionString,
-                "SELECT `doubled_id` FROM `structured_expression_columns` WHERE `id` = 7;",
-                cancellationToken: CancellationToken.None));
+        var generatedValue = await ScalarIntAsync(
+            connectionString,
+            "SELECT `doubled_id` FROM `structured_expression_columns` WHERE `id` = 7;",
+            cancellationToken: CancellationToken.None);
 
-        Assert.Equal(
-            1,
-            await ScalarIntAsync(
-                connectionString,
-                "SELECT COUNT(*) FROM `structured_expression_columns` "
-                + "WHERE `id` = 7 AND `created_at` IS NOT NULL;",
-                cancellationToken: CancellationToken.None));
+        var timestampedRowCount = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM `structured_expression_columns` "
+            + "WHERE `id` = 7 AND `created_at` IS NOT NULL;",
+            cancellationToken: CancellationToken.None);
 
         var drift = new MigrationBuilder(context.Database.ProviderName!);
         drift.ConvergeTable(StructuredExpressionTable(multiplier: 3));
@@ -64,6 +63,15 @@ public sealed class MySqlColumnsStructuredExpressionsIntegrationTests : MySqlSaf
             drift.Operations,
             new SafeMigrationRunOptions("structured-integer-cast-drift"),
             CancellationToken.None);
+
+        // Assert
+        Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
+
+        Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
+        Assert.All(postflight.Assessments, static assessment => Assert.True(assessment.PostconditionSatisfied));
+        Assert.Equal(14, generatedValue);
+
+        Assert.Equal(1, timestampedRowCount);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, driftReport.Status);
         Assert.Contains(
@@ -74,9 +82,11 @@ public sealed class MySqlColumnsStructuredExpressionsIntegrationTests : MySqlSaf
             });
     }
 
+    /// <summary>Reports an unsupported structured cast without creating its target table.</summary>
     [Fact]
     public async Task UnsupportedStructuredCastTarget_IsReportedWithoutCreatingTable()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -100,6 +110,7 @@ public sealed class MySqlColumnsStructuredExpressionsIntegrationTests : MySqlSaf
                     "unsupported_structured_cast",
                     ["id"])));
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -108,6 +119,7 @@ public sealed class MySqlColumnsStructuredExpressionsIntegrationTests : MySqlSaf
                 new SafeMigrationRunOptions("unsupported-structured-cast"),
                 CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Contains(
             report.Assessments,
@@ -128,9 +140,11 @@ public sealed class MySqlColumnsStructuredExpressionsIntegrationTests : MySqlSaf
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Accepts required generated values only with the qualified native nullability proof.</summary>
     [Fact]
     public async Task NonNullableGeneratedColumnConvergesWithQualifiedNativeSemantics()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -155,6 +169,7 @@ public sealed class MySqlColumnsStructuredExpressionsIntegrationTests : MySqlSaf
                     "nonnullable_generated_column",
                     ["id"])));
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -162,8 +177,6 @@ public sealed class MySqlColumnsStructuredExpressionsIntegrationTests : MySqlSaf
                 builder.Operations,
                 new SafeMigrationRunOptions("nonnullable-generated-column"),
                 CancellationToken.None);
-
-        Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
@@ -176,40 +189,48 @@ public sealed class MySqlColumnsStructuredExpressionsIntegrationTests : MySqlSaf
                 new SafeMigrationRunOptions("nonnullable-generated-column-postflight"),
                 CancellationToken.None);
 
+        // Assert
+        Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
+
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
         Assert.All(postflight.Assessments, static assessment => Assert.True(assessment.PostconditionSatisfied));
     }
 
-    [Fact]
-    public async Task CommonCastTargets_RenderTypedNullsAcceptedByTheServer()
+    /// <summary>Requires the server to accept typed NULL expressions for every supported common CAST target.</summary>
+    /// <param name="storeType">The independently exercised native CAST target.</param>
+    [Theory]
+    [InlineData("int")]
+    [InlineData("bigint unsigned")]
+    [InlineData("decimal(18,4)")]
+    [InlineData("float")]
+    [InlineData("double")]
+    [InlineData("varchar(32)")]
+    [InlineData("longtext")]
+    [InlineData("binary(16)")]
+    [InlineData("date")]
+    [InlineData("datetime(6)")]
+    [InlineData("time(6)")]
+    public async Task CommonCastTargets_RenderTypedNullsAcceptedByTheServer(
+        string storeType
+    )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var renderer = new MySqlSafeMigrationSqlExpressionRenderer(
             context.GetService<IRelationalTypeMappingSource>(),
             context.GetService<ISqlGenerationHelper>());
 
-        var storeTypes = new[]
-        {
-            "int",
-            "bigint unsigned",
-            "decimal(18,4)",
-            "float",
-            "double",
-            "varchar(32)",
-            "longtext",
-            "binary(16)",
-            "date",
-            "datetime(6)",
-            "time(6)",
-        };
-
-        foreach (var storeType in storeTypes)
+        // Act
+        var failure = await Record.ExceptionAsync(async () =>
         {
             var expression = renderer.Render(SafeMigrationSql.Literal(null, storeType));
 
             await ExecuteSqlAsync(connectionString, $"SELECT {expression};", cancellationToken: CancellationToken.None);
-        }
+        });
+
+        // Assert
+        Assert.Null(failure);
     }
 
     private static ExpectedTableDefinition StructuredExpressionTable(

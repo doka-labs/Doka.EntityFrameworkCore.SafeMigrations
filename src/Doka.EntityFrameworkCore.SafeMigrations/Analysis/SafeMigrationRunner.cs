@@ -1,8 +1,7 @@
-using System.Collections.ObjectModel;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations;
 
 /// <summary>Default provider-neutral preflight and postflight runner.</summary>
+[PublicAPI]
 public sealed partial class SafeMigrationRunner : ISafeMigrationRunner
 {
     private readonly ISafeMigrationProviderAnalyzer _providerAnalyzer;
@@ -42,7 +41,12 @@ public sealed partial class SafeMigrationRunner : ISafeMigrationRunner
 
         var migrations = migrationsAssembly
             .Migrations
-            .OrderBy(static entry => entry.Key)
+
+            // WHY: Discovery, target boundaries and EF migration IDs must share ordinal identity, not UI culture.
+            .OrderBy(static entry => entry.Key, StringComparer.Ordinal)
+
+            // WHY: Retain the ordered array snapshot used for both target selection and stream reconstruction.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var targetMigrationId = options.TargetMigrationId
@@ -50,7 +54,7 @@ public sealed partial class SafeMigrationRunner : ISafeMigrationRunner
                 .Key;
 
         if (targetMigrationId is not null
-            && !migrations.Any(entry => StringComparer.Ordinal.Equals(entry.Key, targetMigrationId)))
+            && migrations.All(entry => !StringComparer.Ordinal.Equals(entry.Key, targetMigrationId)))
         {
             throw new ArgumentException(
                 "The target migration is not present in the configured migrations assembly.",
@@ -63,9 +67,9 @@ public sealed partial class SafeMigrationRunner : ISafeMigrationRunner
             throw new InvalidOperationException("SafeMigrations preflight supports only forward migration targets.");
         }
 
-        var operations = new List<MigrationOperation>();
-        var targetModels = new List<IModel?>();
-        var migrationIds = new List<string>();
+        List<MigrationOperation> operations = [];
+        List<IModel?> targetModels = [];
+        List<string> migrationIds = [];
 
         // Reconstruct the pending Up-operation stream in the migration-ID order
         // used for target selection throughout this method.
@@ -203,6 +207,8 @@ public sealed partial class SafeMigrationRunner : ISafeMigrationRunner
             await connection.OpenAsync(cancellationToken);
         }
 
+        Exception? originalFailure = null;
+
         try
         {
             var environment = await _providerAnalyzer.GetEnvironmentAsync(context, cancellationToken);
@@ -215,22 +221,41 @@ public sealed partial class SafeMigrationRunner : ISafeMigrationRunner
             activity?.SetTag("db.system.name", environment.EngineFamily);
             activity?.SetTag("safe_migrations.provider", environment.ProviderId);
 
-            await using var analysisScope = await _providerAnalyzer.AcquireAnalysisScopeAsync(
+            var analysisScope = await _providerAnalyzer.AcquireAnalysisScopeAsync(
                 context,
                 cancellationToken);
 
-            var report = await AnalyzeOperationsAsync(
-                context,
-                operations,
-                mode,
-                options,
-                fingerprint,
-                contractFingerprint,
-                generatedAtUtc,
-                environment,
-                targetModels,
-                migrationIds,
-                cancellationToken);
+            SafeMigrationRunReport report;
+            Exception? analysisFailure = null;
+
+            try
+            {
+                report = await AnalyzeOperationsAsync(
+                    context,
+                    operations,
+                    mode,
+                    options,
+                    fingerprint,
+                    contractFingerprint,
+                    generatedAtUtc,
+                    environment,
+                    targetModels,
+                    migrationIds,
+                    cancellationToken);
+            }
+            catch (Exception exception)
+            {
+                analysisFailure = exception;
+
+                throw;
+            }
+            finally
+            {
+                await SafeMigrationAnalysisCleanup.DisposeAsync(
+                    analysisScope,
+                    analysisFailure,
+                    "SafeMigrations.AnalysisScopeDisposeException");
+            }
 
             activity?.SetStatus(ActivityStatusCode.Ok);
 
@@ -244,16 +269,20 @@ public sealed partial class SafeMigrationRunner : ISafeMigrationRunner
 
             return report;
         }
-        catch (Exception exception) when (exception is not OperationCanceledException)
+        catch (Exception exception)
         {
-            var failureCode = SafeMigrationTelemetry.FailureCode(exception);
-            activity?.SetStatus(ActivityStatusCode.Error, failureCode);
-            activity?.SetTag("safe_migrations.failure_code", failureCode);
-            activity?.SetTag(
-                "safe_migrations.runbook",
-                SafeMigrationDiagnostics.RunbookBaseUrl + "failure-codes.md#" + failureCode);
+            originalFailure = exception;
+            if (exception is not OperationCanceledException)
+            {
+                var failureCode = SafeMigrationTelemetry.FailureCode(exception);
+                activity?.SetStatus(ActivityStatusCode.Error, failureCode);
+                activity?.SetTag("safe_migrations.failure_code", failureCode);
+                activity?.SetTag(
+                    "safe_migrations.runbook",
+                    SafeMigrationDiagnostics.RunbookBaseUrl + "failure-codes.md#" + failureCode);
 
-            SafeMigrationTelemetry.RecordFailure(mode, failureCode);
+                SafeMigrationTelemetry.RecordFailure(mode, failureCode);
+            }
 
             throw;
         }
@@ -261,7 +290,7 @@ public sealed partial class SafeMigrationRunner : ISafeMigrationRunner
         {
             if (openedHere)
             {
-                await connection.CloseAsync();
+                await SafeMigrationAnalysisCleanup.CloseAsync(connection, originalFailure);
             }
         }
     }
@@ -313,637 +342,39 @@ public sealed partial class SafeMigrationRunner : ISafeMigrationRunner
     )
     {
         var assessments = new List<SafeMigrationAssessment>(operations.Count);
-        var blocked = false;
-        var hasProviderOperations = false;
-        var hasDeferredOperations = false;
-        SafeMigrationDeferredOrigin? rawSqlOrigin = null;
-        SafeMigrationDeferredOrigin? managedDataOrigin = null;
-        SafeMigrationDeferredOrigin? globalDataOrigin = null;
 
+        // WHY: Keep the compact provider batch independent from full report and migration ordinals.
+        // ReSharper disable once UseCollectionExpression
         var safeOperations = operations
             .OfType<SafeMigrationOperation>()
             .ToArray();
 
-        // Providers classify the safe subset in one batch. The projection then
-        // advances sequentially without rereading the database, which preflight cannot mutate.
-        IReadOnlyList<SafeMigrationProviderAnalysis> liveAnalyses;
-        using (SafeMigrationTelemetry.StartAnalysisStage("provider-classification", safeOperations.Length))
-        {
-            if (_providerAnalyzer is ISafeMigrationProviderTargetModelAnalyzer targetModelAnalyzer)
-            {
-                liveAnalyses = await targetModelAnalyzer.AnalyzeAsync(
-                    context,
-                    operations,
-                    targetModels,
-                    cancellationToken);
-            }
-            else
-            {
-                liveAnalyses = await _providerAnalyzer.AnalyzeAsync(context, safeOperations, cancellationToken);
-            }
-        }
-
-        if (liveAnalyses.Count != safeOperations.Length)
-        {
-            throw new InvalidOperationException("The SafeMigrations analyzer returned an inconsistent result count.");
-        }
-
-        var objectIdentityNormalizer = _providerAnalyzer as ISafeMigrationProviderObjectIdentityNormalizer;
-        var postflightIdentityNormalizer = mode == SafeMigrationReportMode.Postflight
-            ? objectIdentityNormalizer?.GetPostflightIdentityNormalizer(operations)
-            : null;
-
-        IReadOnlyDictionary<int, ModelManagedDataIntent>? renamedManagedIntents = null;
-        if (mode == SafeMigrationReportMode.Postflight)
-        {
-            var revalidated = await RevalidateRenamedContractsAsync(
-                context,
-                operations,
-                targetModels,
-                liveAnalyses,
-                postflightIdentityNormalizer,
-                cancellationToken);
-
-            liveAnalyses = revalidated.Analyses;
-            renamedManagedIntents = revalidated.ManagedIntents;
-        }
-
-        using (SafeMigrationTelemetry.StartAnalysisStage("ordered-projection", operations.Count))
-        {
-            var postflightProjection = mode == SafeMigrationReportMode.Postflight
-                ? new SafeMigrationPostflightProjection(
-                    operations,
-                    postflightIdentityNormalizer,
-                    _providerAnalyzer as ISafeMigrationProjectedKeyAnalyzer,
-                    liveAnalyses,
-                    renamedManagedIntents)
-                : null;
-
-            var preflightProjection = mode == SafeMigrationReportMode.Preflight
-                ? new SafeMigrationPreflightProjection(
-                    _providerAnalyzer as ISafeMigrationProviderOperationProjection,
-                    _providerAnalyzer as ISafeMigrationProjectedKeyAnalyzer,
-                    objectIdentityNormalizer,
-                    _providerAnalyzer as ISafeMigrationProjectedDependencyAnalyzer,
-                    _providerAnalyzer as ISafeMigrationIndexPrerequisiteSource,
-                    _providerAnalyzer as ISafeMigrationProjectedColumnAnalyzer,
-                    _providerAnalyzer as ISafeMigrationRenamedTableAnalyzer,
-                    _providerAnalyzer as ISafeMigrationLivePrerequisiteSource)
-                : null;
-
-            var safeOperationOrdinal = 0;
-
-            // WHY: Retain original operation ordinals for projection ownership and report evidence.
-            // ReSharper disable once ForCanBeConvertedToForeach
-            // ReSharper disable once LoopCanBeConvertedToQuery
-            for (var ordinal = 0; ordinal < operations.Count; ordinal++)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-
-                var operation = operations[ordinal];
-                preflightProjection?.CurrentOperationOrdinal = ordinal;
-
-                var managedDataVersion = preflightProjection?.ModelManagedDataChangeVersion;
-                var globalDataVersion = preflightProjection?.DataMutationVersion;
-                if (operation is not SafeMigrationOperation safeOperation)
-                {
-                    hasProviderOperations = true;
-                    assessments.Add(
-                        new SafeMigrationAssessment(
-                            ordinal,
-                            operation.GetType()
-                                .FullName
-                            ?? operation.GetType()
-                                .Name,
-                            isSafeOperation: false,
-                            operationKind: null,
-                            objectName: null,
-                            observedState: null,
-                            action: null,
-                            postconditionSatisfied: null,
-                            "provider_owned_not_analyzed",
-                            analysisCode: "provider_owned_not_analyzed",
-                            decisionCode: "provider_owned_not_analyzed",
-                            SafeMigrationOperationalImpact.NotApplicable,
-                            differences: null,
-                            deferredOrigin: null,
-                            identity: CaptureProviderIdentity(operation),
-                            migrationId: migrationIds?[ordinal]));
-
-                    if (preflightProjection is not null)
-                    {
-                        preflightProjection.ObserveProviderPostcondition(operation);
-
-                        if (preflightProjection.ModelManagedDataChangeVersion != managedDataVersion)
-                        {
-                            managedDataOrigin = new SafeMigrationDeferredOrigin(
-                                migrationIds?[ordinal],
-                                ordinal,
-                                operation.GetType()
-                                    .FullName
-                                ?? operation.GetType()
-                                    .Name);
-                        }
-
-                        if (preflightProjection.DataMutationVersion != globalDataVersion)
-                        {
-                            globalDataOrigin = managedDataOrigin;
-                        }
-
-                        if (preflightProjection.HasOpaqueSqlPostcondition
-                            && operation is SqlOperation)
-                        {
-                            rawSqlOrigin ??= new SafeMigrationDeferredOrigin(
-                                migrationIds?[ordinal],
-                                ordinal,
-                                operation.GetType()
-                                    .FullName
-                                ?? operation.GetType()
-                                    .Name);
-                        }
-                    }
-
-                    continue;
-                }
-
-                var liveAnalysis = liveAnalyses[safeOperationOrdinal++];
-                var analysis = preflightProjection?.Project(safeOperation, liveAnalysis) ?? liveAnalysis;
-                var deferredOrigin = analysis.IsModelManagedProjectionUnknown
-                    ? analysis.HasStaleGlobalModelManagedData
-                        ? globalDataOrigin ?? managedDataOrigin
-                        : managedDataOrigin
-                    : analysis.IsOpaqueProjectionUnknown
-                        ? rawSqlOrigin
-                        : null;
-
-                if (analysis is
-                    {
-                        IsModelManagedProjectionUnknown: true,
-                        HasStaleGlobalModelManagedData: false,
-                        ModelManagedLocalOriginOrdinal: { } localOriginOrdinal,
-                    })
-                {
-                    var originOperation = operations[localOriginOrdinal];
-
-                    deferredOrigin = new SafeMigrationDeferredOrigin(
-                        migrationIds?[localOriginOrdinal],
-                        localOriginOrdinal,
-                        originOperation.GetType()
-                            .FullName
-                        ?? originOperation.GetType()
-                            .Name);
-                }
-
-                if (analysis.ProviderDeferredOriginOrdinal is { } providerOriginOrdinal)
-                {
-                    // WHY: A provider may invalidate row evidence through typed or
-                    // safe DDL rather than SQL. Only a preceding stream position is
-                    // a valid provenance certificate; a bad certificate fails closed.
-                    if (providerOriginOrdinal < 0
-                        || providerOriginOrdinal >= ordinal)
-                    {
-                        throw new InvalidOperationException(
-                            "The provider returned an invalid deferred-validation origin.");
-                    }
-
-                    var originOperation = operations[providerOriginOrdinal];
-
-                    deferredOrigin = new SafeMigrationDeferredOrigin(
-                        migrationIds?[providerOriginOrdinal],
-                        providerOriginOrdinal,
-                        originOperation.GetType()
-                            .FullName
-                        ?? originOperation.GetType()
-                            .Name);
-                }
-
-                if (mode == SafeMigrationReportMode.Preflight
-                    && deferredOrigin is not null)
-                {
-                    // WHY: Opaque SQL, provider DDL effects and unconfined writes invalidate earlier live
-                    // evidence. Runtime guards inspect the actual ordered state.
-                    // A deferred seed write may itself fire triggers, so discard
-                    // earlier row proofs without inventing its postconditions.
-                    if (analysis.IsModelManagedProjectionUnknown)
-                    {
-                        preflightProjection!.ObserveDeferredModelManagedMutation();
-                        managedDataOrigin = new SafeMigrationDeferredOrigin(
-                            migrationIds?[ordinal],
-                            ordinal,
-                            typeof(SafeMigrationOperation).FullName!);
-
-                        globalDataOrigin = managedDataOrigin;
-                    }
-
-                    else if (analysis.ProviderDeferredOriginOrdinal is not null)
-                    {
-                        preflightProjection!.ObserveDeferredProviderOperation(ordinal);
-                    }
-
-                    hasDeferredOperations = true;
-                    assessments.Add(
-                        new SafeMigrationAssessment(
-                            ordinal,
-                            typeof(SafeMigrationOperation).FullName!,
-                            isSafeOperation: true,
-                            safeOperation.Intent.Kind,
-                            safeOperation.Intent.ObjectName,
-                            observedState: null,
-                            SafeMigrationAction.ValidateAtRuntime,
-                            postconditionSatisfied: null,
-                            "runtime_validation_required",
-                            analysis.Code,
-                            "runtime_validation_required",
-                            SafeMigrationOperationalImpact.Unknown,
-                            differences: null,
-                            deferredOrigin: deferredOrigin,
-                            identity: SafeMigrationOperationIdentity.Create(safeOperation.Intent),
-                            migrationId: migrationIds?[ordinal],
-                            policy: safeOperation.Policy,
-                            explanation: SafeMigrationDiagnosticMessages.GetExplanation(
-                                safeOperation.Intent,
-                                state: null,
-                                analysis.Code,
-                                "runtime_validation_required")));
-
-                    continue;
-                }
-
-                var decision = SafeMigrationDecisionPlanner.Plan(
-                    safeOperation.Intent.Kind,
-                    analysis.ObservedState,
-                    safeOperation.Policy,
-                    analysis.RepairCapability);
-
-                var postconditionSuperseded = postflightProjection?.IsSuperseded(ordinal) == true;
-                var postflightIdentityUnproven = postflightProjection?.IsIdentityUnproven(ordinal) == true;
-                var postconditionSatisfied = !postflightIdentityUnproven
-                    && (analysis.PostconditionSatisfied || postconditionSuperseded);
-
-                var operationBlocked = mode == SafeMigrationReportMode.Preflight
-                    ? decision.Action.RejectsExecution()
-                    : !postconditionSatisfied;
-
-                blocked |= operationBlocked;
-                preflightProjection?.Observe(safeOperation, liveAnalysis, analysis, decision);
-
-                if (preflightProjection is not null
-                    && preflightProjection.ModelManagedDataChangeVersion != managedDataVersion)
-                {
-                    managedDataOrigin = new SafeMigrationDeferredOrigin(
-                        migrationIds?[ordinal],
-                        ordinal,
-                        typeof(SafeMigrationOperation).FullName!);
-                }
-
-                if (preflightProjection is not null
-                    && preflightProjection.DataMutationVersion != globalDataVersion)
-                {
-                    globalDataOrigin = managedDataOrigin;
-                }
-
-                // WHY: Final search-path metadata cannot establish the owner of
-                // an earlier unqualified writer across an opaque schema change.
-                // Neither live absence nor final-writer reduction supplies that proof.
-                var assessmentCode = postflightIdentityUnproven
-                    ? "postcondition_identity_unproven"
-                    : postconditionSuperseded
-                        ? "postcondition_superseded"
-                        : operationBlocked
-                            ? mode == SafeMigrationReportMode.Postflight
-                                ? "postcondition_failed"
-                                : analysis.ObservedState == SafeMigrationObservedState.Unsupported
-                                    ? analysis.Code
-                                    : decision.Code
-                            : analysis.Code;
-
-                assessments.Add(
-                    new SafeMigrationAssessment(
-                        ordinal,
-                        typeof(SafeMigrationOperation).FullName!,
-                        isSafeOperation: true,
-                        safeOperation.Intent.Kind,
-                        safeOperation.Intent.ObjectName,
-                        analysis.ObservedState,
-                        decision.Action,
-                        postconditionSatisfied,
-                        assessmentCode,
-                        analysis.Code,
-                        decision.Code,
-                        analysis.OperationalImpact,
-                        analysis.Differences,
-                        deferredOrigin: null,
-                        identity: SafeMigrationOperationIdentity.Create(safeOperation.Intent),
-                        migrationId: migrationIds?[ordinal],
-                        policy: safeOperation.Policy,
-                        explanation: SafeMigrationDiagnosticMessages.GetExplanation(
-                            safeOperation.Intent,
-                            analysis.ObservedState,
-
-                            // WHY: Aggregate preflight codes identify a planner decision,
-                            // not its provider-proven cause. Postflight phase overrides
-                            // instead describe the established final-condition result.
-                            mode == SafeMigrationReportMode.Postflight
-                                ? assessmentCode
-                                : analysis.Code,
-                            decision.Code)));
-            }
-        }
-
-        var status = operations.Count == 0
-            ? SafeMigrationReportStatus.NoOperations
-            : blocked
-                ? SafeMigrationReportStatus.Blocked
-                : hasDeferredOperations
-                    ? SafeMigrationReportStatus.RuntimeValidationRequired
-                    : hasProviderOperations
-                        ? SafeMigrationReportStatus.ReadyWithProviderOperations
-                        : SafeMigrationReportStatus.Ready;
-
-        IReadOnlyList<SafeMigrationUnexpectedObject> unexpectedObjects;
-        using (SafeMigrationTelemetry.StartAnalysisStage("unexpected-inventory", operations.Count))
-        {
-            unexpectedObjects = await _providerAnalyzer.FindUnexpectedObjectsAsync(
-                context,
-                operations,
-                cancellationToken);
-        }
-
-        return new SafeMigrationRunReport(
+        var classification = await ClassifyOperationStreamAsync(
+            context,
+            operations,
+            safeOperations,
             mode,
-            status,
-            generatedAtUtc,
-            options.InstanceId,
-            environment,
-            options.TargetMigrationId,
+            targetModels,
+            cancellationToken);
+
+        var reduction = ReduceOrderedAssessments(
+            operations,
+            mode,
+            migrationIds,
+            classification,
+            assessments,
+            cancellationToken);
+
+        return await CreateRunReportAsync(
+            context,
+            operations,
+            mode,
+            options,
             modelFingerprint,
             contractFingerprint,
-            assessments,
-            unexpectedObjects);
-    }
-
-    /// <summary>Captures only authored identities from ordinary EF operations without row or SQL payloads.</summary>
-    internal static SafeMigrationOperationIdentity? CaptureProviderIdentity(
-        MigrationOperation operation
-    ) => operation switch
-    {
-        AddColumnOperation value => CaptureKnownProviderIdentity(
-            SafeMigrationOperationKind.EnsureColumn,
-            value.Schema,
-            value.Table,
-            value.Name,
-            SafeMigrationOperationIdentity.CaptureSingleColumn(value.Name)),
-        AlterColumnOperation value => CaptureKnownProviderIdentity(
-            SafeMigrationOperationKind.AlterColumn,
-            value.Schema,
-            value.Table,
-            value.Name,
-            SafeMigrationOperationIdentity.CaptureSingleColumn(value.Name)),
-        DropColumnOperation value => CaptureKnownProviderIdentity(
-            SafeMigrationOperationKind.DropColumn,
-            value.Schema,
-            value.Table,
-            value.Name,
-            SafeMigrationOperationIdentity.CaptureSingleColumn(value.Name)),
-        RenameColumnOperation value => CaptureKnownProviderIdentity(
-            SafeMigrationOperationKind.RenameColumn,
-            value.Schema,
-            value.Table,
-            value.Name,
-            SafeMigrationOperationIdentity.CaptureSingleColumn(value.Name),
-            newObjectName: value.NewName),
-        CreateIndexOperation value => CaptureKnownProviderIdentity(
-            SafeMigrationOperationKind.EnsureIndex,
-            value.Schema,
-            value.Table,
-            value.Name,
-            SnapshotColumns(value.Columns)),
-        DropIndexOperation value => CaptureKnownProviderIdentity(
-            SafeMigrationOperationKind.DropIndex,
-            value.Schema,
-            value.Table,
-            value.Name),
-        RenameIndexOperation value => CaptureKnownProviderIdentity(
-            SafeMigrationOperationKind.RenameIndex,
-            value.Schema,
-            value.Table,
-            value.Name,
-            newObjectName: value.NewName),
-        AddPrimaryKeyOperation value => CaptureKnownProviderIdentity(
-            SafeMigrationOperationKind.EnsurePrimaryKey,
-            value.Schema,
-            value.Table,
-            value.Name,
-            SnapshotColumns(value.Columns)),
-        DropPrimaryKeyOperation value => CaptureKnownProviderIdentity(
-            SafeMigrationOperationKind.DropPrimaryKey,
-            value.Schema,
-            value.Table,
-            value.Name),
-        AddUniqueConstraintOperation value => CaptureKnownProviderIdentity(
-            SafeMigrationOperationKind.EnsureUniqueConstraint,
-            value.Schema,
-            value.Table,
-            value.Name,
-            SnapshotColumns(value.Columns)),
-        DropUniqueConstraintOperation value => CaptureKnownProviderIdentity(
-            SafeMigrationOperationKind.DropUniqueConstraint,
-            value.Schema,
-            value.Table,
-            value.Name),
-        AddCheckConstraintOperation value => CaptureKnownProviderIdentity(
-            SafeMigrationOperationKind.EnsureCheckConstraint,
-            value.Schema,
-            value.Table,
-            value.Name),
-        DropCheckConstraintOperation value => CaptureKnownProviderIdentity(
-            SafeMigrationOperationKind.DropCheckConstraint,
-            value.Schema,
-            value.Table,
-            value.Name),
-        AddForeignKeyOperation value => CaptureKnownProviderIdentity(
-            SafeMigrationOperationKind.EnsureForeignKey,
-            value.Schema,
-            value.Table,
-            value.Name,
-            SnapshotColumns(value.Columns),
-            value.PrincipalSchema,
-            value.PrincipalTable,
-            SnapshotColumns(value.PrincipalColumns)),
-        DropForeignKeyOperation value => CaptureKnownProviderIdentity(
-            SafeMigrationOperationKind.DropForeignKey,
-            value.Schema,
-            value.Table,
-            value.Name),
-        CreateTableOperation value => CaptureKnownProviderIdentity(
-            SafeMigrationOperationKind.EnsureTable,
-            value.Schema,
-            value.Name,
-            value.Name),
-        DropTableOperation value => CaptureKnownProviderIdentity(
-            SafeMigrationOperationKind.DropTable,
-            value.Schema,
-            value.Name,
-            value.Name),
-        RenameTableOperation value => CaptureKnownProviderIdentity(
-            SafeMigrationOperationKind.RenameTable,
-            value.Schema,
-            value.Name,
-            value.Name,
-            newSchema: value.NewSchema,
-            newTable: value.NewName ?? value.Name),
-        EnsureSchemaOperation value => CaptureKnownProviderIdentity(
-            SafeMigrationOperationKind.EnsureSchema,
-            value.Name,
-            table: null,
-            value.Name),
-        DropSchemaOperation value => CaptureKnownProviderIdentity(
-            SafeMigrationOperationKind.DropSchema,
-            value.Name,
-            table: null,
-            value.Name),
-        AlterTableOperation value => CaptureKnownProviderIdentity(
-            operationKind: null,
-            value.Schema,
-            value.Name,
-            value.Name),
-        InsertDataOperation value => CaptureKnownProviderIdentity(
-            SafeMigrationOperationKind.EnsureModelManagedData,
-            value.Schema,
-            value.Table,
-            value.Table,
-            SnapshotColumns(value.Columns)),
-        UpdateDataOperation value => CaptureKnownProviderIdentity(
-            SafeMigrationOperationKind.UpdateModelManagedData,
-            value.Schema,
-            value.Table,
-            value.Table,
-            SnapshotColumns(value.Columns)),
-        DeleteDataOperation value => CaptureKnownProviderIdentity(
-            SafeMigrationOperationKind.DeleteModelManagedData,
-            value.Schema,
-            value.Table,
-            value.Table,
-            SnapshotColumns(value.KeyColumns)),
-        CreateSequenceOperation value => CaptureKnownProviderIdentity(
-            operationKind: null,
-            value.Schema,
-            table: null,
-            value.Name),
-        AlterSequenceOperation value => CaptureKnownProviderIdentity(
-            operationKind: null,
-            value.Schema,
-            table: null,
-            value.Name),
-        DropSequenceOperation value => CaptureKnownProviderIdentity(
-            operationKind: null,
-            value.Schema,
-            table: null,
-            value.Name),
-        RestartSequenceOperation value => CaptureKnownProviderIdentity(
-            operationKind: null,
-            value.Schema,
-            table: null,
-            value.Name),
-        RenameSequenceOperation value => CaptureKnownProviderIdentity(
-            operationKind: null,
-            value.Schema,
-            table: null,
-            value.Name,
-            newSchema: value.NewSchema,
-            newObjectName: value.NewName),
-        _ => null,
-    };
-
-    /// <summary>Captures only usable structural metadata from mutable, potentially incomplete EF operations.</summary>
-    private static SafeMigrationOperationIdentity? CaptureKnownProviderIdentity(
-        SafeMigrationOperationKind? operationKind,
-        string? schema,
-        string? table,
-        string? objectName,
-        IReadOnlyList<string>? columns = null,
-        string? principalSchema = null,
-        string? principalTable = null,
-        IReadOnlyList<string>? principalColumns = null,
-        string? newSchema = null,
-        string? newTable = null,
-        string? newObjectName = null
-    )
-    {
-        var requiresTable = operationKind is not (null
-            or SafeMigrationOperationKind.EnsureSchema
-            or SafeMigrationOperationKind.DropSchema);
-
-        if (string.IsNullOrWhiteSpace(objectName)
-            || (requiresTable && string.IsNullOrWhiteSpace(table))
-            || (schema is not null && string.IsNullOrWhiteSpace(schema))
-            || (principalSchema is not null && string.IsNullOrWhiteSpace(principalSchema))
-            || (newSchema is not null && string.IsNullOrWhiteSpace(newSchema))
-            || (newTable is not null && string.IsNullOrWhiteSpace(newTable))
-            || (newObjectName is not null && string.IsNullOrWhiteSpace(newObjectName))
-            || HasUnavailableIdentifier(columns)
-            || HasUnavailableIdentifier(principalColumns))
-        {
-            // WHY: Ordinary EF operations are mutable and may be malformed.
-            // Diagnostics must preserve their original unclassified report,
-            // not manufacture names or throw while rendering unavailable data.
-            return null;
-        }
-
-        if (operationKind == SafeMigrationOperationKind.EnsureForeignKey
-            && string.IsNullOrWhiteSpace(principalTable))
-        {
-            return null;
-        }
-
-        return SafeMigrationOperationIdentity.CreateKnown(
-            operationKind,
-            schema,
-            table,
-            objectName,
-            columns,
-            principalSchema,
-            principalTable,
-            principalColumns,
-            newSchema,
-            newTable,
-            newObjectName);
-    }
-
-    /// <summary>Checks a captured member list without allocating a filtered endpoint.</summary>
-    private static bool HasUnavailableIdentifier(
-        IReadOnlyList<string>? identifiers
-    )
-    {
-        if (identifiers is null)
-        {
-            return false;
-        }
-
-        // WHY: These retained snapshots expose indexed immutable reads. Enumerating
-        // IReadOnlyList allocates an iterator, including the one-column metadata view.
-        // ReSharper disable once ForCanBeConvertedToForeach
-        // ReSharper disable once LoopCanBeConvertedToQuery
-        for (var index = 0; index < identifiers.Count; index++)
-        {
-            if (string.IsNullOrWhiteSpace(identifiers[index]))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /// <summary>Snapshots mutable EF column arrays before the report outlives the analyzed stream.</summary>
-    private static ReadOnlyCollection<string>? SnapshotColumns(
-        string[]? columns
-    )
-    {
-        // WHY: EF operations are mutable and may be reused after analysis.
-        // A report must not change when callers mutate a composite endpoint.
-        return columns is null
-            ? null
-            : Array.AsReadOnly((string[])columns.Clone());
+            generatedAtUtc,
+            environment,
+            reduction,
+            cancellationToken);
     }
 }

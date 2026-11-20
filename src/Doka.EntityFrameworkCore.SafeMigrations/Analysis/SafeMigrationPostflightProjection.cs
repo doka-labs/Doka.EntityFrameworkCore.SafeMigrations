@@ -139,12 +139,6 @@ internal sealed partial class SafeMigrationPostflightProjection
         out PostflightResource secondaryResource
     )
     {
-        string? Normalize(
-            string? schema
-        ) => objectIdentityNormalizer is null
-            ? schema
-            : objectIdentityNormalizer.NormalizeSchema(schema);
-
         primaryResource = intent switch
         {
             EnsureSchemaIntent value =>
@@ -291,6 +285,12 @@ internal sealed partial class SafeMigrationPostflightProjection
         };
 
         return primaryResource.Kind != PostflightResourceKind.Unknown;
+
+        string? Normalize(
+            string? schema
+        ) => objectIdentityNormalizer is null
+            ? schema
+            : objectIdentityNormalizer.NormalizeSchema(schema);
     }
 
     /// <summary>Uses exact named contracts or verified physical aliases, never diagnostic mismatch names.</summary>
@@ -303,17 +303,14 @@ internal sealed partial class SafeMigrationPostflightProjection
         SafeMigrationProviderAnalysis? analysis
     )
     {
-        if (nameIndependent)
-        {
-            return null;
-        }
-
         // WHY: A wrong-name NoOp Drop(B) does not replace Ensure(A). A final
         // Matching result can independently bind a semantic alias to its real
         // physical name; Missing/Different cannot reconstruct a removed alias's
         // historical identity and must retain the unsatisfied named contract.
 
-        return PhysicalResourceName(authoredName, analysis);
+        return nameIndependent
+            ? null
+            : PhysicalResourceName(authoredName, analysis);
     }
 
     /// <summary>Uses a physical semantic alias only when fresh matching evidence proves that exact identity.</summary>
@@ -393,20 +390,24 @@ internal sealed partial class SafeMigrationPostflightProjection
         string? Name
     );
 
-    private sealed class PostflightResourceComparer(
-        ISafeMigrationProviderObjectIdentityNormalizer? normalizer
-    ) : IEqualityComparer<PostflightResource>
+    private sealed class PostflightResourceComparer : IEqualityComparer<PostflightResource>
     {
-        private readonly StringComparer _columnIdentifierComparer =
-            normalizer?.ColumnIdentifierComparer ?? StringComparer.Ordinal;
+        private readonly StringComparer _columnIdentifierComparer;
+        private readonly StringComparer _foreignKeyIdentifierComparer;
+        private readonly StringComparer _identifierComparer;
+        private readonly StringComparer _indexIdentifierComparer;
 
-        private readonly StringComparer _foreignKeyIdentifierComparer =
-            normalizer?.ForeignKeyIdentifierComparer ?? StringComparer.Ordinal;
-
-        private readonly StringComparer _identifierComparer = normalizer?.IdentifierComparer ?? StringComparer.Ordinal;
-
-        private readonly StringComparer _indexIdentifierComparer =
-            normalizer?.IndexIdentifierComparer ?? StringComparer.Ordinal;
+        /// <summary>Initializes each resource-kind comparer from the verified provider identity rules.</summary>
+        /// <param name="normalizer">The provider identity rules, or ordinal identity when absent.</param>
+        public PostflightResourceComparer(
+            ISafeMigrationProviderObjectIdentityNormalizer? normalizer
+        )
+        {
+            _columnIdentifierComparer = normalizer?.ColumnIdentifierComparer ?? StringComparer.Ordinal;
+            _foreignKeyIdentifierComparer = normalizer?.ForeignKeyIdentifierComparer ?? StringComparer.Ordinal;
+            _identifierComparer = normalizer?.IdentifierComparer ?? StringComparer.Ordinal;
+            _indexIdentifierComparer = normalizer?.IndexIdentifierComparer ?? StringComparer.Ordinal;
+        }
 
         public bool Equals(
             PostflightResource left,

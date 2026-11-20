@@ -83,31 +83,43 @@ public sealed partial class SafeMigrationStandardOperationFactoryTests
         }
     }
 
+    /// <summary>
+    /// Reconstructs literal NULL as explicit SQL NULL while leaving an absent default absent in the ordinary EF
+    /// operation.
+    /// </summary>
     [Fact]
     public void LiteralNull_RemainsDistinctFromNoDefaultInEfOperation()
     {
-        var withLiteralNull = Assert.IsType<AddColumnOperation>(
-            SafeMigrationStandardOperationFactory.Create(
-                new EnsureColumnIntent(
-                    "items",
-                    new ExpectedColumnDefinition(
-                        "value",
-                        typeof(string),
-                        true,
-                        defaultValue: SafeMigrationDefaultValue.Literal(null)))));
+        // Arrange
+        var nullIntent = new EnsureColumnIntent(
+            "items",
+            new ExpectedColumnDefinition("value",
+                typeof(string),
+                true,
+                defaultValue: SafeMigrationDefaultValue.Literal(null)));
 
-        var withoutDefault = Assert.IsType<AddColumnOperation>(
-            SafeMigrationStandardOperationFactory.Create(
-                new EnsureColumnIntent("items", new ExpectedColumnDefinition("other", typeof(string), true))));
+        var absentIntent = new EnsureColumnIntent("items", new ExpectedColumnDefinition("other", typeof(string), true));
+
+        // Act
+        var nullOperation = SafeMigrationStandardOperationFactory.Create(nullIntent);
+        var absentOperation = SafeMigrationStandardOperationFactory.Create(absentIntent);
+
+        // Assert
+        var withLiteralNull = Assert.IsType<AddColumnOperation>(nullOperation);
+        var withoutDefault = Assert.IsType<AddColumnOperation>(absentOperation);
 
         Assert.Equal("NULL", withLiteralNull.DefaultValueSql);
         Assert.Null(withoutDefault.DefaultValueSql);
         Assert.Null(withoutDefault.DefaultValue);
     }
 
+    /// <summary>
+    /// Declares only safely mutable old facets while retaining the target's storage metadata and default.
+    /// </summary>
     [Fact]
     public void EnsureColumnRepairUsesAlterOperationWithOnlyMutableOldFacetsChanged()
     {
+        // Arrange
         var target = new ExpectedColumnDefinition(
             "value",
             typeof(string),
@@ -117,8 +129,11 @@ public sealed partial class SafeMigrationStandardOperationFactoryTests
             comment: "canonical",
             defaultValue: SafeMigrationDefaultValue.Literal("fallback"));
 
-        var operation = Assert.IsType<AlterColumnOperation>(
-            SafeMigrationStandardOperationFactory.CreateRepair(new EnsureColumnIntent("items", target)));
+        // Act
+        var result = SafeMigrationStandardOperationFactory.CreateRepair(new EnsureColumnIntent("items", target));
+
+        // Assert
+        var operation = Assert.IsType<AlterColumnOperation>(result);
 
         Assert.Equal("items", operation.Table);
         Assert.Equal("value", operation.Name);
@@ -133,49 +148,68 @@ public sealed partial class SafeMigrationStandardOperationFactoryTests
         Assert.Equal(operation.MaxLength, operation.OldColumn.MaxLength);
     }
 
+    /// <summary>
+    /// Rejects an annotated column repair when no owning provider validator has approved the preserved metadata.
+    /// </summary>
     [Fact]
     public void EnsureColumnRepairRejectsProviderOwnedDefinitions()
     {
+        // Arrange
         var providerOperation = new AddColumnOperation
         {
             Name = "id",
             Table = "items",
             ClrType = typeof(int),
             IsNullable = false,
+            ["Test:Identity"] = "identity",
         };
 
-        providerOperation["Test:Identity"] = "identity";
         var definition = SafeMigrationExpectedDefinitionFactory.From(providerOperation);
 
-        Assert.Throws<NotSupportedException>(() =>
+        // Act
+        var exception = Record.Exception(() =>
             SafeMigrationStandardOperationFactory.CreateRepair(new EnsureColumnIntent("items", definition)));
+
+        // Assert
+        Assert.IsType<NotSupportedException>(exception);
     }
 
+    /// <summary>
+    /// Retains the exact provider annotation after the owning validator explicitly approves a repair.
+    /// </summary>
     [Fact]
     public void EnsureColumnRepairAllowsProviderToValidateItsOwnMetadata()
     {
+        // Arrange
         var providerOperation = new AddColumnOperation
         {
             Name = "id",
             Table = "items",
             ClrType = typeof(int),
             IsNullable = false,
+            ["Test:Identity"] = "identity",
         };
 
-        providerOperation["Test:Identity"] = "identity";
         var definition = SafeMigrationExpectedDefinitionFactory.From(providerOperation);
 
-        var repair = Assert.IsType<AlterColumnOperation>(
-            SafeMigrationStandardOperationFactory.CreateRepair(
-                new EnsureColumnIntent("items", definition),
-                providerRepairValidator: static _ => true));
+        // Act
+        var result = SafeMigrationStandardOperationFactory.CreateRepair(
+            new EnsureColumnIntent("items", definition),
+            providerRepairValidator: static _ => true);
+
+        // Assert
+        var repair = Assert.IsType<AlterColumnOperation>(result);
 
         Assert.Equal("identity", repair["Test:Identity"]);
     }
 
+    /// <summary>
+    /// Keeps computed-column repair excluded even when a provider validator returns unconditional approval.
+    /// </summary>
     [Fact]
     public void EnsureColumnRepairDoesNotLetProviderOverrideIntrinsicExclusions()
     {
+        // Arrange
         var computed = new ExpectedColumnDefinition(
             "computed_value",
             typeof(int),
@@ -184,9 +218,13 @@ public sealed partial class SafeMigrationStandardOperationFactoryTests
             computedColumnSql: "1 + 1",
             isStored: true);
 
-        Assert.Throws<NotSupportedException>(() =>
+        // Act
+        var exception = Record.Exception(() =>
             SafeMigrationStandardOperationFactory.CreateRepair(
                 new EnsureColumnIntent("items", computed),
                 providerRepairValidator: static _ => true));
+
+        // Assert
+        Assert.IsType<NotSupportedException>(exception);
     }
 }

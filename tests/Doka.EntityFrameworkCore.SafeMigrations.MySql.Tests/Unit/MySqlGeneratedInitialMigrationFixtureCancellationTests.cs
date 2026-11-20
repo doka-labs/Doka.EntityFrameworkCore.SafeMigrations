@@ -42,7 +42,7 @@ public sealed class MySqlGeneratedInitialMigrationFixtureCancellationTests
         // Assert
         Assert.True(canceledBeforeOwnerCompleted);
         Assert.True(peerWasPending);
-        var exception = Assert.IsAssignableFrom<OperationCanceledException>(canceled);
+        var exception = Assert.IsType<OperationCanceledException>(canceled, exactMatch: false);
         Assert.Equal(cancellation.Token, exception.CancellationToken);
         Assert.False(ownerToken.CanBeCanceled);
         Assert.Equal(1, calls);
@@ -77,7 +77,7 @@ public sealed class MySqlGeneratedInitialMigrationFixtureCancellationTests
         });
 
         // Assert
-        var canceled = Assert.IsAssignableFrom<OperationCanceledException>(exception);
+        var canceled = Assert.IsType<OperationCanceledException>(exception, exactMatch: false);
         Assert.Equal(cancellation.Token, canceled.CancellationToken);
         Assert.Equal(0, calls);
     }
@@ -138,7 +138,7 @@ public sealed class MySqlGeneratedInitialMigrationFixtureCancellationTests
             fixture.GetInitializedAsync(false, CancellationToken.None));
 
         // Assert
-        Assert.IsAssignableFrom<OperationCanceledException>(observedCancellation);
+        Assert.IsType<OperationCanceledException>(observedCancellation, exactMatch: false);
         Assert.Same(failure, peerFailure);
         Assert.Same(failure, replayFailure);
         Assert.Equal(1, calls);
@@ -165,7 +165,7 @@ public sealed class MySqlGeneratedInitialMigrationFixtureCancellationTests
         var exception = await Record.ExceptionAsync(() => InvokeHelper(operation, context, cancellation.Token));
 
         // Assert
-        var canceled = Assert.IsAssignableFrom<OperationCanceledException>(exception);
+        var canceled = Assert.IsType<OperationCanceledException>(exception, exactMatch: false);
         Assert.Equal(cancellation.Token, canceled.CancellationToken);
     }
 
@@ -194,7 +194,7 @@ public sealed class MySqlGeneratedInitialMigrationFixtureCancellationTests
         }
         else
         {
-            Assert.IsAssignableFrom<ArgumentException>(exception);
+            Assert.IsType<ArgumentException>(exception, exactMatch: false);
         }
     }
 
@@ -245,7 +245,7 @@ public sealed class MySqlGeneratedInitialMigrationFixtureCancellationTests
             cancellation.Token));
 
         // Assert
-        var canceled = Assert.IsAssignableFrom<OperationCanceledException>(exception);
+        var canceled = Assert.IsType<OperationCanceledException>(exception, exactMatch: false);
         Assert.Equal(cancellation.Token, canceled.CancellationToken);
         Assert.Equal(0, calls);
     }
@@ -279,10 +279,14 @@ public sealed class MySqlGeneratedInitialMigrationFixtureCancellationTests
     };
 
     /// <summary>Exposes protected helpers without constructing a fixture or creating native resources.</summary>
-    private abstract class HelperProbe(
-        MySqlEngineContainerFixture fixture
-    ) : MySqlSafeMigrationIntegrationTests(fixture)
+    private abstract class HelperProbe : MySqlSafeMigrationIntegrationTests
     {
+        /// <summary>Binds the exposed SQL helpers without constructing a native fixture.</summary>
+        /// <param name="fixture">The uninstantiated native fixture supplied by a helper probe.</param>
+        protected HelperProbe(
+            MySqlEngineContainerFixture fixture
+        ) : base(fixture) { }
+
         /// <summary>Executes statement validation against intentionally malformed connection settings.</summary>
         /// <param name="cancellationToken">The caller cancellation forwarded to the SQL helper.</param>
         /// <returns>The actual SQL helper task.</returns>

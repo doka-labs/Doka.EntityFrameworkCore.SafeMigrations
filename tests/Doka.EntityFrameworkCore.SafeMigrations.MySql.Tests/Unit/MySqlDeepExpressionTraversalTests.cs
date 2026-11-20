@@ -271,7 +271,7 @@ public sealed class MySqlDeepExpressionTraversalTests
             SafeMigrationSql.Identifier("else"));
 
         var traversal = new MySqlExpressionTraversal(expression, caseElseFirst);
-        var identifiers = new List<string>();
+        List<string> identifiers = [];
 
         // Act
         try

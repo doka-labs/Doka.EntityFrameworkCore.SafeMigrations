@@ -1,15 +1,15 @@
 ---
 id: D-008
 status: implemented
-date: 2026-08-27
-decision-makers: [Dominic Kalkbrenner]
+date: 2026-11-19
+decision-makers: ["Dominic Kalkbrenner"]
 consulted: []
 informed: ["@doka-labs/core-maintainers"]
 scope: "Automatic generation of safe table and index migration source from the canonical EF model"
 supersedes: []
 superseded-by: []
 amends: [D-002]
-amended-by: [D-009]
+amended-by: [D-009, D-010, D-013]
 madr-version: "4.0.0"
 doka-profile-version: "1.0"
 ---
@@ -246,6 +246,19 @@ operation source. It adds no runtime feature registry, reflection scan, or
 per-operation dispatch allocation. Runtime provider annotations are immutable
 snapshots already required for catalog comparison and hashing.
 
+### 2026-09-22 Compatibility Amendment
+
+The previous release contract through 10.4.2 covered fewer automatically
+rewritten operations. Strict and legacy scaffolding now emit closed SafeMigrations
+calls for schema ensure/drop; table create/drop/rename; column
+add/alter/drop/rename; index create/drop/rename; and supported named-constraint
+adds and drops. Generated add/alter column callbacks capture the complete EF
+operation, including provider annotations, before sealing the expected
+definition. Raw SQL, raw data operations, `AlterTable`, sequences, ambiguous
+metadata, and unknown operations reject the complete source stream. Existing
+migration files remain immutable and keep executing with the behavior they had
+when they were authored; nothing reinterprets them at analysis or execution.
+
 ### Re-evaluation Triggers
 
 - EF Core changes or removes the public design-time generator contracts or its
@@ -261,7 +274,7 @@ snapshots already required for catalog comparison and hashing.
 - 2026-08-27: Decision recorded with status proposed.
 - 2026-08-27: Dominic Kalkbrenner selected automatic strict-by-default scaffolding with explicit legacy convergence and source-frozen behavior.
 - 2026-08-27: Status changed from proposed to accepted.
-- 2026-08-27: Status changed from accepted to implemented after Core, provider, tooling, and package qualification surfaces were added.
+- 2026-08-27: Status changed from accepted to implemented. Core, provider, tooling, and package qualification surfaces were added.
 - 2026-08-29: Doka 10.1.1 `ClientGuid` annotations were classified as catalog-neutral while remaining part of immutable definitions, fingerprints, and provider replay; unsupported provider annotations remain fail-closed.
 - 2026-08-29: Added source-frozen legacy `RepairIfSafe` selection and the
   provider-verified mutable column repair allowlist.
@@ -298,18 +311,10 @@ snapshots already required for catalog comparison and hashing.
   exact typed Guid contract. Strict and legacy generation retain the format
   without inferring representation conversions or unsupported engine support.
 
-### 2026-09-22 Compatibility Amendment
-
-The previous release contract through 10.4.2 covered fewer automatically
-rewritten operations. Strict and legacy scaffolding now emit closed SafeMigrations
-calls for schema ensure/drop; table create/drop/rename; column
-add/alter/drop/rename; index create/drop/rename; and supported named-constraint
-adds and drops. Generated add/alter column callbacks capture the complete EF
-operation, including provider annotations, before sealing the expected
-definition. Raw SQL, raw data operations, `AlterTable`, sequences, ambiguous
-metadata, and unknown operations reject the complete source stream. Existing
-migration files remain immutable and keep executing with the behavior they had
-when they were authored; nothing reinterprets them at analysis or execution.
+- 2026-11-19: Aligned last-update metadata, reciprocal amendments, option titles
+  and source/navigation format with the current documentation profile. Retained
+  the recorded status and historical approval evidence; this migration grants no
+  new architectural acceptance or publication authority.
 
 ### Implementation References
 
@@ -331,8 +336,7 @@ when they were authored; nothing reinterprets them at analysis or execution.
 
 ### Sources
 
-- [Doka 10.5.0 typed migration metadata](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/27a8d3cce3ce2bc64f6efd1e9034b1cd66eb1ff0/src/Doka.EntityFrameworkCore.MySql/Migrations/MySqlMigrationOperationMetadata.cs)
-  (primary source; retrieved 2026-10-15)
+- [Doka 10.5.0 typed migration metadata](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/27a8d3cce3ce2bc64f6efd1e9034b1cd66eb1ff0/src/Doka.EntityFrameworkCore.MySql/Migrations/MySqlMigrationOperationMetadata.cs) (primary source; retrieved 2026-10-15)
 - [EF Core design-time services](https://learn.microsoft.com/en-us/ef/core/cli/services) (primary source; retrieved 2026-08-27)
 - [Installing EF Core tools](https://learn.microsoft.com/en-us/ef/core/get-started/overview/install) (primary source; retrieved 2026-08-27)
 - [EF Core design-time DbContext creation](https://learn.microsoft.com/en-us/ef/core/cli/dbcontext-creation) (primary source; retrieved 2026-08-27)
@@ -340,11 +344,10 @@ when they were authored; nothing reinterprets them at analysis or execution.
 - [EF Core 10.0.11 DesignTimeServicesBuilder ordering](https://github.com/dotnet/efcore/blob/v10.0.11/src/EFCore.Design/Design/Internal/DesignTimeServicesBuilder.cs) (primary source; retrieved 2026-08-31)
 - [EF Core 10.0.11 IMigrationsCodeGeneratorSelector API](https://github.com/dotnet/efcore/blob/v10.0.11/src/EFCore.Design/Migrations/Design/IMigrationsCodeGeneratorSelector.cs) (primary source; retrieved 2026-08-31)
 - [EF Core DesignTimeServicesReferenceAttribute API](https://learn.microsoft.com/en-us/dotnet/api/microsoft.entityframeworkcore.design.designtimeservicesreferenceattribute?view=efcore-10.0) (primary source; retrieved 2026-08-27)
-- [EF Core 10.0.11 unknown-operation rejection](https://github.com/dotnet/efcore/blob/v10.0.11/src/EFCore.Design/Migrations/Design/CSharpMigrationOperationGenerator.cs#L38-L69)
-  (primary source; retrieved 2026-09-09)
+- [EF Core 10.0.11 unknown-operation rejection](https://github.com/dotnet/efcore/blob/v10.0.11/src/EFCore.Design/Migrations/Design/CSharpMigrationOperationGenerator.cs#L38-L69) (primary source; retrieved 2026-09-09)
 - [NuGet MSBuild props and targets](https://learn.microsoft.com/en-us/nuget/concepts/msbuild-props-and-targets) (primary source; retrieved 2026-08-27)
 - [NuGet package build assets](https://learn.microsoft.com/en-us/nuget/create-packages/creating-a-package) (primary source; retrieved 2026-08-27)
-- [Microsoft.EntityFrameworkCore.Tools 10.0.11 package contract](https://www.nuget.org/packages/Microsoft.EntityFrameworkCore.Tools/10.0.11) (primary package metadata; retrieved 2026-08-27)
+- [Microsoft.EntityFrameworkCore.Tools 10.0.11 package contract](https://www.nuget.org/packages/Microsoft.EntityFrameworkCore.Tools/10.0.11) (primary source; retrieved 2026-08-27)
 - [Doka 10.1.1 MySQL value-generation strategies](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.1.1/src/Doka.EntityFrameworkCore.MySql/MySqlValueGenerationStrategy.cs) (primary source; retrieved 2026-08-29)
 - [EF Core custom migration operations](https://learn.microsoft.com/en-us/ef/core/managing-schemas/migrations/operations) (primary source; retrieved 2026-08-29)
 - [MySQL 8.4 `ALTER TABLE`](https://dev.mysql.com/doc/refman/8.4/en/alter-table.html) (primary source; retrieved 2026-08-29)

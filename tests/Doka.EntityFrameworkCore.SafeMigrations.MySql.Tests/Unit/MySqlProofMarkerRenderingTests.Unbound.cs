@@ -4,15 +4,18 @@ public sealed partial class MySqlProofMarkerRenderingTests
 {
     /// <summary>Enumerates the closed rendering consumers independently for each unowned proof family.</summary>
     /// <returns>The expression consumer and structural marker lacking an owning descriptor.</returns>
-    public static IEnumerable<object[]> UnboundProofRenderCases()
+    public static TheoryData<string, string> UnboundProofRenderCases()
     {
+        var cases = new TheoryData<string, string>();
         foreach (var consumer in BinaryRenderCases()
             .Select(static row => (string)row[0]!)
             .Distinct(StringComparer.Ordinal))
         {
-            yield return [consumer, BinaryMarker];
-            yield return [consumer, IdentifierMarker];
+            cases.Add(consumer, BinaryMarker);
+            cases.Add(consumer, IdentifierMarker);
         }
+
+        return cases;
     }
 
     /// <summary>No ordinary, prepared or raw-status renderer can render an unowned structural proof.</summary>

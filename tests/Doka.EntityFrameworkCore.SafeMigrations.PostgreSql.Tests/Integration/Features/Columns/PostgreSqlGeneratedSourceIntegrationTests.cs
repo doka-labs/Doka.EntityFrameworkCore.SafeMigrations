@@ -44,12 +44,12 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
             .GetService<IRelationalTypeMappingSource>()
             .FindMapping(typeof(string))!;
 
+        // Act
         var candidate = renderer.RenderCatalogCapturedNativeDeparsedCandidateSql(
             expression,
-            value => mapping.GenerateSqlLiteral(value),
+            mapping.GenerateSqlLiteral,
             "'native_candidate'::regclass");
 
-        // Act
         var expected = await ScalarStringAsync(
             connectionString,
             "SELECT pg_catalog.pg_get_expr(adbin, adrelid) FROM pg_catalog.pg_attrdef "
@@ -117,6 +117,11 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
                 new SafeMigrationRunOptions("generated-native-identifier-binding"),
                 CancellationToken.None);
 
+        var storedResult = await ScalarStringAsync(
+            connectionString,
+            "SELECT result::text FROM identifier_roles;",
+            cancellationToken: CancellationToken.None);
+
         // Assert
         Assert.Equal(
             actualQuoted == expectedQuoted
@@ -129,10 +134,7 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
             actualQuoted
                 ? "false"
                 : "true",
-            await ScalarStringAsync(
-                connectionString,
-                "SELECT result::text FROM identifier_roles;",
-                cancellationToken: CancellationToken.None));
+            storedResult);
     }
 
     /// <summary>Quoted non-ASCII identities remain exact while the unquoted ASCII grammar fails closed.</summary>
@@ -178,17 +180,17 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
                 new SafeMigrationRunOptions("generated-native-unicode-identifier"),
                 CancellationToken.None);
 
+        var storedResult = await ScalarStringAsync(
+            connectionString,
+            "SELECT result::text FROM unicode_roles;",
+            cancellationToken: CancellationToken.None);
+
         // Assert
         Assert.Equal(action,
             Assert.Single(report.Assessments)
                 .Action);
 
-        Assert.Equal(
-            "true",
-            await ScalarStringAsync(
-                connectionString,
-                "SELECT result::text FROM unicode_roles;",
-                cancellationToken: CancellationToken.None));
+        Assert.Equal("true", storedResult);
     }
 
     /// <summary>A reserved bare token cannot gain validity from a quoted native catalog candidate.</summary>
@@ -231,6 +233,11 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
                 new SafeMigrationRunOptions("generated-native-reserved-identifier"),
                 CancellationToken.None);
 
+        var storedResult = await ScalarStringAsync(
+            connectionString,
+            "SELECT result::text FROM keyword_roles;",
+            cancellationToken: CancellationToken.None);
+
         // Assert
         Assert.Equal(
             quoted
@@ -239,12 +246,7 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
             Assert.Single(report.Assessments)
                 .Action);
 
-        Assert.Equal(
-            "2",
-            await ScalarStringAsync(
-                connectionString,
-                "SELECT result::text FROM keyword_roles;",
-                cancellationToken: CancellationToken.None));
+        Assert.Equal("2", storedResult);
     }
 
     /// <summary>Qualified labels admit native keywords only after their complete owner has been certified.</summary>
@@ -290,6 +292,11 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
                 new SafeMigrationRunOptions("captured-qualified-keyword-label"),
                 CancellationToken.None);
 
+        var storedResult = await ScalarStringAsync(
+            connectionString,
+            "SELECT result::text FROM qualified_roles;",
+            cancellationToken: CancellationToken.None);
+
         // Assert
         Assert.Equal(
             valid
@@ -298,12 +305,7 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
             Assert.Single(report.Assessments)
                 .Action);
 
-        Assert.Equal(
-            "2",
-            await ScalarStringAsync(
-                connectionString,
-                "SELECT result::text FROM qualified_roles;",
-                cancellationToken: CancellationToken.None));
+        Assert.Equal("2", storedResult);
     }
 
     /// <summary>A source type alias must resolve to the native builtin before its canonical cast can match.</summary>
@@ -349,6 +351,11 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
                 new SafeMigrationRunOptions("generated-native-type-alias-binding"),
                 CancellationToken.None);
 
+        var storedResult = await ScalarStringAsync(
+            connectionString,
+            "SELECT result::text FROM type_roles;",
+            cancellationToken: CancellationToken.None);
+
         // Assert
         if (shadowed)
         {
@@ -365,12 +372,7 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
                     .Action);
         }
 
-        Assert.Equal(
-            "1",
-            await ScalarStringAsync(
-                connectionString,
-                "SELECT result::text FROM type_roles;",
-                cancellationToken: CancellationToken.None));
+        Assert.Equal("1", storedResult);
     }
 
     /// <summary>Metadata-only proof types cannot resolve to application domains on the active path.</summary>
@@ -420,20 +422,20 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
         report.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
+        var resultColumns = await ScalarIntAsync(
+            connectionString,
+            """
+            SELECT COUNT(*) FROM pg_catalog.pg_attribute WHERE attrelid = 'metadata_type_binding'::regclass
+            AND attname = 'result' AND NOT attisdropped;
+            """,
+            cancellationToken: CancellationToken.None);
+
         // Assert
         Assert.Equal(SafeMigrationAction.Apply,
             Assert.Single(report.Assessments)
                 .Action);
 
-        Assert.Equal(
-            1,
-            await ScalarIntAsync(
-                connectionString,
-                """
-                SELECT COUNT(*) FROM pg_catalog.pg_attribute WHERE attrelid = 'metadata_type_binding'::regclass
-                AND attname = 'result' AND NOT attisdropped;
-                """,
-                cancellationToken: CancellationToken.None));
+        Assert.Equal(1, resultColumns);
     }
 
     /// <summary>Unrepresented unary-plus roles cannot alias a plain generated member or execute an overload.</summary>
@@ -503,6 +505,19 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
             builder.Operations,
             CancellationToken.None));
 
+        var resultColumns = await ScalarIntAsync(
+            connectionString,
+            """
+            SELECT COUNT(*) FROM pg_catalog.pg_attribute WHERE attrelid = 'unary_binding'::regclass
+            AND attname = 'result' AND NOT attisdropped;
+            """,
+            cancellationToken: CancellationToken.None);
+
+        var storedValue = await ScalarIntAsync(
+            connectionString,
+            "SELECT value FROM unary_binding;",
+            cancellationToken: CancellationToken.None);
+
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationAction.RejectUnsupported,
@@ -518,20 +533,9 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
             existing
                 ? 1
                 : 0,
-            await ScalarIntAsync(
-                connectionString,
-                """
-                SELECT COUNT(*) FROM pg_catalog.pg_attribute WHERE attrelid = 'unary_binding'::regclass
-                AND attname = 'result' AND NOT attisdropped;
-                """,
-                cancellationToken: CancellationToken.None));
+            resultColumns);
 
-        Assert.Equal(
-            7,
-            await ScalarIntAsync(
-                connectionString,
-                "SELECT value FROM unary_binding;",
-                cancellationToken: CancellationToken.None));
+        Assert.Equal(7, storedValue);
     }
 
     /// <summary>Uncertified quoted function roles cannot alias a differently named builtin.</summary>
@@ -578,6 +582,11 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
                 new SafeMigrationRunOptions("generated-quoted-function-identity"),
                 CancellationToken.None);
 
+        var storedResult = await ScalarStringAsync(
+            connectionString,
+            "SELECT result FROM quoted_function;",
+            cancellationToken: CancellationToken.None);
+
         // Assert
         Assert.Equal(SafeMigrationAction.RejectUnsupported,
             Assert.Single(report.Assessments)
@@ -587,10 +596,7 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
             sameFunction
                 ? "ABC"
                 : "abc",
-            await ScalarStringAsync(
-                connectionString,
-                "SELECT result FROM quoted_function;",
-                cancellationToken: CancellationToken.None));
+            storedResult);
     }
 
     /// <summary>Capturing a function never executes an application overload while establishing its proof.</summary>
@@ -679,17 +685,13 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
                 new SafeMigrationRunOptions("captured-function-native-binding"),
                 CancellationToken.None);
 
-        PostgresException? rejection = null;
-        if (shadowed)
-        {
-            rejection = await Assert.ThrowsAsync<PostgresException>(() =>
-                ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
-        }
-        else
+        if (!shadowed)
         {
             report.ThrowIfBlocked();
-            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         }
+
+        var rejection = await Record.ExceptionAsync(() =>
+            ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
 
         // Assert
         Assert.Equal(
@@ -706,11 +708,16 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
             Assert.Single(report.Assessments)
                 .AnalysisCode);
 
-        Assert.Equal(
-            shadowed
-                ? "P1002"
-                : null,
-            rejection?.SqlState);
+        if (shadowed)
+        {
+            Assert.Equal("P1002",
+                Assert.IsType<PostgresException>(rejection)
+                    .SqlState);
+        }
+        else
+        {
+            Assert.Null(rejection);
+        }
     }
 
     /// <summary>Native generated-column immutability is required before a newly parsed capture is applicable.</summary>
@@ -748,26 +755,29 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
                 new SafeMigrationRunOptions("captured-generated-immutability"),
                 CancellationToken.None);
 
-        var native = await Assert.ThrowsAsync<PostgresException>(() => ExecuteSqlAsync(
+        var nativeFailure = await Record.ExceptionAsync(() => ExecuteSqlAsync(
             connectionString,
             $"ALTER TABLE generated_clock ADD COLUMN result timestamptz GENERATED ALWAYS AS ({source}) STORED;",
             cancellationToken: CancellationToken.None));
+
+        var resultColumns = await ScalarIntAsync(
+            connectionString,
+            """
+            SELECT COUNT(*) FROM pg_catalog.pg_attribute WHERE attrelid = 'generated_clock'::regclass
+            AND attname = 'result' AND NOT attisdropped;
+            """,
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationAction.RejectUnsupported,
             Assert.Single(report.Assessments)
                 .Action);
 
-        Assert.Equal("42P17", native.SqlState);
-        Assert.Equal(
-            0,
-            await ScalarIntAsync(
-                connectionString,
-                """
-                SELECT COUNT(*) FROM pg_catalog.pg_attribute WHERE attrelid = 'generated_clock'::regclass
-                AND attname = 'result' AND NOT attisdropped;
-                """,
-                cancellationToken: CancellationToken.None));
+        Assert.Equal("42P17",
+            Assert.IsType<PostgresException>(nativeFailure)
+                .SqlState);
+
+        Assert.Equal(0, resultColumns);
     }
 
     /// <summary>Operator lookup cannot execute an application overload during captured-source analysis.</summary>
@@ -851,17 +861,13 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
                 new SafeMigrationRunOptions("captured-operator-native-binding"),
                 CancellationToken.None);
 
-        PostgresException? rejection = null;
-        if (shadowed)
-        {
-            rejection = await Assert.ThrowsAsync<PostgresException>(() =>
-                ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
-        }
-        else
+        if (!shadowed)
         {
             report.ThrowIfBlocked();
-            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         }
+
+        var rejection = await Record.ExceptionAsync(() =>
+            ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
 
         // Assert
         Assert.Equal(
@@ -871,11 +877,16 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
             Assert.Single(report.Assessments)
                 .Action);
 
-        Assert.Equal(
-            shadowed
-                ? "P1002"
-                : null,
-            rejection?.SqlState);
+        if (shadowed)
+        {
+            Assert.Equal("P1002",
+                Assert.IsType<PostgresException>(rejection)
+                    .SqlState);
+        }
+        else
+        {
+            Assert.Null(rejection);
+        }
     }
 
     /// <summary>Assignment coercions belong to the generated contract, not only to its inner expression.</summary>
@@ -951,17 +962,17 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
                 new SafeMigrationRunOptions("captured-generated-assignment-replay"),
                 CancellationToken.None);
 
+        var storedResult = await ScalarStringAsync(
+            connectionString,
+            "SELECT result::text FROM assignment_binding;",
+            cancellationToken: CancellationToken.None);
+
         // Assert
         Assert.Equal(SafeMigrationAction.NoOp,
             Assert.Single(replay.Assessments)
                 .Action);
 
-        Assert.Equal(
-            value,
-            await ScalarStringAsync(
-                connectionString,
-                "SELECT result::text FROM assignment_binding;",
-                cancellationToken: CancellationToken.None));
+        Assert.Equal(value, storedResult);
     }
 
     /// <summary>A UUID certificate cannot authorize malformed input or a different physical target type.</summary>
@@ -1058,6 +1069,11 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
                 new SafeMigrationRunOptions("generated-source-identifier-dialect"),
                 CancellationToken.None);
 
+        var storedResult = await ScalarStringAsync(
+            connectionString,
+            "SELECT result::text FROM quoted_identifier;",
+            cancellationToken: CancellationToken.None);
+
         // Assert
         Assert.Equal(
             native
@@ -1066,12 +1082,7 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
             Assert.Single(report.Assessments)
                 .Action);
 
-        Assert.Equal(
-            "true",
-            await ScalarStringAsync(
-                connectionString,
-                "SELECT result::text FROM quoted_identifier;",
-                cancellationToken: CancellationToken.None));
+        Assert.Equal("true", storedResult);
     }
 
     /// <summary>Identifier dialect qualification never treats string literal contents as identifier tokens.</summary>
@@ -1114,17 +1125,17 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
                 new SafeMigrationRunOptions("generated-literal-delimiter-replay"),
                 CancellationToken.None);
 
+        var storedResult = await ScalarStringAsync(
+            connectionString,
+            "SELECT result FROM literal_delimiters;",
+            cancellationToken: CancellationToken.None);
+
         // Assert
         Assert.Equal(SafeMigrationAction.NoOp,
             Assert.Single(replay.Assessments)
                 .Action);
 
-        Assert.Equal(
-            "`[x]`",
-            await ScalarStringAsync(
-                connectionString,
-                "SELECT result FROM literal_delimiters;",
-                cancellationToken: CancellationToken.None));
+        Assert.Equal("`[x]`", storedResult);
     }
 
     /// <summary>Native folded references retain exact original capture keys through sparse CHECK promotion.</summary>
@@ -1253,6 +1264,11 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
                 new SafeMigrationRunOptions("generated-original-numeric-source-replay"),
                 CancellationToken.None);
 
+        var storedResult = await ScalarStringAsync(
+            connectionString,
+            "SELECT result::text FROM numeric_source;",
+            cancellationToken: CancellationToken.None);
+
         // Assert
         Assert.Equal(
             adopt
@@ -1265,12 +1281,7 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
             Assert.Single(replay.Assessments)
                 .Action);
 
-        Assert.Equal(
-            value,
-            await ScalarStringAsync(
-                connectionString,
-                "SELECT result::text FROM numeric_source;",
-                cancellationToken: CancellationToken.None));
+        Assert.Equal(value, storedResult);
     }
 
     /// <summary>Neighboring numeric sources cannot alias through an identical CLR double approximation.</summary>
@@ -1307,21 +1318,24 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
                 new SafeMigrationRunOptions("generated-numeric-source-drift"),
                 CancellationToken.None);
 
-        var exception = await Assert.ThrowsAsync<PostgresException>(() =>
+        var failure = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
+
+        var storedResult = await ScalarStringAsync(
+            connectionString,
+            "SELECT result::text FROM numeric_source;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationAction.RejectDifferent,
             Assert.Single(report.Assessments)
                 .Action);
 
-        Assert.Equal("P1001", exception.SqlState);
-        Assert.Equal(
-            "9007199254740992",
-            await ScalarStringAsync(
-                connectionString,
-                "SELECT result::text FROM numeric_source;",
-                cancellationToken: CancellationToken.None));
+        Assert.Equal("P1001",
+            Assert.IsType<PostgresException>(failure)
+                .SqlState);
+
+        Assert.Equal("9007199254740992", storedResult);
     }
 
     /// <summary>Native numeric common-type coercions remain visible in captured CASE predicates.</summary>
@@ -1373,17 +1387,17 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
                 new SafeMigrationRunOptions("generated-native-numeric-case-replay"),
                 CancellationToken.None);
 
+        var storedResult = await ScalarStringAsync(
+            connectionString,
+            "SELECT result::text FROM numeric_case;",
+            cancellationToken: CancellationToken.None);
+
         // Assert
         Assert.Equal(SafeMigrationAction.NoOp,
             Assert.Single(replay.Assessments)
                 .Action);
 
-        Assert.Equal(
-            "true",
-            await ScalarStringAsync(
-                connectionString,
-                "SELECT result::text FROM numeric_case;",
-                cancellationToken: CancellationToken.None));
+        Assert.Equal("true", storedResult);
     }
 
     /// <summary>Only an absent CASE CHECK may be rebound after an accepted source-type replacement.</summary>
@@ -1530,6 +1544,11 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
             await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         }
 
+        var constraintCount = await ScalarIntAsync(
+            connectionString,
+            "SELECT count(*) FROM pg_catalog.pg_constraint WHERE conname = 'ck_case';",
+            cancellationToken: CancellationToken.None);
+
         // Assert
         Assert.Equal(
             valid
@@ -1548,9 +1567,6 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
             valid
                 ? 1
                 : 0,
-            await ScalarIntAsync(
-                connectionString,
-                "SELECT count(*) FROM pg_catalog.pg_constraint WHERE conname = 'ck_case';",
-                cancellationToken: CancellationToken.None));
+            constraintCount);
     }
 }

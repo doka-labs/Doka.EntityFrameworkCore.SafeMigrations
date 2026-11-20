@@ -1,8 +1,7 @@
-using System.Collections.ObjectModel;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations;
 
 /// <summary>Contains one provider's immutable live-state classification.</summary>
+[PublicAPI]
 public sealed class SafeMigrationProviderAnalysis
 {
     private SafeMigrationIndexPhysicalEnvironment? _indexPhysicalEnvironment;
@@ -19,6 +18,9 @@ public sealed class SafeMigrationProviderAnalysis
     /// <param name="repairCapability">The provider-proven repair capability.</param>
     /// <param name="postconditionSatisfied">Whether the operation's final target condition currently holds.</param>
     /// <param name="code">The stable low-cardinality result code.</param>
+
+    // WHY: Both published constructor signatures remain binary-compatible; optional parameters cannot replace one.
+    // ReSharper disable once IntroduceOptionalParameters.Global
     public SafeMigrationProviderAnalysis(
         SafeMigrationObservedState observedState,
         SafeMigrationRepairCapability repairCapability,
@@ -361,7 +363,12 @@ public sealed class SafeMigrationProviderAnalysis
         IEnumerable<SafeMigrationFacetDifference> differences
     )
     {
+        // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+        // ReSharper disable once UseCollectionExpression
         var snapshot = differences.ToArray();
+
+        // WHY: Runtime callers can violate element annotations; reject nulls before diagnostics are retained.
+        // ReSharper disable once ConditionIsAlwaysTrueOrFalseAccordingToNullableAPIContract
         if (snapshot.Any(static difference => difference is null))
         {
             throw new ArgumentException("Differences cannot contain null values.", nameof(differences));

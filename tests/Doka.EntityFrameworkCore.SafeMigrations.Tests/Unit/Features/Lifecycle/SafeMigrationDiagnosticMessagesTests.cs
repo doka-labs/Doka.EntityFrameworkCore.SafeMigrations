@@ -479,7 +479,7 @@ public sealed class SafeMigrationDiagnosticMessagesTests
         // Assert
         Assert.InRange(message.Length, 1, 2048);
         Assert.All(message, character => Assert.InRange(character, ' ', '~'));
-        Assert.Contains("\\u000D\\u000A\\u001B", message, StringComparison.Ordinal);
+        Assert.Contains(@"\u000D\u000A\u001B", message, StringComparison.Ordinal);
         Assert.Contains("\\u20AC", message, StringComparison.Ordinal);
         Assert.Contains("...", message, StringComparison.Ordinal);
         Assert.Contains("reason=", message, StringComparison.Ordinal);
@@ -545,7 +545,7 @@ public sealed class SafeMigrationDiagnosticMessagesTests
     [InlineData("Items", "Items")]
     [InlineData("Items\n", "Items\\u000A")]
     [InlineData("\u20AC", "\\u20AC")]
-    [InlineData("\\", "\\\\")]
+    [InlineData("\\", @"\\")]
     public void IdentifierDisplayEscapesWithoutGuessingOrPayloadInterpretation(
         string source,
         string expected

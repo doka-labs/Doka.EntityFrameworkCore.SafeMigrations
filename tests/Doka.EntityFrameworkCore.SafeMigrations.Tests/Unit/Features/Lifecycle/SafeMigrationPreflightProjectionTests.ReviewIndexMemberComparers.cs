@@ -179,21 +179,33 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     }
 
     /// <summary>Isolates physical owner identity from explicitly opted-in native member comparisons.</summary>
-    private sealed class ReviewIndexMemberNormalizer(
-        bool insensitiveIndexes = false,
-        bool insensitiveColumns = false
-    ) : ISafeMigrationProviderObjectIdentityNormalizer
+    private sealed class ReviewIndexMemberNormalizer : ISafeMigrationProviderObjectIdentityNormalizer
     {
+        private readonly bool _insensitiveColumns;
+        private readonly bool _insensitiveIndexes;
+
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="insensitiveIndexes">The supplied insensitive indexes for this fixture.</param>
+        /// <param name="insensitiveColumns">The supplied insensitive columns for this fixture.</param>
+        public ReviewIndexMemberNormalizer(
+            bool insensitiveIndexes = false,
+            bool insensitiveColumns = false
+        )
+        {
+            _insensitiveIndexes = insensitiveIndexes;
+            _insensitiveColumns = insensitiveColumns;
+        }
+
         /// <inheritdoc />
         public StringComparer IdentifierComparer => StringComparer.Ordinal;
 
         /// <inheritdoc />
-        public StringComparer IndexIdentifierComparer => insensitiveIndexes
+        public StringComparer IndexIdentifierComparer => _insensitiveIndexes
             ? StringComparer.OrdinalIgnoreCase
             : StringComparer.Ordinal;
 
         /// <inheritdoc />
-        public StringComparer ColumnIdentifierComparer => insensitiveColumns
+        public StringComparer ColumnIdentifierComparer => _insensitiveColumns
             ? StringComparer.OrdinalIgnoreCase
             : StringComparer.Ordinal;
 

@@ -212,6 +212,8 @@ internal sealed class SafeMigrationMigrationsModelDiffer : IMigrationsModelDiffe
 
             ValidateTypes(columns, existingTypes, table, context);
 
+            // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+            // ReSharper disable once UseCollectionExpression
             return existingTypes.ToArray();
         }
 
@@ -223,6 +225,9 @@ internal sealed class SafeMigrationMigrationsModelDiffer : IMigrationsModelDiffe
                     $"SafeMigrations could not resolve {context} column "
                     + $"'{SafeMigrationDiagnosticMessages.BoundForDisplay(column)}' in relational table "
                     + $"{DisplayTable(table.Name, table.Schema)}. Check the source and target column mappings."))
+
+            // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
     }
 
@@ -340,7 +345,7 @@ internal sealed class SafeMigrationMigrationsModelDiffer : IMigrationsModelDiffe
         string[] managedColumns
     )
     {
-        var keys = new List<ExpectedModelManagedDataUniqueKeyDefinition>();
+        List<ExpectedModelManagedDataUniqueKeyDefinition> keys = [];
         foreach (var constraint in table.UniqueConstraints)
         {
             if (ReferenceEquals(constraint, table.PrimaryKey))
@@ -352,6 +357,10 @@ internal sealed class SafeMigrationMigrationsModelDiffer : IMigrationsModelDiffe
                 constraint
                     .Columns
                     .Select(static column => column.Name)
+
+                    // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based
+                    // materialization.
+                    // ReSharper disable once UseCollectionExpression
                     .ToArray(),
                 managedColumns);
         }
@@ -362,12 +371,19 @@ internal sealed class SafeMigrationMigrationsModelDiffer : IMigrationsModelDiffe
                 index
                     .Columns
                     .Select(static column => column.Name)
+
+                    // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based
+                    // materialization.
+                    // ReSharper disable once UseCollectionExpression
                     .ToArray(),
                 managedColumns);
         }
 
         return keys
             .DistinctBy(static key => string.Join("\u001f", key.Columns), StringComparer.Ordinal)
+
+            // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
     }
 
@@ -385,6 +401,9 @@ internal sealed class SafeMigrationMigrationsModelDiffer : IMigrationsModelDiffe
         var columns = primaryKey
             .Columns
             .Select(static column => column.Name)
+
+            // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         if (columns.Any(column => !managedColumns.Contains(column, StringComparer.Ordinal)))
@@ -400,6 +419,10 @@ internal sealed class SafeMigrationMigrationsModelDiffer : IMigrationsModelDiffe
             primaryKey
                 .Columns
                 .Select(static column => column.StoreType)
+
+                // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based
+                // materialization.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray());
     }
 
@@ -429,5 +452,8 @@ internal sealed class SafeMigrationMigrationsModelDiffer : IMigrationsModelDiffe
             foreignKey.Columns.Select(static column => column.Name),
             foreignKey.PrincipalColumns.Select(static column => column.Name),
             foreignKey.Table.Schema))
+
+        // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+        // ReSharper disable once UseCollectionExpression
         .ToArray();
 }

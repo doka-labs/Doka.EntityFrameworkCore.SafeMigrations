@@ -40,6 +40,8 @@ internal sealed class SqliteDiagnosticMigrationContext : DbContext
 /// <summary>Adds a required column without a replacement to exercise managed runtime rejection.</summary>
 [DbContext(typeof(SqliteDiagnosticMigrationContext))]
 [Migration(MigrationIdentifier)]
+// WHY: EF migration discovery constructs this fixture from its attributed migration identity.
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public sealed class SqliteDiagnosticGuardMigration : Migration
 {
     /// <summary>Gets the EF-valid isolated fixture identity.</summary>

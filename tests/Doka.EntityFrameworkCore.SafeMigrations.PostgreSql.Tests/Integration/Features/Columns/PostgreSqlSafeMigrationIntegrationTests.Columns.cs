@@ -9,9 +9,11 @@ public sealed class PostgreSqlColumnsIntegrationTests : PostgreSqlSafeMigrationI
         PostgreSqlContainerFixture fixture
     ) : base(fixture) { }
 
+    /// <summary>Null Collation Means Provider Inferred Default And Never Wildcard.</summary>
     [Fact]
     public async Task NullCollation_MeansProviderInferredDefaultAndNeverWildcard()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -31,6 +33,7 @@ public sealed class PostgreSqlColumnsIntegrationTests : PostgreSqlSafeMigrationI
             new ExpectedColumnDefinition("explicit", typeof(string), true, "text"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
+        // Act
         var inheritedReport = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -47,6 +50,7 @@ public sealed class PostgreSqlColumnsIntegrationTests : PostgreSqlSafeMigrationI
                 new SafeMigrationRunOptions("explicit-collation"),
                 CancellationToken.None);
 
+        // Assert
         Assert.Equal(
             SafeMigrationObservedState.Matching,
             Assert.Single(inheritedReport.Assessments)
@@ -58,9 +62,11 @@ public sealed class PostgreSqlColumnsIntegrationTests : PostgreSqlSafeMigrationI
                 .ObservedState);
     }
 
+    /// <summary>Unsafe Not Null Add Fails Before Target Ddl.</summary>
     [Fact]
     public async Task UnsafeNotNullAdd_FailsBeforeTargetDdl()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -71,12 +77,15 @@ public sealed class PostgreSqlColumnsIntegrationTests : PostgreSqlSafeMigrationI
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExists<int>("sequence", "orders", type: "integer", nullable: false);
 
-        var exception =
-            await Assert.ThrowsAsync<PostgresException>(() => ExecuteOperationsAsync(
+        // Act
+        var failure =
+            await Record.ExceptionAsync(() => ExecuteOperationsAsync(
                 context,
                 builder.Operations,
                 CancellationToken.None));
 
+        // Assert
+        var exception = Assert.IsType<PostgresException>(failure);
         Assert.Equal("P1003", exception.SqlState);
         Assert.Equal(
             0,
@@ -90,111 +99,102 @@ public sealed class PostgreSqlColumnsIntegrationTests : PostgreSqlSafeMigrationI
                 cancellationToken: CancellationToken.None));
     }
 
-    [Fact]
-    public async Task RepairIfSafe_RequiresTheLiveColumnToMatchTheDeclaredOldDefinition()
+    /// <summary>Only an exact declared old definition permits a column repair.</summary>
+    /// <param name="oldDefinitionMatches">Whether the declared old width matches the native column.</param>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task RepairIfSafe_RequiresTheLiveColumnToMatchTheDeclaredOldDefinition(
+        bool oldDefinitionMatches
+    )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
+        var actualWidth = oldDefinitionMatches
+            ? 40
+            : 30;
+
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE repair_guard ("
-            + "safe_value character varying(40) NULL, "
-            + "drifted_value character varying(30) NULL);",
+            $"CREATE TABLE repair_guard (value character varying({actualWidth}) NULL);",
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var declaredOld = new ExpectedColumnDefinition(
-            "safe_value",
+            "value",
             typeof(string),
             isNullable: true,
             storeType: "character varying(40)",
             maxLength: 40);
 
         var target = new ExpectedColumnDefinition(
-            "safe_value",
+            "value",
             typeof(string),
             isNullable: true,
             storeType: "character varying(40)",
             maxLength: 40,
             comment: "approved repair");
 
-        var safeRepair = new MigrationBuilder(context.Database.ProviderName!);
-        safeRepair.AlterColumnIfDifferent("repair_guard", target, declaredOld, SafeMigrationPolicy.RepairIfSafe);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.AlterColumnIfDifferent("repair_guard", target, declaredOld, SafeMigrationPolicy.RepairIfSafe);
+        var runner = context.GetService<ISafeMigrationRunner>();
 
-        await ExecuteOperationsAsync(context, safeRepair.Operations, CancellationToken.None);
-        await ExecuteOperationsAsync(context, safeRepair.Operations, CancellationToken.None);
+        // Act
+        var report = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("declared-old-repair"),
+            CancellationToken.None);
 
-        Assert.Equal(
-            "approved repair",
-            await ScalarStringAsync(
-                connectionString,
-                """
-                SELECT pg_catalog.col_description(c.oid, a.attnum)
-                FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-                JOIN pg_catalog.pg_attribute a ON a.attrelid = c.oid
-                WHERE n.nspname = current_schema()
-                AND c.relname = 'repair_guard'
-                AND a.attname = 'safe_value';
-                """,
-                cancellationToken: CancellationToken.None));
+        var failure = await Record.ExceptionAsync(async () =>
+        {
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        });
 
-        var driftedOld = new ExpectedColumnDefinition(
-            "drifted_value",
-            typeof(string),
-            isNullable: true,
-            storeType: "character varying(40)",
-            maxLength: 40);
-
-        var driftedTarget = new ExpectedColumnDefinition(
-            "drifted_value",
-            typeof(string),
-            isNullable: true,
-            storeType: "character varying(40)",
-            maxLength: 40,
-            comment: "must not land");
-
-        var blockedRepair = new MigrationBuilder(context.Database.ProviderName!);
-        blockedRepair.AlterColumnIfDifferent(
-            "repair_guard",
-            driftedTarget,
-            driftedOld,
-            SafeMigrationPolicy.RepairIfSafe);
-
-        var report = await context
-            .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(
-                context,
-                blockedRepair.Operations,
-                new SafeMigrationRunOptions("test-instance"),
-                CancellationToken.None);
-
+        // Assert
         var assessment = Assert.Single(report.Assessments);
-        Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
-        Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
-        var exception =
-            await Assert.ThrowsAsync<PostgresException>(() => ExecuteOperationsAsync(
-                context,
-                blockedRepair.Operations,
-                CancellationToken.None));
-
-        Assert.Equal("P1001", exception.SqlState);
-        Assert.Equal(
-            30,
+        Assert.Equal(actualWidth,
             await ScalarIntAsync(
                 connectionString,
                 """
-                SELECT character_maximum_length
-                FROM information_schema.columns
-                WHERE table_schema = current_schema()
-                AND table_name = 'repair_guard'
-                AND column_name = 'drifted_value';
+                SELECT character_maximum_length FROM information_schema.columns
+                WHERE table_schema = current_schema() AND table_name = 'repair_guard' AND column_name = 'value';
                 """,
                 cancellationToken: CancellationToken.None));
+
+        if (oldDefinitionMatches)
+        {
+            Assert.Null(failure);
+            Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
+            Assert.Equal(SafeMigrationAction.Repair, assessment.Action);
+            Assert.Equal("approved repair",
+                await ScalarStringAsync(
+                    connectionString,
+                    """
+                    SELECT pg_catalog.col_description(c.oid, a.attnum)
+                    FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+                    JOIN pg_catalog.pg_attribute a ON a.attrelid = c.oid
+                    WHERE n.nspname = current_schema() AND c.relname = 'repair_guard' AND a.attname = 'value';
+                    """,
+                    cancellationToken: CancellationToken.None));
+        }
+        else
+        {
+            Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
+            Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
+            Assert.Equal("P1001",
+                Assert.IsType<PostgresException>(failure)
+                    .SqlState);
+        }
     }
 
+    /// <summary>Legacy Convergence Repair Repairs Mutable Column Drift And Is Idempotent.</summary>
     [Fact]
     public async Task LegacyConvergenceRepair_RepairsMutableColumnDriftAndIsIdempotent()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -219,6 +219,7 @@ public sealed class PostgreSqlColumnsIntegrationTests : PostgreSqlSafeMigrationI
                 defaultValue: SafeMigrationDefaultValue.Literal("canonical")),
             SafeMigrationPolicy.RepairIfSafe);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -237,15 +238,6 @@ public sealed class PostgreSqlColumnsIntegrationTests : PostgreSqlSafeMigrationI
                     .ToArray(),
                 CancellationToken.None);
 
-        var assessment = Assert.Single(report.Assessments);
-        var providerAssessment = Assert.Single(providerAnalysis);
-
-        Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
-        Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
-        Assert.Equal(SafeMigrationAction.Repair, assessment.Action);
-        Assert.Equal(SafeMigrationOperationalImpact.TableRewritePossible, assessment.OperationalImpact);
-        Assert.True(providerAssessment.RequiresLiveDataProof);
-
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         var rerun = await context
@@ -256,16 +248,26 @@ public sealed class PostgreSqlColumnsIntegrationTests : PostgreSqlSafeMigrationI
                 new SafeMigrationRunOptions("legacy-repair-rerun"),
                 CancellationToken.None);
 
-        var rerunAssessment = Assert.Single(rerun.Assessments);
-
-        Assert.Equal(SafeMigrationObservedState.Matching, rerunAssessment.ObservedState);
-        Assert.Equal(SafeMigrationAction.NoOp, rerunAssessment.Action);
-
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "INSERT INTO legacy_repair DEFAULT VALUES;",
             cancellationToken: CancellationToken.None);
+
+        // Assert
+        var assessment = Assert.Single(report.Assessments);
+        var providerAssessment = Assert.Single(providerAnalysis);
+
+        Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
+        Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
+        Assert.Equal(SafeMigrationAction.Repair, assessment.Action);
+        Assert.Equal(SafeMigrationOperationalImpact.TableRewritePossible, assessment.OperationalImpact);
+        Assert.True(providerAssessment.RequiresLiveDataProof);
+
+        var rerunAssessment = Assert.Single(rerun.Assessments);
+
+        Assert.Equal(SafeMigrationObservedState.Matching, rerunAssessment.ObservedState);
+        Assert.Equal(SafeMigrationAction.NoOp, rerunAssessment.Action);
 
         Assert.Equal(
             1,
@@ -301,9 +303,11 @@ public sealed class PostgreSqlColumnsIntegrationTests : PostgreSqlSafeMigrationI
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Legacy Convergence Repair Nullability Tightening With Null Rows Is Data Blocked.</summary>
     [Fact]
     public async Task LegacyConvergenceRepair_NullabilityTighteningWithNullRowsIsDataBlocked()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -327,6 +331,7 @@ public sealed class PostgreSqlColumnsIntegrationTests : PostgreSqlSafeMigrationI
                 comment: "must not land"),
             SafeMigrationPolicy.RepairIfSafe);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -345,9 +350,11 @@ public sealed class PostgreSqlColumnsIntegrationTests : PostgreSqlSafeMigrationI
                     .ToArray(),
                 CancellationToken.None);
 
-        var exception = await Assert.ThrowsAsync<PostgresException>(() =>
+        var failure = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
 
+        // Assert
+        var exception = Assert.IsType<PostgresException>(failure);
         var assessment = Assert.Single(report.Assessments);
         var providerAssessment = Assert.Single(providerAnalysis);
 
@@ -384,9 +391,11 @@ public sealed class PostgreSqlColumnsIntegrationTests : PostgreSqlSafeMigrationI
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Legacy Convergence Repair Invariant Type Drift Rejects Without Mutation.</summary>
     [Fact]
     public async Task LegacyConvergenceRepair_InvariantTypeDriftRejectsWithoutMutation()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -407,6 +416,7 @@ public sealed class PostgreSqlColumnsIntegrationTests : PostgreSqlSafeMigrationI
                 comment: "must not land"),
             SafeMigrationPolicy.RepairIfSafe);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -415,9 +425,11 @@ public sealed class PostgreSqlColumnsIntegrationTests : PostgreSqlSafeMigrationI
                 new SafeMigrationRunOptions("legacy-type-drift"),
                 CancellationToken.None);
 
-        var exception = await Assert.ThrowsAsync<PostgresException>(() =>
+        var failure = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
 
+        // Assert
+        var exception = Assert.IsType<PostgresException>(failure);
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
@@ -451,9 +463,11 @@ public sealed class PostgreSqlColumnsIntegrationTests : PostgreSqlSafeMigrationI
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Unmapped Clr Type Is Classified Unsupported Before Ddl.</summary>
     [Fact]
     public async Task UnmappedClrType_IsClassifiedUnsupportedBeforeDdl()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -467,6 +481,7 @@ public sealed class PostgreSqlColumnsIntegrationTests : PostgreSqlSafeMigrationI
             new ExpectedColumnDefinition("unmapped_value", typeof(UnmappedValue), true),
             SafeMigrationPolicy.ThrowIfDifferent);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -475,6 +490,7 @@ public sealed class PostgreSqlColumnsIntegrationTests : PostgreSqlSafeMigrationI
                 new SafeMigrationRunOptions("test-instance"),
                 CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(
             SafeMigrationObservedState.Unsupported,
@@ -494,9 +510,11 @@ public sealed class PostgreSqlColumnsIntegrationTests : PostgreSqlSafeMigrationI
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Computed Collation And Comment Facets Converge And Detect Single Field Drift.</summary>
     [Fact]
     public async Task ComputedCollationAndCommentFacets_ConvergeAndDetectSingleFieldDrift()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -528,9 +546,6 @@ public sealed class PostgreSqlColumnsIntegrationTests : PostgreSqlSafeMigrationI
                 computedExpression: SqlColumnAndColumn("a", SafeMigrationSqlBinaryOperator.Add, "b")),
             SafeMigrationPolicy.ThrowIfDifferent);
 
-        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-
         var mismatch = new MigrationBuilder(context.Database.ProviderName!);
         mismatch.EnsureColumn(
             "advanced_columns",
@@ -544,6 +559,10 @@ public sealed class PostgreSqlColumnsIntegrationTests : PostgreSqlSafeMigrationI
                 comment: "different"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
+        // Act
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -552,6 +571,7 @@ public sealed class PostgreSqlColumnsIntegrationTests : PostgreSqlSafeMigrationI
                 new SafeMigrationRunOptions("test-instance"),
                 CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(
             SafeMigrationObservedState.Different,
@@ -559,9 +579,11 @@ public sealed class PostgreSqlColumnsIntegrationTests : PostgreSqlSafeMigrationI
                 .ObservedState);
     }
 
+    /// <summary>Virtual Generated Column Is Classified Unsupported Before Ddl.</summary>
     [Fact]
     public async Task VirtualGeneratedColumn_IsClassifiedUnsupportedBeforeDdl()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -581,6 +603,7 @@ public sealed class PostgreSqlColumnsIntegrationTests : PostgreSqlSafeMigrationI
                 computedExpression: SqlColumnAndInt("a", SafeMigrationSqlBinaryOperator.Add, 1)),
             SafeMigrationPolicy.ThrowIfDifferent);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -589,6 +612,7 @@ public sealed class PostgreSqlColumnsIntegrationTests : PostgreSqlSafeMigrationI
                 new SafeMigrationRunOptions("test-instance"),
                 CancellationToken.None);
 
+        // Assert
         Assert.Equal(
             SafeMigrationObservedState.Unsupported,
             Assert.Single(report.Assessments)
@@ -607,9 +631,21 @@ public sealed class PostgreSqlColumnsIntegrationTests : PostgreSqlSafeMigrationI
                 cancellationToken: CancellationToken.None));
     }
 
-    [Fact]
-    public async Task LiteralDefaultMatrix_ConvergesAndIsIdempotent()
+    /// <summary>Provides independently discoverable native literal-default cases.</summary>
+    public static IEnumerable<object[]> LiteralDefaultCases() => CreateLiteralDefaultDefinitions()
+        .Select(static (definition, index) => new object[] { index, definition.Name });
+
+    /// <summary>Each literal default converges, preserves its catalog definition, and replays as a no-op.</summary>
+    /// <param name="definitionIndex">The selected definition in the complete literal contract matrix.</param>
+    /// <param name="columnName">The discoverable native column identity.</param>
+    [Theory]
+    [MemberData(nameof(LiteralDefaultCases))]
+    public async Task LiteralDefaultMatrix_ConvergesAndIsIdempotent(
+        int definitionIndex,
+        string columnName
+    )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -617,8 +653,90 @@ public sealed class PostgreSqlColumnsIntegrationTests : PostgreSqlSafeMigrationI
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
-        var definitions = new[]
+        var definition = CreateLiteralDefaultDefinitions()[definitionIndex];
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.EnsureColumn("default_values", definition, SafeMigrationPolicy.ThrowIfDifferent);
+        var runner = context.GetService<ISafeMigrationRunner>();
+
+        // Act
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("default-matrix"),
+            CancellationToken.None);
+
+        try
         {
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        }
+        catch (Exception exception)
+        {
+            var catalog = await DescribeColumnAsync(
+                connectionString,
+                definition.Name,
+                cancellationToken: CancellationToken.None);
+
+            throw new InvalidOperationException(
+                $"Literal default failed for '{definition.Name}'. Catalog: {catalog}",
+                exception);
+        }
+
+        var replay = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("default-matrix-replay"),
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(columnName, definition.Name);
+        Assert.Equal(SafeMigrationObservedState.Missing,
+            Assert.Single(preflight.Assessments)
+                .ObservedState);
+
+        Assert.Equal(SafeMigrationAction.NoOp,
+            Assert.Single(replay.Assessments)
+                .Action);
+
+        Assert.Equal(
+            2,
+            await ScalarIntAsync(
+                connectionString,
+                """
+                SELECT COUNT(*) FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                AND table_name = 'default_values';
+                """,
+                cancellationToken: CancellationToken.None));
+    }
+
+    /// <summary>The native fixture matrix covers every supported non-null literal CLR type.</summary>
+    [Fact]
+    public void LiteralDefaultMatrix_CoversTheCompleteLiteralContract()
+    {
+        // Arrange
+        var definitions = CreateLiteralDefaultDefinitions();
+        var expectedTypes = SafeMigrationLiteralContract.CreateSupportedNonNullTypes();
+
+        // Act
+        var coveredLiteralTypes = definitions
+            .Where(static definition => definition.DefaultValue.Kind == SafeMigrationDefaultValueKind.Literal)
+            .Select(static definition => definition.DefaultValue.LiteralValue)
+            .Where(static value => value is not null)
+            .Select(static value => value!.GetType())
+            .Distinct()
+            .OrderBy(static type => type.FullName, StringComparer.Ordinal)
+            .ToArray();
+
+        // Assert
+        Assert.Equal(expectedTypes, coveredLiteralTypes);
+    }
+
+    /// <summary>Builds fresh literal fixtures without sharing mutable values between discovered test cases.</summary>
+    private static ExpectedColumnDefinition[] CreateLiteralDefaultDefinitions()
+    {
+        return
+        [
             new ExpectedColumnDefinition(
                 "boolean_value",
                 typeof(bool),
@@ -799,60 +917,7 @@ public sealed class PostgreSqlColumnsIntegrationTests : PostgreSqlSafeMigrationI
                 precision: 6,
                 defaultValue: SafeMigrationDefaultValue.Sql(
                     SafeMigrationSql.Current(SafeMigrationSqlCurrentValue.Timestamp))),
-        };
-
-        var coveredLiteralTypes = definitions
-            .Where(static definition => definition.DefaultValue.Kind == SafeMigrationDefaultValueKind.Literal)
-            .Select(static definition => definition.DefaultValue.LiteralValue)
-            .Where(static value => value is not null)
-            .Select(static value => value!.GetType())
-            .Distinct()
-            .OrderBy(static type => type.FullName, StringComparer.Ordinal)
-            .ToArray();
-
-        foreach (var definition in definitions)
-        {
-            var builder = new MigrationBuilder(context.Database.ProviderName!);
-            builder.EnsureColumn("default_values", definition, SafeMigrationPolicy.ThrowIfDifferent);
-            var preflight = await context
-                .GetService<ISafeMigrationRunner>()
-                .AnalyzeAsync(
-                    context,
-                    builder.Operations,
-                    new SafeMigrationRunOptions("default-matrix"),
-                    CancellationToken.None);
-
-            var assessment = Assert.Single(preflight.Assessments);
-            Assert.Equal(SafeMigrationObservedState.Missing, assessment.ObservedState);
-            try
-            {
-                await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-                await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-            }
-            catch (Exception exception)
-            {
-                var catalog = await DescribeColumnAsync(
-                    connectionString,
-                    definition.Name,
-                    cancellationToken: CancellationToken.None);
-
-                throw new InvalidOperationException(
-                    $"Literal default failed for '{definition.Name}'. Catalog: {catalog}",
-                    exception);
-            }
-        }
-
-        Assert.Equal(SafeMigrationLiteralContract.CreateSupportedNonNullTypes(), coveredLiteralTypes);
-        Assert.Equal(
-            definitions.Length + 1,
-            await ScalarIntAsync(
-                connectionString,
-                """
-                SELECT COUNT(*) FROM information_schema.columns
-                WHERE table_schema = current_schema()
-                AND table_name = 'default_values';
-                """,
-                cancellationToken: CancellationToken.None));
+        ];
     }
 
     /// <summary>Reads the complete physical column description from the fixture catalog.</summary>

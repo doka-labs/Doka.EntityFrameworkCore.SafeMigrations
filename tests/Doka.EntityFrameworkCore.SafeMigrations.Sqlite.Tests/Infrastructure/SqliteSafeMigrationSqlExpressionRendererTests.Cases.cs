@@ -1,24 +1,27 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 
+/// <summary>
+/// Provides isolated SQLite coverage for safe migration SQL expression renderer.
+/// </summary>
 public sealed partial class SqliteSafeMigrationSqlExpressionRendererTests
 {
     /// <summary>Gets serializable operator cases shared by rendering and completeness tests.</summary>
-    public static IEnumerable<object[]> BinaryOperatorCases()
+    public static TheoryData<SafeMigrationSqlBinaryOperator, string> BinaryOperatorCases() => new()
     {
-        yield return [SafeMigrationSqlBinaryOperator.And, "(1 AND 2)"];
-        yield return [SafeMigrationSqlBinaryOperator.Or, "(1 OR 2)"];
-        yield return [SafeMigrationSqlBinaryOperator.Equal, "(1 = 2)"];
-        yield return [SafeMigrationSqlBinaryOperator.NotEqual, "(1 <> 2)"];
-        yield return [SafeMigrationSqlBinaryOperator.LessThan, "(1 < 2)"];
-        yield return [SafeMigrationSqlBinaryOperator.LessThanOrEqual, "(1 <= 2)"];
-        yield return [SafeMigrationSqlBinaryOperator.GreaterThan, "(1 > 2)"];
-        yield return [SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, "(1 >= 2)"];
-        yield return [SafeMigrationSqlBinaryOperator.Add, "(1 + 2)"];
-        yield return [SafeMigrationSqlBinaryOperator.Subtract, "(1 - 2)"];
-        yield return [SafeMigrationSqlBinaryOperator.Multiply, "(1 * 2)"];
-        yield return [SafeMigrationSqlBinaryOperator.Divide, "(1 / 2)"];
-        yield return [SafeMigrationSqlBinaryOperator.Modulo, "(1 % 2)"];
-    }
+        { SafeMigrationSqlBinaryOperator.And, "(1 AND 2)" },
+        { SafeMigrationSqlBinaryOperator.Or, "(1 OR 2)" },
+        { SafeMigrationSqlBinaryOperator.Equal, "(1 = 2)" },
+        { SafeMigrationSqlBinaryOperator.NotEqual, "(1 <> 2)" },
+        { SafeMigrationSqlBinaryOperator.LessThan, "(1 < 2)" },
+        { SafeMigrationSqlBinaryOperator.LessThanOrEqual, "(1 <= 2)" },
+        { SafeMigrationSqlBinaryOperator.GreaterThan, "(1 > 2)" },
+        { SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, "(1 >= 2)" },
+        { SafeMigrationSqlBinaryOperator.Add, "(1 + 2)" },
+        { SafeMigrationSqlBinaryOperator.Subtract, "(1 - 2)" },
+        { SafeMigrationSqlBinaryOperator.Multiply, "(1 * 2)" },
+        { SafeMigrationSqlBinaryOperator.Divide, "(1 / 2)" },
+        { SafeMigrationSqlBinaryOperator.Modulo, "(1 % 2)" },
+    };
 
     /// <summary>Restores each original heterogeneous input from a discoverable stable identifier.</summary>
     private static SafeMigrationSqlExpression CreateStructuredExpression(

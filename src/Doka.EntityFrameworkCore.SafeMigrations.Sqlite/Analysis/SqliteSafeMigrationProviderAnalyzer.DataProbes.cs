@@ -71,19 +71,26 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
     {
         var expressions = definition
             .Keys
-            .Select(key => key.Column is not null
-                ? Delimit(key.Column)
-                + (key.Collation is null
-                    ? string.Empty
-                    : " COLLATE " + Delimit(key.Collation.Name))
-                : key.StructuredExpression is not null
-                    ? _expressionRenderer.Render(key.StructuredExpression)
-                    : key.Expression
-                    ?? throw new InvalidOperationException("A SQLite index key requires a column or expression."))
+            .Select(key => key switch
+            {
+                { Column: not null } => Delimit(key.Column)
+                    + (key.Collation is null
+                        ? string.Empty
+                        : " COLLATE " + Delimit(key.Collation.Name)),
+                { StructuredExpression: not null } => _expressionRenderer.Render(key.StructuredExpression),
+                _ => key.Expression
+                    ?? throw new InvalidOperationException("A SQLite index key requires a column or expression."),
+            })
+
+            // WHY: Preserve explicit fluent materialization for the ordered snapshot.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var predicates = expressions
             .Select(expression => $"({expression}) IS NOT NULL")
+
+            // WHY: Retain explicit list materialization for the mutable ordered working set.
+            // ReSharper disable once UseCollectionExpression
             .ToList();
 
         var filter = definition.StructuredFilter is not null
@@ -151,8 +158,12 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
         var liveRebuiltTable = rebuildArtifacts.ResolveLiveTableName(rebuiltTable, currentOperation);
         foreach (var dependent in snapshot.Tables.Values)
         {
-            foreach (var foreignKey in dependent.ForeignKeys)
+            // WHY: Traverse the stable ordered source by ordinal without materializing another collection.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var foreignKeyIndex = 0; foreignKeyIndex < dependent.ForeignKeys.Count; foreignKeyIndex++)
             {
+                var foreignKey = dependent.ForeignKeys[foreignKeyIndex];
                 if (!rebuildArtifacts.RetainsForeignKey(dependent.Name, foreignKey)
                     || (!s_identifierComparer.Equals(dependent.Name, liveRebuiltTable)
                         && !s_identifierComparer.Equals(foreignKey.PrincipalTable, liveRebuiltTable)))

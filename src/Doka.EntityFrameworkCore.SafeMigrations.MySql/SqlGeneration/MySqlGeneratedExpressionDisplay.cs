@@ -33,6 +33,10 @@ internal static class MySqlGeneratedExpressionDisplay
                 .Concat(MySqlExpressionCanonicalizer.BuildComparisonCandidates(
                     Render(expression, renderer, isMariaDb, groupBooleanChains: true),
                     includeMySqlEncodedDisplay: false))
+
+                // WHY: Retain fluent materialization and its existing snapshot
+                // ownership rather than replacing this boundary with a spread.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray();
         }
 
@@ -47,6 +51,10 @@ internal static class MySqlGeneratedExpressionDisplay
                     MySqlExpressionCanonicalizer.BuildComparisonCandidates(
                         Render(expression, renderer, isMariaDb, preserveCapturedStringLiterals: true),
                         includeMySqlEncodedDisplay: !isMariaDb))
+
+                // WHY: Retain fluent materialization and its existing snapshot
+                // ownership rather than replacing this boundary with a spread.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray();
 
             if (groupedBooleanChains)
@@ -59,6 +67,10 @@ internal static class MySqlGeneratedExpressionDisplay
                             preserveCapturedStringLiterals: true,
                             groupBooleanChains: true),
                         includeMySqlEncodedDisplay: false))
+
+                    // WHY: Retain fluent materialization and its existing snapshot
+                    // ownership rather than replacing this boundary with a spread.
+                    // ReSharper disable once UseCollectionExpression
                     .ToArray();
             }
         }
@@ -377,11 +389,12 @@ internal static class MySqlGeneratedExpressionDisplay
                 break;
             case SafeMigrationSqlCaseExpression value:
                 builder.Append(
-                    index == value.WhenClauses.Count * 2
-                        ? " else "
-                        : index % 2 == 0
-                            ? " when "
-                            : " then ");
+                    index switch
+                    {
+                        _ when index == value.WhenClauses.Count * 2 => " else ",
+                        _ when index % 2 == 0 => " when ",
+                        _ => " then ",
+                    });
 
                 break;
         }
@@ -593,6 +606,9 @@ internal static class MySqlGeneratedExpressionDisplay
     };
 
     /// <summary>Preserves three-valued comparison semantics when native parsing removes a NOT node.</summary>
+
+    // WHY: The caller narrows to the six relational comparisons; other operators must remain unreachable.
+    // ReSharper disable once SwitchExpressionHandlesSomeKnownEnumValuesWithExceptionInDefault
     private static SafeMigrationSqlBinaryOperator NegatedComparison(
         SafeMigrationSqlBinaryOperator value
     ) => value switch
@@ -650,19 +666,30 @@ internal static class MySqlGeneratedExpressionDisplay
     };
 
     /// <summary>Keeps one active output continuation independently of CASE or function argument width.</summary>
-    private struct DisplayFrame(
-        SafeMigrationSqlExpression expression,
-        int precedence,
-        bool parentheses
-    )
+    private struct DisplayFrame
     {
+        /// <summary>Retains the next child and parent output state without growing the call stack.</summary>
+        /// <param name="expression">The parent whose ordered children are being rendered.</param>
+        /// <param name="precedence">The binding strength restored for each child.</param>
+        /// <param name="parentheses">Whether the continuation must close a grouping delimiter.</param>
+        internal DisplayFrame(
+            SafeMigrationSqlExpression expression,
+            int precedence,
+            bool parentheses
+        )
+        {
+            Children = new MySqlExpressionChildCursor(expression);
+            ParentPrecedence = precedence;
+            Parentheses = parentheses;
+        }
+
         /// <summary>The parent and next child whose output resumes after the active operand.</summary>
-        internal MySqlExpressionChildCursor Children = new(expression);
+        internal MySqlExpressionChildCursor Children;
 
         /// <summary>The parent's binding strength for restoring each child context.</summary>
-        internal readonly int ParentPrecedence = precedence;
+        internal readonly int ParentPrecedence;
 
         /// <summary>Whether this continuation must close a native grouping delimiter.</summary>
-        internal readonly bool Parentheses = parentheses;
+        internal readonly bool Parentheses;
     }
 }

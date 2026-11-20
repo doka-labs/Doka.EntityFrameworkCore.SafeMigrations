@@ -8,8 +8,8 @@
              Link="Infrastructure\SafeMigrationLiteralContract.cs" />
     <Compile Include="..\Shared\SafeMigrationStateSpaceGenerator.cs"
              Link="Infrastructure\SafeMigrationStateSpaceGenerator.cs" />
-    <Compile Include="..\Shared\LivePerformanceEvidence.cs"
-             Link="Infrastructure\LivePerformanceEvidence.cs" />
+    <Compile Include="..\Shared\MatchingTableAssessmentAssertions.cs"
+             Link="Infrastructure\MatchingTableAssessmentAssertions.cs" />
     <Compile Include="..\Shared\LargeMigrationStressContract.cs"
              Link="Infrastructure\LargeMigrationStressContract.cs" />
     <Compile Include="..\Shared\ModelManagedDataLargeExecutionContract.cs"

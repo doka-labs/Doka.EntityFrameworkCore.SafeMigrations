@@ -85,7 +85,7 @@ public sealed class SqlServerMigrationFixtureTests
             ? MigrationsSqlGenerationOptions.Idempotent
             : MigrationsSqlGenerationOptions.Default;
 
-        var historyPredicate = $"WHERE [MigrationId] = N'{SqlServerHistoryMigration.MigrationIdentifier}'";
+        const string historyPredicate = $"WHERE [MigrationId] = N'{SqlServerHistoryMigration.MigrationIdentifier}'";
 
         // WHY: These are ordinary tests, not live-theory cases. Target resolution
         // and SQL generation must fail locally even when an ARM host skips DDL.
@@ -118,7 +118,9 @@ public sealed class SqlServerMigrationFixtureTests
                 .State);
     }
 
-    /// <summary>Malformed and unknown explicit targets remain rejected rather than silently selecting a migration.</summary>
+    /// <summary>
+    /// Malformed and unknown explicit targets remain rejected rather than silently selecting a migration.
+    /// </summary>
     /// <param name="registerSafeMigrations">Whether the SafeMigrations services replace the EF services.</param>
     /// <param name="target">The invalid or nonexistent requested migration.</param>
     [Theory]

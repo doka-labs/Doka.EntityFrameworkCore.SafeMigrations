@@ -120,7 +120,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                     parameters.Utf8PayloadBytes,
                     candidates[offset]);
             },
-            async (reader, offset, count, token) =>
+            async (reader, offset, count, callbackCancellationToken) =>
             {
                 if (reader.FieldCount != 4)
                 {
@@ -128,7 +128,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                 }
 
                 var row = 0;
-                while (await reader.ReadAsync(token))
+                while (await reader.ReadAsync(callbackCancellationToken))
                 {
                     if (row >= count
                         || reader.GetInt32(0) != candidates[offset + row])
@@ -167,7 +167,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                     throw InvalidRenameTargetResult();
                 }
             },
-            cancellationToken);
+            transaction: null,
+            maximumParameters: SafeMigrationCatalogQueryLimits.MaximumParameters,
+            cancellationToken: cancellationToken);
 
         // WHY: A later malformed result or cancellation cannot expose a
         // partially certified destination set to ordered projection.

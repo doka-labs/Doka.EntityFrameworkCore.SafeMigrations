@@ -486,6 +486,8 @@ public sealed partial class SqliteSafeMigrationConstraintShapeIdentityIntegratio
                 (name is null
                     ? string.Empty
                     : "CONSTRAINT " + name + " ")
+                // WHY: This fixture accepts only its declared constraint families; every other operation must reject.
+                // ReSharper disable once SwitchExpressionHandlesSomeKnownEnumValuesWithExceptionInDefault
                 + kind switch
                 {
                     SafeMigrationOperationKind.EnsureUniqueConstraint => "UNIQUE (Code)",
@@ -555,6 +557,8 @@ public sealed partial class SqliteSafeMigrationConstraintShapeIdentityIntegratio
         string name
     )
     {
+        // WHY: This fixture accepts only its declared constraint families; every other operation must reject.
+        // ReSharper disable once SwitchStatementHandlesSomeKnownEnumValuesWithDefault
         switch (kind)
         {
             case SafeMigrationOperationKind.EnsureUniqueConstraint:
@@ -581,6 +585,8 @@ public sealed partial class SqliteSafeMigrationConstraintShapeIdentityIntegratio
         string name
     )
     {
+        // WHY: This fixture accepts only its declared constraint families; every other operation must reject.
+        // ReSharper disable once SwitchStatementHandlesSomeKnownEnumValuesWithDefault
         switch (kind)
         {
             case SafeMigrationOperationKind.EnsureUniqueConstraint:
@@ -604,7 +610,10 @@ public sealed partial class SqliteSafeMigrationConstraintShapeIdentityIntegratio
     private static IEnumerable<string?> ConstraintShapeNames(
         SqliteTableSnapshot table,
         SafeMigrationOperationKind kind
-    ) => kind switch
+    ) =>
+        // WHY: This fixture accepts only its declared constraint families; every other operation must reject.
+        // ReSharper disable once SwitchExpressionHandlesSomeKnownEnumValuesWithExceptionInDefault
+        kind switch
     {
         SafeMigrationOperationKind.EnsureUniqueConstraint => table.UniqueConstraints.Select(value => value.Name),
         SafeMigrationOperationKind.EnsureCheckConstraint => table.Checks.Select(value => value.Name),
@@ -617,7 +626,10 @@ public sealed partial class SqliteSafeMigrationConstraintShapeIdentityIntegratio
     /// <returns>The corresponding native object family.</returns>
     private static SafeMigrationDatabaseObjectKind ConstraintShapeObjectKind(
         SafeMigrationOperationKind kind
-    ) => kind switch
+    ) =>
+        // WHY: This fixture accepts only its declared constraint families; every other operation must reject.
+        // ReSharper disable once SwitchExpressionHandlesSomeKnownEnumValuesWithExceptionInDefault
+        kind switch
     {
         SafeMigrationOperationKind.EnsureUniqueConstraint => SafeMigrationDatabaseObjectKind.UniqueConstraint,
         SafeMigrationOperationKind.EnsureCheckConstraint => SafeMigrationDatabaseObjectKind.CheckConstraint,
@@ -634,7 +646,10 @@ public sealed partial class SqliteSafeMigrationConstraintShapeIdentityIntegratio
     private SqliteConstraintShapeContext CreateConstraintShapeContext(
         DbConnection connection,
         SafeMigrationOperationKind kind
-    ) => kind switch
+    ) =>
+        // WHY: This fixture accepts only its declared constraint families; every other operation must reject.
+        // ReSharper disable once SwitchExpressionHandlesSomeKnownEnumValuesWithExceptionInDefault
+        kind switch
     {
         SafeMigrationOperationKind.EnsureUniqueConstraint =>
             new SqliteUniqueConstraintShapeContext(connection, _constraintShapeServices.Provider),
@@ -647,6 +662,8 @@ public sealed partial class SqliteSafeMigrationConstraintShapeIdentityIntegratio
 }
 
 /// <summary>Owns one provider for independently cached constraint identity and projected-FK CLR models.</summary>
+// WHY: xUnit constructs and disposes this class fixture through test discovery.
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public sealed class SqliteConstraintShapeServiceFixture : IDisposable
 {
     /// <summary>Builds bounded shared provider services without entering EF's process-wide singleton cache.</summary>

@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Creates the Core ownership fixture for real EF tooling qualification.</summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public sealed class CoreOwnershipDesignTimeDbContextFactory
     : IDesignTimeDbContextFactory<CoreOwnershipDbContext>
 {
@@ -24,6 +25,7 @@ public sealed class CoreOwnershipDesignTimeDbContextFactory
 }
 
 /// <summary>Creates the custom ownership fixture for real EF tooling qualification.</summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public sealed class CustomOwnershipDesignTimeDbContextFactory
     : IDesignTimeDbContextFactory<CustomOwnershipDbContext>
 {

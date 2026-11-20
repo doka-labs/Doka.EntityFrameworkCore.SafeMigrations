@@ -62,7 +62,8 @@ jobs:
         id: version
         env:
           PACKAGE_VERSION: ${{ inputs.version }}
-        run: bash eng/validate-release-version.sh "$PACKAGE_VERSION"
+          QUALIFICATION_ONLY: ${{ inputs.qualification-only }}
+        run: bash eng/validate-release-version.sh "$PACKAGE_VERSION" --qualification-only "$QUALIFICATION_ONLY"
 
       - name: Verify current untagged release-line source
         id: line

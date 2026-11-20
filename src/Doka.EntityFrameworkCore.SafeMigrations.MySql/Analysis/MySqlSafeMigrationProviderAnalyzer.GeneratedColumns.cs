@@ -105,6 +105,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                 : GeneratedColumnDependencyUnproven();
         }
 
+        // WHY: Each branch requires a different current-source certificate; preserve their native-refusal precedence.
+        // ReSharper disable once ConvertIfStatementToSwitchStatement
         if (projected is
             {
                 ObservedState: SafeMigrationObservedState.PrerequisiteMissing,
@@ -173,8 +175,13 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             liveOwnerCurrent = false;
         }
 
-        foreach (var source in proof.Sources)
+        // WHY: Index this stable list while preserving its order and ownership.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var sourceIndex = 0; sourceIndex < proof.Sources.Count; sourceIndex++)
         {
+            var source = proof.Sources[sourceIndex];
+
             if (columns.TryGetProjectedColumn(proof.Table, proof.Schema, source, out var definition))
             {
                 if ((proof.ForbidIdentitySources && MySqlGeneratedColumnDependencies.IsIdentitySource(definition))
@@ -229,8 +236,13 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         string source
     )
     {
-        foreach (var required in proof.ValueSources)
+        // WHY: Index this stable list while preserving its order and ownership.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var requiredIndex = 0; requiredIndex < proof.ValueSources.Count; requiredIndex++)
         {
+            var required = proof.ValueSources[requiredIndex];
+
             if (StringComparer.OrdinalIgnoreCase.Equals(required, source))
             {
                 return true;

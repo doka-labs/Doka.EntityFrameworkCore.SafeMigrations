@@ -91,11 +91,14 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                 } column
                 && _catalogSqlBuilder.IsSupportedIntegerWidening(column.OldDefinition, column.Definition))
             .Distinct()
+
+            // WHY: Retain this explicit fluent snapshot instead of a collection-spread rewrite.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         if (candidates.Length == 0
-            && !operations.Any(static operation =>
-                operation.Intent is EnsureCheckConstraintIntent))
+            && operations.All(static operation =>
+                operation.Intent is not EnsureCheckConstraintIntent))
         {
             return;
         }
@@ -136,6 +139,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
 
                     return _catalogSqlBuilder.BuildIntegerWideningCapturePlan(column, reserved);
                 })
+
+                // WHY: Retain this explicit fluent snapshot instead of a collection-spread rewrite.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray();
 
             await ReadCatalogCaptureAsync(
@@ -156,9 +162,12 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             .Select(static operation => TransitionDrop(operation.Intent))
             .OfType<TransitionDependency>()
             .Distinct()
+
+            // WHY: Retain this explicit fluent snapshot instead of a collection-spread rewrite.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
-        var capturedDrops = new Dictionary<TransitionDependency, TransitionDependency>();
+        Dictionary<TransitionDependency, TransitionDependency> capturedDrops = [];
         var dependencyStatements = (candidates.Length
                 + SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement
                 - 1)
@@ -205,7 +214,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
 
                 return new SafeMigrationCatalogProbeStatement(1, 0, offset);
             },
-            async (reader, slot, _, token) =>
+            async (reader, slot, _, callbackCancellationToken) =>
             {
                 var dropCapture = slot >= dependencyStatements;
                 var offset = (dropCapture
@@ -220,7 +229,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                         : candidates.Length)
                     - offset);
 
-                while (await reader.ReadAsync(token))
+                while (await reader.ReadAsync(callbackCancellationToken))
                 {
                     var ordinal = reader.GetInt32(0);
                     if (ordinal < offset
@@ -251,9 +260,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                     }
                 }
             },
-            cancellationToken,
             transaction,
-            SqlServerCatalogParameterBindings.MaximumParameters);
+            SqlServerCatalogParameterBindings.MaximumParameters,
+            cancellationToken);
 
         // WHY: Pair each transition candidate with its analysis and dependency snapshot.
         // ReSharper disable once ForCanBeConvertedToForeach
@@ -264,7 +273,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                 candidates[index],
                 analyses[index],
                 (IReadOnlyCollection<TransitionDependency>?)dependencies[index]
-                ?? Array.Empty<TransitionDependency>());
+                ?? []);
         }
 
         foreach (var pair in capturedDrops)

@@ -9,9 +9,13 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
         MySqlEngineContainerFixture fixture
     ) : base(fixture) { }
 
+    /// <summary>
+    /// Preserves the stable mismatch category and allows a following operation to recover the same native session.
+    /// </summary>
     [Fact]
     public async Task StrictMismatch_FailsWithStableCategoryAndNextOperationRecoversSameSession()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -27,6 +31,7 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
             nullable: true,
             policy: SafeMigrationPolicy.ThrowIfDifferent);
 
+        // Act
         var exception =
             await AssertOwnedGuardFailureAsync(
                 operationToken => ExecuteOperationsAsync(
@@ -35,27 +40,30 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
                     operationToken),
                 cancellationToken: CancellationToken.None);
 
-        Assert.Contains("doka_sm_different", exception.Message, StringComparison.OrdinalIgnoreCase);
-
         var valid = new MigrationBuilder(context.Database.ProviderName!);
         valid.AddColumnIfNotExists<string>("description", "accounts", type: "varchar(100)", nullable: true);
         await ExecuteOperationsAsync(context, valid.Operations, CancellationToken.None);
 
-        Assert.Equal(
-            1,
-            await ScalarIntAsync(
-                connectionString,
-                """
-                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
-                WHERE TABLE_SCHEMA = DATABASE()
-                AND TABLE_NAME = 'accounts' AND COLUMN_NAME = 'description';
-                """,
-                cancellationToken: CancellationToken.None));
+        var recoveredDescriptionColumns = await ScalarIntAsync(
+            connectionString,
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'accounts' AND COLUMN_NAME = 'description';
+            """,
+            cancellationToken: CancellationToken.None);
+
+        // Assert
+        Assert.Contains("doka_sm_different", exception.Message, StringComparison.OrdinalIgnoreCase);
+
+        Assert.Equal(1, recoveredDescriptionColumns);
     }
 
+    /// <summary>Keeps rejection guards and cleanup effective under the tested SQL-mode profiles.</summary>
     [Fact]
     public async Task SessionSqlModes_DoNotDisableAssertionsAndFailureRecovery()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -84,6 +92,7 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
             nullable: true,
             policy: SafeMigrationPolicy.ThrowIfDifferent);
 
+        // Act
         var mismatchException =
             await AssertOwnedGuardFailureAsync(
                 operationToken => ExecuteOperationsAsync(
@@ -91,8 +100,6 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
                     mismatch.Operations,
                     operationToken),
                 cancellationToken: CancellationToken.None);
-
-        Assert.Contains("doka_sm_different", mismatchException.Message, StringComparison.OrdinalIgnoreCase);
 
         var blockedCheck = new MigrationBuilder(context.Database.ProviderName!);
         blockedCheck.EnsureCheckConstraint(
@@ -110,8 +117,6 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
                     operationToken),
                 cancellationToken: CancellationToken.None);
 
-        Assert.Contains("doka_sm_data_blocked", blockedException.Message, StringComparison.OrdinalIgnoreCase);
-
         var recovery = new MigrationBuilder(context.Database.ProviderName!);
         recovery.AddColumnIfNotExists<string>(
             "note",
@@ -127,34 +132,43 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
 
         await ExecuteOperationsAsync(context, blockedCheck.Operations, CancellationToken.None);
 
-        Assert.Equal(
-            "mode\\safe",
-            await ScalarStringAsync(
-                connectionString,
-                """
-                SELECT COLUMN_COMMENT FROM INFORMATION_SCHEMA.COLUMNS
-                WHERE TABLE_SCHEMA = DATABASE()
-                AND TABLE_NAME = 'sql_mode_guard'
-                AND COLUMN_NAME = 'note';
-                """,
-                cancellationToken: CancellationToken.None));
+        var storedComment = await ScalarStringAsync(
+            connectionString,
+            """
+            SELECT COLUMN_COMMENT FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'sql_mode_guard'
+            AND COLUMN_NAME = 'note';
+            """,
+            cancellationToken: CancellationToken.None);
 
-        Assert.Equal(
-            1,
-            await ScalarIntAsync(
-                connectionString,
-                """
-                SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
-                WHERE CONSTRAINT_SCHEMA = DATABASE()
-                AND TABLE_NAME = 'sql_mode_guard'
-                AND CONSTRAINT_NAME = 'ck_sql_mode_guard_quantity';
-                """,
-                cancellationToken: CancellationToken.None));
+        var recoveredCheckCount = await ScalarIntAsync(
+            connectionString,
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
+            WHERE CONSTRAINT_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'sql_mode_guard'
+            AND CONSTRAINT_NAME = 'ck_sql_mode_guard_quantity';
+            """,
+            cancellationToken: CancellationToken.None);
+
+        // Assert
+        Assert.Contains("doka_sm_different", mismatchException.Message, StringComparison.OrdinalIgnoreCase);
+
+        Assert.Contains("doka_sm_data_blocked", blockedException.Message, StringComparison.OrdinalIgnoreCase);
+
+        Assert.Equal("mode\\safe", storedComment);
+
+        Assert.Equal(1, recoveredCheckCount);
     }
 
+    /// <summary>
+    /// Fails generation with the exact missing-handler category rather than executing an unowned operation.
+    /// </summary>
     [Fact]
     public async Task MissingHandler_FailsClosedDuringGeneration()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString, registerSafeMigrations: false);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -164,8 +178,12 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
 
         var generator = context.GetService<IMigrationsSqlGenerator>();
 
-        var exception = Assert.Throws<MySqlMigrationOperationHandlerException>(() =>
+        // Act
+        var failure = Record.Exception(() =>
             generator.Generate(builder.Operations, context.Model));
+
+        // Assert
+        var exception = Assert.IsType<MySqlMigrationOperationHandlerException>(failure);
 
         Assert.Equal(MySqlMigrationHandlerFailureCode.UnknownOperationType, exception.FailureCode);
         Assert.Equal(
@@ -177,9 +195,11 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Applies mixed ordinary and guarded migrations before writing their successful history row.</summary>
     [Fact]
     public async Task Migrator_MixesStandardAndSafeOperationsAndWritesHistoryOnlyAfterSuccess()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -188,11 +208,13 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
 
         await using var context = CreateContext(connectionString);
 
+        // Act
         await context.Database.MigrateAsync(cancellationToken: CancellationToken.None);
         await context
             .GetService<IMigrator>()
             .MigrateAsync(cancellationToken: CancellationToken.None);
 
+        // Assert
         Assert.Equal(
             1,
             await ScalarIntAsync(
@@ -214,60 +236,75 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
                 cancellationToken: CancellationToken.None));
     }
 
-    [Fact]
-    public async Task MigrationScripts_ExecuteNormalIdempotentAndNoTransactionPaths()
+    /// <summary>Executes generated normal, idempotent, and no-transaction scripts against the native catalog.</summary>
+    /// <param name="scriptKind">The independently generated script execution mode.</param>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    public async Task MigrationScripts_ExecuteNormalIdempotentAndNoTransactionPaths(
+        int scriptKind
+    )
     {
+        // Arrange
         var generationConnectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var generationContext = CreateContext(generationConnectionString);
         var migrator = generationContext.GetService<IMigrator>();
-        var scripts = new[]
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
+
+        // Act
+        var script = scriptKind switch
         {
-            migrator.GenerateScript(),
-            migrator.GenerateScript(options: MigrationsSqlGenerationOptions.Idempotent),
-            migrator.GenerateScript(
+            0 => migrator.GenerateScript(),
+            1 => migrator.GenerateScript(options: MigrationsSqlGenerationOptions.Idempotent),
+            2 => migrator.GenerateScript(
                 options: MigrationsSqlGenerationOptions.Idempotent | MigrationsSqlGenerationOptions.NoTransactions),
+            _ => throw new ArgumentOutOfRangeException(nameof(scriptKind)),
         };
 
-        foreach (var script in scripts)
+        await ExecuteMigrationScriptAsync(connectionString, script, cancellationToken: CancellationToken.None);
+        if (scriptKind != 0)
         {
-            Assert.Contains(CoreConvergenceMigration.MigrationIdentifier, script, StringComparison.Ordinal);
-            var connectionString = await CreateDatabaseAsync(CancellationToken.None);
             await ExecuteMigrationScriptAsync(connectionString, script, cancellationToken: CancellationToken.None);
-            if (script != scripts[0])
-            {
-                await ExecuteMigrationScriptAsync(connectionString, script, cancellationToken: CancellationToken.None);
-            }
-
-            Assert.Equal(
-                1,
-                await ScalarIntAsync(
-                    connectionString,
-                    """
-                    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
-                    WHERE TABLE_SCHEMA = DATABASE()
-                    AND TABLE_NAME = 'pipeline_state'
-                    AND COLUMN_NAME = 'payload';
-                    """,
-                    cancellationToken: CancellationToken.None));
-
-            Assert.Equal(
-                1,
-                await ScalarIntAsync(
-                    connectionString,
-                    $"SELECT COUNT(*) FROM `__ApplicationDbContextMigrationsHistory` "
-                    + $"WHERE `MigrationId` = '{CoreConvergenceMigration.MigrationIdentifier}';",
-                    cancellationToken: CancellationToken.None));
         }
+
+        // Assert
+        Assert.Contains(CoreConvergenceMigration.MigrationIdentifier, script, StringComparison.Ordinal);
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'pipeline_state'
+                AND COLUMN_NAME = 'payload';
+                """,
+                cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                $"SELECT COUNT(*) FROM `__ApplicationDbContextMigrationsHistory` "
+                + $"WHERE `MigrationId` = '{CoreConvergenceMigration.MigrationIdentifier}';",
+                cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Writes neither target objects nor migration history when operation handling is unavailable.</summary>
     [Fact]
     public async Task Migrator_WithoutHandlerWritesNeitherTargetDdlNorHistoryRow()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString, registerSafeMigrations: false);
 
-        var exception = await Assert.ThrowsAsync<MySqlMigrationOperationHandlerException>(() =>
+        // Act
+        var failure = await Record.ExceptionAsync(() =>
             context.Database.MigrateAsync(cancellationToken: CancellationToken.None));
+
+        // Assert
+        var exception = Assert.IsType<MySqlMigrationOperationHandlerException>(failure);
 
         Assert.Equal(MySqlMigrationHandlerFailureCode.UnknownOperationType, exception.FailureCode);
 
@@ -299,9 +336,11 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Retains forward-recovery semantics after ordinary DDL precedes a guarded runtime failure.</summary>
     [Fact]
     public async Task RuntimeGuardFailureAfterStandardDdl_RequiresForwardFixAndRemainsRetryable()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -310,31 +349,27 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
 
         await using var context = CreateContext(connectionString);
 
+        // Act
         var exception = await AssertOwnedGuardFailureAsync(
             operationToken =>
                 context.Database.MigrateAsync(cancellationToken: operationToken),
             cancellationToken: CancellationToken.None);
 
-        Assert.Contains("doka_sm_unsupported", exception.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal(
-            1,
-            await ScalarIntAsync(
-                connectionString,
-                """
-                SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
-                WHERE TABLE_SCHEMA = DATABASE()
-                AND TABLE_NAME = 'pipeline_probe'
-                AND TABLE_TYPE = 'BASE TABLE';
-                """,
-                cancellationToken: CancellationToken.None));
+        var probeTablesAfterFailure = await ScalarIntAsync(
+            connectionString,
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'pipeline_probe'
+            AND TABLE_TYPE = 'BASE TABLE';
+            """,
+            cancellationToken: CancellationToken.None);
 
-        Assert.Equal(
-            0,
-            await ScalarIntAsync(
-                connectionString,
-                $"SELECT COUNT(*) FROM `__ApplicationDbContextMigrationsHistory` "
-                + $"WHERE `MigrationId` = '{CoreConvergenceMigration.MigrationIdentifier}';",
-                cancellationToken: CancellationToken.None));
+        var historyRowsAfterFailure = await ScalarIntAsync(
+            connectionString,
+            $"SELECT COUNT(*) FROM `__ApplicationDbContextMigrationsHistory` "
+            + $"WHERE `MigrationId` = '{CoreConvergenceMigration.MigrationIdentifier}';",
+            cancellationToken: CancellationToken.None);
 
         await ExecuteSqlAsync(
             connectionString,
@@ -343,18 +378,28 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
 
         await context.Database.MigrateAsync(cancellationToken: CancellationToken.None);
 
-        Assert.Equal(
-            1,
-            await ScalarIntAsync(
-                connectionString,
-                $"SELECT COUNT(*) FROM `__ApplicationDbContextMigrationsHistory` "
-                + $"WHERE `MigrationId` = '{CoreConvergenceMigration.MigrationIdentifier}';",
-                cancellationToken: CancellationToken.None));
+        var historyRowsAfterRecovery = await ScalarIntAsync(
+            connectionString,
+            $"SELECT COUNT(*) FROM `__ApplicationDbContextMigrationsHistory` "
+            + $"WHERE `MigrationId` = '{CoreConvergenceMigration.MigrationIdentifier}';",
+            cancellationToken: CancellationToken.None);
+
+        // Assert
+        Assert.Contains("doka_sm_unsupported", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(1, probeTablesAfterFailure);
+
+        Assert.Equal(0, historyRowsAfterFailure);
+
+        Assert.Equal(1, historyRowsAfterRecovery);
     }
 
+    /// <summary>
+    /// Resolves the additive handler and runner through an explicitly supplied internal service provider.
+    /// </summary>
     [Fact]
     public async Task ExternalInternalServiceProvider_ResolvesTheAdditiveHandlerAndRunner()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var services = new ServiceCollection();
         services.AddEntityFrameworkDokaMySql();
@@ -373,25 +418,30 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
 
         await using var context = new SafeMigrationDbContext(options);
 
-        Assert.NotNull(context.GetService<ISafeMigrationRunner>());
+        // Act
         await context.Database.MigrateAsync(cancellationToken: CancellationToken.None);
 
-        Assert.Equal(
-            1,
-            await ScalarIntAsync(
-                connectionString,
-                """
-                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
-                WHERE TABLE_SCHEMA = DATABASE()
-                AND TABLE_NAME = 'pipeline_state'
-                AND COLUMN_NAME = 'payload';
-                """,
-                cancellationToken: CancellationToken.None));
+        var migratedPayloadColumns = await ScalarIntAsync(
+            connectionString,
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'pipeline_state'
+            AND COLUMN_NAME = 'payload';
+            """,
+            cancellationToken: CancellationToken.None);
+
+        // Assert
+        Assert.NotNull(context.GetService<ISafeMigrationRunner>());
+
+        Assert.Equal(1, migratedPayloadColumns);
     }
 
+    /// <summary>Rejects duplicate operation ownership before target DDL or migration history mutation.</summary>
     [Fact]
     public async Task ConflictingHandler_FailsBeforeTargetDdlAndHistory()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var services = new ServiceCollection();
         services.AddEntityFrameworkDokaMySql();
@@ -411,9 +461,13 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
 
         await using var context = new SafeMigrationDbContext(options);
 
-        var exception =
-            await Assert.ThrowsAsync<MySqlMigrationOperationHandlerException>(() =>
+        // Act
+        var failure =
+            await Record.ExceptionAsync(() =>
                 context.Database.MigrateAsync(cancellationToken: CancellationToken.None));
+
+        // Assert
+        var exception = Assert.IsType<MySqlMigrationOperationHandlerException>(failure);
 
         Assert.Equal(MySqlMigrationHandlerFailureCode.DuplicateOperationOwnership, exception.FailureCode);
         Assert.Equal(
@@ -436,9 +490,11 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Keeps analysis and verification read-only while preserving runtime classification semantics.</summary>
     [Fact]
     public async Task PreflightAndPostflight_AreReadOnlyAndUseRuntimeClassification()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -456,8 +512,27 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
 
         var runOptions = new SafeMigrationRunOptions("test-instance", expectedModelFingerprint: fingerprint);
 
+        // Act
         var preflight = await runner.AnalyzeAsync(context, builder.Operations, runOptions, CancellationToken.None);
+        var targetsAfterPreflight = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES "
+            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'analysis_target';",
+            cancellationToken: CancellationToken.None);
 
+        var historiesAfterPreflight = await ScalarIntAsync(
+            connectionString,
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = '__ApplicationDbContextMigrationsHistory';
+            """,
+            cancellationToken: CancellationToken.None);
+
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        var postflight = await runner.VerifyAsync(context, builder.Operations, runOptions, CancellationToken.None);
+
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
         Assert.Equal(SafeMigrationRunReport.CurrentSchemaVersion, preflight.SchemaVersion);
         Assert.Equal("test-instance", preflight.InstanceId);
@@ -469,45 +544,29 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
 
         Assert.NotEmpty(preflight.Environment.ServerVersion);
         Assert.Equal(64, preflight.ContractFingerprint.Length);
-        Assert.Equal(
-            SafeMigrationObservedState.Missing,
+        Assert.Equal(SafeMigrationObservedState.Missing,
             Assert.Single(preflight.Assessments)
                 .ObservedState);
 
-        Assert.Equal(
-            0,
-            await ScalarIntAsync(
-                connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'analysis_target';",
-                cancellationToken: CancellationToken.None));
-
-        Assert.Equal(
-            0,
-            await ScalarIntAsync(
-                connectionString,
-                """
-                SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
-                WHERE TABLE_SCHEMA = DATABASE()
-                AND TABLE_NAME = '__ApplicationDbContextMigrationsHistory';
-                """,
-                cancellationToken: CancellationToken.None));
-
-        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var postflight = await runner.VerifyAsync(context, builder.Operations, runOptions, CancellationToken.None);
-
+        Assert.Equal(0, targetsAfterPreflight);
+        Assert.Equal(0, historiesAfterPreflight);
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
         Assert.True(
             Assert.Single(postflight.Assessments)
                 .PostconditionSatisfied);
     }
 
+    /// <summary>
+    /// Projects the full missing convergence table rather than rejecting its dependent initial operations.
+    /// </summary>
     [Fact]
     public async Task PendingPreflight_ProjectsACompleteMissingConvergenceTable()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzePendingMigrationsAsync(
@@ -515,6 +574,7 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
                 new SafeMigrationRunOptions("test-instance"),
                 CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.ReadyWithProviderOperations, report.Status);
         Assert.Contains(
             report.Assessments,
@@ -542,9 +602,11 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Uses an ordinary provider column addition as a prerequisite for a following guarded index.</summary>
     [Fact]
     public async Task PreflightProjectsProviderAddColumnForFollowingSafeIndex()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -582,9 +644,64 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
 
         var runner = context.GetService<ISafeMigrationRunner>();
         var options = new SafeMigrationRunOptions("mixed-provider-safe-operations");
+
+        // Act
         var preflight = await runner.AnalyzeAsync(context, builder.Operations, options, CancellationToken.None);
         var projectedIndex = preflight.Assessments.Single(static assessment => assessment.IsSafeOperation);
 
+        var columnsAfterPreflight = await ScalarIntAsync(
+            connectionString,
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'mixed_evolution'
+            AND COLUMN_NAME = 'customer_id';
+            """,
+            cancellationToken: CancellationToken.None);
+
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+
+        var postflight = await runner.VerifyAsync(context, builder.Operations, options, CancellationToken.None);
+        var replay = await runner.AnalyzeAsync(context, builder.Operations, options, CancellationToken.None);
+        var postflightIndex = postflight.Assessments.Single(static assessment => assessment.IsSafeOperation);
+        var replayIndex = replay.Assessments.Single(static assessment => assessment.IsSafeOperation);
+
+        var storedCustomerId = await ScalarIntAsync(
+            connectionString,
+            "SELECT `customer_id` FROM `mixed_evolution`;",
+            cancellationToken: CancellationToken.None);
+
+        var foreignKeyCount = await ScalarIntAsync(
+            connectionString,
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS
+            WHERE CONSTRAINT_SCHEMA = DATABASE()
+            AND CONSTRAINT_NAME = 'fk_mixed_evolution_customers_customer_id';
+            """,
+            cancellationToken: CancellationToken.None);
+
+        var columnsWithoutDefault = await ScalarIntAsync(
+            connectionString,
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'mixed_evolution'
+            AND COLUMN_NAME = 'customer_id'
+            AND COLUMN_DEFAULT IS NULL;
+            """,
+            cancellationToken: CancellationToken.None);
+
+        var supportIndexCount = await ScalarIntAsync(
+            connectionString,
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'mixed_evolution'
+            AND INDEX_NAME = 'ix_mixed_evolution_customer_id';
+            """,
+            cancellationToken: CancellationToken.None);
+
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.ReadyWithProviderOperations, preflight.Status);
         Assert.Equal(5, preflight.Assessments.Count);
         Assert.All(
@@ -594,77 +711,30 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
         Assert.Equal(SafeMigrationObservedState.Missing, projectedIndex.ObservedState);
         Assert.Equal(SafeMigrationAction.Apply, projectedIndex.Action);
         Assert.Equal("projected_missing", projectedIndex.Code);
-        Assert.Equal(
-            0,
-            await ScalarIntAsync(
-                connectionString,
-                """
-                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
-                WHERE TABLE_SCHEMA = DATABASE()
-                AND TABLE_NAME = 'mixed_evolution'
-                AND COLUMN_NAME = 'customer_id';
-                """,
-                cancellationToken: CancellationToken.None));
-
-        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-
-        var postflight = await runner.VerifyAsync(context, builder.Operations, options, CancellationToken.None);
-        var replay = await runner.AnalyzeAsync(context, builder.Operations, options, CancellationToken.None);
-        var postflightIndex = postflight.Assessments.Single(static assessment => assessment.IsSafeOperation);
-        var replayIndex = replay.Assessments.Single(static assessment => assessment.IsSafeOperation);
+        Assert.Equal(0, columnsAfterPreflight);
 
         Assert.Equal(SafeMigrationReportStatus.ReadyWithProviderOperations, postflight.Status);
         Assert.Equal(SafeMigrationObservedState.Matching, postflightIndex.ObservedState);
         Assert.True(postflightIndex.PostconditionSatisfied);
         Assert.Equal(SafeMigrationReportStatus.ReadyWithProviderOperations, replay.Status);
         Assert.Equal(SafeMigrationAction.NoOp, replayIndex.Action);
-        Assert.Equal(
-            7,
-            await ScalarIntAsync(
-                connectionString,
-                "SELECT `customer_id` FROM `mixed_evolution`;",
-                cancellationToken: CancellationToken.None));
+        Assert.Equal(7, storedCustomerId);
 
-        Assert.Equal(
-            1,
-            await ScalarIntAsync(
-                connectionString,
-                """
-                SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS
-                WHERE CONSTRAINT_SCHEMA = DATABASE()
-                AND CONSTRAINT_NAME = 'fk_mixed_evolution_customers_customer_id';
-                """,
-                cancellationToken: CancellationToken.None));
+        Assert.Equal(1, foreignKeyCount);
 
-        Assert.Equal(
-            1,
-            await ScalarIntAsync(
-                connectionString,
-                """
-                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
-                WHERE TABLE_SCHEMA = DATABASE()
-                AND TABLE_NAME = 'mixed_evolution'
-                AND COLUMN_NAME = 'customer_id'
-                AND COLUMN_DEFAULT IS NULL;
-                """,
-                cancellationToken: CancellationToken.None));
+        Assert.Equal(1, columnsWithoutDefault);
 
-        Assert.Equal(
-            1,
-            await ScalarIntAsync(
-                connectionString,
-                """
-                SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
-                WHERE TABLE_SCHEMA = DATABASE()
-                AND TABLE_NAME = 'mixed_evolution'
-                AND INDEX_NAME = 'ix_mixed_evolution_customer_id';
-                """,
-                cancellationToken: CancellationToken.None));
+        Assert.Equal(1, supportIndexCount);
     }
 
+    /// <summary>
+    /// Preserves structural prerequisites across provider seed operations without claiming to analyze their data
+    /// effects.
+    /// </summary>
     [Fact]
     public async Task PreflightPreservesSafeStructureAcrossProviderSeedData()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -689,18 +759,13 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
 
         var runner = context.GetService<ISafeMigrationRunner>();
         var options = new SafeMigrationRunOptions("provider-seed-projection");
+
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
             options,
             CancellationToken.None);
-
-        Assert.Equal(SafeMigrationReportStatus.ReadyWithProviderOperations, preflight.Status);
-        Assert.Equal(3, preflight.Assessments.Count);
-        Assert.Equal("provider_owned_not_analyzed", preflight.Assessments[1].Code);
-        Assert.Equal(SafeMigrationObservedState.Missing, preflight.Assessments[2].ObservedState);
-        Assert.Equal(SafeMigrationAction.Apply, preflight.Assessments[2].Action);
-        Assert.Equal("projected_missing", preflight.Assessments[2].Code);
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
@@ -710,29 +775,42 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
             options,
             CancellationToken.None);
 
+        var seededRowCount = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM `seed_projection`;",
+            cancellationToken: CancellationToken.None);
+
+        var supportIndexCount = await ScalarIntAsync(
+            connectionString,
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'seed_projection'
+            AND INDEX_NAME = 'ix_seed_projection_group_id';
+            """,
+            cancellationToken: CancellationToken.None);
+
+        // Assert
+        Assert.Equal(SafeMigrationReportStatus.ReadyWithProviderOperations, preflight.Status);
+        Assert.Equal(3, preflight.Assessments.Count);
+        Assert.Equal("provider_owned_not_analyzed", preflight.Assessments[1].Code);
+        Assert.Equal(SafeMigrationObservedState.Missing, preflight.Assessments[2].ObservedState);
+        Assert.Equal(SafeMigrationAction.Apply, preflight.Assessments[2].Action);
+        Assert.Equal("projected_missing", preflight.Assessments[2].Code);
+
         Assert.Equal(SafeMigrationReportStatus.ReadyWithProviderOperations, replay.Status);
         Assert.Equal(SafeMigrationAction.NoOp, replay.Assessments[0].Action);
         Assert.Equal(SafeMigrationAction.NoOp, replay.Assessments[2].Action);
-        Assert.Equal(
-            1,
-            await ScalarIntAsync(
-                connectionString,
-                "SELECT COUNT(*) FROM `seed_projection`;",
-                cancellationToken: CancellationToken.None));
+        Assert.Equal(1, seededRowCount);
 
-        Assert.Equal(
-            1,
-            await ScalarIntAsync(
-                connectionString,
-                """
-                SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
-                WHERE TABLE_SCHEMA = DATABASE()
-                AND TABLE_NAME = 'seed_projection'
-                AND INDEX_NAME = 'ix_seed_projection_group_id';
-                """,
-                cancellationToken: CancellationToken.None));
+        Assert.Equal(1, supportIndexCount);
     }
 
+    /// <summary>
+    /// Preserves GUID values and referential cascade behavior across the provider seed migration journey.
+    /// </summary>
+    /// <param name="mode">The explicitly selected strict or legacy-convergence scaffolding mode.</param>
+    /// <param name="guidFormat">The native GUID storage-format annotation under test.</param>
     [Theory]
     [InlineData(
         SafeMigrationScaffoldingMode.Strict,
@@ -751,6 +829,7 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
         DokaMySqlGuidFormat guidFormat
     )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -862,6 +941,8 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
 
         var runner = context.GetService<ISafeMigrationRunner>();
         var options = new SafeMigrationRunOptions($"provider-seed-journey-{mode}-{guidFormat}");
+
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
@@ -871,6 +952,9 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
         var providerAssessments = preflight
             .Assessments
             .Where(static assessment => !assessment.IsSafeOperation)
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var indexAssessment = preflight.Assessments.Single(assessment => assessment is
@@ -878,23 +962,6 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
             OperationKind: SafeMigrationOperationKind.EnsureIndex,
             ObjectName: "ix_seed_journey_dependents_principal_id",
         });
-
-        Assert.Equal(SafeMigrationReportStatus.ReadyWithProviderOperations, preflight.Status);
-        Assert.Equal(3, providerAssessments.Length);
-        Assert.All(
-            providerAssessments,
-            static assessment => Assert.Equal("provider_owned_not_analyzed", assessment.Code));
-
-        Assert.Equal(
-            providerAssessments[0].Ordinal + 1,
-            providerAssessments[1].Ordinal);
-
-        Assert.Equal(
-            providerAssessments[1].Ordinal + 1,
-            providerAssessments[2].Ordinal);
-
-        Assert.Equal(SafeMigrationObservedState.Missing, indexAssessment.ObservedState);
-        Assert.Equal(SafeMigrationAction.Apply, indexAssessment.Action);
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
@@ -932,57 +999,77 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
             ? "N"
             : "D";
 
-        Assert.Equal(principalId.ToString(expectedFormat), storedPrincipalId);
-        Assert.Equal(publicId.ToString(expectedFormat), storedPublicId);
-        Assert.Equal(optionalGuid.ToString(expectedFormat), storedOptionalGuid);
-        Assert.Equal(
-            1,
-            await ScalarIntAsync(
-                connectionString,
-                """
-                SELECT COUNT(*) FROM `seed_journey_dependents` AS `dependent`
-                INNER JOIN `seed_journey_principals` AS `principal` ON `dependent`.`principal_id`
-                = `principal`.`id`;
-                """,
-                cancellationToken: CancellationToken.None));
+        var joinedRowsBeforeCascade = await ScalarIntAsync(
+            connectionString,
+            """
+            SELECT COUNT(*) FROM `seed_journey_dependents` AS `dependent`
+            INNER JOIN `seed_journey_principals` AS `principal` ON `dependent`.`principal_id`
+            = `principal`.`id`;
+            """,
+            cancellationToken: CancellationToken.None);
 
-        Assert.Equal(
-            1,
-            await ScalarIntAsync(
-                connectionString,
-                """
-                SELECT COUNT(DISTINCT INDEX_NAME)
-                FROM INFORMATION_SCHEMA.STATISTICS
-                WHERE TABLE_SCHEMA = DATABASE()
-                AND TABLE_NAME = 'seed_journey_dependents'
-                AND COLUMN_NAME = 'principal_id'
-                AND SEQ_IN_INDEX = 1;
-                """,
-                cancellationToken: CancellationToken.None));
+        var supportIndexesBeforeCascade = await ScalarIntAsync(
+            connectionString,
+            """
+            SELECT COUNT(DISTINCT INDEX_NAME)
+            FROM INFORMATION_SCHEMA.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'seed_journey_dependents'
+            AND COLUMN_NAME = 'principal_id'
+            AND SEQ_IN_INDEX = 1;
+            """,
+            cancellationToken: CancellationToken.None);
 
         await ExecuteSqlAsync(
             connectionString,
             "DELETE FROM `seed_journey_principals`;",
             cancellationToken: CancellationToken.None);
 
-        Assert.Equal(
-            0,
-            await ScalarIntAsync(
-                connectionString,
-                "SELECT COUNT(*) FROM `seed_journey_dependents`;",
-                cancellationToken: CancellationToken.None));
+        var dependentsAfterCascade = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM `seed_journey_dependents`;",
+            cancellationToken: CancellationToken.None);
+
+        var scalarsAfterCascade = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM `seed_journey_scalars`;",
+            cancellationToken: CancellationToken.None);
+
+        // Assert
+        Assert.Equal(SafeMigrationReportStatus.ReadyWithProviderOperations, preflight.Status);
+        Assert.Equal(3, providerAssessments.Length);
+        Assert.All(
+            providerAssessments,
+            static assessment => Assert.Equal("provider_owned_not_analyzed", assessment.Code));
 
         Assert.Equal(
-            1,
-            await ScalarIntAsync(
-                connectionString,
-                "SELECT COUNT(*) FROM `seed_journey_scalars`;",
-                cancellationToken: CancellationToken.None));
+            providerAssessments[0].Ordinal + 1,
+            providerAssessments[1].Ordinal);
+
+        Assert.Equal(
+            providerAssessments[1].Ordinal + 1,
+            providerAssessments[2].Ordinal);
+
+        Assert.Equal(SafeMigrationObservedState.Missing, indexAssessment.ObservedState);
+        Assert.Equal(SafeMigrationAction.Apply, indexAssessment.Action);
+
+        Assert.Equal(principalId.ToString(expectedFormat), storedPrincipalId);
+        Assert.Equal(publicId.ToString(expectedFormat), storedPublicId);
+        Assert.Equal(optionalGuid.ToString(expectedFormat), storedOptionalGuid);
+        Assert.Equal(1, joinedRowsBeforeCascade);
+
+        Assert.Equal(1, supportIndexesBeforeCascade);
+
+        Assert.Equal(0, dependentsAfterCascade);
+
+        Assert.Equal(1, scalarsAfterCascade);
     }
 
+    /// <summary>Does not carry an earlier uniqueness proof across provider-owned seed mutations.</summary>
     [Fact]
     public async Task PreflightDoesNotInferUniqueSafetyAcrossProviderSeedData()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -1006,6 +1093,7 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
             "GroupId",
             unique: true);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -1014,6 +1102,7 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
                 new SafeMigrationRunOptions("provider-seed-unique-projection"),
                 CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, report.Assessments[2].ObservedState);
         Assert.Equal(SafeMigrationAction.RejectPrerequisiteMissing, report.Assessments[2].Action);
@@ -1030,9 +1119,11 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Retains a live nonunique index's structural prerequisites across provider seed operations.</summary>
     [Fact]
     public async Task PreflightPreservesLiveNonUniqueIndexAcrossProviderSeedData()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -1052,6 +1143,7 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
             "existing_seed_projection",
             "GroupId");
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -1060,35 +1152,38 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
                 new SafeMigrationRunOptions("provider-existing-seed-projection"),
                 CancellationToken.None);
 
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+
+        var seededRowCount = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM `existing_seed_projection`;",
+            cancellationToken: CancellationToken.None);
+
+        var preservedIndexCount = await ScalarIntAsync(
+            connectionString,
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'existing_seed_projection'
+            AND INDEX_NAME = 'ix_existing_seed_projection_group_id';
+            """,
+            cancellationToken: CancellationToken.None);
+
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.ReadyWithProviderOperations, report.Status);
         Assert.Equal(SafeMigrationObservedState.Missing, report.Assessments[1].ObservedState);
         Assert.Equal(SafeMigrationAction.Apply, report.Assessments[1].Action);
 
-        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        Assert.Equal(1, seededRowCount);
 
-        Assert.Equal(
-            1,
-            await ScalarIntAsync(
-                connectionString,
-                "SELECT COUNT(*) FROM `existing_seed_projection`;",
-                cancellationToken: CancellationToken.None));
-
-        Assert.Equal(
-            1,
-            await ScalarIntAsync(
-                connectionString,
-                """
-                SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
-                WHERE TABLE_SCHEMA = DATABASE()
-                AND TABLE_NAME = 'existing_seed_projection'
-                AND INDEX_NAME = 'ix_existing_seed_projection_group_id';
-                """,
-                cancellationToken: CancellationToken.None));
+        Assert.Equal(1, preservedIndexCount);
     }
 
+    /// <summary>Invalidates uniqueness evidence after a provider-owned seed operation may change its rows.</summary>
     [Fact]
     public async Task PreflightInvalidatesLiveUniqueIndexSafetyAcrossProviderSeedData()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -1109,6 +1204,7 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
             "GroupId",
             unique: true);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -1117,6 +1213,7 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
                 new SafeMigrationRunOptions("provider-existing-seed-unique-projection"),
                 CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, report.Assessments[1].ObservedState);
         Assert.Equal(SafeMigrationAction.RejectPrerequisiteMissing, report.Assessments[1].Action);
@@ -1141,14 +1238,17 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Rejects an incorrect canonical fingerprint before any catalog interaction.</summary>
     [Fact]
     public async Task Preflight_RejectsWrongCanonicalModelFingerprintBeforeCatalogAccess()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var runner = context.GetService<ISafeMigrationRunner>();
 
-        await Assert.ThrowsAsync<SafeMigrationModelMismatchException>(() => runner.AnalyzeAsync(
+        // Act
+        var failure = await Record.ExceptionAsync(() => runner.AnalyzeAsync(
             context,
             [],
             new SafeMigrationRunOptions(
@@ -1156,22 +1256,33 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
                 expectedModelFingerprint: "safe-relational-model:v1:Doka.EntityFrameworkCore.MySql:sha256:"
                 + new string('0', 64)),
             CancellationToken.None));
+
+        // Assert
+        Assert.IsType<SafeMigrationModelMismatchException>(failure);
     }
 
+    /// <summary>Rejects a schema-changing derived model against the canonical migration snapshot.</summary>
     [Fact]
     public async Task Preflight_RejectsASchemaChangingDerivedContextAgainstTheMigrationSnapshot()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = new SchemaChangingDerivedContext(connectionString, Fixture.ServerVersion);
 
-        await Assert.ThrowsAsync<SafeMigrationModelMismatchException>(() => context
+        // Act
+        var failure = await Record.ExceptionAsync(() => context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(context, [], new SafeMigrationRunOptions("test-instance"), CancellationToken.None));
+
+        // Assert
+        Assert.IsType<SafeMigrationModelMismatchException>(failure);
     }
 
+    /// <summary>Includes unexpected legacy objects in diagnostics without removing their native state.</summary>
     [Fact]
     public async Task Preflight_ReportsButDoesNotDeleteUnexpectedLegacyObjects()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -1190,6 +1301,7 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
             policy: SafeMigrationPolicy.ExistenceOnly,
             mode: SafeMigrationTableMode.ConvergenceContainer);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -1198,6 +1310,7 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
                 new SafeMigrationRunOptions("test-instance"),
                 CancellationToken.None);
 
+        // Assert
         Assert.Contains(
             report.UnexpectedObjects,
             value => value is { ObjectKind: SafeMigrationDatabaseObjectKind.Table, Name: "legacy_extra" });
@@ -1222,9 +1335,11 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Applies and replays the column, table, and index lifecycle without duplicate native objects.</summary>
     [Fact]
     public async Task ColumnTableIndexLifecycle_IsIdempotentAcrossEveryOperationFamily()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -1239,6 +1354,8 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
         var rename = new MigrationBuilder(context.Database.ProviderName!);
         rename.RenameColumnIfExists("old_name", "lifecycle", "name");
         rename.RenameIndexIfExists("ix_lifecycle_old_name", "lifecycle", "ix_lifecycle_name");
+
+        // Act
         await ExecuteOperationsAsync(context, rename.Operations, CancellationToken.None);
         await ExecuteOperationsAsync(context, rename.Operations, CancellationToken.None);
 
@@ -1275,6 +1392,7 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
         await ExecuteOperationsAsync(context, dropTable.Operations, CancellationToken.None);
         await ExecuteOperationsAsync(context, dropTable.Operations, CancellationToken.None);
 
+        // Assert
         Assert.Equal(
             0,
             await ScalarIntAsync(
@@ -1284,9 +1402,13 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>
+    /// Treats an absent rename source as an idempotent no-op rather than inventing a replacement source.
+    /// </summary>
     [Fact]
     public async Task MissingRenameSources_AreIdempotentNoOps()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -1294,9 +1416,11 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
         builder.RenameColumnIfExists("missing_column", "missing_table", "renamed_column");
         builder.RenameIndexIfExists("missing_index", "missing_table", "renamed_index");
 
+        // Act
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
+        // Assert
         Assert.Equal(
             0,
             await ScalarIntAsync(
@@ -1309,9 +1433,11 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Cleans native guard resources after a body failure and retries on the same physical session.</summary>
     [Fact]
     public async Task GuardPlan_FailedBodyCleansSameSessionAndRemainsRetryable()
     {
+        // Arrange
         var databaseConnectionString = await CreateDatabaseAsync(CancellationToken.None);
         var connectionString = new MySqlConnectionStringBuilder(databaseConnectionString)
         {
@@ -1337,29 +1463,26 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
         var invalid = new MigrationBuilder(context.Database.ProviderName!);
         invalid.AddColumnIfNotExists<string>("guarded_value", "fault_target", type: "varchar(70000)", nullable: true);
 
-        await Assert.ThrowsAsync<MySqlException>(() => ExecuteOperationsAsync(
+        // Act
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
             context,
             invalid.Operations,
             CancellationToken.None));
 
-        Assert.Equal(
-            physicalConnectionId,
-            await ContextScalarIntAsync(
-                context,
-                "SELECT CONNECTION_ID();",
-                cancellationToken: CancellationToken.None));
+        var connectionIdAfterFailure = await ContextScalarIntAsync(
+            context,
+            "SELECT CONNECTION_ID();",
+            cancellationToken: CancellationToken.None);
 
-        Assert.Equal(
-            1,
-            await ContextScalarIntAsync(
-                context,
-                """
-                SELECT @doka_sm_state IS NULL
-                AND @doka_sm_action IS NULL AND @doka_sm_repair_ok IS NULL
-                AND @doka_sm_prerequisite_ok IS NULL
-                AND @doka_sm_sql IS NULL AND @doka_sm_post_ok IS NULL;
-                """,
-                cancellationToken: CancellationToken.None));
+        var cleanVariablesAfterFailure = await ContextScalarIntAsync(
+            context,
+            """
+            SELECT @doka_sm_state IS NULL
+            AND @doka_sm_action IS NULL AND @doka_sm_repair_ok IS NULL
+            AND @doka_sm_prerequisite_ok IS NULL
+            AND @doka_sm_sql IS NULL AND @doka_sm_post_ok IS NULL;
+            """,
+            cancellationToken: CancellationToken.None);
 
         await context.Database.ExecuteSqlRawAsync(
             "CREATE TEMPORARY TABLE `__doka_sm_assert` (`value` int NOT NULL); "
@@ -1372,25 +1495,35 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
         await ExecuteOperationsAsync(context, retry.Operations, CancellationToken.None);
         await ExecuteOperationsAsync(context, retry.Operations, CancellationToken.None);
 
-        Assert.Equal(
-            1,
-            await ScalarIntAsync(
-                connectionString,
-                """
-                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
-                WHERE TABLE_SCHEMA = DATABASE()
-                AND TABLE_NAME = 'fault_target'
-                AND COLUMN_NAME = 'guarded_value';
-                """,
-                cancellationToken: CancellationToken.None));
+        var recoveredColumnCount = await ScalarIntAsync(
+            connectionString,
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'fault_target'
+            AND COLUMN_NAME = 'guarded_value';
+            """,
+            cancellationToken: CancellationToken.None);
 
         await MySqlConnection.ClearPoolAsync((MySqlConnection)context.Database.GetDbConnection(),
             CancellationToken.None);
+
+        // Assert
+        Assert.IsType<MySqlException>(failure);
+        Assert.Equal(physicalConnectionId, connectionIdAfterFailure);
+
+        Assert.Equal(1, cleanVariablesAfterFailure);
+
+        Assert.Equal(1, recoveredColumnCount);
     }
 
+    /// <summary>
+    /// Cancels an actually dispatched guarded body, cleans its resources, and permits same-session recovery.
+    /// </summary>
     [Fact]
     public async Task GuardPlan_CancelledBodyCleansSameSessionAndRemainsRetryable()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -1412,12 +1545,20 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExists<int>("guarded_value", "cancel_target", type: "int", nullable: true);
-        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(1));
+        using var cancellation = new CancellationTokenSource();
 
+        Exception? exception;
+
+        // Act
         try
         {
-            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-                ExecuteOperationsAsync(context, builder.Operations, cancellation.Token));
+            exception = await MySqlNativeCancellationCheckpoint.CancelWhenDispatchedAsync(
+                connectionString,
+                ((MySqlConnection)context.Database.GetDbConnection()).ServerThread,
+                "ALTER TABLE `cancel_target`",
+                cancellation,
+                Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations, cancellation.Token)),
+                CancellationToken.None);
         }
         finally
         {
@@ -1426,44 +1567,50 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
             await unlockCommand.ExecuteNonQueryAsync(CancellationToken.None);
         }
 
-        Assert.Equal(
-            physicalConnectionId,
-            await ContextScalarIntAsync(
-                context,
-                "SELECT CONNECTION_ID();",
-                cancellationToken: CancellationToken.None));
+        var connectionIdAfterCancellation = await ContextScalarIntAsync(
+            context,
+            "SELECT CONNECTION_ID();",
+            cancellationToken: CancellationToken.None);
 
-        Assert.Equal(
-            1,
-            await ContextScalarIntAsync(
-                context,
-                """
-                SELECT @doka_sm_state IS NULL
-                AND @doka_sm_action IS NULL AND @doka_sm_repair_ok IS NULL
-                AND @doka_sm_prerequisite_ok IS NULL
-                AND @doka_sm_sql IS NULL AND @doka_sm_post_ok IS NULL;
-                """,
-                cancellationToken: CancellationToken.None));
+        var cleanVariablesAfterCancellation = await ContextScalarIntAsync(
+            context,
+            """
+            SELECT @doka_sm_state IS NULL
+            AND @doka_sm_action IS NULL AND @doka_sm_repair_ok IS NULL
+            AND @doka_sm_prerequisite_ok IS NULL
+            AND @doka_sm_sql IS NULL AND @doka_sm_post_ok IS NULL;
+            """,
+            cancellationToken: CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
-        Assert.Equal(
-            1,
-            await ScalarIntAsync(
-                connectionString,
-                """
-                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
-                WHERE TABLE_SCHEMA = DATABASE()
-                AND TABLE_NAME = 'cancel_target'
-                AND COLUMN_NAME = 'guarded_value';
-                """,
-                cancellationToken: CancellationToken.None));
+        var recoveredColumnCount = await ScalarIntAsync(
+            connectionString,
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'cancel_target'
+            AND COLUMN_NAME = 'guarded_value';
+            """,
+            cancellationToken: CancellationToken.None);
+
+        // Assert
+        Assert.IsType<OperationCanceledException>(exception, exactMatch: false);
+        Assert.Equal(physicalConnectionId, connectionIdAfterCancellation);
+
+        Assert.Equal(1, cleanVariablesAfterCancellation);
+
+        Assert.Equal(1, recoveredColumnCount);
     }
 
+    /// <summary>
+    /// Evicts a session whose scoped cleanup failed instead of returning contaminated state to the pool.
+    /// </summary>
     [Fact]
     public async Task ScopedCommand_CleanupFailureEvictsThePhysicalSession()
     {
+        // Arrange
         var databaseConnectionString = await CreateDatabaseAsync(CancellationToken.None);
         var connectionString = new MySqlConnectionStringBuilder(databaseConnectionString)
         {
@@ -1495,20 +1642,13 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
                 .GetService<IMigrationsSqlGenerator>()
                 .Generate([new CleanupFailureOperation()], context.Model));
 
-        var exception = await Record.ExceptionAsync(() =>
-            command.ExecuteNonQueryAsync(context.GetService<IRelationalConnection>()));
+        // Act
+        var exception = await Record.ExceptionAsync(() => command.ExecuteNonQueryAsync(
+            context.GetService<IRelationalConnection>(),
+            cancellationToken: CancellationToken.None));
 
-        var cleanupException = Assert.IsType<InvalidOperationException>(exception, exactMatch: false);
-
-        Assert.Equal(
-            "MySqlMigrationSessionCleanupException",
-            cleanupException.GetType()
-                .Name);
-
-        Assert.Equal(
-            ConnectionState.Closed,
-            context.Database.GetDbConnection()
-                .State);
+        var connectionStateAfterCleanup = context.Database.GetDbConnection()
+            .State;
 
         await context.Database.OpenConnectionAsync(CancellationToken.None);
         var replacementConnectionId = await ContextScalarIntAsync(
@@ -1516,21 +1656,33 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
             "SELECT CONNECTION_ID();",
             cancellationToken: CancellationToken.None);
 
-        Assert.NotEqual(originalConnectionId, replacementConnectionId);
-        Assert.Equal(
-            1,
-            await ContextScalarIntAsync(
-                context,
-                "SELECT @safe_migrations_cleanup_probe IS NULL;",
-                cancellationToken: CancellationToken.None));
+        var cleanVariablesOnReplacement = await ContextScalarIntAsync(
+            context,
+            "SELECT @safe_migrations_cleanup_probe IS NULL;",
+            cancellationToken: CancellationToken.None);
 
         await MySqlConnection.ClearPoolAsync((MySqlConnection)context.Database.GetDbConnection(),
             CancellationToken.None);
+
+        // Assert
+        var cleanupException = Assert.IsType<InvalidOperationException>(exception, exactMatch: false);
+
+        Assert.Equal(
+            "MySqlMigrationSessionCleanupException",
+            cleanupException.GetType()
+                .Name);
+
+        Assert.Equal(ConnectionState.Closed, connectionStateAfterCleanup);
+
+        Assert.NotEqual(originalConnectionId, replacementConnectionId);
+        Assert.Equal(1, cleanVariablesOnReplacement);
     }
 
+    /// <summary>Runs guarded migrations without requiring stored-routine creation privileges.</summary>
     [Fact]
     public async Task GuardPlan_RunsWithLeastPrivilegeWithoutCreateRoutine()
     {
+        // Arrange
         var rootConnectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             rootConnectionString,
@@ -1549,25 +1701,27 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
             .GetService<IMigrationsSqlGenerator>()
             .Generate(builder.Operations, context.Model);
 
+        // Act
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+
+        var guardedColumnCount = await ScalarIntAsync(
+            rootConnectionString,
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'least_privilege_target'
+            AND COLUMN_NAME = 'guarded_value';
+            """,
+            cancellationToken: CancellationToken.None);
+
+        // Assert
         Assert.DoesNotContain(
             commands,
             command => command.CommandText.Contains("ROUTINE", StringComparison.OrdinalIgnoreCase)
                 || command.CommandText.Contains("PROCEDURE", StringComparison.OrdinalIgnoreCase));
 
-        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-
-        Assert.Equal(
-            1,
-            await ScalarIntAsync(
-                rootConnectionString,
-                """
-                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
-                WHERE TABLE_SCHEMA = DATABASE()
-                AND TABLE_NAME = 'least_privilege_target'
-                AND COLUMN_NAME = 'guarded_value';
-                """,
-                cancellationToken: CancellationToken.None));
+        Assert.Equal(1, guardedColumnCount);
     }
 
     private static object ProviderGuidValue(

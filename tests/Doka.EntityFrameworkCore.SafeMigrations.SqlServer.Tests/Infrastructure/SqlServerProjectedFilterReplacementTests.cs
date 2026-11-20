@@ -23,7 +23,7 @@ public sealed class SqlServerProjectedFilterReplacementTests
     )
     {
         // Arrange
-        using var context = new SafeMigrationDbContext(ConnectionString);
+        await using var context = new SafeMigrationDbContext(ConnectionString);
         var analyzer = new SqlServerSafeMigrationProviderAnalyzer(
             context.GetService<IRelationalTypeMappingSource>(),
             context.GetService<ISqlGenerationHelper>());
@@ -121,12 +121,22 @@ public sealed class SqlServerProjectedFilterReplacementTests
             analysis.ObservedState);
     }
 
-    private sealed class Source(
-        ExpectedColumnDefinition[] unchanged,
-        ExpectedColumnDefinition? changed
-    )
+    private sealed class Source
         : ISafeMigrationProjectedColumnSource, ISafeMigrationProjectedTableSource
     {
+        private readonly ExpectedColumnDefinition? _changed;
+        private readonly ExpectedColumnDefinition[] _unchanged;
+
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        public Source(
+            ExpectedColumnDefinition[] unchanged,
+            ExpectedColumnDefinition? changed
+        )
+        {
+            _unchanged = unchanged;
+            _changed = changed;
+        }
+
         public bool TryGetProjectedColumn(
             string table,
             string? schema,
@@ -134,9 +144,9 @@ public sealed class SqlServerProjectedFilterReplacementTests
             [NotNullWhen(true)] out ExpectedColumnDefinition? column
         )
         {
-            column = changed?.Name == name
-                ? changed
-                : unchanged.FirstOrDefault(value => value.Name == name);
+            column = _changed?.Name == name
+                ? _changed
+                : _unchanged.FirstOrDefault(value => value.Name == name);
 
             return column is not null;
         }

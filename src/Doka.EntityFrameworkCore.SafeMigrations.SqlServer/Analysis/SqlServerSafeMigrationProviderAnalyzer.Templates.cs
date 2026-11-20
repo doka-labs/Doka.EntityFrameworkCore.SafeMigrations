@@ -2,7 +2,9 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer;
 
 internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
 {
-    /// <summary>Shares immutable classifier text within one bounded statement, never live evidence or parameters.</summary>
+    /// <summary>
+    /// Shares immutable classifier text within one bounded statement, never live evidence or parameters.
+    /// </summary>
     private sealed class DelayedCatalogTemplates
     {
         private readonly Dictionary<(string Template, string Definitions), string> _variables = [];
@@ -31,6 +33,8 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                 ? Encoding.UTF8.GetByteCount(encoded)
                 : checked(Encoding.UTF8.GetByteCount(template) + 3);
 
+            // WHY: Scan the existing UTF-16 string directly, without a separate LINQ character iterator.
+            // ReSharper disable once ForeachCanBeConvertedToQueryUsingAnotherGetEnumerator
             foreach (var character in encoded is null
                 ? template
                 : string.Empty)

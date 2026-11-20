@@ -2,7 +2,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql;
 
 internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
 {
-    private const string SchemaIdentityMismatchCode = "schema_search_path_mismatch";
+    private const string SchemaIdentityMismatchCode = PostgreSqlSafeMigrationRuntimePlan.SchemaIdentityMismatchCode;
     private readonly HashSet<int> _schemaIdentityMismatchOrdinals = [];
     private IReadOnlyList<MigrationOperation>? _analysisOperationStream;
     private string? _currentSchema;
@@ -119,6 +119,10 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                 context,
                 operations
                     .OfType<SafeMigrationOperation>()
+
+                    // WHY: Keep explicit fluent materialization and its existing
+                    // ownership/evaluation boundary instead of an implicit spread.
+                    // ReSharper disable once UseCollectionExpression
                     .ToArray(),
                 cancellationToken);
         }
@@ -145,17 +149,14 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             return false;
         }
 
-        if (operation.Intent is ModelManagedDataIntent)
+        switch (operation.Intent)
         {
-            return _dmlTriggerRisk != PostgreSqlTriggerRisk.None;
-        }
-
-        if ((operation.Intent is RenameTableIntent table
-                && (table.NewName is null || table.NewName == table.Name)
-                && (table.NewSchema is null || table.NewSchema == table.Schema))
-            || (operation.Intent is RenameIndexIntent index && index.Name == index.NewName))
-        {
-            return false;
+            case ModelManagedDataIntent:
+                return _dmlTriggerRisk != PostgreSqlTriggerRisk.None;
+            case RenameTableIntent table when (table.NewName is null || table.NewName == table.Name)
+                && (table.NewSchema is null || table.NewSchema == table.Schema):
+            case RenameIndexIntent index when index.Name == index.NewName:
+                return false;
         }
 
         // WHY: A final matching catalog does not prove an earlier qualified
@@ -192,8 +193,13 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
 
         var hasUnqualifiedOwner = false;
         var hasQualifiedOwner = false;
-        foreach (var operation in operations)
+
+        // WHY: This pass only reads the stable ordered collection by ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var operationIndex = 0; operationIndex < operations.Count; operationIndex++)
         {
+            var operation = operations[operationIndex];
             if (operation is null)
             {
                 throw new ArgumentException("The operation batch cannot contain null entries.", nameof(operations));
@@ -202,35 +208,47 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             var owner = PostgreSqlSafeMigrationSchemaIdentity.GetOwner(operation.Intent);
             hasUnqualifiedOwner |= owner is { Table: not null, Schema: null };
             hasQualifiedOwner |= owner.Schema is not null;
-            if (operation.Intent is EnsureForeignKeyIntent foreignKey)
+            switch (operation.Intent)
             {
-                hasUnqualifiedOwner |= foreignKey.Definition.PrincipalSchema is null;
-                hasQualifiedOwner |= foreignKey.Definition.PrincipalSchema is not null;
-            }
+                case EnsureForeignKeyIntent foreignKey:
+                    hasUnqualifiedOwner |= foreignKey.Definition.PrincipalSchema is null;
+                    hasQualifiedOwner |= foreignKey.Definition.PrincipalSchema is not null;
+                    break;
+                case EnsureTableIntent table:
+                    // WHY: Inspect both qualifier flags from the same immutable foreign-key definition.
+                    // ReSharper disable once ForCanBeConvertedToForeach
+                    // ReSharper disable once LoopCanBeConvertedToQuery
+                    for (var index = 0; index < table.Definition.ForeignKeys.Count; index++)
+                    {
+                        var foreignKeyDefinition = table.Definition.ForeignKeys[index];
+                        hasUnqualifiedOwner |= foreignKeyDefinition.PrincipalSchema is null;
+                        hasQualifiedOwner |= foreignKeyDefinition.PrincipalSchema is not null;
+                    }
 
-            if (operation.Intent is EnsureTableIntent table)
-            {
-                foreach (var foreignKeyDefinition in table.Definition.ForeignKeys)
-                {
-                    hasUnqualifiedOwner |= foreignKeyDefinition.PrincipalSchema is null;
-                    hasQualifiedOwner |= foreignKeyDefinition.PrincipalSchema is not null;
-                }
-            }
+                    break;
+                case DeleteModelManagedDataIntent delete:
+                    // WHY: Each delete boundary carries its own exact dependent schema.
+                    // ReSharper disable once ForCanBeConvertedToForeach
+                    // ReSharper disable once LoopCanBeConvertedToQuery
+                    for (var index = 0; index < delete.ForeignKeys.Count; index++)
+                    {
+                        var foreignKeyDefinition = delete.ForeignKeys[index];
+                        hasUnqualifiedOwner |= foreignKeyDefinition.Schema is null;
+                        hasQualifiedOwner |= foreignKeyDefinition.Schema is not null;
+                    }
 
-            if (operation.Intent is DeleteModelManagedDataIntent delete)
-            {
-                foreach (var foreignKeyDefinition in delete.ForeignKeys)
-                {
-                    hasUnqualifiedOwner |= foreignKeyDefinition.Schema is null;
-                    hasQualifiedOwner |= foreignKeyDefinition.Schema is not null;
-                }
+                    break;
             }
         }
 
         if (_analysisOperationStream is not null)
         {
-            foreach (var operation in _analysisOperationStream)
+            // WHY: This pass only reads the stable ordered collection by ordinal.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var operationIndex = 0; operationIndex < _analysisOperationStream.Count; operationIndex++)
             {
+                var operation = _analysisOperationStream[operationIndex];
                 if (operation is SafeMigrationOperation
                     || ProviderOperationPreservesTableState(operation))
                 {
@@ -240,22 +258,23 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                 var owner = PostgreSqlSafeMigrationSchemaIdentity.GetProviderOwner(operation);
                 hasUnqualifiedOwner |= owner is { Table: not null, Schema: null };
                 hasQualifiedOwner |= owner is { Table: not null, Schema: not null };
-                if (operation is AddForeignKeyOperation foreignKey)
+                switch (operation)
                 {
-                    hasUnqualifiedOwner |= foreignKey.PrincipalSchema is null;
-                    hasQualifiedOwner |= foreignKey.PrincipalSchema is not null;
-                }
+                    case AddForeignKeyOperation foreignKey:
+                        hasUnqualifiedOwner |= foreignKey.PrincipalSchema is null;
+                        hasQualifiedOwner |= foreignKey.PrincipalSchema is not null;
+                        break;
+                    case CreateTableOperation table:
+                        // WHY: Read both qualifier flags from the same provider-owned FK list.
+                        // ReSharper disable once ForCanBeConvertedToForeach
+                        // ReSharper disable once LoopCanBeConvertedToQuery
+                        for (var index = 0; index < table.ForeignKeys.Count; index++)
+                        {
+                            hasUnqualifiedOwner |= table.ForeignKeys[index].PrincipalSchema is null;
+                            hasQualifiedOwner |= table.ForeignKeys[index].PrincipalSchema is not null;
+                        }
 
-                if (operation is CreateTableOperation table)
-                {
-                    // WHY: Read both qualifier flags from the same provider-owned FK list.
-                    // ReSharper disable once ForCanBeConvertedToForeach
-                    // ReSharper disable once LoopCanBeConvertedToQuery
-                    for (var index = 0; index < table.ForeignKeys.Count; index++)
-                    {
-                        hasUnqualifiedOwner |= table.ForeignKeys[index].PrincipalSchema is null;
-                        hasQualifiedOwner |= table.ForeignKeys[index].PrincipalSchema is not null;
-                    }
+                        break;
                 }
             }
         }
@@ -343,12 +362,23 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     }
 
     /// <summary>Provides stable exact identifier rules and bounded historical-identity exclusions.</summary>
-    private sealed class PostflightSchemaIdentity(
-        string? currentSchema,
-        bool[]? unproven
-    )
-        : ISafeMigrationProviderObjectIdentityNormalizer
+    private sealed class PostflightSchemaIdentity : ISafeMigrationProviderObjectIdentityNormalizer
     {
+        private readonly string? _currentSchema;
+        private readonly bool[]? _unproven;
+
+        /// <summary>Retains the invocation-owned identity snapshot without copying its exclusion map.</summary>
+        /// <param name="currentSchema">The final independently observed schema.</param>
+        /// <param name="unproven">The existing ordinal exclusion map, retained under the same ownership.</param>
+        internal PostflightSchemaIdentity(
+            string? currentSchema,
+            bool[]? unproven
+        )
+        {
+            _currentSchema = currentSchema;
+            _unproven = unproven;
+        }
+
         /// <inheritdoc />
         public StringComparer IdentifierComparer => StringComparer.Ordinal;
 
@@ -372,7 +402,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         /// <inheritdoc />
         public string? NormalizeSchema(
             string? schema
-        ) => PostgreSqlSafeMigrationSchemaIdentity.Normalize(schema, currentSchema);
+        ) => PostgreSqlSafeMigrationSchemaIdentity.Normalize(schema, _currentSchema);
 
         /// <inheritdoc />
         public bool IsObjectIdentityMismatch(
@@ -387,7 +417,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         {
             ArgumentNullException.ThrowIfNull(intent);
 
-            return unproven is null || !unproven[ordinal];
+            return _unproven is null || !_unproven[ordinal];
         }
     }
 }

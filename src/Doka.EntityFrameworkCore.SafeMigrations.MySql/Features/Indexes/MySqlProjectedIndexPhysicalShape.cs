@@ -48,8 +48,14 @@ internal static class MySqlProjectedIndexPhysicalShape
 
         long totalWidth = 0;
         var hasUnprefixedVariableWidth = false;
-        foreach (var key in index.Keys)
+
+        // WHY: Index this stable list while preserving its order and ownership.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var keyIndex = 0; keyIndex < index.Keys.Count; keyIndex++)
         {
+            var key = index.Keys[keyIndex];
+
             if (key.Column is null)
             {
                 return MySqlProjectedIndexPhysicalShapeResult.Unverifiable;
@@ -200,8 +206,14 @@ internal static class MySqlProjectedIndexPhysicalShape
         }
 
         long totalWidth = 0;
-        foreach (var columnName in keyColumns)
+
+        // WHY: Index this stable list while preserving its order and ownership.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var columnNameIndex = 0; columnNameIndex < keyColumns.Count; columnNameIndex++)
         {
+            var columnName = keyColumns[columnNameIndex];
+
             var width = columns.TryGetProjectedColumn(table, schema, columnName, out var column)
                 ? GetProjectedKeyWidth(
                     column,
@@ -314,11 +326,12 @@ internal static class MySqlProjectedIndexPhysicalShape
 
         if (prefixLength is not { } prefix)
         {
-            return shape.FullWidthBytes is { } fullWidth
-                ? KeyWidth.Feasible(fullWidth, unprefixedVariableWidth: shape.SupportsPrefix)
-                : shape.SupportsPrefix
-                    ? KeyWidth.MissingRequiredPrefix
-                    : KeyWidth.Unverifiable;
+            return shape.FullWidthBytes switch
+            {
+                { } fullWidth => KeyWidth.Feasible(fullWidth, unprefixedVariableWidth: shape.SupportsPrefix),
+                _ when shape.SupportsPrefix => KeyWidth.MissingRequiredPrefix,
+                _ => KeyWidth.Unverifiable,
+            };
         }
 
         if (!shape.SupportsPrefix

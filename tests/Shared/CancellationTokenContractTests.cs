@@ -19,7 +19,25 @@ public sealed class CancellationTokenContractTests
         Assert.Empty(violations);
     }
 
-    /// <summary>Owned asynchronous helpers require a token parameter or a local captured cancellation scope.</summary>
+    /// <summary>
+    /// Owned operations and asynchronous callback contracts place cancellation last and name it clearly.
+    /// </summary>
+    [Fact]
+    public void RepositoryOwnedCancellationSignaturesAreExplicitAndLast()
+    {
+        // Arrange
+        var assemblies = GetOwnedAssemblies();
+
+        // Act
+        var violations = assemblies
+            .SelectMany(CancellationTokenContract.FindSignatureViolations)
+            .ToArray();
+
+        // Assert
+        Assert.True(violations.Length == 0, string.Join(Environment.NewLine, violations));
+    }
+
+    /// <summary>Owned asynchronous helpers require their own explicit cancellation parameter.</summary>
     [Fact]
     public void RepositoryOwnedAsynchronousHelpersRequireCancellation()
     {
@@ -88,8 +106,9 @@ public sealed class CancellationTokenContractTests
             parameters,
             static parameter =>
             {
-                Assert.True(parameter.IsOptional);
-                Assert.True(parameter.HasDefaultValue);
+                var identity = $"{parameter.Member.DeclaringType?.FullName}.{parameter.Member.Name}({parameter.Name})";
+                Assert.True(parameter.IsOptional, identity + " must retain its external optional contract.");
+                Assert.True(parameter.HasDefaultValue, identity + " must retain its external default value.");
             });
     }
 
@@ -114,6 +133,97 @@ public sealed class CancellationTokenContractTests
 /// <summary>Inspects metadata rather than exempting token parameters by a fragile method-name allowlist.</summary>
 internal static class CancellationTokenContract
 {
+    /// <summary>
+    /// Checks owned parameter names/order and the actual Invoke contract of owned async callback slots.
+    /// </summary>
+    /// <param name="assembly">The assembly containing the owned declarations.</param>
+    /// <returns>Identifier-only descriptions of every invalid operation or callback contract.</returns>
+    internal static IReadOnlyList<string> FindSignatureViolations(
+        Assembly assembly
+    )
+    {
+        const BindingFlags declarations = BindingFlags.DeclaredOnly
+            | BindingFlags.Instance
+            | BindingFlags.Static
+            | BindingFlags.Public
+            | BindingFlags.NonPublic;
+
+        var violations = new List<string>();
+
+        foreach (var type in assembly.GetTypes())
+        {
+            var members = type
+                .GetMethods(declarations)
+                .Cast<MethodBase>()
+                .Concat(type.GetConstructors(declarations));
+
+            foreach (var member in members)
+            {
+                if (member is MethodInfo method
+                    && (method.IsSpecialName
+                        || IsExternalMethodContract(method)
+                        || IsFrameworkEntryPoint(method)
+                        || IsRequiredCleanup(method)
+                        || IsCompilerAdapter(method)
+                        || IsDelegateAdapter(method)))
+                {
+                    continue;
+                }
+
+                // WHY: Lowered capturing locals can append a by-ref display class after authored arguments.
+                // That compiler transport parameter is not part of the source cancellation contract.
+                var parameters = member
+                    .GetParameters()
+                    .Where(static parameter =>
+                        !(parameter.ParameterType.IsByRef
+                            && parameter.ParameterType.GetElementType()!
+                                .IsDefined(typeof(CompilerGeneratedAttribute), inherit: false)))
+                    .ToArray();
+
+                foreach (var parameter in parameters)
+                {
+                    if (parameter.ParameterType == typeof(CancellationToken)
+                        && (parameter != parameters[^1]
+                            || parameter.IsOptional
+                            || !(parameter.Name == "cancellationToken"
+                                || parameter.Name?.EndsWith("CancellationToken", StringComparison.Ordinal) == true)))
+                    {
+                        violations.Add($"{type.FullName}.{member.Name}({parameter.Name}): token signature");
+                    }
+
+                    if (!typeof(Delegate).IsAssignableFrom(parameter.ParameterType))
+                    {
+                        continue;
+                    }
+
+                    var callback = parameter.ParameterType.GetMethod("Invoke");
+
+                    if (callback is null
+                        || !IsAsynchronous(callback))
+                    {
+                        continue;
+                    }
+
+                    if (IsRequiredCleanupCallback(member, parameter))
+                    {
+                        continue;
+                    }
+
+                    var callbackParameters = callback.GetParameters();
+
+                    if (callbackParameters.Length == 0
+                        || callbackParameters[^1].ParameterType != typeof(CancellationToken)
+                        || callbackParameters[^1].IsOptional)
+                    {
+                        violations.Add($"{type.FullName}.{member.Name}({parameter.Name}): callback cancellation");
+                    }
+                }
+            }
+        }
+
+        return violations;
+    }
+
     /// <summary>Finds asynchronous operations outside actual framework or reviewed cleanup boundaries.</summary>
     /// <param name="assembly">The owned assembly whose compiled declarations are inspected.</param>
     /// <returns>Identifier-only descriptions of tokenless owned asynchronous helpers.</returns>
@@ -129,8 +239,12 @@ internal static class CancellationTokenContract
 
         var violations = new List<string>();
 
+        // WHY: Each reflected declaration contributes its own diagnostic identity; retain direct source enumeration.
+        // ReSharper disable once LoopCanBeConvertedToQuery
         foreach (var type in assembly.GetTypes())
         {
+            // WHY: Keep violation collection in declaration order without a captured filtering pipeline.
+            // ReSharper disable once LoopCanBeConvertedToQuery
             foreach (var method in type.GetMethods(declarations))
             {
                 if (method.IsSpecialName
@@ -143,8 +257,7 @@ internal static class CancellationTokenContract
                     || IsFrameworkEntryPoint(method)
                     || IsCompilerAdapter(method)
                     || IsDelegateAdapter(method)
-                    || IsRequiredCleanup(method)
-                    || HasCapturedCancellationScope(method))
+                    || IsRequiredCleanup(method))
                 {
                     continue;
                 }
@@ -192,6 +305,8 @@ internal static class CancellationTokenContract
             return false;
         }
 
+        // WHY: Interface maps must be queried only for external contracts, preserving short-circuit reflection calls.
+        // ReSharper disable once LoopCanBeConvertedToQuery
         foreach (var contract in declaringType.GetInterfaces())
         {
             if (IsExternal(contract)
@@ -265,63 +380,68 @@ internal static class CancellationTokenContract
         && (method.IsDefined(typeof(CompilerGeneratedAttribute), inherit: false)
             || method.DeclaringType!.IsDefined(typeof(CompilerGeneratedAttribute), inherit: false));
 
-    /// <summary>Recognizes local functions that already carry an enclosing cancellation scope.</summary>
-    /// <param name="method">The compiler-lowered local function whose captured environment is inspected.</param>
-    /// <returns>Whether the generated closure graph contains an operation token or its owning source.</returns>
-    private static bool HasCapturedCancellationScope(
-        MethodInfo method
-    )
-    {
-        if (!method.Name.Contains(">g__", StringComparison.Ordinal)
-            || (!method.IsDefined(typeof(CompilerGeneratedAttribute), inherit: false)
-                && !method.DeclaringType!.IsDefined(typeof(CompilerGeneratedAttribute), inherit: false)))
-        {
-            return false;
-        }
-
-        var pending = new Stack<Type>();
-        var visited = new HashSet<Type>();
-        pending.Push(method.DeclaringType!);
-        foreach (var parameter in method.GetParameters())
-        {
-            var type = parameter.ParameterType;
-            pending.Push(
-                type.IsByRef
-                    ? type.GetElementType()!
-                    : type);
-        }
-
-        // WHY: A capturing local can lower to a static method with a by-ref closure struct.
-        // This checks available scope only; behavioral tests separately verify actual token forwarding.
-        while (pending.TryPop(out var type))
-        {
-            if (!type.IsDefined(typeof(CompilerGeneratedAttribute), inherit: false)
-                || !visited.Add(type))
-            {
-                continue;
-            }
-
-            foreach (var field in type.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
-            {
-                if (field.FieldType == typeof(CancellationToken)
-                    || field.FieldType == typeof(CancellationTokenSource))
-                {
-                    return true;
-                }
-
-                pending.Push(field.FieldType);
-            }
-        }
-
-        return false;
-    }
-
     /// <summary>Retains the CLR delegate infrastructure while checking the authored Invoke contract.</summary>
     private static bool IsDelegateAdapter(
         MethodInfo method
     ) => typeof(Delegate).IsAssignableFrom(method.DeclaringType)
         && method.Name is "BeginInvoke" or "EndInvoke"
+        // WHY: The CLR convention masks code-type bits; this framework enum is not owned here and cannot be annotated.
+        // ReSharper disable once BitwiseOperatorOnEnumWithoutFlags
         && (method.GetMethodImplementationFlags() & MethodImplAttributes.CodeTypeMask) == MethodImplAttributes.Runtime;
+
+    /// <summary>Recognizes only the reviewed callback slot of an exact protected-cleanup boundary.</summary>
+    /// <param name="member">The constructor or operation declaring the callback.</param>
+    /// <param name="parameter">The actual asynchronous callback parameter.</param>
+    /// <returns>Whether this exact slot is required to finish independently of forward cancellation.</returns>
+    private static bool IsRequiredCleanupCallback(
+        MethodBase member,
+        ParameterInfo parameter
+    )
+    {
+        var owner = member.DeclaringType!;
+        var identity = owner.FullName ?? string.Empty;
+        if (parameter.Position != 3
+            || parameter.ParameterType != typeof(Func<Task>)
+            || !IsCleanupOwnerAssembly(identity,
+                owner.Assembly.GetName()
+                    .Name))
+        {
+            return false;
+        }
+
+        var parameters = string.Join(
+            ",",
+            member
+                .GetParameters()
+                .Select(static value => value.ParameterType.ToString()));
+
+        // WHY: Only these teardown slots must outlive cancellation. Other callbacks on the same
+        // owner, including forward work, still require their own final cancellation parameter.
+        return (identity, member.Name, parameter.Name, parameters) switch
+        {
+            ("Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests.PostgreSqlContainerFixture",
+                ".ctor", "disposeContainer",
+                "System.Func`3[System.String,System.Threading.CancellationToken,System.Threading.Tasks.Task],"
+                + "System.Func`3[System.String,System.Threading.CancellationToken,System.Threading.Tasks.Task],"
+                + "System.Func`2[System.String,System.String],System.Func`1[System.Threading.Tasks.Task]")
+                => member is ConstructorInfo,
+            ("Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests.PostgreSqlOwnedConcurrentAttempt",
+                "RunAsync", "releaseOnFailure",
+                "System.Func`2[System.Threading.CancellationToken,System.Threading.Tasks.Task],"
+                + "System.Func`3[System.Threading.Tasks.Task,"
+                + "System.Threading.CancellationToken,System.Threading.Tasks.Task],"
+                + "System.Func`2[System.Threading.CancellationToken,System.Threading.Tasks.Task],"
+                + "System.Func`1[System.Threading.Tasks.Task],System.Threading.CancellationTokenSource,"
+                + "System.Threading.CancellationToken")
+                => member is MethodInfo { IsStatic: true } method && method.ReturnType == typeof(Task<Exception>),
+            ("Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests.SqlServerContainerFixture",
+                ".ctor", "disposeContainerAsync", "System.String,"
+                + "System.Func`3[System.String,System.Threading.CancellationToken,System.Threading.Tasks.Task],"
+                + "System.Func`3[System.String,System.Threading.CancellationToken,System.Threading.Tasks.Task],"
+                + "System.Func`1[System.Threading.Tasks.Task]") => member is ConstructorInfo,
+            _ => false,
+        };
+    }
 
     /// <summary>Matches the reviewed owner, method and exact parameter types of mandatory cleanup work.</summary>
     private static bool IsRequiredCleanup(
@@ -348,6 +468,10 @@ internal static class CancellationTokenContract
         // are not exceptions; each owner/signature must be reviewed as a resource-recovery boundary.
         return (identity, method.Name, parameters) switch
         {
+            ("Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationAnalysisCleanup",
+                "DisposeAsync", "System.IAsyncDisposable,System.Exception,System.String") => true,
+            ("Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationAnalysisCleanup",
+                "CloseAsync", "System.Data.Common.DbConnection,System.Exception") => true,
             ("Doka.EntityFrameworkCore.SafeMigrations.Testing.OwnedTestOperationCleanup",
                 "CompleteAsync", "System.Exception,System.Threading.Tasks.Task,"
                 + "System.Func`1[System.Threading.Tasks.Task],System.Threading.CancellationTokenSource,"
@@ -364,6 +488,12 @@ internal static class CancellationTokenContract
             ("Doka.EntityFrameworkCore.SafeMigrations.SqlServer.SqlServerSafeMigrationProviderAnalyzer",
                 "CleanupTemporaryScopeAsync", "System.Data.Common.DbConnection,System.Data.Common.DbTransaction,"
                 + "System.String,System.Nullable`1[System.Int32],System.Exception") => true,
+            ("Doka.EntityFrameworkCore.SafeMigrations.SqlServer.SqlServerSafeMigrationProviderAnalyzer",
+                "CleanupTargetCaptureAsync", "Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationCatalogBatch,"
+                + "System.Data.Common.DbCommand,System.Exception") => true,
+            ("Doka.EntityFrameworkCore.SafeMigrations.SqlServer.SqlServerSafeMigrationProviderAnalyzer",
+                "CleanupTemporaryCommandAsync", "System.Data.Common.DbConnection,System.Data.Common.DbTransaction,"
+                + "System.String,System.Nullable`1[System.Int32]") => true,
             ("Doka.EntityFrameworkCore.SafeMigrations.Testing.SharedContainerFixtureLifecycle`1",
                 "DisposeAsync", "") => true,
             ("Doka.EntityFrameworkCore.SafeMigrations.Testing.SharedContainerFixtureLifecycle`1",
@@ -377,6 +507,8 @@ internal static class CancellationTokenContract
             ("Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests.MySqlFixtureLifecycle",
                 "DisposeAsync", "System.Func`1[System.Threading.Tasks.Task],"
                 + "System.Func`1[System.Threading.Tasks.Task],System.Action") => true,
+            ("Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests.MySqlProviderAnalysisCleanupTests"
+                + "+ProbeCleanupFailureState", "DisposeTargetAsync", "System.String") => true,
             ("Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests.MySqlGeneratedCaseIntegrationTests",
                 "ReleaseSparseDropGateAsync", "MySqlConnector.MySqlConnection,System.String") => true,
             ("Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests.MySqlSafeMigrationIntegrationTests",
@@ -386,6 +518,9 @@ internal static class CancellationTokenContract
                 + "System.Boolean") => true,
             ("Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests.PostgreSqlContainerFixture",
                 "DisposeNativeContainerAsync", "") => true,
+            ("Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests.PostgreSqlNativeAdmission",
+                "CompleteAsync", "System.Exception,System.Threading.Tasks.Task,System.Data.Common.DbConnection,"
+                + "System.Data.Common.DbCommand,System.Threading.CancellationTokenSource") => true,
             ("Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests.SqlServerLocalCatalogDiagnostics",
                 "DropDatabaseAsync", "Microsoft.Data.SqlClient.SqlConnection,System.String") => true,
             _ => false,
@@ -411,15 +546,21 @@ internal static class CancellationTokenContract
 
         return owner switch
         {
+            root + ".SafeMigrationAnalysisCleanup" => assembly == root,
             root + ".MySql.MySqlCatalogSnapshot" => assembly == root + ".MySql",
             root + ".SqlServer.SqlServerSafeMigrationIdentityInsertCommand"
                 or root + ".SqlServer.SqlServerSafeMigrationProviderAnalyzer" => assembly == root + ".SqlServer",
             root + ".MySql.Tests.MySqlEngineContainerFixture"
                 or root + ".MySql.Tests.MySqlFixtureLifecycle"
+                or root + ".MySql.Tests.MySqlProviderAnalysisCleanupTests+ProbeCleanupFailureState"
                 or root + ".MySql.Tests.MySqlGeneratedCaseIntegrationTests"
                 or root + ".MySql.Tests.MySqlSafeMigrationIntegrationTests" => assembly == root + ".MySql.Tests",
-            root + ".PostgreSql.Tests.PostgreSqlContainerFixture" => assembly == root + ".PostgreSql.Tests",
-            root + ".SqlServer.Tests.SqlServerLocalCatalogDiagnostics" => assembly == root + ".SqlServer.Tests",
+            root + ".PostgreSql.Tests.PostgreSqlContainerFixture"
+                or root + ".PostgreSql.Tests.PostgreSqlNativeAdmission"
+                or root + ".PostgreSql.Tests.PostgreSqlOwnedConcurrentAttempt"
+                => assembly == root + ".PostgreSql.Tests",
+            root + ".SqlServer.Tests.SqlServerLocalCatalogDiagnostics"
+                or root + ".SqlServer.Tests.SqlServerContainerFixture" => assembly == root + ".SqlServer.Tests",
             _ => false,
         };
     }

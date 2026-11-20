@@ -1,5 +1,8 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 
+/// <summary>
+/// Provides the SQLite integration test base fixture contract.
+/// </summary>
 public abstract class SqliteIntegrationTestBase
 {
     /// <summary>Opens an owned in-memory connection and disposes it if startup fails.</summary>
@@ -27,6 +30,12 @@ public abstract class SqliteIntegrationTestBase
         return connection;
     }
 
+    /// <summary>
+    /// Creates a context bound to the caller-owned SQLite connection.
+    /// </summary>
+    /// <param name="connection">The caller-owned native SQLite connection.</param>
+    /// <param name="registerSafeMigrations">Whether to install SafeMigrations alongside the SQLite provider.</param>
+    /// <returns>A context bound to the supplied native connection without acquiring its ownership.</returns>
     protected static SqliteSafeMigrationTestContext CreateContext(
         DbConnection connection,
         bool registerSafeMigrations = true

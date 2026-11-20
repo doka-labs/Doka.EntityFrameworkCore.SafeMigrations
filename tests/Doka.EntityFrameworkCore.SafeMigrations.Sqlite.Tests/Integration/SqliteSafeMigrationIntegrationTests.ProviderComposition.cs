@@ -3,9 +3,13 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 /// <summary>Exercises provider composition with independently owned SQLite state.</summary>
 public sealed class SqliteSafeMigrationProviderCompositionIntegrationTests : SqliteSafeMigrationCatalogIntegrationTests
 {
+    /// <summary>
+    /// Contiguous provider operations are rewritten as one lossless transition.
+    /// </summary>
     [Fact]
     public async Task ContiguousProviderOperations_AreRewrittenAsOneLosslessTransition()
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
@@ -22,28 +26,38 @@ public sealed class SqliteSafeMigrationProviderCompositionIntegrationTests : Sql
         builder.DropColumn("Legacy", "provider_rewrite_entities");
         builder.RenameColumn("Replacement", "provider_rewrite_entities", newName: "Legacy");
 
+        // Act
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
 
+        var observedScalar1 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM provider_rewrite_entities "
+            + "WHERE Id = 1 AND Legacy = 'preserve';",
+            cancellationToken: CancellationToken.None);
+
+        var observedScalar2 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM pragma_table_xinfo('provider_rewrite_entities') "
+            + "WHERE name = 'Replacement';",
+            cancellationToken: CancellationToken.None);
+
+        // Assert
         Assert.Equal(
             1,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM provider_rewrite_entities "
-                + "WHERE Id = 1 AND Legacy = 'preserve';",
-                cancellationToken: CancellationToken.None));
+            observedScalar1);
 
         Assert.Equal(
             0,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM pragma_table_xinfo('provider_rewrite_entities') "
-                + "WHERE name = 'Replacement';",
-                cancellationToken: CancellationToken.None));
+            observedScalar2);
     }
 
+    /// <summary>
+    /// Provider column followed by safe relationship operations applies and replays.
+    /// </summary>
     [Fact]
     public async Task ProviderColumnFollowedBySafeRelationshipOperations_AppliesAndReplays()
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
@@ -78,6 +92,7 @@ public sealed class SqliteSafeMigrationProviderCompositionIntegrationTests : Sql
 
         var runner = context.GetService<ISafeMigrationRunner>();
 
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
@@ -102,6 +117,26 @@ public sealed class SqliteSafeMigrationProviderCompositionIntegrationTests : Sql
 
         await ExecuteOperationsAsync(context, replay.Operations, cancellationToken: CancellationToken.None);
 
+        var observedScalar1 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM pragma_table_xinfo('constraint_children') WHERE name = 'ParentId';",
+            cancellationToken: CancellationToken.None);
+
+        var observedScalar2 = await ScalarIntAsync(
+            connection,
+            """
+            SELECT COUNT(*) FROM pragma_foreign_key_list('constraint_children')
+            WHERE "table" = 'constraint_parents'
+            AND "from" = 'ParentId';
+            """,
+            cancellationToken: CancellationToken.None);
+
+        var observedScalar3 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM constraint_children WHERE Id = 11;",
+            cancellationToken: CancellationToken.None);
+
+        // Assert
         Assert.True(
             preflight.Status == SafeMigrationReportStatus.ReadyWithProviderOperations,
             string.Join(
@@ -120,33 +155,24 @@ public sealed class SqliteSafeMigrationProviderCompositionIntegrationTests : Sql
 
         Assert.Equal(
             1,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM pragma_table_xinfo('constraint_children') WHERE name = 'ParentId';",
-                cancellationToken: CancellationToken.None));
+            observedScalar1);
 
         Assert.Equal(
             1,
-            await ScalarIntAsync(
-                connection,
-                """
-                SELECT COUNT(*) FROM pragma_foreign_key_list('constraint_children')
-                WHERE "table" = 'constraint_parents'
-                AND "from" = 'ParentId';
-                """,
-                cancellationToken: CancellationToken.None));
+            observedScalar2);
 
         Assert.Equal(
             1,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM constraint_children WHERE Id = 11;",
-                cancellationToken: CancellationToken.None));
+            observedScalar3);
     }
 
+    /// <summary>
+    /// Multiline partial index does not match full index.
+    /// </summary>
     [Fact]
     public async Task MultilinePartialIndex_DoesNotMatchFullIndex()
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
@@ -166,6 +192,7 @@ public sealed class SqliteSafeMigrationProviderCompositionIntegrationTests : Sql
             ["Code"],
             unique: true);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -174,13 +201,18 @@ public sealed class SqliteSafeMigrationProviderCompositionIntegrationTests : Sql
                 new SafeMigrationRunOptions("sqlite-partial-index-drift"),
                 cancellationToken: CancellationToken.None);
 
+        // Assert
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
     }
 
+    /// <summary>
+    /// Multiline partial index rename preserves filter.
+    /// </summary>
     [Fact]
     public async Task MultilinePartialIndex_RenamePreservesFilter()
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
@@ -200,23 +232,31 @@ public sealed class SqliteSafeMigrationProviderCompositionIntegrationTests : Sql
             "partial_index_entities",
             "ix_partial_index_entities_code_v2");
 
+        // Act
         await ExecuteOperationsAsync(context, rename.Operations, cancellationToken: CancellationToken.None);
 
+        var observedScalar1 = await ScalarIntAsync(
+            connection,
+            """
+            SELECT COUNT(*) FROM sqlite_schema
+            WHERE type = 'index' AND name = 'ix_partial_index_entities_code_v2'
+            AND lower(sql) LIKE '%where code is not null%';
+            """,
+            cancellationToken: CancellationToken.None);
+
+        // Assert
         Assert.Equal(
             1,
-            await ScalarIntAsync(
-                connection,
-                """
-                SELECT COUNT(*) FROM sqlite_schema
-                WHERE type = 'index' AND name = 'ix_partial_index_entities_code_v2'
-                AND lower(sql) LIKE '%where code is not null%';
-                """,
-                cancellationToken: CancellationToken.None));
+            observedScalar1);
     }
 
+    /// <summary>
+    /// Check constraint string literals remain case sensitive.
+    /// </summary>
     [Fact]
     public async Task CheckConstraintStringLiterals_RemainCaseSensitive()
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
@@ -234,6 +274,7 @@ public sealed class SqliteSafeMigrationProviderCompositionIntegrationTests : Sql
             "literal_check_entities",
             "Status = 'ACTIVE'");
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -242,14 +283,19 @@ public sealed class SqliteSafeMigrationProviderCompositionIntegrationTests : Sql
                 new SafeMigrationRunOptions("sqlite-check-literal-case"),
                 cancellationToken: CancellationToken.None);
 
+        // Assert
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
         Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
     }
 
+    /// <summary>
+    /// Column comments and identifier text do not change parsed facets.
+    /// </summary>
     [Fact]
     public async Task ColumnCommentsAndIdentifierText_DoNotChangeParsedFacets()
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
@@ -277,6 +323,7 @@ public sealed class SqliteSafeMigrationProviderCompositionIntegrationTests : Sql
             nullable: true,
             collation: new SafeMigrationCollationIdentifier("NOCASE"));
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -285,6 +332,7 @@ public sealed class SqliteSafeMigrationProviderCompositionIntegrationTests : Sql
                 new SafeMigrationRunOptions("sqlite-comment-parsing"),
                 cancellationToken: CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
         Assert.All(report.Assessments, assessment => Assert.Equal(SafeMigrationAction.NoOp, assessment.Action));
     }

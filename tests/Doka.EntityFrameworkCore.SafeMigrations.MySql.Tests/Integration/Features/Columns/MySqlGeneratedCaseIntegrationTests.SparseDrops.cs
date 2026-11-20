@@ -320,6 +320,9 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
                 builder
                     .Operations
                     .Cast<SafeMigrationOperation>()
+
+                    // WHY: Retain this explicit materialization/copy path and its collection lowering.
+                    // ReSharper disable once UseCollectionExpression
                     .ToArray(),
                 CancellationToken.None);
 

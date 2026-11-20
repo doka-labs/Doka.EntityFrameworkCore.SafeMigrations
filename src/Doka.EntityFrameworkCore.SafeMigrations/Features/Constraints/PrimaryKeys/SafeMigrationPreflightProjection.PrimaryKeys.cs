@@ -37,6 +37,9 @@ internal sealed partial class SafeMigrationPreflightProjection
         }
 
         var canonical = ResolveAlterTable(key);
+
+        // WHY: Resolve the first accepted physical owner using the dictionary's native enumerator.
+        // ReSharper disable once ForeachCanBePartlyConvertedToQueryUsingAnotherGetEnumerator
         foreach (var pair in _tables)
         {
             if (_tables.Comparer.Equals(ResolveAlterTable(pair.Key), canonical))
@@ -45,6 +48,8 @@ internal sealed partial class SafeMigrationPreflightProjection
             }
         }
 
+        // WHY: A removed-key tombstone must be observed in the same ordered owner lookup as a surviving key.
+        // ReSharper disable once ForeachCanBePartlyConvertedToQueryUsingAnotherGetEnumerator
         foreach (var pair in _prerequisites)
         {
             if (_prerequisites.Comparer.Equals(ResolveAlterTable(pair.Key), canonical))

@@ -52,6 +52,9 @@ public sealed partial class MySqlTablesCatalogSnapshotIntegrationTests : MySqlSa
         var operations = builder
             .Operations
             .Cast<SafeMigrationOperation>()
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var before = await SessionCounterAsync(

@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations;
 
 /// <summary>Defines the requested sort direction of an index key.</summary>
+[PublicAPI]
 public enum SafeMigrationIndexSortOrder
 {
     /// <summary>Use and verify the provider's effective default direction.</summary>
@@ -14,6 +15,7 @@ public enum SafeMigrationIndexSortOrder
 }
 
 /// <summary>Defines the requested null placement of an ordered index key.</summary>
+[PublicAPI]
 public enum SafeMigrationIndexNullOrder
 {
     /// <summary>Use and verify the provider's effective default null placement.</summary>

@@ -2,39 +2,53 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 
 internal sealed partial class SafeMigrationPreflightProjection
 {
-    private sealed class ProjectedDefinitionSet<T>(
-        IEqualityComparer<T> semanticComparer,
-        ISafeMigrationProviderObjectIdentityNormalizer? objectIdentityNormalizer,
-        StringComparer? memberComparer = null
-    )
+    private sealed class ProjectedDefinitionSet<T>
         where T : class
     {
-        private readonly Dictionary<string, PhysicalDefinition> _aliases = new(
-            new IdentifierComparer(objectIdentityNormalizer, memberComparer));
-
-        private readonly IdentifierComparer _identifierComparer = new(objectIdentityNormalizer, memberComparer);
-
-        private readonly HashSet<string> _missingNames =
-            new(new IdentifierComparer(objectIdentityNormalizer, memberComparer));
-
-        private readonly HashSet<T> _mutatedSemanticDefinitions = new(semanticComparer);
-
-        private readonly Dictionary<string, PhysicalDefinition> _physicalDefinitions =
-            new(new IdentifierComparer(objectIdentityNormalizer, memberComparer));
-
-        private readonly Dictionary<string, T> _removedDefinitions =
-            new(new IdentifierComparer(objectIdentityNormalizer, memberComparer));
+        private readonly Dictionary<string, PhysicalDefinition> _aliases;
+        private readonly IdentifierComparer _identifierComparer;
+        private readonly HashSet<string> _missingNames;
+        private readonly HashSet<T> _mutatedSemanticDefinitions;
+        private readonly Dictionary<string, PhysicalDefinition> _physicalDefinitions;
+        private readonly Dictionary<string, T> _removedDefinitions;
+        private readonly IEqualityComparer<T> _semanticComparer;
 
         // WHY: A semantic NoOp is an alias for an existing physical object, not
         // another object. Keeping that binding lets one drop invalidate every
         // alias without hiding a distinct physical object with the same shape.
-        private readonly Dictionary<T, HashSet<PhysicalDefinition>> _semanticDefinitions = new(semanticComparer);
-
-        private readonly HashSet<string> _unresolvedMissingNames =
-            new(new IdentifierComparer(objectIdentityNormalizer, memberComparer));
+        private readonly Dictionary<T, HashSet<PhysicalDefinition>> _semanticDefinitions;
+        private readonly HashSet<string> _unresolvedMissingNames;
 
         private HashSet<T>? _unboundDefinitions;
         private bool _unboundIdentityInvalidated;
+
+        /// <summary>Initializes semantic lifetimes and physical aliases with their distinct identity rules.</summary>
+        /// <param name="semanticComparer">The semantic definition equality and hash contract.</param>
+        /// <param name="objectIdentityNormalizer">The provider's physical identity rules.</param>
+        /// <param name="memberComparer">The optional member-specific comparer.</param>
+        public ProjectedDefinitionSet(
+            IEqualityComparer<T> semanticComparer,
+            ISafeMigrationProviderObjectIdentityNormalizer? objectIdentityNormalizer,
+            StringComparer? memberComparer = null
+        )
+        {
+            _semanticComparer = semanticComparer;
+            _aliases = new Dictionary<string, PhysicalDefinition>(
+                new IdentifierComparer(objectIdentityNormalizer, memberComparer));
+
+            _identifierComparer = new IdentifierComparer(objectIdentityNormalizer, memberComparer);
+            _missingNames = new HashSet<string>(new IdentifierComparer(objectIdentityNormalizer, memberComparer));
+            _mutatedSemanticDefinitions = new HashSet<T>(semanticComparer);
+            _physicalDefinitions = new Dictionary<string, PhysicalDefinition>(
+                new IdentifierComparer(objectIdentityNormalizer, memberComparer));
+
+            _removedDefinitions = new Dictionary<string, T>(
+                new IdentifierComparer(objectIdentityNormalizer, memberComparer));
+
+            _semanticDefinitions = new Dictionary<T, HashSet<PhysicalDefinition>>(semanticComparer);
+            _unresolvedMissingNames = new HashSet<string>(
+                new IdentifierComparer(objectIdentityNormalizer, memberComparer));
+        }
 
         /// <summary>Gets the accepted removal ordinal that invalidated unresolved member identities.</summary>
         public int? IdentityUnknownOriginOrdinal { get; private set; }
@@ -65,6 +79,8 @@ internal sealed partial class SafeMigrationPreflightProjection
             Func<T, TState, bool> predicate
         )
         {
+            // WHY: Enumerate the concrete map without boxing its enumerator or capturing lookup state.
+            // ReSharper disable once ForeachCanBeConvertedToQueryUsingAnotherGetEnumerator
             foreach (var physical in _physicalDefinitions.Values)
             {
                 if (predicate(physical.Definition, state))
@@ -75,6 +91,8 @@ internal sealed partial class SafeMigrationPreflightProjection
 
             if (_unboundDefinitions is not null)
             {
+                // WHY: Preserve direct list enumeration and the same first matching state-aware predicate call.
+                // ReSharper disable once ForeachCanBeConvertedToQueryUsingAnotherGetEnumerator
                 foreach (var definition in _unboundDefinitions)
                 {
                     if (predicate(definition, state))
@@ -96,6 +114,8 @@ internal sealed partial class SafeMigrationPreflightProjection
             Func<T, TState, bool> predicate
         )
         {
+            // WHY: Keep the concrete map enumerator and evaluate the predicate only for created lifetimes.
+            // ReSharper disable once ForeachCanBeConvertedToQueryUsingAnotherGetEnumerator
             foreach (var physical in _physicalDefinitions.Values)
             {
                 if (physical.CreatedByProjection
@@ -121,7 +141,7 @@ internal sealed partial class SafeMigrationPreflightProjection
 
             // WHY: Table matching can ignore constraint symbols. Allocate this
             // separate set only for live shapes that lack physical-name proof.
-            _unboundDefinitions ??= new HashSet<T>(semanticComparer);
+            _unboundDefinitions ??= new HashSet<T>(_semanticComparer);
             _unboundDefinitions.Add(definition);
         }
 
@@ -151,11 +171,15 @@ internal sealed partial class SafeMigrationPreflightProjection
                 definitions.Add(physical);
             }
 
+            // WHY: Snapshot before changing the source collection; retain the existing materialization contract.
+            // ReSharper disable once UseCollectionExpression
             foreach (var name in _removedDefinitions.Keys.ToArray())
             {
                 _removedDefinitions[name] = transform(_removedDefinitions[name]);
             }
 
+            // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+            // ReSharper disable once UseCollectionExpression
             var mutated = _mutatedSemanticDefinitions.ToArray();
             _mutatedSemanticDefinitions.Clear();
             foreach (var definition in mutated)
@@ -165,6 +189,9 @@ internal sealed partial class SafeMigrationPreflightProjection
 
             if (_unboundDefinitions is not null)
             {
+                // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based
+                // materialization.
+                // ReSharper disable once UseCollectionExpression
                 var unbound = _unboundDefinitions.ToArray();
                 _unboundDefinitions.Clear();
                 foreach (var definition in unbound)
@@ -223,7 +250,7 @@ internal sealed partial class SafeMigrationPreflightProjection
                 AcceptPhysical(physicalName, definition);
                 physical = _physicalDefinitions[physicalName];
             }
-            else if (!semanticComparer.Equals(physical.Definition, definition))
+            else if (!_semanticComparer.Equals(physical.Definition, definition))
             {
                 return false;
             }
@@ -268,9 +295,11 @@ internal sealed partial class SafeMigrationPreflightProjection
             T expected
         )
         {
+            // WHY: The removed map owns its values; no enumerable adapter is needed for semantic lookup.
+            // ReSharper disable once ForeachCanBeConvertedToQueryUsingAnotherGetEnumerator
             foreach (var removed in _removedDefinitions.Values)
             {
-                if (semanticComparer.Equals(removed, expected))
+                if (_semanticComparer.Equals(removed, expected))
                 {
                     return true;
                 }
@@ -290,7 +319,7 @@ internal sealed partial class SafeMigrationPreflightProjection
         )
         {
             if (_aliases.TryGetValue(name, out var exact)
-                && semanticComparer.Equals(exact.Definition, expected))
+                && _semanticComparer.Equals(exact.Definition, expected))
             {
                 physicalName = exact.Name;
 
@@ -403,7 +432,7 @@ internal sealed partial class SafeMigrationPreflightProjection
         public bool SemanticallyEquals(
             T left,
             T right
-        ) => semanticComparer.Equals(left, right);
+        ) => _semanticComparer.Equals(left, right);
 
         public bool RemovePhysical(
             string physicalName,
@@ -431,6 +460,10 @@ internal sealed partial class SafeMigrationPreflightProjection
             var names = _physicalDefinitions
                 .Where(pair => predicate(pair.Value.Definition))
                 .Select(static pair => pair.Key)
+
+                // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based
+                // materialization.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray();
 
             foreach (var name in names)
@@ -459,7 +492,7 @@ internal sealed partial class SafeMigrationPreflightProjection
             if (_missingNames.Contains(name))
             {
                 if (_removedDefinitions.TryGetValue(name, out var removed)
-                    && semanticComparer.Equals(removed, expected))
+                    && _semanticComparer.Equals(removed, expected))
                 {
                     return ProjectedDefinitionMutation.Missing;
                 }
@@ -503,6 +536,7 @@ internal sealed partial class SafeMigrationPreflightProjection
             }
 
             definition = null;
+
             return false;
         }
 
@@ -551,21 +585,34 @@ internal sealed partial class SafeMigrationPreflightProjection
             }
         }
 
-        private sealed class PhysicalDefinition(
-            string name,
-            T definition,
-            IEqualityComparer<string> identifierComparer,
-            bool createdByProjection
-        )
+        private sealed class PhysicalDefinition
         {
-            public HashSet<string> Aliases { get; } = new(identifierComparer);
+            /// <summary>Initializes one physical lifetime independently from its semantic aliases.</summary>
+            /// <param name="name">The physical member name.</param>
+            /// <param name="definition">The accepted semantic shape.</param>
+            /// <param name="identifierComparer">The physical alias identity comparer.</param>
+            /// <param name="createdByProjection">Whether accepted DDL created the physical lifetime.</param>
+            public PhysicalDefinition(
+                string name,
+                T definition,
+                IEqualityComparer<string> identifierComparer,
+                bool createdByProjection
+            )
+            {
+                Aliases = new HashSet<string>(identifierComparer);
+                Definition = definition;
+                Name = name;
+                CreatedByProjection = createdByProjection;
+            }
 
-            public T Definition { get; set; } = definition;
+            public HashSet<string> Aliases { get; }
 
-            public string Name { get; } = name;
+            public T Definition { get; set; }
+
+            public string Name { get; }
 
             /// <summary>Gets whether accepted DDL created this lifetime rather than observing a live alias.</summary>
-            public bool CreatedByProjection { get; } = createdByProjection;
+            public bool CreatedByProjection { get; }
         }
     }
 

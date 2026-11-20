@@ -227,8 +227,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 
         var noSetNullDependency = BuildNoOutgoingSetNullForeignKey(intent.Table, intent.Definition.Name);
         var ordinaryInvariant = plan.NullabilityDataProbe?.RepairInvariantExpression ?? "FALSE";
-        var status = MySqlSafeMigrationRuntimePlan.RequiredColumnAddStatusPlaceholder;
-        var resume = MySqlSafeMigrationRequiredColumnAddPlan.ResumeExpression;
+        const string status = MySqlSafeMigrationRuntimePlan.RequiredColumnAddStatusPlaceholder;
+        const string resume = MySqlSafeMigrationRequiredColumnAddPlan.ResumeExpression;
 
         // WHY: Materialize complete catalog facts once per operation. State,
         // repair, NULL eligibility and diagnostics consume only this closed
@@ -321,7 +321,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         };
     }
 
-    /// <summary>Requires to be enforced transactional CHECK protection and strict final nullability conversion.</summary>
+    /// <summary>
+    /// Requires enforced transactional CHECK protection and strict final nullability conversion.
+    /// </summary>
     /// <param name="table">The exact local table identity.</param>
     /// <param name="isMariaDb">Whether the CHECK session switch must also be qualified.</param>
     /// <param name="backslashEscapes">Whether only standard native literal decoding can represent the target.</param>

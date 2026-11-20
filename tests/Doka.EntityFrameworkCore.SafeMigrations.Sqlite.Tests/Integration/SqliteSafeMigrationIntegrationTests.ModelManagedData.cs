@@ -3,9 +3,13 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 /// <summary>Exercises model managed data with independently owned SQLite state.</summary>
 public sealed class SqliteSafeMigrationModelManagedDataIntegrationTests : SqliteSafeMigrationCatalogIntegrationTests
 {
+    /// <summary>
+    /// Composite keys updates deletes and null unique values converge in order.
+    /// </summary>
     [Fact]
     public async Task CompositeKeysUpdatesDeletesAndNullUniqueValuesConvergeInOrder()
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
@@ -51,6 +55,7 @@ public sealed class SqliteSafeMigrationModelManagedDataIntegrationTests : Sqlite
 
         var runner = context.GetService<ISafeMigrationRunner>();
 
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
@@ -66,6 +71,22 @@ public sealed class SqliteSafeMigrationModelManagedDataIntegrationTests : Sqlite
             new SafeMigrationRunOptions("sqlite-composite-model-data-replay"),
             cancellationToken: CancellationToken.None);
 
+        var observedScalar1 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM composite_managed_rows WHERE managed_value = 'target';",
+            cancellationToken: CancellationToken.None);
+
+        var observedScalar2 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM composite_managed_rows WHERE code IS NULL;",
+            cancellationToken: CancellationToken.None);
+
+        var observedScalar3 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM composite_managed_rows WHERE tenant_id = 2 AND id = 1;",
+            cancellationToken: CancellationToken.None);
+
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, preflight.Status);
         Assert.Equal(SafeMigrationAction.Apply, preflight.Assessments[0].Action);
         Assert.Equal(SafeMigrationAction.ValidateAtRuntime, preflight.Assessments[1].Action);
@@ -73,29 +94,24 @@ public sealed class SqliteSafeMigrationModelManagedDataIntegrationTests : Sqlite
         Assert.All(replay.Assessments, assessment => Assert.Equal(SafeMigrationAction.NoOp, assessment.Action));
         Assert.Equal(
             2,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM composite_managed_rows WHERE managed_value = 'target';",
-                cancellationToken: CancellationToken.None));
+            observedScalar1);
 
         Assert.Equal(
             1,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM composite_managed_rows WHERE code IS NULL;",
-                cancellationToken: CancellationToken.None));
+            observedScalar2);
 
         Assert.Equal(
             0,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM composite_managed_rows WHERE tenant_id = 2 AND id = 1;",
-                cancellationToken: CancellationToken.None));
+            observedScalar3);
     }
 
+    /// <summary>
+    /// Model managed update with unexpected source value is rejected without overwrite.
+    /// </summary>
     [Fact]
     public async Task ModelManagedUpdateWithUnexpectedSourceValue_IsRejectedWithoutOverwrite()
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
@@ -118,6 +134,7 @@ public sealed class SqliteSafeMigrationModelManagedDataIntegrationTests : Sqlite
             new object?[,] { { "source" } },
             new object?[,] { { "target" } });
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -126,20 +143,27 @@ public sealed class SqliteSafeMigrationModelManagedDataIntegrationTests : Sqlite
                 new SafeMigrationRunOptions("sqlite-model-data-drift"),
                 cancellationToken: CancellationToken.None);
 
+        var observedScalar1 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM managed_drift WHERE id = 1 AND managed_value = 'operator-change';",
+            cancellationToken: CancellationToken.None);
+
+        // Assert
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
         Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
         Assert.Equal(
             1,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM managed_drift WHERE id = 1 AND managed_value = 'operator-change';",
-                cancellationToken: CancellationToken.None));
+            observedScalar1);
     }
 
+    /// <summary>
+    /// Initial table and model managed data apply replay and verify.
+    /// </summary>
     [Fact]
     public async Task InitialTableAndModelManagedData_ApplyReplayAndVerify()
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -167,6 +191,7 @@ public sealed class SqliteSafeMigrationModelManagedDataIntegrationTests : Sqlite
 
         var runner = context.GetService<ISafeMigrationRunner>();
 
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
@@ -188,6 +213,12 @@ public sealed class SqliteSafeMigrationModelManagedDataIntegrationTests : Sqlite
             new SafeMigrationRunOptions("sqlite-managed-postflight"),
             cancellationToken: CancellationToken.None);
 
+        var observedScalar1 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM managed_roles WHERE Id = 1 AND Code = 'administrator';",
+            cancellationToken: CancellationToken.None);
+
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
         Assert.All(preflight.Assessments, assessment => Assert.Equal(SafeMigrationAction.Apply, assessment.Action));
         Assert.Equal(SafeMigrationReportStatus.Ready, replay.Status);
@@ -196,10 +227,7 @@ public sealed class SqliteSafeMigrationModelManagedDataIntegrationTests : Sqlite
         Assert.All(postflight.Assessments, assessment => Assert.True(assessment.PostconditionSatisfied));
         Assert.Equal(
             1,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM managed_roles WHERE Id = 1 AND Code = 'administrator';",
-                cancellationToken: CancellationToken.None));
+            observedScalar1);
     }
 
     /// <summary>An inserted row cannot reuse an existing unique value or mutate either table.</summary>
@@ -229,23 +257,27 @@ public sealed class SqliteSafeMigrationModelManagedDataIntegrationTests : Sqlite
             new SafeMigrationRunOptions("sqlite-managed-collision"),
             cancellationToken: CancellationToken.None);
 
+        var observedScalar1 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM managed_roles;",
+            cancellationToken: CancellationToken.None);
+
+        var observedScalar2 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM managed_assignments;",
+            cancellationToken: CancellationToken.None);
+
         // Assert
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal(SafeMigrationObservedState.DataBlocked, assessment.ObservedState);
         Assert.Equal("model_managed_unique_collision", assessment.AnalysisCode);
         Assert.Equal(
             2,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM managed_roles;",
-                cancellationToken: CancellationToken.None));
+            observedScalar1);
 
         Assert.Equal(
             1,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM managed_assignments;",
-                cancellationToken: CancellationToken.None));
+            observedScalar2);
     }
 
     /// <summary>Deleting a referenced row requires modeled dependency evidence and leaves all rows intact.</summary>
@@ -275,23 +307,27 @@ public sealed class SqliteSafeMigrationModelManagedDataIntegrationTests : Sqlite
             new SafeMigrationRunOptions("sqlite-managed-unmodeled-dependency"),
             cancellationToken: CancellationToken.None);
 
+        var observedScalar1 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM managed_roles;",
+            cancellationToken: CancellationToken.None);
+
+        var observedScalar2 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM managed_assignments;",
+            cancellationToken: CancellationToken.None);
+
         // Assert
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal(SafeMigrationObservedState.Unsupported, assessment.ObservedState);
         Assert.Equal("model_managed_unmodeled_dependency", assessment.AnalysisCode);
         Assert.Equal(
             2,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM managed_roles;",
-                cancellationToken: CancellationToken.None));
+            observedScalar1);
 
         Assert.Equal(
             1,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM managed_assignments;",
-                cancellationToken: CancellationToken.None));
+            observedScalar2);
     }
 
     /// <summary>Creates the original small dependency fixture independently for each rejection contract.</summary>
@@ -315,9 +351,13 @@ public sealed class SqliteSafeMigrationModelManagedDataIntegrationTests : Sqlite
         """,
         cancellationToken: cancellationToken);
 
+    /// <summary>
+    /// Ordered model managed dependency deletion is projected and applied without cascade.
+    /// </summary>
     [Fact]
     public async Task OrderedModelManagedDependencyDeletion_IsProjectedAndAppliedWithoutCascade()
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
@@ -361,6 +401,7 @@ public sealed class SqliteSafeMigrationModelManagedDataIntegrationTests : Sqlite
 
         var runner = context.GetService<ISafeMigrationRunner>();
 
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
@@ -375,6 +416,17 @@ public sealed class SqliteSafeMigrationModelManagedDataIntegrationTests : Sqlite
             new SafeMigrationRunOptions("sqlite-managed-dependency-replay"),
             cancellationToken: CancellationToken.None);
 
+        var observedScalar1 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM managed_roles;",
+            cancellationToken: CancellationToken.None);
+
+        var observedScalar2 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM managed_assignments;",
+            cancellationToken: CancellationToken.None);
+
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, preflight.Status);
         Assert.Equal(SafeMigrationObservedState.TransitionReady, preflight.Assessments[0].ObservedState);
         Assert.Equal(SafeMigrationAction.ValidateAtRuntime, preflight.Assessments[1].Action);
@@ -383,22 +435,20 @@ public sealed class SqliteSafeMigrationModelManagedDataIntegrationTests : Sqlite
         Assert.All(replay.Assessments, assessment => Assert.Equal(SafeMigrationAction.NoOp, assessment.Action));
         Assert.Equal(
             0,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM managed_roles;",
-                cancellationToken: CancellationToken.None));
+            observedScalar1);
 
         Assert.Equal(
             0,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM managed_assignments;",
-                cancellationToken: CancellationToken.None));
+            observedScalar2);
     }
 
+    /// <summary>
+    /// Model managed dependency without prior delete is data blocked.
+    /// </summary>
     [Fact]
     public async Task ModelManagedDependencyWithoutPriorDelete_IsDataBlocked()
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
@@ -430,6 +480,7 @@ public sealed class SqliteSafeMigrationModelManagedDataIntegrationTests : Sqlite
                     ["Id"]),
             ]);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -438,22 +489,27 @@ public sealed class SqliteSafeMigrationModelManagedDataIntegrationTests : Sqlite
                 new SafeMigrationRunOptions("sqlite-managed-dependency-blocked"),
                 cancellationToken: CancellationToken.None);
 
+        var observedScalar1 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM managed_roles;",
+            cancellationToken: CancellationToken.None);
+
+        var observedScalar2 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM managed_assignments;",
+            cancellationToken: CancellationToken.None);
+
+        // Assert
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationObservedState.DataBlocked, assessment.ObservedState);
         Assert.Equal("model_managed_dependency", assessment.AnalysisCode);
         Assert.Equal(
             1,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM managed_roles;",
-                cancellationToken: CancellationToken.None));
+            observedScalar1);
 
         Assert.Equal(
             1,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM managed_assignments;",
-                cancellationToken: CancellationToken.None));
+            observedScalar2);
     }
 }

@@ -39,6 +39,7 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
         // PostgreSQL's catalog deparser emits canonical built-in names, so
         // normalize documented aliases before building both DDL and candidates.
         canonicalStoreType = CanonicalizeBuiltInAliases(mapping.StoreType);
+
         return true;
     }
 
@@ -202,6 +203,7 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
         }
 
         canonical = canonicalName + suffix;
+
         return true;
     }
 }

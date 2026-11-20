@@ -13,6 +13,7 @@ public sealed class MySqlCatalogPackingIntegrationTests : MySqlSafeMigrationInte
     [Fact]
     public async Task Analyzer_PacksAcrossShortCircuitGapsAndCaptureBoundariesWithoutMixingResults()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -46,8 +47,12 @@ public sealed class MySqlCatalogPackingIntegrationTests : MySqlSafeMigrationInte
         var operations = builder
             .Operations
             .Cast<SafeMigrationOperation>()
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
+        // Act
         var results = await context
             .GetService<ISafeMigrationProviderAnalyzer>()
             .AnalyzeAsync(
@@ -55,6 +60,7 @@ public sealed class MySqlCatalogPackingIntegrationTests : MySqlSafeMigrationInte
                 operations,
                 CancellationToken.None);
 
+        // Assert
         Assert.False(connection.CanCreateBatch);
         Assert.Equal(10, connection.ClassificationStatementCount);
         Assert.Equal(operations.Length, results.Count);
@@ -78,6 +84,7 @@ public sealed class MySqlCatalogPackingIntegrationTests : MySqlSafeMigrationInte
         bool missingRows
     )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -103,9 +110,13 @@ public sealed class MySqlCatalogPackingIntegrationTests : MySqlSafeMigrationInte
         var operations = builder
             .Operations
             .Cast<SafeMigrationOperation>()
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        // Act
+        var capturedException = await Record.ExceptionAsync(() =>
             context
                 .GetService<ISafeMigrationProviderAnalyzer>()
                 .AnalyzeAsync(
@@ -113,6 +124,8 @@ public sealed class MySqlCatalogPackingIntegrationTests : MySqlSafeMigrationInte
                     operations,
                     CancellationToken.None));
 
+        // Assert
+        var exception = Assert.IsType<InvalidOperationException>(capturedException);
         Assert.True(connection.FaultWasInjected);
         Assert.Equal(1, connection.ClassificationStatementCount);
         Assert.Equal(ConnectionState.Closed, connection.State);

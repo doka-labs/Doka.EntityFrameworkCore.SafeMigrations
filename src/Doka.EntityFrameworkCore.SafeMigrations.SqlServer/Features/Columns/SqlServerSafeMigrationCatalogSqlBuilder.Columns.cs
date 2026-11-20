@@ -510,11 +510,13 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         var collationClause = string.Empty;
         if (type.IsCharacter)
         {
-            var collation = computed
-                ? ComputedVariable(definition, "collation")
-                : definition.Collation is null
-                    ? "CONVERT(sysname, DATABASEPROPERTYEX(DB_NAME(), 'Collation'))"
-                    : Literal(definition.Collation.Name);
+            var collation = computed switch
+            {
+                true => ComputedVariable(definition, "collation"),
+                false when definition.Collation is null
+                    => "CONVERT(sysname, DATABASEPROPERTYEX(DB_NAME(), 'Collation'))",
+                false => Literal(definition.Collation.Name),
+            };
 
             collationClause = $" AND c.collation_name = {collation}";
         }
@@ -523,11 +525,12 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         // matching. Render it once without a list, joined copy, and another
         // intermediate copy of every invariant physical facet.
 
-        var nullability = computed
-            ? ComputedVariable(definition, "nullable")
-            : definition.IsNullable
-                ? "1"
-                : "0";
+        var nullability = computed switch
+        {
+            true => ComputedVariable(definition, "nullable"),
+            false when definition.IsNullable => "1",
+            false => "0",
+        };
 
         var computedClause = computed
             ? $"""
@@ -766,6 +769,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             """;
     }
 
+    // WHY: None has no SQL expression; it and unknown kinds retain the established rejecting precondition.
+    // ReSharper disable once SwitchExpressionHandlesSomeKnownEnumValuesWithExceptionInDefault
     private string DefaultExpression(
         ExpectedColumnDefinition definition
     ) => definition.DefaultValue.Kind switch
@@ -795,8 +800,14 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     )
     {
         List<string>? matches = null;
-        foreach (var candidate in candidates)
+
+        // WHY: The stable indexed snapshot preserves declaration order without mutating the source.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var candidateIndex0 = 0; candidateIndex0 < candidates.Count; candidateIndex0++)
         {
+            var candidate = candidates[candidateIndex0];
+
             if (foreignKeysOnly && candidate.Intent is DropTableIntent table)
             {
                 (matches ??= []).Add($"({alias}.parent_object_id={TableId(table.Table, table.Schema)})");

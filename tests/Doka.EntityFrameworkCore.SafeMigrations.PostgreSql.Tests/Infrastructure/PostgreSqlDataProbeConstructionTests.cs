@@ -173,8 +173,8 @@ public sealed class PostgreSqlDataProbeConstructionTests
     )
     {
         var target = Definition(40);
-        var source = (ExpectedColumnDefinition?)Definition(80);
-        var schema = (string?)null;
+        var source = Definition(80);
+        string? schema = null;
         var table = "probe_rows";
         var alter = caseId.StartsWith("alter-", StringComparison.Ordinal);
 
@@ -321,8 +321,8 @@ public sealed class PostgreSqlDataProbeConstructionTests
                 throw new ArgumentOutOfRangeException(nameof(caseId), caseId, "Unknown data-probe case.");
         }
 
-        var intent = alter
-            ? (SafeMigrationIntent)new AlterColumnIntent(table, target, source, schema)
+        SafeMigrationIntent intent = alter
+            ? new AlterColumnIntent(table, target, source, schema)
             : new EnsureColumnIntent(table, target, schema);
 
         var operation = new SafeMigrationOperation(intent, policy);

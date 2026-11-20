@@ -15,6 +15,8 @@ var expectsDesignTimeReference = args switch
 };
 
 GeneratedExpressionConsumerContract.Verify();
+GeneratedExpressionConsumerContract.VerifyAssemblyContracts(
+    typeof(SqlServerSafeMigrationOptionsBuilderExtensions).Assembly);
 
 var migrationBuilder = new MigrationBuilder("PackageConsumer");
 migrationBuilder.EnsureSchemaExists("consumer_schema");

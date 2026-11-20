@@ -1,11 +1,13 @@
 # SQLite behavior
 
-Version 10.7.2 corrects quoted/depth-sensitive index, collation, constraint and
-default-value catalog interpretation. It retains atomic retiring-table FK removal,
-safe rebuild column order and generated-column/DROP proofs. Review the
-[current upgrade notes](support-and-qualification.md#upgrade-to-1072) for catalog
-and literal-ownership corrections, required cancellation arguments and dependency
-floors, and the earlier
+Version 10.7.3 preserves the quoted/depth-sensitive catalog corrections from
+10.7.2 and fixes owned asynchronous work/cleanup lifetimes. Atomic retiring-table
+FK removal, safe rebuild column order and generated-column/DROP proofs remain.
+Review the
+[current upgrade notes](support-and-qualification.md#upgrade-to-1073) for
+ownership, cleanup and dependency floors, the
+[10.7.2 upgrade](support-and-qualification.md#upgrade-to-1072) for catalog and
+literal-ownership corrections, and the earlier
 [10.6.0 contract changes](support-and-qualification.md#upgrade-to-1060) for
 conditional computed/CHECK fingerprint approvals and conservative boundaries.
 

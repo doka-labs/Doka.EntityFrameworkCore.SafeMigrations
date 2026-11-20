@@ -1,8 +1,8 @@
-using MySqlGuidFormat = MySqlConnector.MySqlGuidFormat;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-/// <summary>Owns one configured native engine and retains database/login cleanup ownership until release succeeds.</summary>
+/// <summary>
+/// Owns one configured native engine and retains database/login cleanup ownership until release succeeds.
+/// </summary>
 public sealed class MySqlEngineContainerFixture : IAsyncLifetime, IDisposable
 {
     private const string BootstrapDatabase = "bootstrap";
@@ -33,16 +33,14 @@ public sealed class MySqlEngineContainerFixture : IAsyncLifetime, IDisposable
             throw new ArgumentOutOfRangeException(nameof(lowerCaseTableNames));
         }
 
-        _engine = ReadEnvironment("SAFE_MIGRATIONS_MYSQL_ENGINE", "mariadb");
-        _version = ReadEnvironment("SAFE_MIGRATIONS_MYSQL_VERSION", "12.3.3");
+        _engine = ReadEnvironment("SAFE_MIGRATIONS_MYSQL_ENGINE", DatabaseImageCatalog.DefaultMySqlEngine);
+        _version = ReadEnvironment("SAFE_MIGRATIONS_MYSQL_VERSION", DatabaseImageCatalog.DefaultMySqlVersion);
 
         var configuredImage = Environment
             .GetEnvironmentVariable("SAFE_MIGRATIONS_MYSQL_IMAGE")
             ?.Trim();
 
-        var image = string.IsNullOrWhiteSpace(configuredImage)
-            ? $"{_engine}:{_version}"
-            : configuredImage;
+        var image = DatabaseImageCatalog.Resolve(_engine, _version, configuredImage);
 
         var builder = new MySqlBuilder(image)
             .WithDatabase(BootstrapDatabase)
@@ -152,9 +150,9 @@ public sealed class MySqlEngineContainerFixture : IAsyncLifetime, IDisposable
                     _createdDatabases.Add(databaseName, connectionString);
                     _createdUsers.Add(databaseName, new HashSet<string>(StringComparer.Ordinal));
                 },
-                async token =>
+                async databaseCancellationToken =>
                 {
-                    await command.ExecuteNonQueryAsync(token);
+                    await command.ExecuteNonQueryAsync(databaseCancellationToken);
                 },
                 cancellationToken);
 
@@ -211,7 +209,9 @@ public sealed class MySqlEngineContainerFixture : IAsyncLifetime, IDisposable
         }
     }
 
-    /// <summary>Releases only an exact database lease issued by this fixture, retaining failed cleanup for disposal.</summary>
+    /// <summary>
+    /// Releases only an exact database lease issued by this fixture, retaining failed cleanup for disposal.
+    /// </summary>
     /// <param name="connectionString">The original root connection string returned during database creation.</param>
     /// <param name="cancellationToken">Cancels resource cleanup.</param>
     public async Task ReleaseDatabaseAsync(
@@ -276,7 +276,7 @@ public sealed class MySqlEngineContainerFixture : IAsyncLifetime, IDisposable
         Password = password,
         Database = database,
         AllowUserVariables = true,
-        GuidFormat = MySqlGuidFormat.Binary16,
+        GuidFormat = ConnectorMySqlGuidFormat.Binary16,
         Pooling = false,
     }.ConnectionString;
 
@@ -294,6 +294,8 @@ public sealed class MySqlEngineContainerFixture : IAsyncLifetime, IDisposable
 
         List<Exception>? failures = null;
 
+        // WHY: Retain this explicit materialization/copy path and its collection lowering.
+        // ReSharper disable once UseCollectionExpression
         foreach (var database in _createdDatabases.Keys.ToArray())
         {
             try
@@ -323,6 +325,9 @@ public sealed class MySqlEngineContainerFixture : IAsyncLifetime, IDisposable
         await dropDatabase.ExecuteNonQueryAsync(cancellationToken);
 
         foreach (var user in _createdUsers[database]
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray())
         {
             await using var command = connection.CreateCommand();

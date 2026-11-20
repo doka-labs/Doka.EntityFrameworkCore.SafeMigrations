@@ -344,12 +344,27 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         return projection;
     }
 
-    private sealed class DependencyProbe(
-        SafeMigrationProviderAnalysis? replacement = null,
-        SafeMigrationProviderAnalysis? opaqueReplacement = null,
-        SafeMigrationProviderAnalysis? capturedReplacement = null
-    ) : ISafeMigrationProjectedDependencyAnalyzer
+    private sealed class DependencyProbe : ISafeMigrationProjectedDependencyAnalyzer
     {
+        private readonly SafeMigrationProviderAnalysis? _capturedReplacement;
+        private readonly SafeMigrationProviderAnalysis? _opaqueReplacement;
+        private readonly SafeMigrationProviderAnalysis? _replacement;
+
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="replacement">The supplied replacement for this fixture.</param>
+        /// <param name="opaqueReplacement">The supplied opaque replacement for this fixture.</param>
+        /// <param name="capturedReplacement">The supplied captured replacement for this fixture.</param>
+        public DependencyProbe(
+            SafeMigrationProviderAnalysis? replacement = null,
+            SafeMigrationProviderAnalysis? opaqueReplacement = null,
+            SafeMigrationProviderAnalysis? capturedReplacement = null
+        )
+        {
+            _replacement = replacement;
+            _opaqueReplacement = opaqueReplacement;
+            _capturedReplacement = capturedReplacement;
+        }
+
         public int CapturedValidationCount { get; private set; }
 
         public int OpaqueValidationCount { get; private set; }
@@ -370,7 +385,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         {
             CapturedValidationCount++;
 
-            return capturedReplacement;
+            return _capturedReplacement;
         }
 
         public SafeMigrationProviderAnalysis? ValidateOpaqueProviderPostcondition(
@@ -381,7 +396,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         {
             OpaqueValidationCount++;
 
-            return opaqueReplacement;
+            return _opaqueReplacement;
         }
 
         public SafeMigrationProviderAnalysis ValidateProjectedOperation(
@@ -393,7 +408,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             ValidationCount++;
             LastProjectedState = projectedAnalysis.ObservedState;
 
-            return replacement ?? projectedAnalysis;
+            return _replacement ?? projectedAnalysis;
         }
 
         public void ObserveAcceptedOperation(

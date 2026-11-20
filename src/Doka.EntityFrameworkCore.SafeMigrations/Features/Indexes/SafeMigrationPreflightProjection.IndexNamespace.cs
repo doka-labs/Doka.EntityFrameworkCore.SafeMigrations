@@ -23,16 +23,16 @@ internal sealed partial class SafeMigrationPreflightProjection
         // name under another owner. Inspect current accepted maps without a
         // second per-operation catalog or a cache whose invalidation can drift.
         // Current presence always wins over an older removal tombstone.
-        foreach (var pair in _tables)
+        // ReSharper disable once ForeachCanBeConvertedToQueryUsingAnotherGetEnumerator
+        foreach (var (owner, table) in _tables)
         {
-            if (!SameIndexSchema(pair.Key, targetSchema)
-                || _projectedMissingTables.Contains(pair.Key))
+            if (!SameIndexSchema(owner, targetSchema)
+                || _projectedMissingTables.Contains(owner))
             {
                 continue;
             }
 
-            var table = pair.Value;
-            if (comparer.Equals(pair.Key.Table, intent.NewName)
+            if (comparer.Equals(owner.Table, intent.NewName)
                 || table.Indexes.ContainsKey(intent.NewName)
                 || (keyBackingNames
                     && ((table.PrimaryKey is not null
@@ -43,16 +43,15 @@ internal sealed partial class SafeMigrationPreflightProjection
             }
         }
 
-        foreach (var pair in _prerequisites)
+        foreach (var (owner, prerequisites) in _prerequisites)
         {
-            if (!SameIndexSchema(pair.Key, targetSchema)
-                || _projectedMissingTables.Contains(pair.Key))
+            if (!SameIndexSchema(owner, targetSchema)
+                || _projectedMissingTables.Contains(owner))
             {
                 continue;
             }
 
-            var prerequisites = pair.Value;
-            if (comparer.Equals(pair.Key.Table, intent.NewName)
+            if (comparer.Equals(owner.Table, intent.NewName)
                 || (prerequisites.Indexes.TryGetPhysicalState(intent.NewName, out var indexPresent) && indexPresent)
                 || (keyBackingNames
                     && ((prerequisites.PrimaryKeyPhysicalName is { } primaryName
@@ -64,6 +63,8 @@ internal sealed partial class SafeMigrationPreflightProjection
             }
         }
 
+        // WHY: Only after current presence is exhausted can a retained physical removal prove absence.
+        // ReSharper disable once ForeachCanBeConvertedToQueryUsingAnotherGetEnumerator
         foreach (var missing in _droppedPhysicalKeys)
         {
             if (SameIndexSchema(new TableKey(missing.Table, missing.Schema), targetSchema)
@@ -73,6 +74,8 @@ internal sealed partial class SafeMigrationPreflightProjection
             }
         }
 
+        // WHY: Scan the exact missing-owner set directly after all current relation-name candidates.
+        // ReSharper disable once ForeachCanBeConvertedToQueryUsingAnotherGetEnumerator
         foreach (var missing in _projectedMissingTables)
         {
             if (SameIndexSchema(missing, targetSchema)

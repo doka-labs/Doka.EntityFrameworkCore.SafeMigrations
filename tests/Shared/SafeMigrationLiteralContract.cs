@@ -1,3 +1,7 @@
+// WHY: Linked Core and provider tests consume different literal inventories from this shared contract.
+// ReSharper disable MemberCanBePrivate.Global
+// ReSharper disable UnusedMember.Global
+
 namespace Doka.EntityFrameworkCore.SafeMigrations.Testing;
 
 internal static class SafeMigrationLiteralContract
@@ -29,6 +33,8 @@ internal static class SafeMigrationLiteralContract
         DayOfWeek.Monday,
     ];
 
+    // WHY: Keep explicit fluent materialization of the filtered, ordered type inventory.
+    // ReSharper disable once UseCollectionExpression
     public static Type[] CreateSupportedNonNullTypes() => CreateRepresentativeValues()
         .Where(static value => value is not null)
         .Select(static value => value!.GetType())

@@ -3,25 +3,31 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 /// <summary>Verifies pooled traversal storage ownership independently of expression consumers.</summary>
 public sealed class SafeMigrationWorkStackTests
 {
+    /// <summary>An unused stack never rents storage, and repeated disposal has no ownership effect.</summary>
     [Fact]
     public void EmptyStackDoesNotRentAndDisposalIsIdempotent()
     {
+        // Arrange
         var pool = new RecordingPool<object>();
         var stack = new SafeMigrationWorkStack<object>(pool);
 
+        // Act
         var popped = stack.TryPop(out var item);
         stack.Dispose();
         stack.Dispose();
 
+        // Assert
         Assert.False(popped);
         Assert.Null(item);
         Assert.Empty(pool.Rented);
         Assert.Empty(pool.Returned);
     }
 
+    /// <summary>Growth preserves LIFO order and releases every reference buffer exactly once with clearing.</summary>
     [Fact]
     public void GrowthPreservesOrderAndClearsEveryReturnedReferenceBuffer()
     {
+        // Arrange
         var pool = new RecordingPool<object>();
         var stack = new SafeMigrationWorkStack<object>(pool);
         var values = Enumerable
@@ -29,12 +35,14 @@ public sealed class SafeMigrationWorkStackTests
             .Select(static _ => new object())
             .ToArray();
 
+        var actual = new List<object>();
+
+        // Act
         foreach (var value in values)
         {
             stack.Push(value);
         }
 
-        var actual = new List<object>();
         while (stack.TryPop(out var value))
         {
             actual.Add(value);
@@ -43,6 +51,7 @@ public sealed class SafeMigrationWorkStackTests
         stack.Dispose();
         stack.Dispose();
 
+        // Assert
         Assert.Equal(values.Reverse(), actual);
         Assert.Equal(4, pool.Rented.Count);
         Assert.Equal(pool.Rented, pool.Returned);
@@ -50,13 +59,16 @@ public sealed class SafeMigrationWorkStackTests
         Assert.All(pool.ClearRequests, Assert.True);
     }
 
+    /// <summary>Popping a value frame clears its backing-slot reference before the buffer is returned.</summary>
     [Fact]
     public void PopImmediatelyReleasesReferencesIncludingReferencesInsideValueFrames()
     {
+        // Arrange
         var pool = new RecordingPool<ReferenceFrame>();
         var stack = new SafeMigrationWorkStack<ReferenceFrame>(pool);
         var value = new object();
 
+        // Act
         stack.Push(new ReferenceFrame(value));
         var popped = stack.TryPop(out var actual);
         var retained = pool
@@ -64,41 +76,50 @@ public sealed class SafeMigrationWorkStackTests
 
         stack.Dispose();
 
+        // Assert
         Assert.True(popped);
         Assert.Same(value, actual.Value);
         Assert.Null(retained);
         Assert.True(Assert.Single(pool.ClearRequests));
     }
 
+    /// <summary>Reference-free frames return their buffer without requesting unnecessary clearing.</summary>
     [Fact]
     public void ReferenceFreeFramesDoNotRequestUnnecessaryBufferClearing()
     {
+        // Arrange
         var pool = new RecordingPool<int>();
         var stack = new SafeMigrationWorkStack<int>(pool);
 
+        // Act
         stack.Push(42);
         var popped = stack.TryPop(out var value);
         stack.Dispose();
 
+        // Assert
         Assert.True(popped);
         Assert.Equal(42, value);
         Assert.False(Assert.Single(pool.ClearRequests));
     }
 
+    /// <summary>Releasing one stack cannot clear another owner's buffer containing the same payload.</summary>
     [Fact]
     public void DisposingOneStackDoesNotClearAnotherStacksAliasedPayload()
     {
+        // Arrange
         var pool = new RecordingPool<object>();
         var first = new SafeMigrationWorkStack<object>(pool);
         var second = new SafeMigrationWorkStack<object>(pool);
         var sharedValue = new object();
 
+        // Act
         first.Push(sharedValue);
         second.Push(sharedValue);
         first.Dispose();
         var popped = second.TryPop(out var actual);
         second.Dispose();
 
+        // Assert
         Assert.True(popped);
         Assert.Same(sharedValue, actual);
         Assert.NotSame(pool.Rented[0], pool.Rented[1]);
@@ -106,27 +127,41 @@ public sealed class SafeMigrationWorkStackTests
         Assert.All(pool.Returned, static buffer => Assert.All(buffer, Assert.Null));
     }
 
+    /// <summary>Exception unwinding returns and clears pending storage despite repeated cleanup.</summary>
     [Fact]
     public void ExceptionalExitReturnsPendingReferenceFramesExactlyOnce()
     {
+        // Arrange
         var pool = new RecordingPool<object>();
 
-        var failure = Assert.Throws<InvalidOperationException>(() => ThrowWithPendingWork(pool));
+        // Act
+        var failure = Record.Exception(() => ThrowWithPendingWork(pool));
 
-        Assert.Equal("expected traversal failure", failure.Message);
+        // Assert
+        Assert.Equal("expected traversal failure",
+            Assert.IsType<InvalidOperationException>(failure)
+                .Message);
+
         Assert.Single(pool.Rented);
         Assert.Single(pool.Returned);
         Assert.All(pool.Returned[0], Assert.Null);
     }
 
+    /// <summary>A failed replacement rent leaves the original buffer owned until deterministic disposal.</summary>
     [Fact]
     public void FailedGrowthRetainsTheOriginalBufferForDisposal()
     {
+        // Arrange
         var pool = new RecordingPool<object> { FailRentNumber = 2 };
 
-        var failure = Assert.Throws<InvalidOperationException>(() => ExhaustPool(pool));
+        // Act
+        var failure = Record.Exception(() => ExhaustPool(pool));
 
-        Assert.Equal("expected rent failure", failure.Message);
+        // Assert
+        Assert.Equal("expected rent failure",
+            Assert.IsType<InvalidOperationException>(failure)
+                .Message);
+
         Assert.Single(pool.Rented);
         Assert.Single(pool.Returned);
         Assert.All(pool.Returned[0], Assert.Null);

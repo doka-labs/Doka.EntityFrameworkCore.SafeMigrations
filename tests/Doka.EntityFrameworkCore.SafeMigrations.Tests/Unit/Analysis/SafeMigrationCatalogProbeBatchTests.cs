@@ -1,5 +1,3 @@
-using System.Data.Common;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
 /// <summary>Checks transport limits and result ownership for independent catalog probes.</summary>
@@ -16,6 +14,9 @@ public sealed class SafeMigrationCatalogProbeBatchTests
     {
         // Arrange
         await using var connection = new CatalogProbeTestConnection(native);
+
+        // WHY: This in-memory transaction probe tests synchronous acquisition, not database I/O.
+        // ReSharper disable once MethodHasAsyncOverload
         await using var transaction = connection.BeginTransaction();
         var values = new List<int>();
 
@@ -26,9 +27,11 @@ public sealed class SafeMigrationCatalogProbeBatchTests
             4 * 1024 * 1024,
             73,
             BuildStatement,
-            (reader, offset, count, token) => ReadStatementAsync(reader, offset, count, values, token),
-            CancellationToken.None,
-            transaction);
+            (reader, offset, count, callbackCancellationToken) =>
+                ReadStatementAsync(reader, offset, count, values, callbackCancellationToken),
+            transaction,
+            SafeMigrationCatalogQueryLimits.MaximumParameters,
+            CancellationToken.None);
 
         // Assert
         Assert.Equal(Enumerable
@@ -88,7 +91,10 @@ public sealed class SafeMigrationCatalogProbeBatchTests
             100,
             null,
             (command, offset) => BuildStatement(command, offset, count: 1, parameterPayload: 60),
-            (reader, offset, count, token) => ReadStatementAsync(reader, offset, count, values, token),
+            (reader, offset, count, callbackCancellationToken) =>
+                ReadStatementAsync(reader, offset, count, values, callbackCancellationToken),
+            transaction: null,
+            maximumParameters: SafeMigrationCatalogQueryLimits.MaximumParameters,
             CancellationToken.None);
 
         // Assert
@@ -138,6 +144,8 @@ public sealed class SafeMigrationCatalogProbeBatchTests
                     return statement;
                 },
                 static (_, _, _, _) => Task.CompletedTask,
+                transaction: null,
+                maximumParameters: SafeMigrationCatalogQueryLimits.MaximumParameters,
                 CancellationToken.None));
 
         // Assert
@@ -171,7 +179,10 @@ public sealed class SafeMigrationCatalogProbeBatchTests
 
                 return BuildStatement(command, offset, count: 1, parameterPayload: 0);
             },
-            (reader, offset, count, token) => ReadStatementAsync(reader, offset, count, values, token),
+            (reader, offset, count, callbackCancellationToken) =>
+                ReadStatementAsync(reader, offset, count, values, callbackCancellationToken),
+            transaction: null,
+            maximumParameters: SafeMigrationCatalogQueryLimits.MaximumParameters,
             CancellationToken.None);
 
         var failure = await Record.ExceptionAsync(() => execution);
@@ -222,9 +233,11 @@ public sealed class SafeMigrationCatalogProbeBatchTests
 
                 return BuildStatement(command, offset, count: 1, parameterPayload: 0);
             },
-            (reader, offset, count, token) => ReadStatementAsync(reader, offset, count, values, token),
-            CancellationToken.None,
-            maximumParameters: 2000));
+            (reader, offset, count, callbackCancellationToken) =>
+                ReadStatementAsync(reader, offset, count, values, callbackCancellationToken),
+            transaction: null,
+            maximumParameters: 2000,
+            CancellationToken.None));
 
         // Assert
         if (parameters > 2000)
@@ -279,8 +292,9 @@ public sealed class SafeMigrationCatalogProbeBatchTests
             null,
             BuildStatement,
             static (_, _, _, _) => Task.CompletedTask,
-            CancellationToken.None,
-            maximumParameters: cap));
+            transaction: null,
+            maximumParameters: cap,
+            CancellationToken.None));
 
         // Assert
         Assert.Equal(0, connection.Disposals);
@@ -302,6 +316,8 @@ public sealed class SafeMigrationCatalogProbeBatchTests
             null,
             BuildStatement,
             static (_, _, _, _) => Task.CompletedTask,
+            transaction: null,
+            maximumParameters: SafeMigrationCatalogQueryLimits.MaximumParameters,
             CancellationToken.None));
 
         // Assert
@@ -339,12 +355,14 @@ public sealed class SafeMigrationCatalogProbeBatchTests
                 4 * 1024 * 1024,
                 null,
                 BuildStatement,
-                (reader, offset, count, token) =>
+                (reader, offset, count, callbackCancellationToken) =>
                 {
                     consumedOffsets.Add(offset);
 
-                    return ReadStatementAsync(reader, offset, count, [], token);
+                    return ReadStatementAsync(reader, offset, count, [], callbackCancellationToken);
                 },
+                transaction: null,
+                maximumParameters: SafeMigrationCatalogQueryLimits.MaximumParameters,
                 CancellationToken.None));
 
         // Assert
@@ -404,7 +422,7 @@ public sealed class SafeMigrationCatalogProbeBatchTests
         using var cancellation = new CancellationTokenSource();
         if (cancelled)
         {
-            cancellation.Cancel();
+            await cancellation.CancelAsync();
         }
 
         // Act
@@ -415,6 +433,8 @@ public sealed class SafeMigrationCatalogProbeBatchTests
             null,
             BuildStatement,
             static (_, _, _, _) => Task.CompletedTask,
+            transaction: null,
+            maximumParameters: SafeMigrationCatalogQueryLimits.MaximumParameters,
             cancellation.Token);
 
         if (cancelled)
@@ -443,6 +463,9 @@ public sealed class SafeMigrationCatalogProbeBatchTests
     {
         // Arrange
         await using var connection = new CatalogProbeTestConnection(native);
+
+        // WHY: This in-memory transaction probe tests synchronous acquisition, not database I/O.
+        // ReSharper disable once MethodHasAsyncOverload
         await using var transaction = connection.BeginTransaction();
         using var cancellation = new CancellationTokenSource();
         var values = new List<int>();
@@ -455,14 +478,18 @@ public sealed class SafeMigrationCatalogProbeBatchTests
             1024 * 1024,
             null,
             BuildStatement,
-            async (reader, offset, count, token) =>
+            async (reader, offset, count, callbackCancellationToken) =>
             {
                 consumedOffsets.Add(offset);
-                await ReadStatementAsync(reader, offset, count, values, token);
+                await ReadStatementAsync(reader, offset, count, values, callbackCancellationToken);
+
+                // WHY: Cancel inside the consumed-result callback before the transport can advance to the next result.
+                // ReSharper disable once MethodHasAsyncOverload
                 cancellation.Cancel();
             },
-            cancellation.Token,
-            transaction));
+            transaction,
+            SafeMigrationCatalogQueryLimits.MaximumParameters,
+            cancellation.Token));
 
         // Assert
         Assert.Equal(
@@ -522,6 +549,8 @@ public sealed class SafeMigrationCatalogProbeBatchTests
                     return new SafeMigrationCatalogProbeStatement(count, ParameterPayloadBytes: 0, FirstOrdinal: 501);
                 },
                 static (_, _, _, _) => Task.CompletedTask,
+                transaction: null,
+                maximumParameters: SafeMigrationCatalogQueryLimits.MaximumParameters,
                 CancellationToken.None));
 
         // Assert
@@ -555,11 +584,11 @@ public sealed class SafeMigrationCatalogProbeBatchTests
         int offset,
         int count,
         List<int> values,
-        CancellationToken token
+        CancellationToken cancellationToken
     )
     {
         var row = 0;
-        while (await reader.ReadAsync(token))
+        while (await reader.ReadAsync(cancellationToken))
         {
             if (row >= count
                 || reader.GetInt32(0) != (offset + row) * 2 + 501)

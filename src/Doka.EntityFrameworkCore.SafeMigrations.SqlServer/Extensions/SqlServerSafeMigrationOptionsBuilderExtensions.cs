@@ -5,6 +5,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer;
 /// safe migrations, baseline-generator composition, and canonical migration
 /// discovery.
 /// </summary>
+[PublicAPI]
 public static class SqlServerSafeMigrationOptionsBuilderExtensions
 {
     /// <summary>
@@ -15,6 +16,9 @@ public static class SqlServerSafeMigrationOptionsBuilderExtensions
     /// <param name="optionsBuilder">The EF Core options builder to configure.</param>
     /// <returns>The same options builder so additional calls can be chained.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="optionsBuilder" /> is null.</exception>
+
+    // WHY: PublicApiAnalyzers 5.6.0 treats extension blocks as new APIs; preserve the shipped surface.
+    // ReSharper disable once ConvertToExtensionBlock
     public static DbContextOptionsBuilder UseSqlServerSafeMigrations(
         this DbContextOptionsBuilder optionsBuilder
     )
@@ -39,6 +43,9 @@ public static class SqlServerSafeMigrationOptionsBuilderExtensions
     /// <exception cref="ArgumentNullException">
     /// <paramref name="optionsBuilder" /> or <paramref name="configure" /> is null.
     /// </exception>
+
+    // WHY: PublicApiAnalyzers 5.6.0 treats extension blocks as new APIs; preserve the shipped surface.
+    // ReSharper disable once ConvertToExtensionBlock
     public static DbContextOptionsBuilder UseSqlServerSafeMigrations(
         this DbContextOptionsBuilder optionsBuilder,
         Action<SafeMigrationOptionsBuilder> configure
@@ -62,6 +69,9 @@ public static class SqlServerSafeMigrationOptionsBuilderExtensions
     /// <typeparam name="TCanonicalMigrationContext">The context that owns migration discovery and history.</typeparam>
     /// <returns>The same options builder so additional calls can be chained.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="optionsBuilder" /> is null.</exception>
+
+    // WHY: PublicApiAnalyzers 5.6.0 treats extension blocks as new APIs; preserve the shipped surface.
+    // ReSharper disable once ConvertToExtensionBlock
     public static DbContextOptionsBuilder UseSqlServerSafeMigrations<TCanonicalMigrationContext>(
         this DbContextOptionsBuilder optionsBuilder
     )
@@ -88,6 +98,9 @@ public static class SqlServerSafeMigrationOptionsBuilderExtensions
     /// <exception cref="ArgumentNullException">
     /// <paramref name="optionsBuilder" /> or <paramref name="configure" /> is null.
     /// </exception>
+
+    // WHY: PublicApiAnalyzers 5.6.0 treats extension blocks as new APIs; preserve the shipped surface.
+    // ReSharper disable once ConvertToExtensionBlock
     public static DbContextOptionsBuilder UseSqlServerSafeMigrations<TCanonicalMigrationContext>(
         this DbContextOptionsBuilder optionsBuilder,
         Action<SafeMigrationOptionsBuilder> configure
@@ -113,6 +126,9 @@ public static class SqlServerSafeMigrationOptionsBuilderExtensions
     /// <typeparam name="TCanonicalMigrationContext">The context that owns migration discovery and history.</typeparam>
     /// <returns>The same options builder so additional calls can be chained.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="optionsBuilder" /> is null.</exception>
+
+    // WHY: PublicApiAnalyzers 5.6.0 treats extension blocks as new APIs; preserve the shipped surface.
+    // ReSharper disable once ConvertToExtensionBlock
     public static DbContextOptionsBuilder UseSqlServerSafeMigrations<TBaselineGenerator, TCanonicalMigrationContext>(
         this DbContextOptionsBuilder optionsBuilder
     )
@@ -141,6 +157,9 @@ public static class SqlServerSafeMigrationOptionsBuilderExtensions
     /// <exception cref="ArgumentNullException">
     /// <paramref name="optionsBuilder" /> or <paramref name="configure" /> is null.
     /// </exception>
+
+    // WHY: PublicApiAnalyzers 5.6.0 treats extension blocks as new APIs; preserve the shipped surface.
+    // ReSharper disable once ConvertToExtensionBlock
     public static DbContextOptionsBuilder UseSqlServerSafeMigrations<TBaselineGenerator, TCanonicalMigrationContext>(
         this DbContextOptionsBuilder optionsBuilder,
         Action<SafeMigrationOptionsBuilder> configure
@@ -167,6 +186,9 @@ public static class SqlServerSafeMigrationOptionsBuilderExtensions
     /// <typeparam name="TContext">The DbContext type being configured.</typeparam>
     /// <returns>The same options builder so additional calls can be chained.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="optionsBuilder" /> is null.</exception>
+
+    // WHY: PublicApiAnalyzers 5.6.0 treats extension blocks as new APIs; preserve the shipped surface.
+    // ReSharper disable once ConvertToExtensionBlock
     public static DbContextOptionsBuilder<TContext> UseSqlServerSafeMigrations<TContext>(
         this DbContextOptionsBuilder<TContext> optionsBuilder
     )
@@ -193,6 +215,9 @@ public static class SqlServerSafeMigrationOptionsBuilderExtensions
     /// <exception cref="ArgumentNullException">
     /// <paramref name="optionsBuilder" /> or <paramref name="configure" /> is null.
     /// </exception>
+
+    // WHY: PublicApiAnalyzers 5.6.0 treats extension blocks as new APIs; preserve the shipped surface.
+    // ReSharper disable once ConvertToExtensionBlock
     public static DbContextOptionsBuilder<TContext> UseSqlServerSafeMigrations<TContext>(
         this DbContextOptionsBuilder<TContext> optionsBuilder,
         Action<SafeMigrationOptionsBuilder> configure
@@ -219,6 +244,9 @@ public static class SqlServerSafeMigrationOptionsBuilderExtensions
     /// <typeparam name="TCanonicalMigrationContext">The context that owns migration discovery and history.</typeparam>
     /// <returns>The same options builder so additional calls can be chained.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="optionsBuilder" /> is null.</exception>
+
+    // WHY: PublicApiAnalyzers 5.6.0 treats extension blocks as new APIs; preserve the shipped surface.
+    // ReSharper disable once ConvertToExtensionBlock
     public static DbContextOptionsBuilder<TContext> UseSqlServerSafeMigrations<TContext, TBaselineGenerator,
         TCanonicalMigrationContext>(
         this DbContextOptionsBuilder<TContext> optionsBuilder
@@ -250,6 +278,9 @@ public static class SqlServerSafeMigrationOptionsBuilderExtensions
     /// <exception cref="ArgumentNullException">
     /// <paramref name="optionsBuilder" /> or <paramref name="configure" /> is null.
     /// </exception>
+
+    // WHY: PublicApiAnalyzers 5.6.0 treats extension blocks as new APIs; preserve the shipped surface.
+    // ReSharper disable once ConvertToExtensionBlock
     public static DbContextOptionsBuilder<TContext> UseSqlServerSafeMigrations<TContext, TBaselineGenerator,
         TCanonicalMigrationContext>(
         this DbContextOptionsBuilder<TContext> optionsBuilder,

@@ -556,7 +556,7 @@ public sealed partial class SqlServerComputedDropProjectionTests
     public async Task EmptyAnalysisClearsPriorComputedDropCertificates()
     {
         // Arrange
-        using var context = Context();
+        await using var context = Context();
         var analyzer = (SqlServerSafeMigrationProviderAnalyzer)context.GetService<ISafeMigrationProviderAnalyzer>();
         var operation = new SafeMigrationOperation(
             new DropColumnIntent("L", "nodes"),
@@ -926,23 +926,41 @@ public sealed partial class SqlServerComputedDropProjectionTests
             (field.GetValue(analyzer) ?? throw new InvalidOperationException("The native capture is unavailable."));
     }
 
-    private sealed class Source(
-        ExpectedColumnDefinition? flag,
-        ExpectedColumnDefinition? source,
-        bool? generatedDependency = null,
-        bool? indexMissing = null,
-        bool newlyCreated = false,
-        SafeMigrationObservedState? indexState = null
-    )
+    private sealed class Source
         : ISafeMigrationProjectedColumnSource, ISafeMigrationProjectedTableSource
     {
+        private readonly ExpectedColumnDefinition? _flag;
+        private readonly bool? _generatedDependency;
+        private readonly bool? _indexMissing;
+        private readonly SafeMigrationObservedState? _indexState;
+        private readonly bool _newlyCreated;
+        private readonly ExpectedColumnDefinition? _source;
+
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        public Source(
+            ExpectedColumnDefinition? flag,
+            ExpectedColumnDefinition? source,
+            bool? generatedDependency = null,
+            bool? indexMissing = null,
+            bool newlyCreated = false,
+            SafeMigrationObservedState? indexState = null
+        )
+        {
+            _flag = flag;
+            _source = source;
+            _generatedDependency = generatedDependency;
+            _indexMissing = indexMissing;
+            _newlyCreated = newlyCreated;
+            _indexState = indexState;
+        }
+
         public SafeMigrationProviderAnalysis? GetProjectedIndexIdentityAnalysis(
             ExpectedIndexDefinition definition,
             SafeMigrationProviderAnalysis liveAnalysis,
             bool includeConstraintBackingIndexNames = false
-        ) => indexState is { } state
+        ) => _indexState is { } state
             ? Live(state)
-            : indexMissing is { } missing
+            : _indexMissing is { } missing
                 ? Live(
                     missing
                         ? SafeMigrationObservedState.Missing
@@ -956,10 +974,10 @@ public sealed partial class SqlServerComputedDropProjectionTests
             [NotNullWhen(true)] out ExpectedColumnDefinition? definition
         )
         {
-            definition = flag?.Name == column
-                ? flag
-                : source?.Name == column
-                    ? source
+            definition = _flag?.Name == column
+                ? _flag
+                : _source?.Name == column
+                    ? _source
                     : null;
 
             return definition is not null;
@@ -970,7 +988,7 @@ public sealed partial class SqlServerComputedDropProjectionTests
             string? schema,
             string column,
             IEqualityComparer<string> columnComparer
-        ) => generatedDependency;
+        ) => _generatedDependency;
 
         public bool TryGetProjectedTableState(
             string table,
@@ -978,7 +996,7 @@ public sealed partial class SqlServerComputedDropProjectionTests
             out SafeMigrationProjectedTableState state
         )
         {
-            state = new SafeMigrationProjectedTableState(newlyCreated, false, false, false);
+            state = new SafeMigrationProjectedTableState(_newlyCreated, false, false, false);
 
             return true;
         }

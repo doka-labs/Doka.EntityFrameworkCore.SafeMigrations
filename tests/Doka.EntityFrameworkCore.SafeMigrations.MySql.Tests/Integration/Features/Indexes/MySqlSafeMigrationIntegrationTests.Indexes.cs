@@ -9,9 +9,11 @@ public sealed class MySqlIndexesIntegrationTests : MySqlSafeMigrationIntegration
         MySqlEngineContainerFixture fixture
     ) : base(fixture) { }
 
+    /// <summary>Rejects a filtered index on engines that cannot implement the declared predicate.</summary>
     [Fact]
     public async Task UnsupportedFilteredIndex_FailsBeforeTargetDdl()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -22,6 +24,7 @@ public sealed class MySqlIndexesIntegrationTests : MySqlSafeMigrationIntegration
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateIndexIfNotExists("ix_events_filtered", "events", ["id"], filter: "id > 0");
 
+        // Act
         var exception =
             await AssertOwnedGuardFailureAsync(
                 operationToken => ExecuteOperationsAsync(
@@ -30,6 +33,7 @@ public sealed class MySqlIndexesIntegrationTests : MySqlSafeMigrationIntegration
                     operationToken),
                 cancellationToken: CancellationToken.None);
 
+        // Assert
         Assert.Contains("doka_sm_unsupported", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(
             0,
@@ -43,9 +47,11 @@ public sealed class MySqlIndexesIntegrationTests : MySqlSafeMigrationIntegration
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Preserves supported advanced index facets while detecting an independent direction change.</summary>
     [Fact]
     public async Task AdvancedIndexFacets_ConvergeAndDetectDirectionDrift()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -67,6 +73,7 @@ public sealed class MySqlIndexesIntegrationTests : MySqlSafeMigrationIntegration
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureIndex(definition, SafeMigrationPolicy.ThrowIfDifferent);
 
+        // Act
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
@@ -87,6 +94,7 @@ public sealed class MySqlIndexesIntegrationTests : MySqlSafeMigrationIntegration
                 new SafeMigrationRunOptions("test-instance"),
                 CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(
             SafeMigrationObservedState.Different,
@@ -94,9 +102,11 @@ public sealed class MySqlIndexesIntegrationTests : MySqlSafeMigrationIntegration
                 .ObservedState);
     }
 
+    /// <summary>Rejects functional-index creation when the physical key width has not been proved.</summary>
     [Fact]
     public async Task FunctionalIndexCreation_FailsClosedWhenPhysicalWidthCannotBeProven()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -112,6 +122,7 @@ public sealed class MySqlIndexesIntegrationTests : MySqlSafeMigrationIntegration
                 [new ExpectedIndexKeyDefinition(structuredExpression: SqlFunction("lower", "value"))]),
             SafeMigrationPolicy.ThrowIfDifferent);
 
+        // Act
         var preflight = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -120,6 +131,7 @@ public sealed class MySqlIndexesIntegrationTests : MySqlSafeMigrationIntegration
                 new SafeMigrationRunOptions("test-instance"),
                 CancellationToken.None);
 
+        // Assert
         var assessment = Assert.Single(preflight.Assessments);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, preflight.Status);

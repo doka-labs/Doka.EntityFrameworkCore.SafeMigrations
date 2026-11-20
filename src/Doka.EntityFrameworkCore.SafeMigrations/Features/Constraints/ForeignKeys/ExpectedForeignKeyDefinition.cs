@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations;
 
 /// <summary>Describes a complete expected foreign-key definition.</summary>
+[PublicAPI]
 public sealed class ExpectedForeignKeyDefinition
 {
     /// <summary>Initializes an expected foreign key.</summary>

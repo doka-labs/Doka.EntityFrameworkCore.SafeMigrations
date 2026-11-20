@@ -138,6 +138,9 @@ public sealed class PostgreSqlIndexKeyCatalogSqlTests
         .Range(0, count)
         .Select(static index => new ExpectedIndexKeyDefinition(
             "column_" + index.ToString(CultureInfo.InvariantCulture)))
+
+        // WHY: Retain explicit fluent materialization and its independently owned result snapshot.
+        // ReSharper disable once UseCollectionExpression
         .ToArray();
 
     private static string BuildStateExpression(

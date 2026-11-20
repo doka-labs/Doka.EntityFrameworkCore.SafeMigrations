@@ -500,7 +500,7 @@ public sealed class MySqlPreparedSetupFusionTests
             AssertPreparedSetup(setup, evaluations: 1, baselinePreparedInSetup: false, hasDataProbe: false));
 
         // Assert
-        Assert.IsAssignableFrom<XunitException>(exception);
+        Assert.IsType<XunitException>(exception, exactMatch: false);
     }
 
     /// <summary>Provider snapshots cannot mutate shared cleanup templates or leak proof-specific cleanup.</summary>
@@ -563,6 +563,9 @@ public sealed class MySqlPreparedSetupFusionTests
     ) => Enumerable
         .Range(0, count)
         .Select(index => "DO 0; /* provider setup " + index.ToString(CultureInfo.InvariantCulture) + " */\n")
+
+        // WHY: Retain this explicit materialization/copy path and its collection lowering.
+        // ReSharper disable once UseCollectionExpression
         .ToArray();
 
     /// <summary>Creates the real planner paths without synthetic runtime plans.</summary>
@@ -617,9 +620,8 @@ public sealed class MySqlPreparedSetupFusionTests
             ClrType = typeof(int),
             ColumnType = "int",
             IsNullable = false,
+            ["Doka:MySql:ValueGenerationStrategy"] = MySqlValueGenerationStrategy.AutoIncrement,
         };
-
-        operation["Doka:MySql:ValueGenerationStrategy"] = MySqlValueGenerationStrategy.AutoIncrement;
 
         return SafeMigrationExpectedDefinitionFactory.From(operation);
     }
@@ -696,6 +698,9 @@ public sealed class MySqlPreparedSetupFusionTests
         .Fragments
         .Where(fragment => fragment.Kind == kind)
         .Select(fragment => fragment.CommandText.ToString())
+
+        // WHY: Retain this explicit materialization/copy path and its collection lowering.
+        // ReSharper disable once UseCollectionExpression
         .ToArray();
 
     /// <summary>Checks fused dispatches retain every immediate prepared control in its original order.</summary>

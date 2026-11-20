@@ -1,3 +1,7 @@
+// WHY: Linked provider stress executions consume seed ordinals and keys; Core's copy validates scenario contracts.
+// ReSharper disable UnusedMember.Global
+// ReSharper disable MemberCanBePrivate.Global
+
 namespace Doka.EntityFrameworkCore.SafeMigrations.Testing;
 
 internal enum LargeMigrationStressDialect
@@ -691,6 +695,8 @@ internal static class LargeMigrationStressContract
         TargetTable,
         columns.Select(static column => new ExpectedIndexKeyDefinition(column)));
 
+    // WHY: SQL Server uses its separate certified scenario inventory; other unrecognized dialects must reject.
+    // ReSharper disable once SwitchExpressionHandlesSomeKnownEnumValuesWithExceptionInDefault
     private static LargeMigrationStressScenario UnsupportedScenario(
         LargeMigrationStressDialect dialect
     ) => dialect switch

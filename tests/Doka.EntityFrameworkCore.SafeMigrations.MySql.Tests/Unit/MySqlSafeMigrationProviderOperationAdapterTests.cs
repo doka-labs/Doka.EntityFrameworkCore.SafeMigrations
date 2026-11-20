@@ -1,27 +1,9 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
+/// <summary>Protects historical provider operation normalization and unsupported metadata rejection.</summary>
 public sealed class MySqlSafeMigrationProviderOperationAdapterTests
 {
-    public static TheoryData<AlterDatabaseOperation, bool>
-        AlterDatabaseCompatibilityCases
-    {
-        get
-        {
-            var supported = new AlterDatabaseOperation { Collation = "utf8mb4_unicode_ci" };
-            supported["Doka:MySql:CharSet"] = "utf8mb4";
-
-            var unsupportedAnnotation = new AlterDatabaseOperation { Collation = "utf8mb4_unicode_ci" };
-            unsupportedAnnotation["Provider:Unknown"] = "value";
-
-            return new TheoryData<AlterDatabaseOperation, bool>
-            {
-                { supported, true },
-                { unsupportedAnnotation, false },
-                { new AlterDatabaseOperation { Collation = " " }, false },
-            };
-        }
-    }
-
+    /// <summary>Normalizes supported annotated historical column drops into the guarded intent contract.</summary>
     [Fact]
     public void Normalize_ConvertsAnnotatedHistoricalDropColumn()
     {
@@ -30,12 +12,11 @@ public sealed class MySqlSafeMigrationProviderOperationAdapterTests
         {
             Name = "category_id",
             Table = "certificate_types",
+            ["Doka:MySql:GuidFormat"] = DokaMySqlGuidFormat.Char36,
+            ["Doka:MySql:ValueGenerationStrategy"] = MySqlValueGenerationStrategy.None,
+            ["Doka:MySql:CharSet"] = "utf8mb4",
+            ["Relational:Collation"] = "utf8mb4_unicode_ci",
         };
-
-        operation["Doka:MySql:GuidFormat"] = DokaMySqlGuidFormat.Char36;
-        operation["Doka:MySql:ValueGenerationStrategy"] = MySqlValueGenerationStrategy.None;
-        operation["Doka:MySql:CharSet"] = "utf8mb4";
-        operation["Relational:Collation"] = "utf8mb4_unicode_ci";
 
         // Act
         var result = SafeMigrationOperationCompatibility.Normalize(
@@ -51,6 +32,7 @@ public sealed class MySqlSafeMigrationProviderOperationAdapterTests
         Assert.Equal("certificate_types", intent.Table);
     }
 
+    /// <summary>Rejects unknown metadata on a historical column drop rather than silently discarding it.</summary>
     [Fact]
     public void Normalize_RejectsUnknownHistoricalDropColumnMetadata()
     {
@@ -59,9 +41,8 @@ public sealed class MySqlSafeMigrationProviderOperationAdapterTests
         {
             Name = "category_id",
             Table = "certificate_types",
+            ["Provider:Unknown"] = true,
         };
-
-        operation["Provider:Unknown"] = true;
 
         // Act
         var result = SafeMigrationOperationCompatibility.Normalize(
@@ -72,6 +53,9 @@ public sealed class MySqlSafeMigrationProviderOperationAdapterTests
         Assert.Equal(SafeMigrationOperationCompatibilityKind.Unsupported, result.Kind);
     }
 
+    /// <summary>
+    /// Normalizes supported annotated historical column renames without changing their source or target identity.
+    /// </summary>
     [Fact]
     public void Normalize_ConvertsAnnotatedHistoricalRenameColumn()
     {
@@ -81,11 +65,10 @@ public sealed class MySqlSafeMigrationProviderOperationAdapterTests
             Name = "old_code",
             NewName = "renamed_code",
             Table = "users",
+            ["Doka:MySql:ValueGenerationStrategy"] = MySqlValueGenerationStrategy.None,
+            ["Doka:MySql:CharSet"] = "utf8mb4",
+            ["Relational:Collation"] = "utf8mb4_unicode_ci",
         };
-
-        operation["Doka:MySql:ValueGenerationStrategy"] = MySqlValueGenerationStrategy.None;
-        operation["Doka:MySql:CharSet"] = "utf8mb4";
-        operation["Relational:Collation"] = "utf8mb4_unicode_ci";
 
         // Act
         var result = SafeMigrationOperationCompatibility.Normalize(
@@ -102,6 +85,7 @@ public sealed class MySqlSafeMigrationProviderOperationAdapterTests
         Assert.Equal("users", intent.Table);
     }
 
+    /// <summary>Rejects unknown metadata on a historical column rename before creating a guarded intent.</summary>
     [Fact]
     public void Normalize_RejectsUnknownHistoricalRenameColumnMetadata()
     {
@@ -111,9 +95,8 @@ public sealed class MySqlSafeMigrationProviderOperationAdapterTests
             Name = "old_code",
             NewName = "renamed_code",
             Table = "users",
+            ["Provider:Unknown"] = true,
         };
-
-        operation["Provider:Unknown"] = true;
 
         // Act
         var result = SafeMigrationOperationCompatibility.Normalize(
@@ -124,6 +107,9 @@ public sealed class MySqlSafeMigrationProviderOperationAdapterTests
         Assert.Equal(SafeMigrationOperationCompatibilityKind.Unsupported, result.Kind);
     }
 
+    /// <summary>Rejects contradictory or invalid column character-set metadata during normalization.</summary>
+    /// <param name="annotationName">The provider annotation whose independent capability boundary is exercised.</param>
+    /// <param name="annotationValue">The authored provider annotation value under test.</param>
     [Theory]
     [InlineData("Doka:MySql:CharSet", "")]
     [InlineData("Doka:MySql:CharSet", " ")]
@@ -140,9 +126,8 @@ public sealed class MySqlSafeMigrationProviderOperationAdapterTests
             Name = "old_code",
             NewName = "renamed_code",
             Table = "users",
+            [annotationName] = annotationValue,
         };
-
-        operation[annotationName] = annotationValue;
 
         // Act
         var result = SafeMigrationOperationCompatibility.Normalize(
@@ -153,6 +138,7 @@ public sealed class MySqlSafeMigrationProviderOperationAdapterTests
         Assert.Equal(SafeMigrationOperationCompatibilityKind.Unsupported, result.Kind);
     }
 
+    /// <summary>Preserves provider index-prefix metadata in the normalized guarded index definition.</summary>
     [Fact]
     public void Normalize_ProjectsIndexPrefixMetadataIntoTheSafeDefinition()
     {
@@ -162,9 +148,8 @@ public sealed class MySqlSafeMigrationProviderOperationAdapterTests
             Name = "ix_logs_property",
             Table = "logs",
             Columns = ["property"],
+            ["Doka:MySql:IndexPrefixLength"] = new[] { 768 },
         };
-
-        operation["Doka:MySql:IndexPrefixLength"] = new[] { 768 };
 
         // Act
         var result = SafeMigrationOperationCompatibility.Normalize(
@@ -180,14 +165,35 @@ public sealed class MySqlSafeMigrationProviderOperationAdapterTests
                 .PrefixLength);
     }
 
+    /// <summary>Certifies only the supported bounded database-alter metadata contract.</summary>
+    /// <param name="shape">The serializable identity of the exact native operation constructed during Arrange.</param>
+    /// <param name="expectedCertified">Whether this exact native shape must receive a preservation certificate.</param>
     [Theory]
-    [MemberData(nameof(AlterDatabaseCompatibilityCases))]
+    [InlineData("supported", true)]
+    [InlineData("unknown-annotation", false)]
+    [InlineData("blank-collation", false)]
     public void Normalize_CertifiesOnlyBoundedAlterDatabaseMetadata(
-        AlterDatabaseOperation operation,
+        string shape,
         bool expectedCertified
     )
     {
         // Arrange
+        var operation = shape switch
+        {
+            "supported" => new AlterDatabaseOperation
+            {
+                Collation = "utf8mb4_unicode_ci",
+                ["Doka:MySql:CharSet"] = "utf8mb4",
+            },
+            "unknown-annotation" => new AlterDatabaseOperation
+            {
+                Collation = "utf8mb4_unicode_ci",
+                ["Provider:Unknown"] = "value",
+            },
+            "blank-collation" => new AlterDatabaseOperation { Collation = " " },
+            _ => throw new ArgumentOutOfRangeException(nameof(shape)),
+        };
+
         var adapter = MySqlSafeMigrationProviderOperationAdapter.Instance;
 
         // Act

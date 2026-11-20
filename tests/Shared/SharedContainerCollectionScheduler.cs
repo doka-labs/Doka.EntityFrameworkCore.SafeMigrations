@@ -44,8 +44,7 @@ internal sealed class SharedContainerCollectionScheduler : IDisposable
         SharedContainerExecutionPolicy policy
     )
     {
-        if (!policy.DisableParallelization
-            && policy.MaximumParallelThreads > 0)
+        if (policy is { DisableParallelization: false, MaximumParallelThreads: > 0 })
         {
             _semaphore = new SemaphoreSlim(policy.MaximumParallelThreads, policy.MaximumParallelThreads);
         }
@@ -78,6 +77,10 @@ internal sealed class SharedContainerCollectionScheduler : IDisposable
 
         try
         {
+            // WHY: SemaphoreSlim cancellation can race a release while its await continuation resumes.
+            // Check after acquiring ownership; finally still returns that capacity on cancellation.
+            cancellationToken.ThrowIfCancellationRequested();
+
             return await runCollection(cancellationToken)
                 .ConfigureAwait(false);
         }

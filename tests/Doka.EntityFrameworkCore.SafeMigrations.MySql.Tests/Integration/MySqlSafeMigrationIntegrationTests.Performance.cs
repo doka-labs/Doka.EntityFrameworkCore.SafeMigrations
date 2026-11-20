@@ -3,8 +3,8 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 /// <summary>Exercises the Performance migration contracts in an independent class collection.</summary>
 public sealed partial class MySqlPerformanceIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
-    private const int ExpectedPerformanceTableCount = 100;
-    private const int ForeignPerformanceTableCount = 1000;
+    private const int ExpectedPerformanceTableCount = MySqlLiveBenchmarkWorkload.ManagedTableCount;
+    private const int ForeignPerformanceTableCount = MySqlLiveBenchmarkWorkload.ForeignTableCount;
 
     /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
     /// <param name="fixture">The initialized shared native engine.</param>
@@ -15,12 +15,15 @@ public sealed partial class MySqlPerformanceIntegrationTests : MySqlSafeMigratio
 
 public abstract partial class MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Bounds native fixture commands independently of informational performance observations.</summary>
     protected const int PerformanceFixtureCommandTimeoutSeconds = 180;
 }
 
 public sealed partial class MySqlPerformanceIntegrationTests
 {
-    /// <summary>Checks managed-data deferral in several mixed-stream cycles before costly stress qualification.</summary>
+    /// <summary>
+    /// Checks managed-data deferral in several mixed-stream cycles before costly stress qualification.
+    /// </summary>
     [Fact]
     public async Task Analyzer_BoundedMixedOperationsRetainExactDeferredContracts()
     {
@@ -51,10 +54,14 @@ public sealed partial class MySqlPerformanceIntegrationTests
         expectation.AssertReport(report);
     }
 
+    /// <summary>
+    /// Retains the complete ordered contract of the mixed hundred-thousand-operation catalog workload.
+    /// </summary>
     [Fact]
     [Trait("Category", "LargeScale")]
     public async Task Analyzer_OneHundredThousandMixedOperationsRemainBoundedOrderedAndComplete()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -65,6 +72,7 @@ public sealed partial class MySqlPerformanceIntegrationTests
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         var expectation = LargeMigrationStressContract.Populate(builder, LargeMigrationStressDialect.MySql);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -73,6 +81,7 @@ public sealed partial class MySqlPerformanceIntegrationTests
                 new SafeMigrationRunOptions("large-mixed-migration"),
                 CancellationToken.None);
 
+        // Assert
         expectation.AssertReport(report);
     }
 }
@@ -87,10 +96,12 @@ public sealed partial class MySqlProcessWidePerformanceIntegrationTests : MySqlS
         MySqlEngineContainerFixture fixture
     ) : base(fixture) { }
 
+    /// <summary>Preserves typed seed rows through a large initial migration and an idempotent replay.</summary>
     [Fact]
     [Trait("Category", "LargeScale")]
     public async Task ModelManagedData_FiftyThousandMixedRowsConvergeAndReplayIdempotently()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -114,6 +125,7 @@ public sealed partial class MySqlProcessWidePerformanceIntegrationTests : MySqlS
             .GetService<IMigrationsSqlGenerator>()
             .Generate(builder.Operations, context.Model);
 
+        // Act
         var initial = await ModelManagedDataLargeExecutionEvidence.MeasureAsync(
             operationToken => runner.AnalyzeAsync(
                 context,
@@ -151,6 +163,7 @@ public sealed partial class MySqlProcessWidePerformanceIntegrationTests : MySqlS
             replayExecution,
             replay.Measurement);
 
+        // Assert
         expectation.AssertInitialReport(initial.Result);
         expectation.AssertReplayReport(replay.Result);
         Assert.Equal(
@@ -178,9 +191,55 @@ public sealed partial class MySqlProcessWidePerformanceIntegrationTests : MySqlS
 
 public sealed partial class MySqlPerformanceIntegrationTests
 {
+    /// <summary>Proves that a native missing-table rejection cannot satisfy the timeout assertion.</summary>
+    /// <param name="resultPath">The first or later native result whose timeout identity must remain exact.</param>
+    [Theory]
+    [InlineData("first-result")]
+    [InlineData("later-result")]
+    public async Task Analyzer_CommandTimeoutAssertionRejectsUnrelatedNativeFailure(
+        string resultPath
+    )
+    {
+        // Arrange
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
+        await using var connection = new MySqlConnection(connectionString);
+        await connection.OpenAsync(CancellationToken.None);
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT * FROM `missing_command_timeout_negative_control`;";
+        var unrelated = await Record.ExceptionAsync(() => command.ExecuteNonQueryAsync(CancellationToken.None));
+
+        // Act
+        var assertion = Record.Exception(() =>
+        {
+            if (resultPath == "first-result")
+            {
+                MySqlCommandTimeoutAssertions.AssertCommandTimeout(unrelated);
+            }
+            else
+            {
+                MySqlCommandTimeoutAssertions.AssertCatalogBatchTimeout(unrelated);
+            }
+        });
+
+        // Assert
+        Assert.Equal(MySqlErrorCode.NoSuchTable,
+            Assert.IsType<MySqlException>(unrelated)
+                .ErrorCode);
+
+        Assert.IsType<XunitException>(assertion, exactMatch: false);
+    }
+
+    /// <summary>Requires the native catalog command to honor the configured provider timeout.</summary>
     [Fact]
     public async Task Analyzer_AppliesConfiguredCommandTimeoutToCatalogBatches()
     {
+        // Arrange
+        var cancellationToken = CancellationToken.None;
+        var checkpoint = "catalog_timeout_"
+            + Guid
+                .NewGuid()
+                .ToString("N");
+
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -189,7 +248,20 @@ public sealed partial class MySqlPerformanceIntegrationTests
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
+        await context.Database.OpenConnectionAsync(cancellationToken);
         context.Database.SetCommandTimeout(1);
+        await using var checkpointCommand = context
+            .Database
+            .GetDbConnection()
+            .CreateCommand();
+
+        checkpointCommand.CommandText =
+            "SELECT COALESCE(IS_USED_LOCK(@checkpoint) = CONNECTION_ID(), FALSE);";
+
+        var checkpointParameter = checkpointCommand.CreateParameter();
+        checkpointParameter.ParameterName = "@checkpoint";
+        checkpointParameter.Value = checkpoint;
+        checkpointCommand.Parameters.Add(checkpointParameter);
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureCheckConstraint(
@@ -197,23 +269,57 @@ public sealed partial class MySqlPerformanceIntegrationTests
                 "ck_catalog_timeout",
                 "catalog_timeout",
                 SafeMigrationSql.Binary(
-                    SafeMigrationSql.Function("SLEEP", SafeMigrationSql.Literal(5)),
+                    SafeMigrationSql.Function(
+                        "SLEEP",
+                        SafeMigrationSql.Binary(
+                            SafeMigrationSql.Function("GET_LOCK",
+                                SafeMigrationSql.Literal(checkpoint),
+                                SafeMigrationSql.Literal(0)),
+                            SafeMigrationSqlBinaryOperator.Multiply,
+                            SafeMigrationSql.Literal(5))),
                     SafeMigrationSqlBinaryOperator.Equal,
                     SafeMigrationSql.Literal(0))),
             SafeMigrationPolicy.ThrowIfDifferent);
 
-        _ = await Assert.ThrowsAsync<MySqlException>(() => context
-            .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(
-                context,
-                builder.Operations,
-                new SafeMigrationRunOptions("catalog-timeout"),
-                CancellationToken.None));
+        // Act
+        Exception? exception;
+        int reachedDataExpression;
+        try
+        {
+            exception = await Record.ExceptionAsync(() => context
+                .GetService<ISafeMigrationRunner>()
+                .AnalyzeAsync(
+                    context,
+                    builder.Operations,
+                    new SafeMigrationRunOptions("catalog-timeout"),
+                    cancellationToken));
+
+            // WHY: The target expression acquires this unique session lock before SLEEP.
+            // Observing its owner proves actual data-expression admission independently
+            // of a JIT-sensitive private stack frame or an elapsed-time assertion.
+            reachedDataExpression = Convert.ToInt32(
+                await checkpointCommand.ExecuteScalarAsync(cancellationToken),
+                CultureInfo.InvariantCulture);
+        }
+        finally
+        {
+            await context.Database.ExecuteSqlAsync($"DO RELEASE_LOCK({checkpoint});", CancellationToken.None);
+        }
+
+        // Assert
+        Assert.False(cancellationToken.CanBeCanceled);
+        Assert.Equal(1, context.Database.GetCommandTimeout());
+        Assert.Equal(1, reachedDataExpression);
+        MySqlCommandTimeoutAssertions.AssertCatalogBatchTimeout(exception);
     }
 
+    /// <summary>
+    /// Requires complete identical table assessments before and after unrelated catalog noise.
+    /// </summary>
     [Fact]
-    public async Task FullRunner_LiveCatalogP95RemainsBoundedWithForeignObjectsAndPooling()
+    public async Task FullRunner_PooledCatalogPreservesExactScopeWithForeignObjects()
     {
+        // Arrange
         var templateConnectionString = await CreateDatabaseAsync(CancellationToken.None);
         var connectionString = new MySqlConnectionStringBuilder(templateConnectionString)
         {
@@ -232,80 +338,48 @@ public sealed partial class MySqlPerformanceIntegrationTests
 
         await ExecuteSqlAsync(
             fixtureConnectionString,
-            BuildMySqlPerformanceTables("expected_perf_", ExpectedPerformanceTableCount, includeIndex: false),
+            MySqlLiveBenchmarkWorkload.BuildManagedTables(),
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
-        var operations = BuildMySqlPerformanceOperations(context.Database.ProviderName!);
+        var operations = MySqlLiveBenchmarkWorkload.CreateCatalogOperations(context.Database.ProviderName!);
         var runner = context.GetService<ISafeMigrationRunner>();
         var options = new SafeMigrationRunOptions("live-performance");
-        var clean = await LivePerformanceEvidence.MeasureAsync(
-            operationToken => runner.AnalyzeAsync(
-                context,
-                operations,
-                options,
-                operationToken),
-            cancellationToken: CancellationToken.None);
+
+        // Act
+        var clean = await runner.AnalyzeAsync(context, operations, options, CancellationToken.None);
 
         await ExecuteSqlAsync(
             fixtureConnectionString,
-            BuildMySqlPerformanceTables("foreign_perf_", ForeignPerformanceTableCount, includeIndex: true),
+            MySqlLiveBenchmarkWorkload.BuildForeignTables(),
             cancellationToken: CancellationToken.None);
 
-        var noisy = await LivePerformanceEvidence.MeasureAsync(
-            operationToken => runner.AnalyzeAsync(
-                context,
-                operations,
-                options,
-                operationToken),
-            cancellationToken: CancellationToken.None);
+        var noisy = await runner.AnalyzeAsync(context, operations, options, CancellationToken.None);
 
-        LivePerformanceEvidence.Write(
-            Fixture.IsMariaDb
-                ? "mariadb"
-                : "mysql",
-            Fixture.ServerVersion.Version.ToString(),
-            clean,
-            noisy,
+        // Assert
+        MatchingTableAssessmentAssertions.AssertComplete(
+            clean.Assessments,
             ExpectedPerformanceTableCount,
-            ForeignPerformanceTableCount);
+            "expected_perf_");
 
-        Assert.All(
-            clean.LastReport.Assessments,
-            static assessment => Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState));
+        MatchingTableAssessmentAssertions.AssertComplete(
+            noisy.Assessments,
+            ExpectedPerformanceTableCount,
+            "expected_perf_");
 
-        Assert.Empty(clean.LastReport.UnexpectedObjects);
+        Assert.Empty(clean.UnexpectedObjects);
         Assert.Equal(
             ForeignPerformanceTableCount,
-            noisy.LastReport.UnexpectedObjects.Count(static value =>
+            noisy.UnexpectedObjects.Count(static value =>
                 value.ObjectKind == SafeMigrationDatabaseObjectKind.Table));
 
         Assert.DoesNotContain(
-            noisy.LastReport.UnexpectedObjects,
+            noisy.UnexpectedObjects,
             static value => value.ObjectKind != SafeMigrationDatabaseObjectKind.Table);
 
         Assert.Equal(
-            clean.LastReport.Assessments.Select(static value => value.Code),
-            noisy.LastReport.Assessments.Select(static value => value.Code));
-    }
-
-    private static List<MigrationOperation> BuildMySqlPerformanceOperations(
-        string providerName
-    )
-    {
-        var builder = new MigrationBuilder(providerName);
-        for (var index = 0; index < ExpectedPerformanceTableCount; index++)
-        {
-            var table = $"expected_perf_{index:D4}";
-            _ = builder.EnsureTable(
-                new ExpectedTableDefinition(
-                    table,
-                    [new ExpectedColumnDefinition("id", typeof(int), isNullable: false, storeType: "int")]),
-                SafeMigrationTableMode.StrictDefinition,
-                SafeMigrationPolicy.ThrowIfDifferent);
-        }
-
-        return builder.Operations.ToList();
+            clean.Assessments.Select(static value => value.Code),
+            noisy.Assessments.Select(static value => value.Code));
     }
 
     private static string BuildLargeMigrationStressCatalog() => $"""
@@ -364,28 +438,6 @@ public sealed partial class MySqlPerformanceIntegrationTests
                     return $"({key}, {value}, 'canonical', NULL, {value}, {key}, {value}, 1, 1, 1, 1)";
                 }))};
         """;
-
-    private static string BuildMySqlPerformanceTables(
-        string prefix,
-        int count,
-        bool includeIndex
-    ) => string.Join(
-        Environment.NewLine,
-        Enumerable
-            .Range(0, count)
-            .Select(index =>
-            {
-                var table = $"{prefix}{index:D4}";
-                var indexDdl = includeIndex
-                    ? ", INDEX `ix_payload` (`payload`)"
-                    : string.Empty;
-
-                var payloadColumn = includeIndex
-                    ? ", `payload` int NULL"
-                    : string.Empty;
-
-                return $"CREATE TABLE `{table}` (`id` int NOT NULL{payloadColumn}{indexDdl});";
-            }));
 }
 
 public sealed partial class MySqlProcessWidePerformanceIntegrationTests

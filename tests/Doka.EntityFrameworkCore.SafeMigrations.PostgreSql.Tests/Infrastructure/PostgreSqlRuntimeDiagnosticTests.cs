@@ -377,7 +377,7 @@ public sealed class PostgreSqlRuntimeDiagnosticTests
     /// <summary>Reads the native MESSAGE string without interpreting SQL or requiring a database.</summary>
     /// <param name="sql">The generated anonymous-block SQL.</param>
     /// <param name="code">The unchanged guard token whose first diagnostic is selected.</param>
-    internal static string ReadMessage(
+    private static string ReadMessage(
         string sql,
         string code
     )

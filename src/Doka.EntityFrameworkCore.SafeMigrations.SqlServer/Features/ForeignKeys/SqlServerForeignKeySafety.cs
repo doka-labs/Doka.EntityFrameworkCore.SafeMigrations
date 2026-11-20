@@ -85,6 +85,9 @@ internal static class SqlServerForeignKeySafety
     {
         var candidates = definitions
             .Where(HasCascadingAction)
+
+            // WHY: Retain this explicit fluent snapshot instead of a collection-spread rewrite.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         if (candidates.Length == 0)
@@ -225,11 +228,22 @@ internal static class SqlServerForeignKeySafety
         Func<string, string> literal
     )
     {
-        var predicates = new List<string>();
-        foreach (var foreignKey in table.ForeignKeys)
+        List<string> predicates = [];
+
+        // WHY: Immutable FK slots retain their declaration order in the compatibility predicate.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var foreignKeyIndex = 0; foreignKeyIndex < table.ForeignKeys.Count; foreignKeyIndex++)
         {
-            foreach (var name in foreignKey.Columns)
+            var foreignKey = table.ForeignKeys[foreignKeyIndex];
+
+            // WHY: Immutable FK operand slots preserve composite-column order.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var columnIndex = 0; columnIndex < foreignKey.Columns.Count; columnIndex++)
             {
+                var name = foreignKey.Columns[columnIndex];
+
                 var column = table.Columns.First(value => value.Name == name);
                 if ((HasCascadingAction(foreignKey) && IsRowVersion(column))
                     || ((foreignKey.OnDelete == ReferentialAction.SetNull

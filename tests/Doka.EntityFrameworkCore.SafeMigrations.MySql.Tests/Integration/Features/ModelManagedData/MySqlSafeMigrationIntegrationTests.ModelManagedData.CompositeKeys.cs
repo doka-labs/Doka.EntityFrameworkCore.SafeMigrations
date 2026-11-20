@@ -1,6 +1,8 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-/// <summary>Exercises the ModelManagedDataCompositeKeys migration contracts in an independent class collection.</summary>
+/// <summary>
+/// Exercises the ModelManagedDataCompositeKeys migration contracts in an independent class collection.
+/// </summary>
 public sealed class MySqlModelManagedDataCompositeKeysIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
     /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
@@ -9,9 +11,11 @@ public sealed class MySqlModelManagedDataCompositeKeysIntegrationTests : MySqlSa
         MySqlEngineContainerFixture fixture
     ) : base(fixture) { }
 
+    /// <summary>Preserves composite-key order through managed-data convergence and replay.</summary>
     [Fact]
     public async Task CompositeModelManagedKeysConvergeAndReplayInOperationOrder()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -28,6 +32,7 @@ public sealed class MySqlModelManagedDataCompositeKeysIntegrationTests : MySqlSa
         var builder = CompositeModelManagedOperations(context.Database.ProviderName!, "int", "varchar(64)");
         var runner = context.GetService<ISafeMigrationRunner>();
 
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
@@ -43,6 +48,7 @@ public sealed class MySqlModelManagedDataCompositeKeysIntegrationTests : MySqlSa
             new SafeMigrationRunOptions("model-data-composite-keys-replay"),
             CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, preflight.Status);
         Assert.Equal(SafeMigrationObservedState.Missing, preflight.Assessments[0].ObservedState);
         Assert.Equal(SafeMigrationAction.Apply, preflight.Assessments[0].Action);

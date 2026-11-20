@@ -16,17 +16,19 @@ SafeMigrations publishes these package IDs at one version:
 - `Doka.EntityFrameworkCore.SafeMigrations.SqlServer`.
 
 Stable 10.4.6 introduced this five-package inventory; releases 10.4.2 through
-10.4.5 retain their historical four-package set. Version 10.7.2 keeps the shared
-.NET/EF Core 10 identity and corrects native expression/catalog comparison
-internally, without changing existing public APIs or dependency floors. Explicit
-cancellation arguments and BenchmarkDotNet engineering measurements remain. The
-[changelog](../CHANGELOG.md#1072---2026-11-11) and
-[upgrade notes](support-and-qualification.md#upgrade-to-1072) record current
+10.4.5 retain their historical four-package set. Version 10.7.3 keeps the shared
+.NET/EF Core 10 identity and corrects asynchronous work, cleanup and native
+tooling identity internally, without changing existing public APIs. Dependency
+floors advance, including SQL Server-only PKCS 10.0.15. Explicit cancellation
+arguments and opt-in BenchmarkDotNet engineering measurements remain. The
+[changelog](../CHANGELOG.md#1073---2026-11-20) and
+[upgrade notes](support-and-qualification.md#upgrade-to-1073) record current
 consumer requirements. The earlier removal of public optional-token defaults in
 10.7.0 is a deliberate source-breaking exception within 10.x, not a strictly
 SemVer-compatible minor change. Existing CLR method signatures, migration
-policies, report schemas and fingerprint formats remain. Corrected captured
-numeric-default identities require renewed affected approvals, not an old digest
+policies, report schemas and fingerprint formats remain. When upgrading from
+before 10.7.2, corrected captured numeric-default identities require renewed
+affected approvals, not an old digest
 or history rewrite. Applications upgrading from before 10.6.0 must still review its
 [computed/CHECK approval boundaries](support-and-qualification.md#upgrade-to-1060).
 Do not carry an obsolete contract approval forward or rewrite historical
@@ -63,16 +65,17 @@ CI and release call the same reusable quality workflow. It enforces:
   isolated package-only consumers; and
 - SPDX 2.2 SBOM generation and validation.
 
-It also runs Core, MySQL/MariaDB, PostgreSQL, SQLite, and SQL Server through
-BenchmarkDotNet 0.15.8 with `--filter '*' --job Dry`. This smoke checks all
-default cases and native full JSON export, not statistical performance.
-Duration and managed allocation values never determine qualification success.
-Invalid configuration, generated-build or execution failures, missing/failed
-selected cases and missing/invalid evidence remain blocking. Retain each
-suite's complete `artifacts/performance` directory. Build, tests, coverage,
-tooling, package and SBOM gates are unchanged. See the
-[measurement boundaries](support-and-qualification.md#performance-and-memory)
-before comparing full measurement runs or historical allocation reports.
+BenchmarkDotNet is explicitly opt-in, including Dry. Default CI and release
+qualification execute deterministic workload/configuration controls without
+starting statistical benchmarking. `capture-benchmark-evidence` requests the
+default workload families of all five executables, not their advanced native
+modes. Native `--live-*` modes require a separate explicit invocation and a
+private dedicated-engine connection as documented in CONTRIBUTING.
+`capture-sqlserver-baseline` requests the separate SQL Server Short measurement.
+For requested measurement, execution/export failures and invalid evidence remain
+blocking, while numeric timing/allocation values stay informational. Required
+native, coverage, tooling, package and SBOM gates do not depend on this opt-in.
+See [measurement boundaries](support-and-qualification.md#performance-and-memory).
 
 The PostgreSQL EF tooling probe waits for the final TCP listener, never the
 image's temporary socket-only initialization server. Large live performance
@@ -80,9 +83,10 @@ fixtures receive a fixture-only command timeout; production SafeMigrations
 continues to use its normal configured timeout.
 
 The qualified workflow artifact contains the ten package archives,
-`SHA256SUMS`, performance evidence, and the SPDX manifest. GitHub creates build
-provenance and SBOM attestations for those exact bytes. The attestation job
-validates the build-provenance Sigstore bundle against all ten packages,
+`SHA256SUMS`, required qualification evidence, and the SPDX manifest. Explicitly
+requested benchmark output is retained separately, not fabricated when omitted.
+GitHub creates build provenance and SBOM attestations for those exact bytes.
+The attestation job validates the build-provenance Sigstore bundle against all ten packages,
 `SHA256SUMS`, and `manifest.spdx.json`, materializes exactly one canonical
 `release-provenance.intoto.jsonl` record, and uploads it under a run- and
 attempt-qualified artifact name before publication can reach the protected

@@ -1,5 +1,3 @@
-using System.Text.RegularExpressions;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
 /// <summary>Exercises bounded, deduplicated and adversarial PostgreSQL sparse catalog certificates.</summary>
@@ -873,6 +871,8 @@ public sealed class PostgreSqlLivePrerequisiteEvidenceTests
             }
         }
 
+        // WHY: Freeze the collected live prerequisites into an independently owned array.
+        // ReSharper disable once UseCollectionExpression
         return result.ToArray();
     }
 
@@ -884,6 +884,9 @@ public sealed class PostgreSqlLivePrerequisiteEvidenceTests
             operation.Intent is EnsureColumnIntent
                 ? SafeMigrationObservedState.Missing
                 : SafeMigrationObservedState.PrerequisiteMissing))
+
+        // WHY: Retain explicit fluent materialization and its independently owned result snapshot.
+        // ReSharper disable once UseCollectionExpression
         .ToArray();
 
     /// <summary>Creates immutable live classification inputs for the metadata-only phase.</summary>

@@ -16,7 +16,7 @@ public sealed class SqlServerSharedCatalogTemplateTests
     )
     {
         // Arrange
-        using var context = new SafeMigrationDbContext(ConnectionString);
+        await using var context = new SafeMigrationDbContext(ConnectionString);
         var mappings = context.GetService<IRelationalTypeMappingSource>();
         await using var connection = new SqlServerCatalogTestConnection(nativeBatch);
         const int count = 32;
@@ -98,7 +98,7 @@ public sealed class SqlServerSharedCatalogTemplateTests
     )
     {
         // Arrange
-        using var context = new SafeMigrationDbContext(ConnectionString);
+        await using var context = new SafeMigrationDbContext(ConnectionString);
         var mappings = context.GetService<IRelationalTypeMappingSource>();
         await using var connection = new SqlServerCatalogTestConnection(nativeBatch);
         SqlServerSafeMigrationRuntimePlan?[] plans =
@@ -171,7 +171,7 @@ public sealed class SqlServerSharedCatalogTemplateTests
     )
     {
         // Arrange
-        using var context = new SafeMigrationDbContext(ConnectionString);
+        await using var context = new SafeMigrationDbContext(ConnectionString);
         var mappings = context.GetService<IRelationalTypeMappingSource>();
         await using var connection = new SqlServerCatalogTestConnection(nativeBatch);
         const int count = 33;
@@ -261,7 +261,7 @@ public sealed class SqlServerSharedCatalogTemplateTests
     )
     {
         // Arrange
-        using var context = new SafeMigrationDbContext(ConnectionString);
+        await using var context = new SafeMigrationDbContext(ConnectionString);
         var mappings = context.GetService<IRelationalTypeMappingSource>();
         await using var connection = new SqlServerCatalogTestConnection(nativeBatch);
         var first = ParameterizedPlan(mappings, 0, 7) with
@@ -316,7 +316,7 @@ public sealed class SqlServerSharedCatalogTemplateTests
     )
     {
         // Arrange
-        using var context = new SafeMigrationDbContext(ConnectionString);
+        await using var context = new SafeMigrationDbContext(ConnectionString);
         var mappings = context.GetService<IRelationalTypeMappingSource>();
         await using var connection = new SqlServerCatalogTestConnection(nativeBatch);
         var plans = Enumerable
@@ -410,7 +410,7 @@ public sealed class SqlServerSharedCatalogTemplateTests
     )
     {
         // Arrange
-        using var context = new SafeMigrationDbContext(ConnectionString);
+        await using var context = new SafeMigrationDbContext(ConnectionString);
         var mappings = context.GetService<IRelationalTypeMappingSource>();
         await using var connection = new SqlServerCatalogTestConnection(nativeBatch);
         var first = ParameterizedPlan(mappings, 0, "small") with { StateExpression = LargeQuotedUnicodeState() };

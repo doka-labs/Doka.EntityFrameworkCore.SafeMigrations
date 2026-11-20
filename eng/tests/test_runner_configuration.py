@@ -1,8 +1,11 @@
-"""Execute the actual hosted-runner gate without starting SDK or server workloads."""
+"""Execute hosted runner/image admission without starting SDK or server workloads."""
 
+import os
 import re
+import shutil
 import subprocess
 import tempfile
+import textwrap
 import unittest
 from pathlib import Path
 
@@ -48,6 +51,21 @@ class HostedRunnerConfigurationTests(unittest.TestCase):
         # Assert
         self.assertTrue(runners)
         self.assertTrue(all(label == "ubuntu-26.04" for _, label in runners), runners)
+
+    def test_database_version_literals_remain_text_in_matrix_and_environment(self):
+        """YAML numeric coercion must not turn a native version such as 15.20 into 15.2."""
+        # Arrange
+        source = (ROOT / ".github/workflows/quality-gates.yml").read_text(encoding="ascii")
+
+        # Act
+        values = re.findall(r"^\s*(?:-\s+)?(?:version|SAFE_MIGRATIONS_[A-Z]+_VERSION):\s*([^\n]+)$",
+                            source, re.MULTILINE)
+        literals = [value for value in values if not value.startswith("${{")]
+
+        # Assert
+        self.assertEqual(17, len(literals))
+        for value in literals:
+            self.assertRegex(value, r"^(['\"])[0-9]+(?:\.[0-9]+)*\1$")
 
     def test_exact_runner_is_accepted_across_independent_workflows(self):
         """The gate accepts more than one owned workflow without SDK evaluation."""
@@ -97,6 +115,65 @@ class HostedRunnerConfigurationTests(unittest.TestCase):
             # Assert
             self.assertNotEqual(0, result.returncode)
             self.assertIn("At least one pinned ubuntu-26.04 x64 workflow job is required.", result.stderr)
+
+
+class CanonicalImageAdmissionTests(unittest.TestCase):
+    """Reject inaccessible exact manifests before exporting native fixture identities."""
+
+    def test_actual_image_resolution_steps_verify_every_exact_pin_before_export(self):
+        source = (ROOT / ".github/workflows/quality-gates.yml").read_text(encoding="ascii")
+        images = {row.split()[3]: row.split()[1] for row in
+                  (ROOT / "docker/database-images.Dockerfile").read_text(encoding="ascii").splitlines()
+                  if row.startswith("FROM ")}
+        inspected = {target: image.partition("@")[0].rpartition(":")[0] + "@" + image.partition("@")[2]
+                     for target, image in images.items()}
+        steps = {"Resolve canonical coverage images": ("mariadb123", "postgres18", "sqlserver2022"),
+                 "Resolve canonical MySQL or MariaDB image": ("mysql84",),
+                 "Resolve canonical PostgreSQL image": ("postgres18",),
+                 "Resolve canonical SQL Server image": ("sqlserver2022",)}
+        variables = {"mysql84": "SAFE_MIGRATIONS_MYSQL_IMAGE", "mariadb123": "SAFE_MIGRATIONS_MYSQL_IMAGE",
+                     "postgres18": "SAFE_MIGRATIONS_POSTGRES_IMAGE",
+                     "sqlserver2022": "SAFE_MIGRATIONS_SQLSERVER_IMAGE"}
+        for name, targets in steps.items():
+            for failing in (None, *targets):
+                with self.subTest(step=name, failing=failing), tempfile.TemporaryDirectory() as directory:
+                    # Arrange
+                    root = Path(directory)
+                    (root / "eng").mkdir()
+                    (root / "docker").mkdir()
+                    shutil.copyfile(ROOT / "eng/select-database-image.sh", root / "eng/select-database-image.sh")
+                    shutil.copyfile(ROOT / "docker/database-images.Dockerfile",
+                                    root / "docker/database-images.Dockerfile")
+                    native = root / "docker-client"
+                    native.mkdir()
+                    (native / "docker").write_text(
+                        '#!/usr/bin/env bash\nset -euo pipefail\n'
+                        '[[ "$#" == 3 && "$1 $2" == "manifest inspect" && "$3" == *@sha256:* ]] || exit 86\n'
+                        'printf "%s\\n" "$3" >> "$IMAGE_LOG"\n'
+                        'repository="${3%@*}"\n'
+                        '[[ "${repository##*/}" != *:* ]] || exit 86\n'
+                        '[[ "$3" != "$FAIL_IMAGE" ]] || exit 7\n', encoding="ascii")
+                    (native / "docker").chmod(0o755)
+                    log = root / "images.log"
+                    exported = root / "env"
+                    exported.write_text("", encoding="ascii")
+                    step = source.split(f"- name: {name}\n", 1)[1].split("\n      - name:", 1)[0]
+                    command = textwrap.dedent(step.split("        run: |\n", 1)[1])
+                    stop = len(targets) if failing is None else targets.index(failing)
+                    env = {**os.environ, **{variables[target]: target for target in targets},
+                           "PATH": str(native) + os.pathsep + os.environ["PATH"], "GITHUB_ENV": str(exported),
+                           "IMAGE_LOG": str(log), "FAIL_IMAGE": inspected[failing] if failing else ""}
+
+                    # Act
+                    result = subprocess.run(["bash", "-euo", "pipefail", "-c", command], cwd=root, env=env,
+                                            capture_output=True, text=True, check=False)
+
+                    # Assert
+                    self.assertEqual(0 if failing is None else 7, result.returncode, result.stderr)
+                    self.assertEqual([inspected[target] for target in targets[:stop + (failing is not None)]],
+                                     log.read_text(encoding="ascii").splitlines() if log.exists() else [])
+                    self.assertEqual([f"{variables[target]}={images[target]}" for target in targets[:stop]],
+                                     exported.read_text(encoding="ascii").splitlines())
 
 
 if __name__ == "__main__":

@@ -188,7 +188,13 @@ internal sealed class MySqlSafeMigrationPlanCapture
             throw new InvalidOperationException("A MySQL SafeMigrations plan capture is already active in this scope.");
         }
 
+        // WHY: Retain fluent materialization and its existing snapshot
+        // ownership rather than replacing this boundary with a spread.
+        // ReSharper disable once UseCollectionExpression
         _expected = operations.ToArray();
+
+        // WHY: Public generic annotations cannot prevent a runtime null entry in the caller's array.
+        // ReSharper disable once ConditionIsAlwaysTrueOrFalseAccordingToNullableAPIContract
         if (_expected.Any(static operation => operation is null))
         {
             Clear();
@@ -247,6 +253,10 @@ internal sealed class MySqlSafeMigrationPlanCapture
         ClearGeneration();
         var safeOperations = operations
             .OfType<SafeMigrationOperation>()
+
+            // WHY: Retain fluent materialization and its existing snapshot
+            // ownership rather than replacing this boundary with a spread.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         _runtimeDiagnosticCapacity = safeOperations.Length;
@@ -349,7 +359,7 @@ internal sealed class MySqlSafeMigrationPlanCapture
 
         // Only EnsureTable consumes this cross-operation catalog. Avoid
         // materializing the complete expected schema for unrelated batches.
-        if (!operations.Any(static operation => operation.Intent is EnsureTableIntent))
+        if (operations.All(static operation => operation.Intent is not EnsureTableIntent))
         {
             SafeMigrationExpectedIndexTransitions.Validate(
                 operations,
@@ -362,11 +372,18 @@ internal sealed class MySqlSafeMigrationPlanCapture
         var definitions = new Dictionary<MySqlTableIdentity, IReadOnlyList<ExpectedIndexDefinition>>(
             new MySqlTableIdentityComparer(comparer));
 
-        foreach (var table in SafeMigrationExpectedCatalog.Create(
+        var inventory = SafeMigrationExpectedCatalog.Create(
             operations,
             schema => MySqlTableIdentity.NormalizeDatabase(schema, currentDatabase),
-            comparer))
+            comparer);
+
+        // WHY: Retain one immutable catalog snapshot and preserve its established owner order.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var tableIndex = 0; tableIndex < inventory.Count; tableIndex++)
         {
+            var table = inventory[tableIndex];
+
             if (table.UniqueIndexes.Count == 0)
             {
                 continue;
@@ -378,6 +395,10 @@ internal sealed class MySqlSafeMigrationPlanCapture
                 .Values
                 .Where(static index => index.Unique)
                 .OrderBy(static index => index.Name, StringComparer.Ordinal)
+
+                // WHY: Retain fluent materialization and its existing snapshot
+                // ownership rather than replacing this boundary with a spread.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray();
 
             if (!definitions.TryAdd(key, indexes))
@@ -507,7 +528,7 @@ internal sealed class MySqlSafeMigrationPlanCapture
 
     /// <summary>Detects mixed spellings which can change a strict-table or backfill owner contract.</summary>
     private static bool HasCaseAmbiguousOwners(
-        IReadOnlyList<SafeMigrationOperation> operations,
+        SafeMigrationOperation[] operations,
         string? currentDatabase
     )
     {
@@ -638,6 +659,9 @@ internal sealed class MySqlSafeMigrationPlanCapture
     /// <param name="plan">The emitted runtime catalog plan.</param>
     public void Record(
         int ordinal,
+
+        // WHY: Exact operation reference identity is the capture contract, not redundant argument validation.
+        // ReSharper disable once ParameterOnlyUsedForPreconditionCheck.Global
         SafeMigrationOperation operation,
         MySqlSafeMigrationRuntimePlan plan
     )
@@ -688,6 +712,10 @@ internal sealed class MySqlSafeMigrationPlanCapture
 
         var result = _plans
             .Cast<MySqlSafeMigrationRuntimePlan>()
+
+            // WHY: Retain fluent materialization and its existing snapshot
+            // ownership rather than replacing this boundary with a spread.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         _completed = true;
@@ -708,8 +736,14 @@ internal sealed class MySqlSafeMigrationPlanCapture
     {
         HashSet<MySqlTableIdentity>? dropped = null;
         HashSet<SafeMigrationOperation>? result = null;
-        foreach (var operation in operations)
+
+        // WHY: Index this stable list while preserving its order and ownership.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var operationIndex = 0; operationIndex < operations.Count; operationIndex++)
         {
+            var operation = operations[operationIndex];
+
             switch (operation.Intent)
             {
                 case DropPrimaryKeyIntent drop:
@@ -852,27 +886,48 @@ internal sealed class MySqlSafeMigrationPlanCapture
     }
 }
 
-internal sealed class MySqlExpectedUniqueIndexCatalog(
-    IReadOnlyDictionary<MySqlTableIdentity, IReadOnlyList<ExpectedIndexDefinition>> definitions,
-    string? currentDatabase,
-    StringComparer? tableComparer = null
-)
+/// <summary>Retains unique-index declarations under the invocation's qualified native owner identity.</summary>
+internal sealed class MySqlExpectedUniqueIndexCatalog
 {
+    private readonly IReadOnlyDictionary<MySqlTableIdentity, IReadOnlyList<ExpectedIndexDefinition>> _definitions;
+
+    /// <summary>Retains capture-owned definitions and independently verified native identity rules.</summary>
+    /// <param name="definitions">The declarations associated with the complete captured operation stream.</param>
+    /// <param name="currentDatabase">The current database, or null before independent qualification.</param>
+    /// <param name="tableComparer">The verified native table equality, or ordinal equality when unavailable.</param>
+    internal MySqlExpectedUniqueIndexCatalog(
+        IReadOnlyDictionary<MySqlTableIdentity, IReadOnlyList<ExpectedIndexDefinition>> definitions,
+        string? currentDatabase,
+        StringComparer? tableComparer = null
+    )
+    {
+        _definitions = definitions;
+        CurrentDatabase = currentDatabase;
+        TableComparer = tableComparer ?? StringComparer.Ordinal;
+    }
+
     /// <summary>Gets owner equality explicitly selected by the capture's proven native profile.</summary>
-    internal StringComparer TableComparer { get; } = tableComparer ?? StringComparer.Ordinal;
+    internal StringComparer TableComparer { get; }
 
     /// <summary>Gets the independently qualified current database, or null when no such proof is available.</summary>
-    internal string? CurrentDatabase => currentDatabase;
+    internal string? CurrentDatabase { get; }
 
     /// <summary>Normalizes only the existing current-database qualifier contract.</summary>
     internal string? NormalizeSchema(
         string? schema
-    ) => MySqlTableIdentity.NormalizeDatabase(schema, currentDatabase);
+    ) => MySqlTableIdentity.NormalizeDatabase(schema, CurrentDatabase);
 
+    /// <summary>Finds declarations without treating them as accepted native catalog evidence.</summary>
+    /// <param name="table">The exact or independently folded native table identity.</param>
+    /// <param name="schema">
+    /// The optional database qualifier, normalized only against the qualified current database.
+    /// </param>
+    /// <returns>The retained declarations, or null when this capture has no matching owner.</returns>
     public IReadOnlyList<ExpectedIndexDefinition>? Get(
         string table,
         string? schema
-    ) => definitions.GetValueOrDefault(MySqlTableIdentity.Create(table, schema, currentDatabase));
+    ) => _definitions.GetValueOrDefault(
+        MySqlTableIdentity.Create(table, schema, CurrentDatabase));
 }
 
 /// <summary>Stores the folded interpretation used only behind a native execution-time mode guard.</summary>
@@ -886,20 +941,31 @@ internal sealed record MySqlTableContractAlternative(
 );
 
 /// <summary>Keeps native table equality separate from the existing exact database qualifier contract.</summary>
-internal sealed class MySqlTableIdentityComparer(StringComparer tableComparer) : IEqualityComparer<MySqlTableIdentity>
+internal sealed class MySqlTableIdentityComparer : IEqualityComparer<MySqlTableIdentity>
 {
+    private readonly StringComparer _tableComparer;
+
+    /// <summary>Separates the selected table-name policy from exact database qualifier equality.</summary>
+    /// <param name="tableComparer">The independently selected native table-name equality.</param>
+    internal MySqlTableIdentityComparer(
+        StringComparer tableComparer
+    )
+    {
+        _tableComparer = tableComparer;
+    }
+
     /// <inheritdoc />
     public bool Equals(
         MySqlTableIdentity first,
         MySqlTableIdentity second
-    ) => tableComparer.Equals(first.Table, second.Table)
+    ) => _tableComparer.Equals(first.Table, second.Table)
         && StringComparer.Ordinal.Equals(first.Database, second.Database);
 
     /// <inheritdoc />
     public int GetHashCode(
         MySqlTableIdentity identity
     ) => HashCode.Combine(
-        tableComparer.GetHashCode(identity.Table),
+        _tableComparer.GetHashCode(identity.Table),
         identity.Database is null
             ? 0
             : StringComparer.Ordinal.GetHashCode(identity.Database));

@@ -12,6 +12,9 @@ public sealed class MySqlOwnedTestServiceProviderTests
         var versions = Enumerable
             .Range(1, profileCount)
             .Select(static patch => MySqlServerVersion.MySql(new Version(8, 4, patch)))
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         // Act
@@ -97,6 +100,9 @@ public sealed class MySqlOwnedTestServiceProviderTests
         var versions = Enumerable
             .Range(1, profileCount)
             .Select(static patch => MySqlServerVersion.MariaDb(new Version(11, 8, patch)))
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         // Act
@@ -227,6 +233,9 @@ public sealed class MySqlOwnedTestServiceProviderTests
         var versions = Enumerable
             .Range(1, profileCount)
             .Select(static patch => MySqlServerVersion.MariaDb(new Version(11, 8, patch)))
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         // Act

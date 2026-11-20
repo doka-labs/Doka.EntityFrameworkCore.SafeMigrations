@@ -1,8 +1,8 @@
 ---
 id: D-017
 status: proposed
-date: 2026-10-20
-decision-makers: [Dominic Kalkbrenner]
+date: 2026-11-19
+decision-makers: ["Dominic Kalkbrenner"]
 consulted: []
 informed: ["@doka-labs/core-maintainers"]
 scope: "Bounded generated expressions, native identity and ordered source dependencies"
@@ -207,6 +207,10 @@ authorized by this record.
   consumers to preserve native token roles, value components, grammar positions
   and scalar/predicate context. These implementation corrections do not change
   this draft's approval status or claim completed hosted x64 qualification.
+- 2026-11-19: Aligned last-update metadata, reciprocal amendments, option titles
+  and source/navigation format with the current documentation profile. Retained
+  the recorded status and historical approval evidence; this migration grants no
+  new architectural acceptance or publication authority.
 
 ### Implementation References
 
@@ -231,14 +235,14 @@ Representative regression contracts:
 
 ### Sources
 
-- MySQL generated-column restrictions (`https://dev.mysql.com/doc/refman/8.4/en/create-table-generated-columns.html`; primary source; retrieved 2026-10-20)
-- MySQL generated ALTER (`https://dev.mysql.com/doc/refman/8.4/en/alter-table-generated-columns.html`; primary source; retrieved 2026-10-20)
-- MariaDB generated columns (`https://mariadb.com/docs/server/reference/sql-statements/data-definition/create/generated-columns`; primary source; retrieved 2026-10-20)
-- PostgreSQL 14 dependency ownership (`https://github.com/postgres/postgres/blob/REL_14_24/src/backend/catalog/heap.c#L2282-L2312`; primary source; retrieved 2026-10-20)
-- PostgreSQL 18 dependency ownership (`https://github.com/postgres/postgres/blob/REL_18_6/src/backend/catalog/pg_attrdef.c#L104-L121`; primary source; retrieved 2026-10-20)
-- PostgreSQL 14 lock privileges and snapshots (`https://www.postgresql.org/docs/14/sql-lock.html`; primary source; retrieved 2026-10-20)
-- PostgreSQL 18 lock privileges and snapshots (`https://www.postgresql.org/docs/18/sql-lock.html`; primary source; retrieved 2026-10-20)
-- SQLite generated facets (`https://www.sqlite.org/gencol.html`; primary source; retrieved 2026-10-20)
-- SQL Server computed definition (`https://learn.microsoft.com/en-us/sql/t-sql/statements/alter-table-computed-column-definition-transact-sql`; primary source; retrieved 2026-10-20)
-- SQL Server schema-bound column dependencies (`https://learn.microsoft.com/en-us/sql/relational-databases/system-catalog-views/sys-sql-expression-dependencies-transact-sql?view=sql-server-ver17`; primary source; retrieved 2026-10-20)
-- SQL Server automatic-statistics lifetime (`https://learn.microsoft.com/en-us/sql/t-sql/statements/create-statistics-transact-sql?view=sql-server-ver17#auto_drop---on--off`; primary source; retrieved 2026-10-20)
+- [MySQL generated-column restrictions](https://dev.mysql.com/doc/refman/8.4/en/create-table-generated-columns.html) (primary source; retrieved 2026-10-20)
+- [MySQL generated ALTER](https://dev.mysql.com/doc/refman/8.4/en/alter-table-generated-columns.html) (primary source; retrieved 2026-10-20)
+- [MariaDB generated columns](https://mariadb.com/docs/server/reference/sql-statements/data-definition/create/generated-columns) (primary source; retrieved 2026-10-20)
+- [PostgreSQL 14 dependency ownership](https://github.com/postgres/postgres/blob/REL_14_24/src/backend/catalog/heap.c#L2282-L2312) (primary source; retrieved 2026-10-20)
+- [PostgreSQL 18 dependency ownership](https://github.com/postgres/postgres/blob/REL_18_6/src/backend/catalog/pg_attrdef.c#L104-L121) (primary source; retrieved 2026-10-20)
+- [PostgreSQL 14 lock privileges and snapshots](https://www.postgresql.org/docs/14/sql-lock.html) (primary source; retrieved 2026-10-20)
+- [PostgreSQL 18 lock privileges and snapshots](https://www.postgresql.org/docs/18/sql-lock.html) (primary source; retrieved 2026-10-20)
+- [SQLite generated facets](https://www.sqlite.org/gencol.html) (primary source; retrieved 2026-10-20)
+- [SQL Server computed definition](https://learn.microsoft.com/en-us/sql/t-sql/statements/alter-table-computed-column-definition-transact-sql) (primary source; retrieved 2026-10-20)
+- [SQL Server schema-bound column dependencies](https://learn.microsoft.com/en-us/sql/relational-databases/system-catalog-views/sys-sql-expression-dependencies-transact-sql?view=sql-server-ver17) (primary source; retrieved 2026-10-20)
+- [SQL Server automatic-statistics lifetime](https://learn.microsoft.com/en-us/sql/t-sql/statements/create-statistics-transact-sql?view=sql-server-ver17#auto_drop---on--off) (primary source; retrieved 2026-10-20)

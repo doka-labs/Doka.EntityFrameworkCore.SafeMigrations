@@ -14,6 +14,7 @@ public sealed class SqliteTableConstraintTransitionsTests
         string boundary
     )
     {
+        // Arrange
         var builder = new MigrationBuilder("Microsoft.EntityFrameworkCore.Sqlite");
         AddCreator(builder, "children");
         var initial = Assert.IsType<SafeMigrationOperation>(builder.Operations[0]);
@@ -42,18 +43,23 @@ public sealed class SqliteTableConstraintTransitionsTests
 
         builder.AddForeignKeyIfNotExists("fk_children_parent", table, ["ParentId"], "parents", ["Id"]);
 
+        // Act
         var transitions = new SqliteTableConstraintTransitions(builder.Operations);
         var initialContract = transitions.Find(initial);
+        var laterContract = boundary is "repeated" or "drop_recreate"
+            ? transitions.Find((SafeMigrationOperation)builder.Operations[^2])
+            : null;
 
+        // Assert
         Assert.NotNull(initialContract);
         Assert.Empty(initialContract.AllowedForeignKeys);
         Assert.Empty(initialContract.RequiredForeignKeys);
         if (boundary is "repeated" or "drop_recreate")
         {
-            var later = Assert.IsType<SafeMigrationOperation>(builder.Operations[^2]);
+            Assert.IsType<SafeMigrationOperation>(builder.Operations[^2]);
             Assert.Single(
                 Assert.IsType<SafeMigrationExpectedTableConstraints>(
-                        transitions.Find(later))
+                        laterContract)
                     .AllowedForeignKeys);
         }
     }
@@ -62,6 +68,7 @@ public sealed class SqliteTableConstraintTransitionsTests
     [Fact]
     public void UntouchedInlineForeignKeyRemainsRequired()
     {
+        // Arrange
         var builder = new MigrationBuilder("Microsoft.EntityFrameworkCore.Sqlite");
         builder.CreateTableIfNotExists(
             "children",
@@ -79,8 +86,10 @@ public sealed class SqliteTableConstraintTransitionsTests
         builder.AddForeignKeyIfNotExists("fk_children_other", "children", ["Id"], "other_parents", ["Id"]);
         var creator = Assert.IsType<SafeMigrationOperation>(builder.Operations[0]);
 
+        // Act
         var contract = new SqliteTableConstraintTransitions(builder.Operations).Find(creator);
 
+        // Assert
         Assert.NotNull(contract);
         Assert.Equal(2, contract.AllowedForeignKeys.Count);
         Assert.Equal("fk_children_parent",

@@ -572,7 +572,9 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
         CONSTRAINT `doka_sm_postcondition` UNIQUE (`postcondition_code`)) CHARACTER SET ascii COLLATE ascii_bin;
         """;
 
-    /// <summary>Seeds and rejects in the same existing assertion statement without another transport exchange.</summary>
+    /// <summary>
+    /// Seeds and rejects in the same existing assertion statement without another transport exchange.
+    /// </summary>
     private static string BuildDecisionAssertionSql(
         MySqlSafeMigrationRuntimeDiagnostic diagnostic,
         bool script

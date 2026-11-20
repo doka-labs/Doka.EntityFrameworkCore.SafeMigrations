@@ -4,6 +4,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// Creates a deterministic SHA-256 fingerprint of an ordered SafeMigrations
 /// intent and expected-definition contract without reflection or JSON.
 /// </summary>
+[PublicAPI]
 public static partial class SafeMigrationContractFingerprint
 {
     /// <summary>Creates the lowercase contract fingerprint.</summary>

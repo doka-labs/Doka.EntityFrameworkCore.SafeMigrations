@@ -5,6 +5,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql;
 /// safe migrations, baseline-generator composition, and canonical migration
 /// discovery.
 /// </summary>
+[PublicAPI]
 public static class PostgreSqlSafeMigrationOptionsBuilderExtensions
 {
     /// <summary>
@@ -15,6 +16,10 @@ public static class PostgreSqlSafeMigrationOptionsBuilderExtensions
     /// <param name="optionsBuilder">The EF Core options builder to configure.</param>
     /// <returns>The same options builder so additional calls can be chained.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="optionsBuilder" /> is null.</exception>
+
+    // WHY: Extension blocks change API-baseline analyzer output in the qualified toolchain.
+    // Preserve the shipped signatures until that compatibility boundary is supported.
+    // ReSharper disable once ConvertToExtensionBlock
     public static DbContextOptionsBuilder UsePostgreSqlSafeMigrations(
         this DbContextOptionsBuilder optionsBuilder
     )
@@ -39,6 +44,10 @@ public static class PostgreSqlSafeMigrationOptionsBuilderExtensions
     /// <exception cref="ArgumentNullException">
     /// <paramref name="optionsBuilder" /> or <paramref name="configure" /> is null.
     /// </exception>
+
+    // WHY: Extension blocks change API-baseline analyzer output in the qualified toolchain.
+    // Preserve the shipped signatures until that compatibility boundary is supported.
+    // ReSharper disable once ConvertToExtensionBlock
     public static DbContextOptionsBuilder UsePostgreSqlSafeMigrations(
         this DbContextOptionsBuilder optionsBuilder,
         Action<SafeMigrationOptionsBuilder> configure
@@ -62,6 +71,10 @@ public static class PostgreSqlSafeMigrationOptionsBuilderExtensions
     /// <typeparam name="TCanonicalMigrationContext">The context that owns migration discovery and history.</typeparam>
     /// <returns>The same options builder so additional calls can be chained.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="optionsBuilder" /> is null.</exception>
+
+    // WHY: Extension blocks change API-baseline analyzer output in the qualified toolchain.
+    // Preserve the shipped signatures until that compatibility boundary is supported.
+    // ReSharper disable once ConvertToExtensionBlock
     public static DbContextOptionsBuilder UsePostgreSqlSafeMigrations<TCanonicalMigrationContext>(
         this DbContextOptionsBuilder optionsBuilder
     )
@@ -88,6 +101,10 @@ public static class PostgreSqlSafeMigrationOptionsBuilderExtensions
     /// <exception cref="ArgumentNullException">
     /// <paramref name="optionsBuilder" /> or <paramref name="configure" /> is null.
     /// </exception>
+
+    // WHY: Extension blocks change API-baseline analyzer output in the qualified toolchain.
+    // Preserve the shipped signatures until that compatibility boundary is supported.
+    // ReSharper disable once ConvertToExtensionBlock
     public static DbContextOptionsBuilder UsePostgreSqlSafeMigrations<TCanonicalMigrationContext>(
         this DbContextOptionsBuilder optionsBuilder,
         Action<SafeMigrationOptionsBuilder> configure
@@ -113,6 +130,10 @@ public static class PostgreSqlSafeMigrationOptionsBuilderExtensions
     /// <typeparam name="TCanonicalMigrationContext">The context that owns migration discovery and history.</typeparam>
     /// <returns>The same options builder so additional calls can be chained.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="optionsBuilder" /> is null.</exception>
+
+    // WHY: Extension blocks change API-baseline analyzer output in the qualified toolchain.
+    // Preserve the shipped signatures until that compatibility boundary is supported.
+    // ReSharper disable once ConvertToExtensionBlock
     public static DbContextOptionsBuilder UsePostgreSqlSafeMigrations<TBaselineGenerator, TCanonicalMigrationContext>(
         this DbContextOptionsBuilder optionsBuilder
     )
@@ -141,6 +162,10 @@ public static class PostgreSqlSafeMigrationOptionsBuilderExtensions
     /// <exception cref="ArgumentNullException">
     /// <paramref name="optionsBuilder" /> or <paramref name="configure" /> is null.
     /// </exception>
+
+    // WHY: Extension blocks change API-baseline analyzer output in the qualified toolchain.
+    // Preserve the shipped signatures until that compatibility boundary is supported.
+    // ReSharper disable once ConvertToExtensionBlock
     public static DbContextOptionsBuilder UsePostgreSqlSafeMigrations<TBaselineGenerator, TCanonicalMigrationContext>(
         this DbContextOptionsBuilder optionsBuilder,
         Action<SafeMigrationOptionsBuilder> configure
@@ -167,6 +192,10 @@ public static class PostgreSqlSafeMigrationOptionsBuilderExtensions
     /// <typeparam name="TContext">The DbContext type being configured.</typeparam>
     /// <returns>The same options builder so additional calls can be chained.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="optionsBuilder" /> is null.</exception>
+
+    // WHY: Extension blocks change API-baseline analyzer output in the qualified toolchain.
+    // Preserve the shipped signatures until that compatibility boundary is supported.
+    // ReSharper disable once ConvertToExtensionBlock
     public static DbContextOptionsBuilder<TContext> UsePostgreSqlSafeMigrations<TContext>(
         this DbContextOptionsBuilder<TContext> optionsBuilder
     )
@@ -193,6 +222,10 @@ public static class PostgreSqlSafeMigrationOptionsBuilderExtensions
     /// <exception cref="ArgumentNullException">
     /// <paramref name="optionsBuilder" /> or <paramref name="configure" /> is null.
     /// </exception>
+
+    // WHY: Extension blocks change API-baseline analyzer output in the qualified toolchain.
+    // Preserve the shipped signatures until that compatibility boundary is supported.
+    // ReSharper disable once ConvertToExtensionBlock
     public static DbContextOptionsBuilder<TContext> UsePostgreSqlSafeMigrations<TContext>(
         this DbContextOptionsBuilder<TContext> optionsBuilder,
         Action<SafeMigrationOptionsBuilder> configure
@@ -219,6 +252,10 @@ public static class PostgreSqlSafeMigrationOptionsBuilderExtensions
     /// <typeparam name="TCanonicalMigrationContext">The context that owns migration discovery and history.</typeparam>
     /// <returns>The same options builder so additional calls can be chained.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="optionsBuilder" /> is null.</exception>
+
+    // WHY: Extension blocks change API-baseline analyzer output in the qualified toolchain.
+    // Preserve the shipped signatures until that compatibility boundary is supported.
+    // ReSharper disable once ConvertToExtensionBlock
     public static DbContextOptionsBuilder<TContext> UsePostgreSqlSafeMigrations<TContext, TBaselineGenerator,
         TCanonicalMigrationContext>(
         this DbContextOptionsBuilder<TContext> optionsBuilder
@@ -250,6 +287,10 @@ public static class PostgreSqlSafeMigrationOptionsBuilderExtensions
     /// <exception cref="ArgumentNullException">
     /// <paramref name="optionsBuilder" /> or <paramref name="configure" /> is null.
     /// </exception>
+
+    // WHY: Extension blocks change API-baseline analyzer output in the qualified toolchain.
+    // Preserve the shipped signatures until that compatibility boundary is supported.
+    // ReSharper disable once ConvertToExtensionBlock
     public static DbContextOptionsBuilder<TContext> UsePostgreSqlSafeMigrations<TContext, TBaselineGenerator,
         TCanonicalMigrationContext>(
         this DbContextOptionsBuilder<TContext> optionsBuilder,

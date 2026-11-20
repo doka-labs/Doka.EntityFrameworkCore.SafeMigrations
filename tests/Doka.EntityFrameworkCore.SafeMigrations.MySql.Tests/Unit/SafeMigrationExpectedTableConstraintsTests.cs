@@ -1,7 +1,9 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
+/// <summary>Protects complete target-model constraint projection and unavailable-contract rejection.</summary>
 public sealed class SafeMigrationExpectedTableConstraintsTests
 {
+    /// <summary>Projects primary, unique, check, foreign-key, and index expectations from the target model.</summary>
     [Fact]
     public void TargetModelProjectsEveryConstraintFamily()
     {
@@ -49,6 +51,7 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
         Assert.Equal(ReferentialAction.NoAction, foreignKey.OnDelete);
     }
 
+    /// <summary>Does not invent table-constraint overrides for an owner outside the supplied target model.</summary>
     [Fact]
     public void TableOutsideTargetModelHasNoConstraintOverride()
     {
@@ -67,6 +70,7 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
         Assert.Null(constraints);
     }
 
+    /// <summary>Retains every required constraint family when projecting the runtime model.</summary>
     [Fact]
     public void RuntimeModelProjectsEveryConstraintFamily()
     {
@@ -102,6 +106,7 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
                 .Name);
     }
 
+    /// <summary>Rejects runtime model projection when operation-owned check definitions are unavailable.</summary>
     [Fact]
     public void RuntimeModelWithoutOperationOwnedCheckConstraintsFailsClosed()
     {
@@ -154,6 +159,7 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
         }
     }
 
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class ConstraintContractRow
     {
         public int Id { get; set; }

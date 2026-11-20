@@ -9,9 +9,11 @@ public sealed class PostgreSqlOpaqueSqlIntegrationTests : PostgreSqlSafeMigratio
         PostgreSqlContainerFixture fixture
     ) : base(fixture) { }
 
+    /// <summary>Data Preparation Sql Defers Preflight And Allows Guarded Unique Index.</summary>
     [Fact]
     public async Task DataPreparationSql_DefersPreflightAndAllowsGuardedUniqueIndex()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -28,6 +30,7 @@ public sealed class PostgreSqlOpaqueSqlIntegrationTests : PostgreSqlSafeMigratio
         builder.CreateIndexIfNotExists("ux_mixed_records_code", "mixed_records", ["code"], unique: true);
         var runner = context.GetService<ISafeMigrationRunner>();
 
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
@@ -46,15 +49,19 @@ public sealed class PostgreSqlOpaqueSqlIntegrationTests : PostgreSqlSafeMigratio
             """,
             cancellationToken: CancellationToken.None);
 
+        // Assert
+        Assert.Equal(2, preflight.Assessments.Count);
         Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, preflight.Status);
         Assert.Equal(SafeMigrationAction.ValidateAtRuntime, preflight.Assessments[1].Action);
         Assert.Null(preflight.Assessments[1].DeferredOrigin?.MigrationId);
         Assert.Equal(1, indexCount);
     }
 
+    /// <summary>Data Regression Sql Defers Preflight But Runtime Guard Rejects Unique Index.</summary>
     [Fact]
     public async Task DataRegressionSql_DefersPreflightButRuntimeGuardRejectsUniqueIndex()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -71,6 +78,7 @@ public sealed class PostgreSqlOpaqueSqlIntegrationTests : PostgreSqlSafeMigratio
         builder.CreateIndexIfNotExists("ux_mixed_records_code", "mixed_records", ["code"], unique: true);
         var runner = context.GetService<ISafeMigrationRunner>();
 
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
@@ -92,15 +100,19 @@ public sealed class PostgreSqlOpaqueSqlIntegrationTests : PostgreSqlSafeMigratio
             """,
             cancellationToken: CancellationToken.None);
 
+        // Assert
+        Assert.Equal(2, preflight.Assessments.Count);
         Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, preflight.Status);
         Assert.Equal(SafeMigrationAction.ValidateAtRuntime, preflight.Assessments[1].Action);
         Assert.IsType<PostgresException>(exception);
         Assert.Equal(0, indexCount);
     }
 
+    /// <summary>Opaque Sql Does Not Defer Unsupported Operation Annotation.</summary>
     [Fact]
     public async Task OpaqueSql_DoesNotDeferUnsupportedOperationAnnotation()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -111,12 +123,15 @@ public sealed class PostgreSqlOpaqueSqlIntegrationTests : PostgreSqlSafeMigratio
 
         var runner = context.GetService<ISafeMigrationRunner>();
 
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
             new SafeMigrationRunOptions("postgresql-opaque-unsupported-annotation"),
             CancellationToken.None);
 
+        // Assert
+        Assert.Equal(2, preflight.Assessments.Count);
         Assert.Equal(SafeMigrationReportStatus.Blocked, preflight.Status);
         Assert.Equal(SafeMigrationAction.RejectUnsupported, preflight.Assessments[1].Action);
         Assert.Equal("operation_annotation", preflight.Assessments[1].AnalysisCode);

@@ -1,18 +1,23 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
+/// <summary>Verifies PostgreSQL Model Fingerprint contracts in independently owned test state.</summary>
 public sealed class PostgreSqlModelFingerprintTests
 {
     private const string ProviderContract = "Npgsql.EntityFrameworkCore.PostgreSQL";
 
+    /// <summary>Create Is Stable Across Relational Declaration Order.</summary>
     [Fact]
     public void Create_IsStableAcrossRelationalDeclarationOrder()
     {
+        // Arrange
         using var first = new FirstOrderContext();
         using var second = new SecondOrderContext();
 
+        // Act
         var firstFingerprint = Fingerprint(first);
         var secondFingerprint = Fingerprint(second);
 
+        // Assert
         Assert.Equal(firstFingerprint, secondFingerprint);
         Assert.StartsWith(
             "safe-relational-model:v1:Npgsql.EntityFrameworkCore.PostgreSQL:sha256:",
@@ -26,57 +31,76 @@ public sealed class PostgreSqlModelFingerprintTests
             firstFingerprint);
     }
 
+    /// <summary>Create Is Culture Invariant.</summary>
     [Fact]
     public void Create_IsCultureInvariant()
     {
+        // Arrange
         using var context = new FirstOrderContext();
         var originalCulture = CultureInfo.CurrentCulture;
         var originalUiCulture = CultureInfo.CurrentUICulture;
+        string turkish;
+        string german;
 
+        // Act
         try
         {
             CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("tr-TR");
             CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo("tr-TR");
-            var turkish = Fingerprint(context);
+            turkish = Fingerprint(context);
 
             CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("de-DE");
             CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo("de-DE");
-            var german = Fingerprint(context);
-
-            Assert.Equal(turkish, german);
+            german = Fingerprint(context);
         }
         finally
         {
             CultureInfo.CurrentCulture = originalCulture;
             CultureInfo.CurrentUICulture = originalUiCulture;
         }
+
+        // Assert
+        Assert.Equal(turkish, german);
     }
 
+    /// <summary>Create Changes When Relational Facet Changes.</summary>
     [Fact]
     public void Create_ChangesWhenRelationalFacetChanges()
     {
+        // Arrange
         using var baseline = new FirstOrderContext();
         using var changed = new ChangedFacetContext();
 
-        Assert.NotEqual(Fingerprint(baseline), Fingerprint(changed));
+        // Act
+        var baselineFingerprint = Fingerprint(baseline);
+        var changedFingerprint = Fingerprint(changed);
+
+        // Assert
+        Assert.NotEqual(baselineFingerprint, changedFingerprint);
     }
 
+    /// <summary>Create Changes When Provider Contract Changes.</summary>
     [Fact]
     public void Create_ChangesWhenProviderContractChanges()
     {
+        // Arrange
         using var context = new FirstOrderContext();
         var model = context.GetService<IDesignTimeModel>()
             .Model;
 
+        // Act
         var baseline = SafeMigrationModelFingerprint.Create(model, ProviderContract);
         var changed = SafeMigrationModelFingerprint.Create(model, "example.provider");
 
+        // Assert
         Assert.NotEqual(baseline, changed);
     }
 
+    /// <summary>Create Handles Nested Json Container Without Scalar Property Mappings.</summary>
     [Fact]
     public void Create_HandlesNestedJsonContainerWithoutScalarPropertyMappings()
     {
+        // Arrange
         using var context = new JsonArtifactContext();
         var model = context.GetService<IDesignTimeModel>()
             .Model;
@@ -88,9 +112,11 @@ public sealed class PostgreSqlModelFingerprintTests
             .Columns
             .Single(static column => column.Name == "payload");
 
+        // Act
         var first = SafeMigrationModelFingerprint.Create(model, ProviderContract);
         var second = SafeMigrationModelFingerprint.Create(model, ProviderContract);
 
+        // Assert
         Assert.Empty(jsonColumn.PropertyMappings);
         Assert.Equal(first, second);
         Assert.StartsWith(
@@ -99,98 +125,140 @@ public sealed class PostgreSqlModelFingerprintTests
             StringComparison.Ordinal);
     }
 
+    /// <summary>Validate Expected Rejects Legacy Bare Hash.</summary>
     [Fact]
     public void ValidateExpected_RejectsLegacyBareHash()
     {
+        // Arrange
         using var context = new FirstOrderContext();
         var actual = Fingerprint(context);
 
-        var exception = Assert.Throws<ArgumentException>(() =>
+        // Act
+        var failure = Record.Exception(() =>
             SafeMigrationModelFingerprint.ValidateExpected(actual, new string('a', 64)));
 
+        // Assert
+        var exception = Assert.IsType<ArgumentException>(failure);
         Assert.Equal("expectedFingerprint", exception.ParamName);
     }
 
+    /// <summary>Validate Expected Uses Ordinal Wire Equality.</summary>
     [Fact]
     public void ValidateExpected_UsesOrdinalWireEquality()
     {
+        // Arrange
         using var context = new FirstOrderContext();
         var actual = Fingerprint(context);
         var upperHex = actual[..(actual.LastIndexOf(':') + 1)]
             + actual[(actual.LastIndexOf(':') + 1)..]
                 .ToUpperInvariant();
 
-        Assert.Throws<ArgumentException>(() => SafeMigrationModelFingerprint.ValidateExpected(actual, upperHex));
+        // Act
+        var failure = Record.Exception(() => SafeMigrationModelFingerprint.ValidateExpected(actual, upperHex));
+
+        // Assert
+        Assert.IsType<ArgumentException>(failure);
     }
 
+    /// <summary>Create Is Stable Across Repeated And Parallel Calls.</summary>
     [Fact]
     public void Create_IsStableAcrossRepeatedAndParallelCalls()
     {
+        // Arrange
         using var context = new FirstOrderContext();
         var model = context.GetService<IDesignTimeModel>()
             .Model;
 
         var expected = SafeMigrationModelFingerprint.Create(model, ProviderContract);
 
+        // Act
         var actual = Enumerable
             .Range(0, 32)
             .AsParallel()
             .Select(_ => SafeMigrationModelFingerprint.Create(model, ProviderContract))
             .ToArray();
 
+        // Assert
         Assert.All(actual, value => Assert.Equal(expected, value));
     }
 
-    [Fact]
-    public void ValidateExpected_AcceptsNullAndAnExactFingerprint()
+    /// <summary>Validate Expected Accepts Null And An Exact Fingerprint.</summary>
+    /// <param name="useExactFingerprint">Whether the optional contract is present and exactly equal.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ValidateExpected_AcceptsNullAndAnExactFingerprint(
+        bool useExactFingerprint
+    )
     {
+        // Arrange
         using var context = new FirstOrderContext();
         var actual = Fingerprint(context);
+        var expected = useExactFingerprint
+            ? actual
+            : null;
 
-        SafeMigrationModelFingerprint.ValidateExpected(actual, expectedFingerprint: null);
-        SafeMigrationModelFingerprint.ValidateExpected(actual, actual);
+        // Act
+        var failure = Record.Exception(() => SafeMigrationModelFingerprint.ValidateExpected(actual, expected));
+
+        // Assert
+        Assert.Null(failure);
     }
 
+    /// <summary>Create Rejects Unknown Migration Annotation Value Types.</summary>
     [Fact]
     public void Create_RejectsUnknownMigrationAnnotationValueTypes()
     {
+        // Arrange
         using var context = new UnsupportedAnnotationContext();
         var model = context.GetService<IDesignTimeModel>()
             .Model;
 
-        var exception =
-            Assert.Throws<NotSupportedException>(() => SafeMigrationModelFingerprint.Create(model, ProviderContract));
+        // Act
+        var failure = Record.Exception(() => SafeMigrationModelFingerprint.Create(model, ProviderContract));
 
+        // Assert
+        var exception = Assert.IsType<NotSupportedException>(failure);
         Assert.Contains("Doka:UnsupportedFingerprintValue", exception.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>Create Canonicalizes Every Supported Annotation Value Kind.</summary>
     [Fact]
     public void Create_CanonicalizesEverySupportedAnnotationValueKind()
     {
+        // Arrange
         using var context = new SupportedAnnotationContext();
 
+        // Act
         var first = Fingerprint(context);
         var second = Fingerprint(context);
 
+        // Assert
         Assert.Equal(first, second);
     }
 
+    /// <summary>Create Rejects Unknown Dictionary Key Types.</summary>
     [Fact]
     public void Create_RejectsUnknownDictionaryKeyTypes()
     {
+        // Arrange
         using var context = new UnsupportedDictionaryKeyContext();
         var model = context.GetService<IDesignTimeModel>()
             .Model;
 
-        var exception =
-            Assert.Throws<NotSupportedException>(() => SafeMigrationModelFingerprint.Create(model, ProviderContract));
+        // Act
+        var failure = Record.Exception(() => SafeMigrationModelFingerprint.Create(model, ProviderContract));
 
+        // Assert
+        var exception = Assert.IsType<NotSupportedException>(failure);
         Assert.Contains("dictionary key type", exception.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>Create Disposes Dictionary Annotation Enumerator.</summary>
     [Fact]
     public void Create_DisposesDictionaryAnnotationEnumerator()
     {
+        // Arrange
         var dictionary = new DisposableEnumeratorDictionary
         {
             ["alpha"] = 1,
@@ -202,8 +270,10 @@ public sealed class PostgreSqlModelFingerprintTests
 
         dictionary.ResetDisposalState();
 
+        // Act
         _ = SafeMigrationModelFingerprint.Create(model, ProviderContract);
 
+        // Assert
         Assert.True(dictionary.EnumeratorDisposed);
     }
 
@@ -408,15 +478,25 @@ public sealed class PostgreSqlModelFingerprintTests
         }
     }
 
-    private sealed class DisposableDictionaryAnnotationContext(DisposableEnumeratorDictionary dictionary)
+    private sealed class DisposableDictionaryAnnotationContext
         : FingerprintContext
     {
+        private readonly DisposableEnumeratorDictionary _dictionary;
+
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        public DisposableDictionaryAnnotationContext(
+            DisposableEnumeratorDictionary dictionary
+        )
+        {
+            _dictionary = dictionary;
+        }
+
         protected override void OnModelCreating(
             ModelBuilder modelBuilder
         )
         {
             ConfigureAlpha(modelBuilder, 100);
-            modelBuilder.Model.SetAnnotation("Doka:DisposableDictionary", dictionary);
+            modelBuilder.Model.SetAnnotation("Doka:DisposableDictionary", _dictionary);
         }
     }
 
@@ -453,15 +533,25 @@ public sealed class PostgreSqlModelFingerprintTests
         public void ResetDisposalState() => EnumeratorDisposed = false;
     }
 
-    private sealed class DisposableDictionaryEnumerator(
-        IReadOnlyList<DictionaryEntry> entries,
-        Action onDispose
-    ) : IDictionaryEnumerator, IDisposable
+    private sealed class DisposableDictionaryEnumerator : IDictionaryEnumerator, IDisposable
     {
+        private readonly IReadOnlyList<DictionaryEntry> _entries;
+        private readonly Action _onDispose;
+
         private bool _disposed;
         private int _index = -1;
 
-        public DictionaryEntry Entry => entries[_index];
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        public DisposableDictionaryEnumerator(
+            IReadOnlyList<DictionaryEntry> entries,
+            Action onDispose
+        )
+        {
+            _entries = entries;
+            _onDispose = onDispose;
+        }
+
+        public DictionaryEntry Entry => _entries[_index];
 
         public object Key => Entry.Key;
 
@@ -471,12 +561,12 @@ public sealed class PostgreSqlModelFingerprintTests
 
         public bool MoveNext()
         {
-            if (_index < entries.Count)
+            if (_index < _entries.Count)
             {
                 _index++;
             }
 
-            return _index < entries.Count;
+            return _index < _entries.Count;
         }
 
         public void Reset() => _index = -1;
@@ -489,10 +579,11 @@ public sealed class PostgreSqlModelFingerprintTests
             }
 
             _disposed = true;
-            onDispose();
+            _onDispose();
         }
     }
 
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class Alpha
     {
         public int Id { get; set; }
@@ -500,6 +591,7 @@ public sealed class PostgreSqlModelFingerprintTests
         public string Name { get; set; } = string.Empty;
     }
 
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class Beta
     {
         public int Id { get; set; }
@@ -507,6 +599,7 @@ public sealed class PostgreSqlModelFingerprintTests
         public bool Enabled { get; set; }
     }
 
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class JsonArtifact
     {
         public int Id { get; set; }
@@ -514,6 +607,7 @@ public sealed class PostgreSqlModelFingerprintTests
         public JsonArtifactPayload Payload { get; set; } = new();
     }
 
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class JsonArtifactPayload
     {
         public string Name { get; set; } = string.Empty;
@@ -521,6 +615,7 @@ public sealed class PostgreSqlModelFingerprintTests
         public JsonArtifactDetails Details { get; } = new();
     }
 
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class JsonArtifactDetails
     {
         public int Revision { get; set; }

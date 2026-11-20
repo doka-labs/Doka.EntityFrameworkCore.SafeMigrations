@@ -1,5 +1,3 @@
-using System.Text.RegularExpressions;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Pins source-independent member destinations to complete bounded native catalog evidence.</summary>
@@ -302,7 +300,7 @@ public sealed class MySqlMemberRenameEvidenceTests
                 cancellation.Token));
 
         // Assert
-        Assert.IsAssignableFrom<OperationCanceledException>(exception);
+        Assert.IsType<OperationCanceledException>(exception, exactMatch: false);
         Assert.All(analyses, result => Assert.Null(result.RenameTargetExists));
         Assert.All(analyses, result => Assert.Null(result.RenameTargetSupported));
         Assert.Equal(1, connection.ReadersDisposed);
@@ -361,6 +359,9 @@ public sealed class MySqlMemberRenameEvidenceTests
                 ? new RenameColumnIntent("source_" + ordinal, "items", "target_" + ordinal)
                 : new RenameIndexIntent("source_" + ordinal, "items", "target_" + ordinal),
             SafeMigrationPolicy.ThrowIfDifferent))
+
+        // WHY: Retain this explicit materialization/copy path and its collection lowering.
+        // ReSharper disable once UseCollectionExpression
         .ToArray();
 
     private static SafeMigrationProviderAnalysis[] Analyses(
@@ -368,6 +369,9 @@ public sealed class MySqlMemberRenameEvidenceTests
     ) => Enumerable
         .Range(0, count)
         .Select(static _ => Live(SafeMigrationObservedState.Missing))
+
+        // WHY: Retain this explicit materialization/copy path and its collection lowering.
+        // ReSharper disable once UseCollectionExpression
         .ToArray();
 
     private static SafeMigrationProviderAnalysis Live(

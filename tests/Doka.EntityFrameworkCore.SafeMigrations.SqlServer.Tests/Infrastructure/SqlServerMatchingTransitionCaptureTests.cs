@@ -1,13 +1,16 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
-/// <summary>Measures redundant matching replay captures and verifies bounded transition-certificate ownership.</summary>
-/// <param name="output">The test-owned sink for informational allocation and generation measurements.</param>
-public sealed class SqlServerMatchingTransitionCaptureTests(ITestOutputHelper output)
+/// <summary>
+/// Verifies matching replay pruning and bounded transition-certificate ownership.
+/// </summary>
+public sealed class SqlServerMatchingTransitionCaptureTests
 {
     private const string ConnectionString = "Server=127.0.0.1,1433;Database=matching_transition_capture;"
         + "User ID=sa;Password=unused;TrustServerCertificate=True";
 
-    /// <summary>Matching replays cannot use old-source widening certificates and should emit no second catalog capture.</summary>
+    /// <summary>
+    /// Matching replays cannot use old-source widening certificates and should emit no second catalog capture.
+    /// </summary>
     /// <param name="count">The number of distinct matching replay candidates.</param>
     [Theory]
     [InlineData(1)]
@@ -17,8 +20,8 @@ public sealed class SqlServerMatchingTransitionCaptureTests(ITestOutputHelper ou
     )
     {
         // Arrange
-        using var context = new SafeMigrationDbContext(ConnectionString);
-        using var analyzer = Analyzer(context);
+        await using var context = new SafeMigrationDbContext(ConnectionString);
+        await using var analyzer = Analyzer(context);
         await using var connection = new SqlServerCatalogTestConnection(false);
         var operations = Enumerable
             .Range(0, count)
@@ -33,12 +36,7 @@ public sealed class SqlServerMatchingTransitionCaptureTests(ITestOutputHelper ou
                 "classified_matching"))
             .ToArray();
 
-        var thread = Environment.CurrentManagedThreadId;
-        var stopwatch = new Stopwatch();
-
         // Act
-        var before = GC.GetAllocatedBytesForCurrentThread();
-        stopwatch.Start();
         await analyzer.ReadProjectedColumnTransitionsAsync(
             connection,
             null,
@@ -48,24 +46,12 @@ public sealed class SqlServerMatchingTransitionCaptureTests(ITestOutputHelper ou
             73,
             CancellationToken.None);
 
-        stopwatch.Stop();
-        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-
         // Assert
-        Assert.Equal(thread, Environment.CurrentManagedThreadId);
-        output.WriteLine(
-            "candidates={0} statements={1} executions={2} allocated-bytes={3} elapsed-ms={4:F3}",
-            count,
-            connection.RecordedStatements.Count,
-            connection.CommandExecutions,
-            allocated,
-            stopwatch.Elapsed.TotalMilliseconds);
-
         Assert.Empty(connection.RecordedStatements);
     }
 
-    /// <summary>Counterfactual former selection retains identical SQL work for an already matching replay.</summary>
-    /// <param name="count">The number of distinct replay candidates measured in both paths.</param>
+    /// <summary>Counterfactual former selection performs capture work that matching replay must omit.</summary>
+    /// <param name="count">The number of distinct replay candidates compared in both paths.</param>
     [Theory]
     [InlineData(1)]
     [InlineData(512)]
@@ -74,9 +60,9 @@ public sealed class SqlServerMatchingTransitionCaptureTests(ITestOutputHelper ou
     )
     {
         // Arrange
-        using var context = new SafeMigrationDbContext(ConnectionString);
-        using var current = Analyzer(context);
-        using var former = Analyzer(context);
+        await using var context = new SafeMigrationDbContext(ConnectionString);
+        await using var current = Analyzer(context);
+        await using var former = Analyzer(context);
         await using var currentConnection = new SqlServerCatalogTestConnection(false);
         await using var formerConnection = new SqlServerCatalogTestConnection(false)
         {
@@ -105,24 +91,9 @@ public sealed class SqlServerMatchingTransitionCaptureTests(ITestOutputHelper ou
 
         // WHY: Selecting every eligible operation regardless of live state is
         // exactly the removed behavior. Supplying Different reproduces that
-        // selection using the same generator and deterministic transport; this
-        // measures local work, not engine latency. Neither timing is a CI gate.
-        await former.ReadProjectedColumnTransitionsAsync(
-            formerConnection,
-            null,
-            operations,
-            different,
-            true,
-            73,
-            CancellationToken.None);
-
-        formerConnection.RecordedStatements.Clear();
-        var stopwatch = new Stopwatch();
-        var thread = Environment.CurrentManagedThreadId;
+        // selection using the same generator and deterministic transport as the current path.
 
         // Act
-        var before = GC.GetAllocatedBytesForCurrentThread();
-        stopwatch.Start();
         await former.ReadProjectedColumnTransitionsAsync(
             formerConnection,
             null,
@@ -132,11 +103,6 @@ public sealed class SqlServerMatchingTransitionCaptureTests(ITestOutputHelper ou
             73,
             CancellationToken.None);
 
-        stopwatch.Stop();
-        var formerBytes = GC.GetAllocatedBytesForCurrentThread() - before;
-        var formerMilliseconds = stopwatch.Elapsed.TotalMilliseconds;
-        stopwatch.Restart();
-        before = GC.GetAllocatedBytesForCurrentThread();
         await current.ReadProjectedColumnTransitionsAsync(
             currentConnection,
             null,
@@ -146,31 +112,20 @@ public sealed class SqlServerMatchingTransitionCaptureTests(ITestOutputHelper ou
             73,
             CancellationToken.None);
 
-        stopwatch.Stop();
-        var currentBytes = GC.GetAllocatedBytesForCurrentThread() - before;
-
         // Assert
-        Assert.Equal(thread, Environment.CurrentManagedThreadId);
         Assert.Empty(currentConnection.RecordedStatements);
         Assert.NotEmpty(formerConnection.RecordedStatements);
-        output.WriteLine(
-            "candidates={0} former-statements={1} current-statements=0 former-bytes={2} current-bytes={3} "
-            + "former-ms={4:F3} current-ms={5:F3}",
-            count,
-            formerConnection.RecordedStatements.Count,
-            formerBytes,
-            currentBytes,
-            formerMilliseconds,
-            stopwatch.Elapsed.TotalMilliseconds);
     }
 
-    /// <summary>Unmatched widening keeps capture and dependency probes while matching siblings reserve no growth.</summary>
+    /// <summary>
+    /// Unmatched widening keeps capture and dependency probes while matching siblings reserve no growth.
+    /// </summary>
     [Fact]
     public async Task MixedReplay_DoesNotReserveUnusedSiblingGrowth()
     {
         // Arrange
-        using var context = new SafeMigrationDbContext(ConnectionString);
-        using var analyzer = Analyzer(context);
+        await using var context = new SafeMigrationDbContext(ConnectionString);
+        await using var analyzer = Analyzer(context);
         await using var connection = new SqlServerCatalogTestConnection(false);
         var widening = Widening("items");
         var replay = new SafeMigrationOperation(
@@ -210,8 +165,8 @@ public sealed class SqlServerMatchingTransitionCaptureTests(ITestOutputHelper ou
     public async Task MisalignedClassifications_AreRejectedBeforeCatalogAccess()
     {
         // Arrange
-        using var context = new SafeMigrationDbContext(ConnectionString);
-        using var analyzer = Analyzer(context);
+        await using var context = new SafeMigrationDbContext(ConnectionString);
+        await using var analyzer = Analyzer(context);
         await using var connection = new SqlServerCatalogTestConnection(false);
 
         // Act
@@ -232,8 +187,12 @@ public sealed class SqlServerMatchingTransitionCaptureTests(ITestOutputHelper ou
         Assert.Empty(connection.RecordedStatements);
     }
 
-    /// <summary>Initial Matching cannot supply a source-bound repair certificate after earlier mutations change that source.</summary>
-    /// <param name="mutation">The column identity, row layout or physical dependency changed before the later widening.</param>
+    /// <summary>
+    /// Initial Matching cannot supply a source-bound repair certificate after earlier mutations change that source.
+    /// </summary>
+    /// <param name="mutation">
+    /// The column identity, row layout or physical dependency changed before the later widening.
+    /// </param>
     [Theory]
     [InlineData("source")]
     [InlineData("source_and_layout")]
@@ -245,8 +204,8 @@ public sealed class SqlServerMatchingTransitionCaptureTests(ITestOutputHelper ou
     )
     {
         // Arrange
-        using var context = new SafeMigrationDbContext(ConnectionString);
-        using var analyzer = Analyzer(context);
+        await using var context = new SafeMigrationDbContext(ConnectionString);
+        await using var analyzer = Analyzer(context);
         await using var connection = new SqlServerCatalogTestConnection(false);
         var widening = Widening("items");
         var matching = Analysis(SafeMigrationObservedState.Matching);

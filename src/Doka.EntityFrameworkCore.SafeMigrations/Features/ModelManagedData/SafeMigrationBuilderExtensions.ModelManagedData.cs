@@ -16,6 +16,10 @@ public static partial class SafeMigrationBuilderExtensions
     /// <param name="schema">The target schema, or null for the provider default.</param>
     /// <param name="uniqueKeys">Source-model candidate keys used for collision analysis.</param>
     /// <returns>A builder for annotations on the created SafeMigrations operation.</returns>
+
+    // WHY: C# 14 extension blocks fail RS0016 in the current public API analyzer;
+    // retain the published static-call and XML member identities.
+    // ReSharper disable once ConvertToExtensionBlock
     public static OperationBuilder<SafeMigrationOperation> EnsureModelManagedDataFromModel(
         this MigrationBuilder migrationBuilder,
         string table,
@@ -55,6 +59,10 @@ public static partial class SafeMigrationBuilderExtensions
     /// <param name="schema">The target schema, or null for the provider default.</param>
     /// <param name="uniqueKeys">Source-model candidate keys used for collision analysis.</param>
     /// <returns>A builder for annotations on the created SafeMigrations operation.</returns>
+
+    // WHY: C# 14 extension blocks fail RS0016 in the current public API analyzer;
+    // retain the published static-call and XML member identities.
+    // ReSharper disable once ConvertToExtensionBlock
     public static OperationBuilder<SafeMigrationOperation> UpdateModelManagedDataFromModel(
         this MigrationBuilder migrationBuilder,
         string table,
@@ -97,6 +105,10 @@ public static partial class SafeMigrationBuilderExtensions
     /// <param name="schema">The target schema, or null for the provider default.</param>
     /// <param name="foreignKeys">Incoming source-model dependencies that must remain unaffected.</param>
     /// <returns>A builder for annotations on the created SafeMigrations operation.</returns>
+
+    // WHY: C# 14 extension blocks fail RS0016 in the current public API analyzer;
+    // retain the published static-call and XML member identities.
+    // ReSharper disable once ConvertToExtensionBlock
     public static OperationBuilder<SafeMigrationOperation> DeleteModelManagedDataFromModel(
         this MigrationBuilder migrationBuilder,
         string table,

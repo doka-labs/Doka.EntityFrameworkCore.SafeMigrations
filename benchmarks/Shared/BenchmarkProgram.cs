@@ -1,4 +1,5 @@
-using TypeFilter = BenchmarkDotNet.Running.TypeFilter;
+// WHY: Linked benchmark executables use the runner while linked Core tests exercise invocation and export guards.
+// ReSharper disable MemberCanBePrivate.Global
 
 namespace Doka.EntityFrameworkCore.SafeMigrations.Benchmarks;
 
@@ -94,6 +95,9 @@ internal static class BenchmarkProgram
 
             var summaries = switcher
                 .RunAll(boundConfig)
+
+                // WHY: Retain fluent materialization and the resulting snapshot ownership.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray();
 
             if (!HasCompleteExecution(summaries, expectedCases))
@@ -110,6 +114,9 @@ internal static class BenchmarkProgram
                 var paths = JsonExporter
                     .Full
                     .ExportToFiles(summary, ConsoleLogger.Default)
+
+                    // WHY: Retain fluent materialization and the resulting snapshot ownership.
+                    // ReSharper disable once UseCollectionExpression
                     .ToArray();
 
                 if (paths.Length != 1)
@@ -152,6 +159,15 @@ internal static class BenchmarkProgram
             || variable.StartsWith("SAFE_MIGRATIONS_SQLSERVER_ATTRIBUTION_OUTPUT:", StringComparison.OrdinalIgnoreCase)
             || variable.StartsWith(
                 "SAFE_MIGRATIONS_SQLSERVER_ATTRIBUTION_CONNECTION:",
+                StringComparison.OrdinalIgnoreCase)
+            || variable.StartsWith(
+                "SAFE_MIGRATIONS_MYSQL_BENCHMARK_CONNECTION:",
+                StringComparison.OrdinalIgnoreCase)
+            || variable.StartsWith(
+                "SAFE_MIGRATIONS_POSTGRES_BENCHMARK_CONNECTION:",
+                StringComparison.OrdinalIgnoreCase)
+            || variable.StartsWith(
+                "SAFE_MIGRATIONS_SQLSERVER_BENCHMARK_CONNECTION:",
                 StringComparison.OrdinalIgnoreCase));
 
     /// <summary>Binds an optional functional-evidence directory to the caller rather than a generated child.</summary>

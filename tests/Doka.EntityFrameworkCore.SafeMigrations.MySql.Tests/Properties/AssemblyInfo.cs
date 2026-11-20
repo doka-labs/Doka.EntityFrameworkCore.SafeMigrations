@@ -1,5 +1,6 @@
 [assembly: DesignTimeServicesReference(
-    "Doka.EntityFrameworkCore.SafeMigrations.MySql.MySqlSafeMigrationDesignTimeServices, Doka.EntityFrameworkCore.SafeMigrations.MySql",
+    "Doka.EntityFrameworkCore.SafeMigrations.MySql.MySqlSafeMigrationDesignTimeServices, "
+    + "Doka.EntityFrameworkCore.SafeMigrations.MySql",
     "Doka.EntityFrameworkCore.MySql")]
 [assembly: TestFramework(
     "Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests.MySqlTestFramework",

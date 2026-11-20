@@ -3,10 +3,23 @@ if (args is ["--maintenance-attribution", .. var maintenanceArgs])
     return MySqlMaintenanceAttribution.Run(maintenanceArgs);
 }
 
+if (args is ["--live-catalog", .. var catalogArgs])
+{
+    return BenchmarkProgram.Run(catalogArgs, typeof(MySqlLiveCatalogBenchmarks));
+}
+
+if (args is ["--live-runtime", .. var runtimeArgs])
+{
+    return BenchmarkProgram.Run(runtimeArgs,
+        typeof(MySqlLiveRuntimeBenchmarks),
+        typeof(MySqlLiveRuntimeGenerationBenchmarks));
+}
+
 return BenchmarkProgram.Run(
     args,
     typeof(MySqlGenerationBenchmarks),
     typeof(MySqlAllocationBenchmarks),
+    typeof(MySqlGeneratedDependencyCatalogBenchmarks),
     typeof(MySqlAnalyzerBenchmarks),
     typeof(MySqlMigrationBenchmarks),
     typeof(MySqlModelFingerprintBenchmarks));
@@ -27,6 +40,7 @@ internal sealed class MySqlGenerationContext : DbContext
 }
 
 [DbContext(typeof(MySqlGenerationContext))]
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 internal sealed class MySqlGenerationContextModelSnapshot : ModelSnapshot
 {
     protected override void BuildModel(

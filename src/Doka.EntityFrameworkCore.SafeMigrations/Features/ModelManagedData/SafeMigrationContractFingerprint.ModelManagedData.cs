@@ -32,8 +32,13 @@ public static partial class SafeMigrationContractFingerprint
         WriteMatrix(writer, intent.OldValues);
         writer.Add(intent.ForeignKeys.Count);
 
-        foreach (var foreignKey in intent.ForeignKeys)
+        // WHY: This immutable definition snapshot is indexed; retain its authored order without interface enumeration.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var foreignKeyIndex = 0; foreignKeyIndex < intent.ForeignKeys.Count; foreignKeyIndex++)
         {
+            var foreignKey = intent.ForeignKeys[foreignKeyIndex];
+
             WriteTableIdentity(writer, foreignKey.Table, foreignKey.Schema);
             WriteStrings(writer, foreignKey.Columns);
             WriteStrings(writer, foreignKey.PrincipalColumns);

@@ -584,11 +584,21 @@ public sealed class SqlServerProjectedKeyTests
         SafeMigrationObservedState state
     ) => new(state, SafeMigrationRepairCapability.None, state == SafeMigrationObservedState.Matching, "test_state");
 
-    private sealed class ProjectedSource(
-        ExpectedColumnDefinition definition,
-        SafeMigrationProjectedTableState state
-    ) : ISafeMigrationProjectedColumnSource, ISafeMigrationProjectedTableSource
+    private sealed class ProjectedSource : ISafeMigrationProjectedColumnSource, ISafeMigrationProjectedTableSource
     {
+        private readonly ExpectedColumnDefinition _definition;
+        private readonly SafeMigrationProjectedTableState _state;
+
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        public ProjectedSource(
+            ExpectedColumnDefinition definition,
+            SafeMigrationProjectedTableState state
+        )
+        {
+            _definition = definition;
+            _state = state;
+        }
+
         public bool TryGetProjectedColumn(
             string table,
             string? schema,
@@ -596,8 +606,8 @@ public sealed class SqlServerProjectedKeyTests
             [NotNullWhen(true)] out ExpectedColumnDefinition? result
         )
         {
-            result = StringComparer.Ordinal.Equals(column, definition.Name)
-                ? definition
+            result = StringComparer.Ordinal.Equals(column, _definition.Name)
+                ? _definition
                 : null;
 
             return result is not null;
@@ -609,7 +619,7 @@ public sealed class SqlServerProjectedKeyTests
             out SafeMigrationProjectedTableState result
         )
         {
-            result = state;
+            result = _state;
 
             return true;
         }

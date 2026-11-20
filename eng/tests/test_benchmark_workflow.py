@@ -44,7 +44,7 @@ def execute_benchmark(command, exit_code):
             ["bash", "-euo", "pipefail", "-c", command], cwd=root,
             env={**os.environ, "PATH": str(root) + os.pathsep + os.environ["PATH"],
                  "BENCHMARK_ARGUMENTS": str(arguments), "BENCHMARK_EXIT_CODE": str(exit_code)},
-            capture_output=True, text=True, check=False, timeout=10)
+            capture_output=True, text=True, check=False)
 
         return result, arguments.read_text(encoding="ascii").splitlines()
 
@@ -52,7 +52,7 @@ def execute_benchmark(command, exit_code):
 class BenchmarkWorkflowTests(unittest.TestCase):
     """Smoke is complete execution/export evidence, never a hardware-dependent budget gate."""
 
-    def test_all_five_suites_run_all_cases_as_native_dry_jobs(self):
+    def test_explicitly_requested_suites_run_all_cases_as_native_dry_jobs(self):
         for suite, (label, suffix) in SUITES.items():
             with self.subTest(suite=suite):
                 # Arrange
@@ -69,7 +69,37 @@ class BenchmarkWorkflowTests(unittest.TestCase):
                     "--configuration", "Release", "--no-build", "--no-restore", "--",
                     "--filter", "*", "--job", "Dry", "--artifacts", f"artifacts/performance/{suite}",
                 ], arguments)
-                self.assertNotIn("        if:", step)
+                self.assertIn("if: ${{ inputs.capture-benchmark-evidence }}", step)
+
+    def test_ordinary_qualification_does_not_implicitly_request_measurements(self):
+        # Arrange
+        workflow = WORKFLOW.read_text(encoding="ascii")
+        ci = (ROOT / ".github/workflows/ci.yml").read_text(encoding="ascii")
+
+        # Act
+        quality_input = re.split(r"\n      (?=\S)", workflow.split("      capture-benchmark-evidence:\n", 1)[1])[0]
+        dispatch_input = re.split(r"\n      (?=\S)", ci.split("      capture-benchmark-evidence:\n", 1)[1])[0]
+
+        # Assert
+        for declaration in (quality_input, dispatch_input):
+            self.assertIn("default: false", declaration)
+            self.assertIn("type: boolean", declaration)
+        self.assertIn("capture-benchmark-evidence: ${{ github.event_name == 'workflow_dispatch' "
+                      "&& inputs.capture-benchmark-evidence }}", ci)
+
+    def test_requested_measurements_require_separate_artifact_evidence(self):
+        # Arrange
+        workflow = WORKFLOW.read_text(encoding="ascii")
+
+        # Act
+        upload = workflow.split("      - name: Upload requested benchmark evidence\n", 1)[1] \
+            .split("\n      - name:", 1)[0]
+
+        # Assert
+        self.assertIn("if: ${{ always() && inputs.capture-benchmark-evidence }}", upload)
+        self.assertIn("if-no-files-found: error", upload)
+        for suite in SUITES:
+            self.assertIn(f"artifacts/performance/{suite}/results/*-full.json", upload)
 
     def test_every_benchmark_process_failure_remains_fatal(self):
         names = [f"{label} BenchmarkDotNet execution smoke" for label, _ in SUITES.values()]

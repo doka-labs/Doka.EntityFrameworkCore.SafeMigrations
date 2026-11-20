@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Benchmarks;
 
 /// <summary>Attributes local prerequisite extraction independently of provider catalog-plan generation.</summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public class MySqlPrerequisiteAttribution
 {
     private SafeMigrationIntent _intent = null!;
@@ -17,8 +18,9 @@ public class MySqlPrerequisiteAttribution
     public string Workload { get; set; } = "no_expression";
 
     /// <summary>Checks ordered source roles and the null-input negative control before timing.</summary>
+    /// <returns>The setup and optional asynchronous functional evidence persistence.</returns>
     [GlobalSetup]
-    public void Setup()
+    public async Task Setup()
     {
         var definition = MySqlMaintenanceAttribution
             .Prerequisites()
@@ -44,7 +46,7 @@ public class MySqlPrerequisiteAttribution
         var output = Environment.GetEnvironmentVariable("SAFE_MIGRATIONS_ATTRIBUTION_OUTPUT");
         if (!string.IsNullOrWhiteSpace(output))
         {
-            _ = MaintenanceAttribution.Write(
+            await MaintenanceAttribution.WriteAsync(
                 Path.Combine(output, $"prerequisites-{Workload}.json"),
                 "Functional/source evidence; Core prerequisite extraction; not timing evidence",
                 [
@@ -54,7 +56,8 @@ public class MySqlPrerequisiteAttribution
                         Workload,
                         Columns = observed,
                     },
-                ]);
+                ],
+                CancellationToken.None);
         }
     }
 

@@ -1,5 +1,9 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
+/// <summary>
+/// Verifies immutable managed-row contracts, inverse pairing and ordered row-state projection without payload
+/// disclosure.
+/// </summary>
 public sealed partial class SafeMigrationModelManagedDataTests
 {
     /// <summary>Snapshots caller-owned model-data values without changing the default safety policy.</summary>
@@ -161,9 +165,13 @@ public sealed partial class SafeMigrationModelManagedDataTests
         Assert.Equal("administrator", intent.OldValues.GetValue(0, 1));
     }
 
+    /// <summary>
+    /// Preserves nullable added-member source values in both directions of a paired update/drop migration.
+    /// </summary>
     [Fact]
     public void PairerSourceFreezesNullableColumnsAddedAroundModelManagedUpdates()
     {
+        // Arrange
         var addColumn = new AddColumnOperation
         {
             Table = "roles",
@@ -201,10 +209,16 @@ public sealed partial class SafeMigrationModelManagedDataTests
             Name = "request_id",
         };
 
+        // Act
         var forward = SafeMigrationModelManagedDataPairer.Pair(
             [addColumn, update],
             [dropColumn, inverseUpdate]);
 
+        var inverse = SafeMigrationModelManagedDataPairer.Pair(
+            [dropColumn, inverseUpdate],
+            [addColumn, update]);
+
+        // Assert
         var forwardUpdate = Assert.IsType<UpdateModelManagedDataScaffoldingOperation>(forward[1]);
         var forwardIntent = Assert.IsType<UpdateModelManagedDataIntent>(forwardUpdate.Intent);
 
@@ -214,10 +228,6 @@ public sealed partial class SafeMigrationModelManagedDataTests
         Assert.Equal("owner", forwardIntent.NewValues.GetValue(0, 0));
         Assert.Null(forwardIntent.NewValues.GetValue(0, 1));
 
-        var inverse = SafeMigrationModelManagedDataPairer.Pair(
-            [dropColumn, inverseUpdate],
-            [addColumn, update]);
-
         var inverseResult = Assert.IsType<UpdateModelManagedDataScaffoldingOperation>(inverse[1]);
         var inverseIntent = Assert.IsType<UpdateModelManagedDataIntent>(inverseResult.Intent);
 
@@ -226,9 +236,14 @@ public sealed partial class SafeMigrationModelManagedDataTests
         Assert.Equal("administrator", inverseIntent.NewValues.GetValue(0, 0));
     }
 
+    /// <summary>
+    /// Uses the captured explicit ADD default as the managed update's old value without inventing a missing source
+    /// cell.
+    /// </summary>
     [Fact]
     public void PairerSourceFreezesExplicitDefaultsForRequiredAddedColumns()
     {
+        // Arrange
         var addColumn = new AddColumnOperation
         {
             Table = "roles",
@@ -261,10 +276,12 @@ public sealed partial class SafeMigrationModelManagedDataTests
             Values = new object?[1, 0],
         };
 
+        // Act
         var result = SafeMigrationModelManagedDataPairer.Pair(
             [addColumn, update],
             [inverseUpdate]);
 
+        // Assert
         var pairedUpdate = Assert.IsType<UpdateModelManagedDataScaffoldingOperation>(result[1]);
         var intent = Assert.IsType<UpdateModelManagedDataIntent>(pairedUpdate.Intent);
 
@@ -272,6 +289,13 @@ public sealed partial class SafeMigrationModelManagedDataTests
         Assert.Equal(7, intent.NewValues.GetValue(0, 0));
     }
 
+    /// <summary>
+    /// Rejects missing, opaque, late or storage-inconsistent source values before pairing a newly added managed
+    /// member.
+    /// </summary>
+    /// <param name="initialValueValue">
+    /// The serializable identity of the unsupported added-member source-value contract.
+    /// </param>
     [Theory]
     [InlineData((int)AddedColumnInitialValue.Absent)]
     [InlineData((int)AddedColumnInitialValue.OpaqueSql)]
@@ -283,6 +307,7 @@ public sealed partial class SafeMigrationModelManagedDataTests
         int initialValueValue
     )
     {
+        // Arrange
         var initialValue = (AddedColumnInitialValue)initialValueValue;
         var update = new UpdateDataOperation
         {
@@ -342,15 +367,23 @@ public sealed partial class SafeMigrationModelManagedDataTests
             operations.Add(update);
         }
 
-        var exception = Assert.Throws<InvalidOperationException>(() =>
+        // Act
+        var exception = Record.Exception(() =>
             SafeMigrationModelManagedDataPairer.Pair(operations, [inverseUpdate]));
 
-        Assert.Contains("request_id", exception.Message, StringComparison.Ordinal);
+        // Assert
+        var failure = Assert.IsType<InvalidOperationException>(exception);
+
+        Assert.Contains("request_id", failure.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Rejects inverse-only row members when no corresponding physical column removal explains their disappearance.
+    /// </summary>
     [Fact]
     public void PairerRejectsInverseOnlyColumnsWithoutAColumnDrop()
     {
+        // Arrange
         var update = new UpdateDataOperation
         {
             Table = "roles",
@@ -373,11 +406,15 @@ public sealed partial class SafeMigrationModelManagedDataTests
             Values = new object?[,] { { "owner", null } },
         };
 
-        var exception = Assert.Throws<InvalidOperationException>(() =>
+        // Act
+        var exception = Record.Exception(() =>
             SafeMigrationModelManagedDataPairer.Pair([update], [inverseUpdate]));
 
-        Assert.Contains("request_id", exception.Message, StringComparison.Ordinal);
-        Assert.Contains("column drop", exception.Message, StringComparison.Ordinal);
+        // Assert
+        var failure = Assert.IsType<InvalidOperationException>(exception);
+
+        Assert.Contains("request_id", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("column drop", failure.Message, StringComparison.Ordinal);
     }
 
     /// <summary>Rejects each independently insufficient inverse-evidence contract.</summary>
@@ -420,9 +457,18 @@ public sealed partial class SafeMigrationModelManagedDataTests
         Assert.IsType<InvalidOperationException>(exception);
     }
 
-    [Fact]
-    public void PairerUsesCapturedPrimaryKeyOnlyWhenInverseDropsExactTable()
+    /// <summary>
+    /// Uses captured PK metadata only for an inverse DROP with the exact table and schema identity.
+    /// </summary>
+    /// <param name="inverseSchema">The inverse DROP's independently verified owner schema.</param>
+    [Theory]
+    [InlineData("identity")]
+    [InlineData("other")]
+    public void PairerUsesCapturedPrimaryKeyOnlyWhenInverseDropsExactTable(
+        string inverseSchema
+    )
     {
+        // Arrange
         var insert = new InsertDataOperation
         {
             Table = "roles",
@@ -440,36 +486,49 @@ public sealed partial class SafeMigrationModelManagedDataTests
                 [],
                 []));
 
-        var result = SafeMigrationModelManagedDataPairer.Pair(
+        IReadOnlyList<MigrationOperation>? result = null;
+
+        // Act
+        var exception = Record.Exception(() => result = SafeMigrationModelManagedDataPairer.Pair(
             [insert],
             [
                 new DropTableOperation
                 {
                     Name = "roles",
-                    Schema = "identity",
+                    Schema = inverseSchema,
                 },
-            ]);
+            ]));
+
+        // Assert
+        if (inverseSchema != "identity")
+        {
+            Assert.IsType<InvalidOperationException>(exception);
+
+            return;
+        }
+
+        Assert.Null(exception);
+        Assert.NotNull(result);
 
         var ensure = Assert.IsType<EnsureModelManagedDataScaffoldingOperation>(Assert.Single(result));
 
         Assert.Equal(["tenant_id", "id"], ensure.Intent.KeyColumns);
         Assert.Equal(7, ensure.Intent.KeyValues.GetValue(0, 0));
         Assert.Equal(1, ensure.Intent.KeyValues.GetValue(0, 1));
-
-        Assert.Throws<InvalidOperationException>(() => SafeMigrationModelManagedDataPairer.Pair(
-            [insert],
-            [
-                new DropTableOperation
-                {
-                    Name = "roles",
-                    Schema = "other",
-                },
-            ]));
     }
 
-    [Fact]
-    public void PairerTreatsInverseRowsAsSubsumedOnlyByExactForwardDropTable()
+    /// <summary>
+    /// Subsumes inverse row evidence only when the forward table removal addresses the same schema-qualified owner.
+    /// </summary>
+    /// <param name="forwardSchema">The forward DROP's independently verified owner schema.</param>
+    [Theory]
+    [InlineData("identity")]
+    [InlineData("other")]
+    public void PairerTreatsInverseRowsAsSubsumedOnlyByExactForwardDropTable(
+        string forwardSchema
+    )
     {
+        // Arrange
         var inverseInsert = new InsertDataOperation
         {
             Table = "roles",
@@ -479,31 +538,40 @@ public sealed partial class SafeMigrationModelManagedDataTests
             Values = new object?[,] { { 1 } },
         };
 
-        var result = SafeMigrationModelManagedDataPairer.Pair(
-            [
-                new DropTableOperation
-                {
-                    Name = "roles",
-                    Schema = "identity",
-                },
-            ],
-            [inverseInsert]);
+        IReadOnlyList<MigrationOperation>? result = null;
 
-        Assert.IsType<DropTableOperation>(Assert.Single(result));
-        Assert.Throws<InvalidOperationException>(() => SafeMigrationModelManagedDataPairer.Pair(
+        // Act
+        var exception = Record.Exception(() => result = SafeMigrationModelManagedDataPairer.Pair(
             [
                 new DropTableOperation
                 {
                     Name = "roles",
-                    Schema = "other",
+                    Schema = forwardSchema,
                 },
             ],
             [inverseInsert]));
+
+        // Assert
+        if (forwardSchema != "identity")
+        {
+            Assert.IsType<InvalidOperationException>(exception);
+
+            return;
+        }
+
+        Assert.Null(exception);
+        Assert.NotNull(result);
+
+        Assert.IsType<DropTableOperation>(Assert.Single(result));
     }
 
+    /// <summary>
+    /// Retains forward row order and exact batch partitioning while inverse keys arrive in reverse order.
+    /// </summary>
     [Fact]
     public void PairerIndexesOneHundredThousandReorderedRowsAndPreservesForwardOrder()
     {
+        // Arrange
         const int rowCount = 100_000;
         var values = new object?[rowCount, 2];
         var inverseKeys = new object?[rowCount, 1];
@@ -530,8 +598,10 @@ public sealed partial class SafeMigrationModelManagedDataTests
             KeyValues = inverseKeys,
         };
 
+        // Act
         var result = SafeMigrationModelManagedDataPairer.Pair([insert], [inverseDelete]);
 
+        // Assert
         var first = Assert.IsType<EnsureModelManagedDataScaffoldingOperation>(result[0]);
         var last = Assert.IsType<EnsureModelManagedDataScaffoldingOperation>(result[^1]);
 
@@ -540,6 +610,12 @@ public sealed partial class SafeMigrationModelManagedDataTests
         Assert.Equal(rowCount - 1, last.Intent.KeyValues.GetValue(last.Intent.RowCount - 1, 0));
     }
 
+    /// <summary>
+    /// Rejects existence-only and repair policies that could authorize unreviewed model-managed row overwrites.
+    /// </summary>
+    /// <param name="policy">
+    /// The policy that must not authorize model-managed row overwrites.
+    /// </param>
     [Theory]
     [InlineData(SafeMigrationPolicy.ExistenceOnly)]
     [InlineData(SafeMigrationPolicy.RepairIfSafe)]
@@ -547,6 +623,7 @@ public sealed partial class SafeMigrationModelManagedDataTests
         SafeMigrationPolicy policy
     )
     {
+        // Arrange
         var intent = new EnsureModelManagedDataIntent(
             "roles",
             ["id"],
@@ -557,14 +634,23 @@ public sealed partial class SafeMigrationModelManagedDataTests
             schema: null,
             uniqueKeys: null);
 
-        var exception = Assert.Throws<ArgumentException>(() => new SafeMigrationOperation(intent, policy));
+        // Act
+        var exception = Record.Exception(() => new SafeMigrationOperation(intent, policy));
 
-        Assert.Equal("policy", exception.ParamName);
+        // Assert
+        var failure = Assert.IsType<ArgumentException>(exception);
+
+        Assert.Equal("policy", failure.ParamName);
     }
 
+    /// <summary>
+    /// Carries an accepted managed INSERT through UPDATE source/target proof into the subsequent DELETE source
+    /// proof.
+    /// </summary>
     [Fact]
     public void PreflightProjectsAcceptedModelManagedTransitionsInOrder()
     {
+        // Arrange
         var projection = new SafeMigrationPreflightProjection();
         var ensure = Operation(
             new EnsureModelManagedDataIntent(
@@ -592,11 +678,6 @@ public sealed partial class SafeMigrationModelManagedDataTests
                 schema: null,
                 uniqueKeys: null));
 
-        var projectedUpdate = projection.Project(update, Live(SafeMigrationObservedState.PrerequisiteMissing));
-
-        Assert.Equal(SafeMigrationObservedState.TransitionReady, projectedUpdate.ObservedState);
-        Accept(projection, update, SafeMigrationObservedState.PrerequisiteMissing);
-
         var deletion = Operation(
             new DeleteModelManagedDataIntent(
                 "roles",
@@ -609,8 +690,13 @@ public sealed partial class SafeMigrationModelManagedDataTests
                 schema: null,
                 foreignKeys: null));
 
+        // Act
+        var projectedUpdate = projection.Project(update, Live(SafeMigrationObservedState.PrerequisiteMissing));
+        Accept(projection, update, SafeMigrationObservedState.PrerequisiteMissing);
         var projectedDelete = projection.Project(deletion, Live(SafeMigrationObservedState.Different));
 
+        // Assert
+        Assert.Equal(SafeMigrationObservedState.TransitionReady, projectedUpdate.ObservedState);
         Assert.Equal(SafeMigrationObservedState.TransitionReady, projectedDelete.ObservedState);
     }
 

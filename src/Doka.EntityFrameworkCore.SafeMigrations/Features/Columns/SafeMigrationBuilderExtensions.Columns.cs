@@ -9,6 +9,10 @@ public static partial class SafeMigrationBuilderExtensions
     /// <param name="policy">The conflict policy for the operation.</param>
     /// <param name="schema">The schema name, or null for the provider default.</param>
     /// <returns>A builder for annotations on the created SafeMigrations operation.</returns>
+
+    // WHY: C# 14 extension blocks fail RS0016 in the current public API analyzer;
+    // retain the published static-call and XML member identities.
+    // ReSharper disable once ConvertToExtensionBlock
     public static OperationBuilder<SafeMigrationOperation> EnsureColumn(
         this MigrationBuilder migrationBuilder,
         string table,
@@ -44,6 +48,10 @@ public static partial class SafeMigrationBuilderExtensions
     /// <param name="policy">The conflict policy for the operation.</param>
     /// <typeparam name="T">The column CLR type.</typeparam>
     /// <returns>A builder for annotations on the created SafeMigrations operation.</returns>
+
+    // WHY: C# 14 extension blocks fail RS0016 in the current public API analyzer;
+    // retain the published static-call and XML member identities.
+    // ReSharper disable once ConvertToExtensionBlock
     public static OperationBuilder<SafeMigrationOperation> AddColumnIfNotExists<T>(
         this MigrationBuilder migrationBuilder,
         string name,
@@ -115,6 +123,10 @@ public static partial class SafeMigrationBuilderExtensions
     /// <exception cref="InvalidOperationException">
     /// The callback does not append exactly one add-column operation.
     /// </exception>
+
+    // WHY: C# 14 extension blocks fail RS0016 in the current public API analyzer;
+    // retain the published static-call and XML member identities.
+    // ReSharper disable once ConvertToExtensionBlock
     public static OperationBuilder<SafeMigrationOperation> AddColumnIfNotExistsFromModel(
         this MigrationBuilder migrationBuilder,
         Action<MigrationBuilder> operationFactory,
@@ -133,6 +145,10 @@ public static partial class SafeMigrationBuilderExtensions
     /// <param name="table">The table name.</param>
     /// <param name="schema">The schema name, or null for the provider default.</param>
     /// <returns>A builder for annotations on the created SafeMigrations operation.</returns>
+
+    // WHY: C# 14 extension blocks fail RS0016 in the current public API analyzer;
+    // retain the published static-call and XML member identities.
+    // ReSharper disable once ConvertToExtensionBlock
     public static OperationBuilder<SafeMigrationOperation> DropColumnIfExists(
         this MigrationBuilder migrationBuilder,
         string name,
@@ -147,6 +163,10 @@ public static partial class SafeMigrationBuilderExtensions
     /// <param name="newName">The target database object name.</param>
     /// <param name="schema">The schema name, or null for the provider default.</param>
     /// <returns>A builder for annotations on the created SafeMigrations operation.</returns>
+
+    // WHY: C# 14 extension blocks fail RS0016 in the current public API analyzer;
+    // retain the published static-call and XML member identities.
+    // ReSharper disable once ConvertToExtensionBlock
     public static OperationBuilder<SafeMigrationOperation> RenameColumnIfExists(
         this MigrationBuilder migrationBuilder,
         string name,
@@ -169,6 +189,10 @@ public static partial class SafeMigrationBuilderExtensions
     /// <param name="policy">The conflict policy for the operation.</param>
     /// <param name="schema">The schema name, or null for the provider default.</param>
     /// <returns>A builder for annotations on the created SafeMigrations operation.</returns>
+
+    // WHY: C# 14 extension blocks fail RS0016 in the current public API analyzer;
+    // retain the published static-call and XML member identities.
+    // ReSharper disable once ConvertToExtensionBlock
     public static OperationBuilder<SafeMigrationOperation> AlterColumnIfDifferent(
         this MigrationBuilder migrationBuilder,
         string table,
@@ -195,6 +219,10 @@ public static partial class SafeMigrationBuilderExtensions
     /// <exception cref="InvalidOperationException">
     /// The callback does not append exactly one alter-column operation.
     /// </exception>
+
+    // WHY: C# 14 extension blocks fail RS0016 in the current public API analyzer;
+    // retain the published static-call and XML member identities.
+    // ReSharper disable once ConvertToExtensionBlock
     public static OperationBuilder<SafeMigrationOperation> AlterColumnIfDifferentFromModel(
         this MigrationBuilder migrationBuilder,
         Action<MigrationBuilder> operationFactory,

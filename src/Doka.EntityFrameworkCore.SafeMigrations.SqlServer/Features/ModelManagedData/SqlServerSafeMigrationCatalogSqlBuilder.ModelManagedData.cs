@@ -241,7 +241,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         // session-scoped. TRY/CATCH restores ordinary SQL errors; client
         // attentions require MigrationCommand cleanup or script-client recovery.
 
-        var clearOwnership = $"EXEC sys.sp_set_session_context "
+        const string clearOwnership = $"EXEC sys.sp_set_session_context "
             + $"@key = N'{SqlServerSafeMigrationIdentityInsertScope.ContextKey}', @value = NULL;";
 
         return $"""
@@ -309,9 +309,12 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             .KeyColumns
             .Concat(intent.Columns)
             .Distinct(StringComparer.Ordinal)
+
+            // WHY: Retain this explicit fluent snapshot instead of a collection-spread rewrite.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
-        var predicates = new List<string> { TableAndColumnsExist(intent.Table, intent.Schema, columns) };
+        List<string> predicates = [TableAndColumnsExist(intent.Table, intent.Schema, columns)];
 
         if (intent is DeleteModelManagedDataIntent deletion)
         {
@@ -365,8 +368,13 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 
         if (intent is DeleteModelManagedDataIntent deletion)
         {
-            foreach (var foreignKey in deletion.ForeignKeys)
+            // WHY: The stable indexed snapshot preserves declaration order without mutating the source.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var foreignKeyIndex0 = 0; foreignKeyIndex0 < deletion.ForeignKeys.Count; foreignKeyIndex0++)
             {
+                var foreignKey = deletion.ForeignKeys[foreignKeyIndex0];
+
                 var table = (foreignKey.Table, EffectiveSchema(foreignKey.Schema));
                 if (!tables.TryGetValue(table, out var dependentColumns))
                 {
@@ -497,14 +505,24 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         {
             EnsureModelManagedDataIntent ensure => ensure.UniqueKeys,
             UpdateModelManagedDataIntent update => update.UniqueKeys,
-            DeleteModelManagedDataIntent => Array.Empty<ExpectedModelManagedDataUniqueKeyDefinition>(),
+            DeleteModelManagedDataIntent => [],
             _ => throw new UnreachableException(),
         };
 
-        foreach (var uniqueKey in uniqueKeys)
+        // WHY: The stable indexed snapshot preserves declaration order without mutating the source.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var uniqueKeyIndex0 = 0; uniqueKeyIndex0 < uniqueKeys.Count; uniqueKeyIndex0++)
         {
-            foreach (var column in uniqueKey.Columns)
+            var uniqueKey = uniqueKeys[uniqueKeyIndex0];
+
+            // WHY: The stable indexed snapshot preserves declaration order without mutating the source.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var uniqueColumnIndex0 = 0; uniqueColumnIndex0 < uniqueKey.Columns.Count; uniqueColumnIndex0++)
             {
+                var column = uniqueKey.Columns[uniqueColumnIndex0];
+
                 var ordinal = ColumnOrdinal(intent.Columns, column);
 
                 if (IsCharacterManagedStoreType(intent.ColumnTypes[ordinal]))
@@ -557,6 +575,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     {
         // WHY: Captured store-type text becomes a T-SQL CAST target. Only known
         // built-in mappings may be embedded; opaque provider types fail closed.
+        // Keep the mapping-source validation free of a captured predicate allocation.
+        // ReSharper disable once LoopCanBeConvertedToQuery
         foreach (var storeType in intent.KeyColumnTypes.Concat(intent.ColumnTypes))
         {
             if (!IsSupportedManagedStoreType(storeType)
@@ -566,11 +586,11 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             }
         }
 
-        var matrices = intent switch
+        ModelManagedDataMatrix[] matrices = intent switch
         {
-            EnsureModelManagedDataIntent ensure => new[] { ensure.KeyValues, ensure.Values },
-            UpdateModelManagedDataIntent update => new[] { update.KeyValues, update.OldValues, update.NewValues },
-            DeleteModelManagedDataIntent delete => new[] { delete.KeyValues, delete.OldValues },
+            EnsureModelManagedDataIntent ensure => [ensure.KeyValues, ensure.Values],
+            UpdateModelManagedDataIntent update => [update.KeyValues, update.OldValues, update.NewValues],
+            DeleteModelManagedDataIntent delete => [delete.KeyValues, delete.OldValues],
             _ => throw new UnreachableException(),
         };
 
@@ -618,7 +638,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     )
     {
         var predicates = new HashSet<string>(StringComparer.Ordinal);
-        var rendered = new HashSet<(object? Value, string Type, string Column)>();
+        HashSet<(object? Value, string Type, string Column)> rendered = [];
 
         AddValues(intent.KeyColumns, intent.KeyColumnTypes, intent.KeyValues);
 
@@ -803,8 +823,12 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             return false;
         }
 
+        // WHY: Type families parse different argument grammars lazily, retaining their existing rejection order.
+        // ReSharper disable once ConvertIfStatementToSwitchStatement
         if (type is "char" or "varchar" or "nchar" or "nvarchar" or "binary" or "varbinary")
         {
+            // WHY: Missing arguments reject before the separate MAX special case; no parsing is needed for either.
+            // ReSharper disable once ConvertIfStatementToSwitchStatement
             if (args is null)
             {
                 return false;
@@ -1066,8 +1090,13 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                     $"doka_other.{Delimited($"k{index}")}"))),
         };
 
-        foreach (var uniqueKey in uniqueKeys)
+        // WHY: The stable indexed snapshot preserves declaration order without mutating the source.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var uniqueKeyIndex1 = 0; uniqueKeyIndex1 < uniqueKeys.Count; uniqueKeyIndex1++)
         {
+            var uniqueKey = uniqueKeys[uniqueKeyIndex1];
+
             collisionKeys.Add(
                 string.Join(
                     " AND ",

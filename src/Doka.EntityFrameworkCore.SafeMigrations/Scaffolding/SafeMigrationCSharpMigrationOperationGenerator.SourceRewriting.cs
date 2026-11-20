@@ -70,6 +70,9 @@ internal sealed partial class SafeMigrationCSharpMigrationOperationGenerator
     }
 
     /// <summary>Validates the convergence policy before freezing it into the existing typed table source.</summary>
+
+    // WHY: ExistenceOnly is a declared policy but cannot authorize a reviewed convergence baseline.
+    // ReSharper disable once SwitchExpressionHandlesSomeKnownEnumValuesWithExceptionInDefault
     private SafeMigrationPolicy GetLegacyConvergencePolicy() => _configuration.LegacyConvergencePolicy switch
     {
         SafeMigrationPolicy.ThrowIfDifferent => SafeMigrationPolicy.ThrowIfDifferent,
@@ -154,27 +157,20 @@ internal sealed partial class SafeMigrationCSharpMigrationOperationGenerator
                 continue;
             }
 
-            if (current == '"')
+            switch (current)
             {
-                inString = true;
-                verbatimString = index > 0 && source[index - 1] == '@';
-                continue;
-            }
-
-            if (current == '\'')
-            {
-                inCharacter = true;
-                continue;
-            }
-
-            if (current == '(')
-            {
-                depth++;
-            }
-            else if (current == ')'
-                && --depth == 0)
-            {
-                return index;
+                case '"':
+                    inString = true;
+                    verbatimString = index > 0 && source[index - 1] == '@';
+                    continue;
+                case '\'':
+                    inCharacter = true;
+                    continue;
+                case '(':
+                    depth++;
+                    break;
+                case ')' when --depth == 0:
+                    return index;
             }
         }
 
@@ -345,6 +341,10 @@ internal sealed partial class SafeMigrationCSharpMigrationOperationGenerator
             .Select(foreignKey => Dependencies.CSharpHelper.Literal(foreignKey.PrincipalColumns!))
             .GroupBy(static literal => literal, StringComparer.Ordinal);
 
+        // WHY: Each replacement consumes the previous source while group enumeration retains authored order.
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        // WHY: Each replacement consumes the prior source in group order; retain that explicit sequential rewrite.
+        // ReSharper disable once LoopCanBeConvertedToQuery
         foreach (var group in literals)
         {
             source = ReplaceArrayLiteral(source, group.Key, group.Count());

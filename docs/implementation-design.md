@@ -1387,38 +1387,41 @@ granularity follows the grouped setup invocation; caller cancellation and
 independent cleanup remain authoritative. Runtime regression workloads exercise
 actual `Database.MigrateAsync` without explicit preflight against empty,
 matching, partial and safely widened catalogs, then verify schema, rows,
-migration history and history-only replay. They persist aggregate command,
-payload, duration and generation-allocation evidence without SQL text or
-connection information. Local workload timings are not production speedup
-claims. See [MySQL/MariaDB runtime boundaries](mysql-mariadb-ddl-behavior.md#session-local-guard-shape).
+migration history and history-only replay. The ordinary tests retain functional
+command, schema, data, history and replay oracles. Explicit native BenchmarkDotNet
+runtime and generation modes own the associated timing/allocation evidence;
+their results are not production speedup claims.
+See [MySQL/MariaDB runtime boundaries](mysql-mariadb-ddl-behavior.md#session-local-guard-shape).
 
 The repository measures construction, planning, all provider generators, and
 report serialization at 1, 100, and 1000 operations, plus blocker-view
 selection across 50,000 assessments. Core, MySQL/MariaDB, PostgreSQL, SQLite,
-and SQL Server have independent BenchmarkDotNet 0.15.8 executables, with 56
-default parameterized cases in total. Canonical snapshot initialization,
+and SQL Server have independent BenchmarkDotNet 0.15.8 executables for their
+registered default parameterized cases. Canonical snapshot initialization,
 `IMigrationsModelDiffer` comparison and the runner's model fingerprint path
 remain separate workloads. Compile-linked configuration and a thin entry
 adapter select workloads and validate native full JSON evidence; BenchmarkDotNet
 owns timing, statistics and process-wide managed allocation diagnostics.
-There is no repository timer, median sampler, custom result schema or benchmark
-budget evaluator. CI uses all-case `Dry` execution/export smoke, not a
-statistical performance comparison. Numeric results cannot fail qualification;
+There is no handwritten statistical benchmark runner, median sampler, custom
+benchmark result schema or budget evaluator. Dry requires explicit opt-in; default CI,
+tests and cleanup retain deterministic workload checks without starting it.
+Requested Dry execution is export smoke, not statistical comparison.
+Numeric results cannot fail qualification;
 invalid configuration, generated-build/execution errors, missing/failed selected
 cases and missing/invalid evidence still fail. Full measurement runs and old
 thread-local reports have different methodologies; see
 [performance and memory](support-and-qualification.md#performance-and-memory).
 
-Provider integration tests measure 20 complete pooled runner calls against 100
-expected tables in clean and noisy catalogs. The noisy catalog adds 1,000
-foreign tables with columns and indexes. Each matrix cell persists p50/p95,
-assessment counts and unexpected-object counts. The unchanged comparison
-`2 * clean p95 + 250 ms` is informational: JSON records
-`evaluationMode: "informational"` and retains `requirement.passed: false` for an
-overrun instead of failing the integration test. Matching assessments and the
-server-side exclusion of foreign child objects remain mandatory. Invalid
-measurements, execution exceptions and evidence-output failures are not
-converted into timing verdicts or suppressed.
+Provider integration tests verify the clean/noisy pooled-runner contract once
+per state against 100 expected tables and 1,000 foreign tables with columns and
+indexes. Matching assessments, exact counts/identities and server-side exclusion
+of foreign child objects remain mandatory. Native BenchmarkDotNet modes preserve
+the same diagnostic workloads, including PostgreSQL column runtime and MySQL
+migration/replay. They run only when explicitly selected; preparation/reset and
+functional validation are outside measurement. The old 20-call percentile
+collector and relative-budget JSON are retired rather than maintained as a
+second measurement system. Execution, cleanup and requested-export failures are
+not converted into timing verdicts or suppressed.
 
 Benchmark measurements and live comparisons are informational evidence.
 The live measurements retain same-runner relative context, not an

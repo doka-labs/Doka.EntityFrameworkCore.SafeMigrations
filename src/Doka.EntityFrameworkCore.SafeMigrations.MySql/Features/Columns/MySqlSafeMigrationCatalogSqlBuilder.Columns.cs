@@ -77,11 +77,14 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             repairInvariant = $"({repairInvariant}) AND ({dependencyInvariant})";
         }
 
-        var nullableColumn = repairCapability == SafeMigrationRepairCapability.Safe && !intent.Definition.IsNullable
-            ? nativeOwnerQualified
-                ? BuildRequiredColumnAddColumnExists(intent.Table, intent.Definition.Name, "c.IS_NULLABLE = 'YES'")
-                : ColumnWithInvariantExists(intent.Table, intent.Definition.Name, "c.IS_NULLABLE = 'YES'")
-            : null;
+        var nullableColumn = (repairCapability == SafeMigrationRepairCapability.Safe && !intent.Definition.IsNullable)
+            switch
+            {
+                true when nativeOwnerQualified =>
+                    BuildRequiredColumnAddColumnExists(intent.Table, intent.Definition.Name, "c.IS_NULLABLE = 'YES'"),
+                true => ColumnWithInvariantExists(intent.Table, intent.Definition.Name, "c.IS_NULLABLE = 'YES'"),
+                false => null,
+            };
 
         if (nullableColumn is not null)
         {

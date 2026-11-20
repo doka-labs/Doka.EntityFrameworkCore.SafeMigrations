@@ -1,6 +1,3 @@
-using Microsoft.EntityFrameworkCore.Migrations.Design;
-using Microsoft.Extensions.DependencyInjection;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
 /// <summary>
@@ -40,6 +37,8 @@ public sealed class SqlServerIncludedIndexScaffoldingTests
             index.Name,
             index.Table,
             index.Columns[0],
+            // WHY: Fluent terminal materialization preserves the existing snapshot and enumeration contract.
+            // ReSharper disable once UseCollectionExpression
             projection.IncludedColumns!.ToArray());
 
         var safeOperation = (SafeMigrationOperation)migrationBuilder.Operations.Single();

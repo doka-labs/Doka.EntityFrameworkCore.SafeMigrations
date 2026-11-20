@@ -23,13 +23,23 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 Collect(check.Definition.CapturedSql);
                 break;
             case EnsureTableIntent table:
-                foreach (var column in table.Definition.Columns)
+                // WHY: Index this stable list while preserving its order and ownership.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
+                for (var columnIndex = 0; columnIndex < table.Definition.Columns.Count; columnIndex++)
                 {
+                    var column = table.Definition.Columns[columnIndex];
+
                     Collect(column.CapturedComputedSql);
                 }
 
-                foreach (var check in table.Definition.CheckConstraints)
+                // WHY: Index this stable list while preserving its order and ownership.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
+                for (var checkIndex = 0; checkIndex < table.Definition.CheckConstraints.Count; checkIndex++)
                 {
+                    var check = table.Definition.CheckConstraints[checkIndex];
+
                     Collect(check.CapturedSql);
                 }
 

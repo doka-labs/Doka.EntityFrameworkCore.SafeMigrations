@@ -54,7 +54,7 @@ public sealed class MySqlIdentifierReferenceProofTests
     )
     {
         // Arrange
-        var marker = Marker;
+        const string marker = Marker;
 
         // Act
         var exception = Record.Exception(() =>
@@ -108,7 +108,7 @@ public sealed class MySqlIdentifierReferenceProofTests
     )
     {
         // Arrange
-        var marker = Marker;
+        const string marker = Marker;
 
         // Act
         var exception = Record.Exception(() =>

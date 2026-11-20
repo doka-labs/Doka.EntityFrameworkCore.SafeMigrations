@@ -54,14 +54,23 @@ internal static class MySqlSafeMigrationServiceCollectionDecorator
         return (IMigrationsSqlGenerator)ActivatorUtilities.CreateInstance(provider, implementationType);
     }
 
-    private sealed class Factory(
-        ServiceDescriptor providerDescriptor
-    )
+    private sealed class Factory
     {
+        private readonly ServiceDescriptor _providerDescriptor;
+
+        /// <summary>Retains the original descriptor without changing factory-target identity.</summary>
+        /// <param name="providerDescriptor">The original provider registration to decorate.</param>
+        internal Factory(
+            ServiceDescriptor providerDescriptor
+        )
+        {
+            _providerDescriptor = providerDescriptor;
+        }
+
         public MySqlSafeMigrationsSqlGenerator Create(
             IServiceProvider provider
         ) => new(
-            CreateProviderGenerator(provider, providerDescriptor),
+            CreateProviderGenerator(provider, _providerDescriptor),
             provider.GetRequiredService<MySqlSafeMigrationPlanCapture>(),
             provider.GetRequiredService<MigrationsSqlGeneratorDependencies>());
     }

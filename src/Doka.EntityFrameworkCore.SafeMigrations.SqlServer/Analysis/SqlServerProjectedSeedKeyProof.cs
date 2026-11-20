@@ -58,8 +58,13 @@ internal sealed record SqlServerProjectedSeedKeyProof(
             return false;
         }
 
-        foreach (var definition in Table.Columns)
+        // WHY: Immutable column slots retain the exact authored-definition identity.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var columnIndex = 0; columnIndex < Table.Columns.Count; columnIndex++)
         {
+            var definition = Table.Columns[columnIndex];
+
             if (!source.TryGetProjectedColumn(Table.Table, Table.Schema, definition.Name, out var projected)
                 || !ReferenceEquals(definition, projected))
             {
@@ -72,16 +77,27 @@ internal sealed record SqlServerProjectedSeedKeyProof(
 }
 
 /// <summary>Contains only inserts within one unchanged, newly-created table lineage.</summary>
-internal sealed class SqlServerProjectedSeedLineage(ExpectedTableDefinition table)
+internal sealed class SqlServerProjectedSeedLineage
 {
+    /// <summary>Starts one newly created-table lineage and its initial physical key contracts.</summary>
+    /// <param name="table">The exact immutable table definition retained by subsequent row proofs.</param>
+    internal SqlServerProjectedSeedLineage(
+        ExpectedTableDefinition table
+    )
+    {
+        Table = table;
+        Seeds = [];
+        UniqueContracts = InitialContracts(table);
+    }
+
     /// <summary>Gets the exact destination definition that opened this lineage.</summary>
-    internal ExpectedTableDefinition Table { get; } = table;
+    internal ExpectedTableDefinition Table { get; }
 
     /// <summary>Gets the immutable insert intents observed in operation order.</summary>
-    internal List<EnsureModelManagedDataIntent> Seeds { get; } = [];
+    internal List<EnsureModelManagedDataIntent> Seeds { get; }
 
     /// <summary>Gets the ordered physical candidate contracts that must constrain prospective inserts.</summary>
-    internal Dictionary<string, SqlServerProjectedSeedContract> UniqueContracts { get; } = InitialContracts(table);
+    internal Dictionary<string, SqlServerProjectedSeedContract> UniqueContracts { get; }
 
     /// <summary>Gets whether an unsupported filtered contract prevents an exact prospective row proof.</summary>
     internal bool HasUnprovenContract { get; set; }
@@ -96,8 +112,13 @@ internal sealed class SqlServerProjectedSeedLineage(ExpectedTableDefinition tabl
             result.Add(primaryKey.Name, new SqlServerProjectedSeedContract(primaryKey.Columns));
         }
 
-        foreach (var uniqueKey in definition.UniqueConstraints)
+        // WHY: Immutable constraint order is retained without replacing the keyed proof accumulator.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var keyIndex = 0; keyIndex < definition.UniqueConstraints.Count; keyIndex++)
         {
+            var uniqueKey = definition.UniqueConstraints[keyIndex];
+
             result.Add(uniqueKey.Name, new SqlServerProjectedSeedContract(uniqueKey.Columns));
         }
 
@@ -158,7 +179,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
 
         async Task<int> ExecuteProofAsync(
             string sql,
-            CancellationToken token
+            CancellationToken callbackCancellationToken
         )
         {
             await using var command = connection.CreateCommand();
@@ -166,7 +187,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             ApplyCommandTimeout(command, commandTimeout);
             command.CommandText = sql;
 
-            return Convert.ToInt32(await command.ExecuteScalarAsync(token), CultureInfo.InvariantCulture);
+            return Convert.ToInt32(
+                await command.ExecuteScalarAsync(callbackCancellationToken),
+                CultureInfo.InvariantCulture);
         }
     }
 
@@ -181,10 +204,10 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
     )
     {
         var filters = await CaptureProjectedFilterProofsAsync(operations, execute, cancellationToken);
-        var authored = new Dictionary<(string Schema, string Table), SqlServerProjectedSeedLineage>();
-        var result = new Dictionary<SafeMigrationIntent, List<SqlServerProjectedSeedKeyProof>>();
-        var rows = new Dictionary<EnsureModelManagedDataIntent, List<SqlServerProjectedSeedKeyProof>>();
-        var caches = new Dictionary<SqlServerProjectedSeedLineage, SqlServerProjectedSeedProofCache>();
+        Dictionary<(string Schema, string Table), SqlServerProjectedSeedLineage> authored = [];
+        Dictionary<SafeMigrationIntent, List<SqlServerProjectedSeedKeyProof>> result = [];
+        Dictionary<EnsureModelManagedDataIntent, List<SqlServerProjectedSeedKeyProof>> rows = [];
+        Dictionary<SqlServerProjectedSeedLineage, SqlServerProjectedSeedProofCache> caches = [];
         var buffers = PrepareSeedBuffers(operations, cancellationToken);
 
         // WHY: Evaluate seed proofs against the authored prefix at each operation ordinal.
@@ -209,11 +232,20 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                     ? SqlServerSafeMigrationCatalogSqlBuilder.GetStructuredIndexFilter(index.Definition)
                     : null;
 
-                var proof = await CaptureAsync(lineage, columns, capturedMetadataMatches || filter is not null, filter);
+                var proof = await CaptureAsync(
+                    lineage,
+                    columns,
+                    capturedMetadataMatches || filter is not null,
+                    filter,
+                    cancellationToken);
+
                 AddProof(result, operation.Intent, proof);
             }
 
             ObserveSeedLineage(authored, operation.Intent, noOp: false);
+
+            // WHY: New-table cache ownership and later seed-proof capture are separate ordered stages.
+            // ReSharper disable once ConvertIfStatementToSwitchStatement
             if (operation.Intent is EnsureTableIntent table)
             {
                 caches.Add(
@@ -245,13 +277,15 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                         prospective,
                         candidate.Columns,
                         metadataMatches: true,
-                        candidate.Filter);
+                        candidate.Filter,
+                        cancellationToken);
 
-                    outcome = proof.Result == 0 || outcome == 0
-                        ? 0
-                        : proof.Result == -1 || outcome == -1
-                            ? -1
-                            : 1;
+                    outcome = (proof.Result, outcome) switch
+                    {
+                        (0, _) or (_, 0) => 0,
+                        (-1, _) or (_, -1) => -1,
+                        _ => 1,
+                    };
                 }
 
                 AddProof(
@@ -273,11 +307,14 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         _projectedSeedRows = rows;
         _projectedIndexFilters = filters;
 
+        return;
+
         async Task<SqlServerProjectedSeedKeyProof> CaptureAsync(
             SqlServerProjectedSeedLineage lineage,
             IReadOnlyList<string> columns,
             bool metadataMatches,
-            SafeMigrationSqlExpression? filter = null
+            SafeMigrationSqlExpression? filter,
+            CancellationToken callbackCancellationToken
         )
         {
             var cache = GetCache(lineage);
@@ -289,7 +326,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                 filter,
                 _catalogSqlBuilder,
                 execute,
-                cancellationToken);
+                callbackCancellationToken);
         }
 
         SqlServerProjectedSeedProofCache GetCache(
@@ -302,8 +339,8 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         CancellationToken cancellationToken
     )
     {
-        var lineages = new Dictionary<(string Schema, string Table), SqlServerProjectedSeedLineage>();
-        var tables = new Dictionary<int, SqlServerProjectedSeedLineage>();
+        Dictionary<(string Schema, string Table), SqlServerProjectedSeedLineage> lineages = [];
+        Dictionary<int, SqlServerProjectedSeedLineage> tables = [];
 
         // WHY: Retain table-creation ordinals while advancing seed lineage in order.
         // ReSharper disable once ForCanBeConvertedToForeach
@@ -475,6 +512,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                                     .Definition
                                     .Keys
                                     .Select(static column => column.Column!)
+
+                                    // WHY: Retain this explicit fluent snapshot instead of a collection-spread rewrite.
+                                    // ReSharper disable once UseCollectionExpression
                                     .ToArray(),
                                 filter);
                     }
@@ -517,6 +557,8 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                 break;
         }
 
+        return;
+
         void AddUniqueContract(
             string table,
             string? schema,
@@ -553,6 +595,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             .Definition
             .Keys
             .Select(static column => column.Column!)
+
+            // WHY: Retain this explicit fluent snapshot instead of a collection-spread rewrite.
+            // ReSharper disable once UseCollectionExpression
             .ToArray(),
         _ => throw new UnreachableException(),
     };

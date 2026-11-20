@@ -85,6 +85,8 @@ public sealed class SqliteProjectedRebuildCandidateTests
         }
         else
         {
+            // WHY: Keep direct fixture mutations explicit; case scopes and breaks would not clarify this setup.
+            // ReSharper disable once ConvertIfStatementToSwitchStatement
             if (scenario == "ordinary_add")
             {
                 builder.AddColumn<int>("source", owner, type: "INTEGER", nullable: true);

@@ -157,6 +157,8 @@ public sealed class SqlServerManagedTypeGuardIntegrationTests : SqlServerIntegra
             ["int", "bigint"],
             new object?[,] { { 1, 2L } },
             null,
+            // WHY: Fluent terminal materialization preserves the existing snapshot and enumeration contract.
+            // ReSharper disable once UseCollectionExpression
             foreignKeys.ToArray());
 
         var guard = catalog.BuildModelManagedDataAnalysisGuard(intent)

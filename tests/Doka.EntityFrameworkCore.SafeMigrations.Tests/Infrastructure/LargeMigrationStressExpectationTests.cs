@@ -51,7 +51,7 @@ public sealed class LargeMigrationStressExpectationTests
         var exception = Record.Exception(() => expectation.AssertReport(report));
 
         // Assert
-        Assert.IsAssignableFrom<XunitException>(exception);
+        Assert.IsType<XunitException>(exception, exactMatch: false);
     }
 
     /// <summary>Accepts only the expected uncertainty after the first model-managed ensure.</summary>
@@ -146,7 +146,7 @@ public sealed class LargeMigrationStressExpectationTests
         var exception = Record.Exception(() => expectation.AssertReport(report));
 
         // Assert
-        Assert.IsAssignableFrom<XunitException>(exception);
+        Assert.IsType<XunitException>(exception, exactMatch: false);
     }
 
     /// <summary>Rejects each independently corrupted field of otherwise valid deferred evidence.</summary>
@@ -180,7 +180,7 @@ public sealed class LargeMigrationStressExpectationTests
         var exception = Record.Exception(() => expectation.AssertReport(report));
 
         // Assert
-        Assert.IsAssignableFrom<XunitException>(exception);
+        Assert.IsType<XunitException>(exception, exactMatch: false);
     }
 
     /// <summary>A runtime deferral cannot erase a proven blocker or precede the first managed mutation.</summary>
@@ -212,7 +212,7 @@ public sealed class LargeMigrationStressExpectationTests
         var exception = Record.Exception(() => expectation.AssertReport(report));
 
         // Assert
-        Assert.IsAssignableFrom<XunitException>(exception);
+        Assert.IsType<XunitException>(exception, exactMatch: false);
     }
 
     /// <summary>The first model-managed update retains its source-state proof and must not be deferred.</summary>
@@ -235,7 +235,7 @@ public sealed class LargeMigrationStressExpectationTests
         var exception = Record.Exception(() => expectation.AssertReport(report));
 
         // Assert
-        Assert.IsAssignableFrom<XunitException>(exception);
+        Assert.IsType<XunitException>(exception, exactMatch: false);
     }
 
     /// <summary>Separately pins the constructor boundary for an inconsistent deferred action and origin.</summary>

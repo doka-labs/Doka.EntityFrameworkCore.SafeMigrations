@@ -200,12 +200,13 @@ public sealed class PostgreSqlNullProofEligibilityTests
 
         // Assert
         Assert.Equal(
-            quoted + """
-                     CASE WHEN (eligible)
-                     AND NOT (proven_not_null)
-                     THEN (row_probe)
-                     ELSE FALSE END
-                     """,
+            quoted
+            + """
+            CASE WHEN (eligible)
+            AND NOT (proven_not_null)
+            THEN (row_probe)
+            ELSE FALSE END
+            """,
             inline);
 
         Assert.Equal(quoted + "doka_nullability_blocked", runtime);
@@ -217,7 +218,7 @@ public sealed class PostgreSqlNullProofEligibilityTests
     public void RepairInvariantRendering_PreservesQuotedTokenText()
     {
         // Arrange
-        var token = PostgreSqlSafeMigrationRuntimePlan.NullabilityRepairInvariantPlaceholder;
+        const string token = PostgreSqlSafeMigrationRuntimePlan.NullabilityRepairInvariantPlaceholder;
         var quoted = "'doubled ''" + token + "' || \"doubled\"\"" + token + "\" || ";
         var plan = new PostgreSqlSafeMigrationRuntimePlan(
             quoted + token,

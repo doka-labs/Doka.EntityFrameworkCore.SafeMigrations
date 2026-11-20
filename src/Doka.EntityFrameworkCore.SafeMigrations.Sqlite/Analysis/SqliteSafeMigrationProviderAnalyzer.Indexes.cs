@@ -64,11 +64,12 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
 
         var index = table.Indexes.FirstOrDefault(value => s_identifierComparer.Equals(value.Name, intent.Name));
 
-        return index is null
-            ? Missing(postconditionSatisfied: true)
-            : index.Origin == "c"
-                ? Matching(postconditionSatisfied: false, matchedObjectName: index.Name)
-                : Different("index_origin", "created", index.Origin, matchedObjectName: index.Name);
+        return index switch
+        {
+            null => Missing(postconditionSatisfied: true),
+            { Origin: "c" } => Matching(postconditionSatisfied: false, matchedObjectName: index.Name),
+            _ => Different("index_origin", "created", index.Origin, matchedObjectName: index.Name),
+        };
     }
 
     /// <summary>Classifies an index rename using both physical identities and target occupancy.</summary>
@@ -128,8 +129,12 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
         foreach (var table in snapshot.Tables.Values)
         {
             // ReSharper disable once LoopCanBeConvertedToQuery
-            foreach (var index in table.Indexes)
+            // WHY: Traverse the stable ordered source by ordinal without materializing another collection.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var physicalIndex = 0; physicalIndex < table.Indexes.Count; physicalIndex++)
             {
+                var index = table.Indexes[physicalIndex];
                 if (s_identifierComparer.Equals(index.Name, name))
                 {
                     return true;
@@ -137,8 +142,12 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
             }
         }
 
-        foreach (var schemaObject in snapshot.OtherObjects)
+        // WHY: Traverse the stable ordered source by ordinal without materializing another collection.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var schemaObjectIndex = 0; schemaObjectIndex < snapshot.OtherObjects.Count; schemaObjectIndex++)
         {
+            var schemaObject = snapshot.OtherObjects[schemaObjectIndex];
             if (schemaObject.Type is "view" or "index"
                 && s_identifierComparer.Equals(schemaObject.Name, name))
             {
@@ -160,6 +169,9 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
             .Keys
             .Where(static value => value.IsKey)
             .OrderBy(static value => value.Ordinal)
+
+            // WHY: Preserve explicit fluent materialization for the ordered snapshot.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var expectedFilter = expected.StructuredFilter is null
@@ -216,6 +228,9 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
             .Keys
             .Where(static value => value.IsKey)
             .OrderBy(static value => value.Ordinal)
+
+            // WHY: Preserve explicit fluent materialization for the ordered snapshot.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         if (actual.Unique != expected.IsUnique
@@ -259,8 +274,12 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
             return "index_provider_option";
         }
 
-        foreach (var key in definition.Keys)
+        // WHY: Traverse the stable ordered source by ordinal without materializing another collection.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var keyIndex = 0; keyIndex < definition.Keys.Count; keyIndex++)
         {
+            var key = definition.Keys[keyIndex];
             if (key.PrefixLength is not null
                 || key.OperatorClass is not null
                 || key.NullOrder != SafeMigrationIndexNullOrder.ProviderDefault

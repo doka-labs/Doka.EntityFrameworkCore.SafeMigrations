@@ -14,7 +14,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql;
 internal static class MySqlCatalogRelations
 {
     /// <summary>The prefix every catalog relation name shares.</summary>
-    public const string Prefix = "INFORMATION_SCHEMA.";
+    private const string Prefix = "INFORMATION_SCHEMA.";
 
     private static readonly string[] s_views =
     [
@@ -28,9 +28,6 @@ internal static class MySqlCatalogRelations
         "INFORMATION_SCHEMA.COLUMNS",
         "INFORMATION_SCHEMA.TABLES",
     ];
-
-    /// <summary>Gets the catalog relations a classification template may name.</summary>
-    public static IReadOnlyList<string> All => s_views;
 
     /// <summary>Redirects unquoted catalog table sources in a complete statement.</summary>
     /// <param name="sql">The statement.</param>
@@ -64,6 +61,7 @@ internal static class MySqlCatalogRelations
     {
         // WHY: s_views is ordered longest first, so the first match is the longest one and a
         // shorter relation cannot consume the prefix of a longer one.
+        // ReSharper disable once LoopCanBeConvertedToQuery
         foreach (var view in s_views)
         {
             var after = start + view.Length;
@@ -194,6 +192,8 @@ internal static class MySqlCatalogRelations
                     continue;
                 }
 
+                // WHY: Quote/comment recognition remains an ordered lexical pipeline with lookahead and loop exits.
+                // ReSharper disable once ConvertIfStatementToSwitchStatement
                 if (character is '\'' or '"' or '`')
                 {
                     _quote = character;
@@ -282,6 +282,9 @@ internal static class MySqlCatalogRelations
                 }
 
                 _expectRelation = false;
+
+                // WHY: The depth-limit branch exits the lexical loop directly, not a nested switch.
+                // ReSharper disable once ConvertIfStatementToSwitchStatement
                 if (character == '(')
                 {
                     // WHY: FROM inside TRIM/EXTRACT is not a table source. Query scopes track

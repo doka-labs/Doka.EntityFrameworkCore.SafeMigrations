@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Benchmarks;
 
 /// <summary>Measures the retained MySQL canonical, repair and model-managed-data workloads.</summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public class MySqlMigrationBenchmarks : IDisposable
 {
     private MySqlGenerationContext _context = null!;

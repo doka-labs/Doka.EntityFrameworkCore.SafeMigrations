@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations;
 
 /// <summary>Defines explicit, immutable metadata for one analysis or verification run.</summary>
+[PublicAPI]
 public sealed class SafeMigrationRunOptions
 {
     /// <summary>Initializes run metadata.</summary>

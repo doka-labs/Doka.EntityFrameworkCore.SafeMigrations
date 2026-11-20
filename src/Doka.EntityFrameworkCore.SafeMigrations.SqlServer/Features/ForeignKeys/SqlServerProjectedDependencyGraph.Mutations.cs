@@ -40,19 +40,34 @@ internal sealed partial class SqlServerProjectedDependencyGraph
                     RegisterConstraint(tableId, table.Definition.Schema, primaryKey.Name, "PK");
                 }
 
-                foreach (var unique in table.Definition.UniqueConstraints)
+                // WHY: Immutable constraints retain their authored installation order.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
+                for (var uniqueIndex = 0; uniqueIndex < table.Definition.UniqueConstraints.Count; uniqueIndex++)
                 {
+                    var unique = table.Definition.UniqueConstraints[uniqueIndex];
+
                     AddCandidateKey(tableId, unique.Name, unique.Columns);
                     RegisterConstraint(tableId, table.Definition.Schema, unique.Name, "UQ");
                 }
 
-                foreach (var check in table.Definition.CheckConstraints)
+                // WHY: Immutable CHECK slots retain their authored installation order.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
+                for (var checkIndex = 0; checkIndex < table.Definition.CheckConstraints.Count; checkIndex++)
                 {
+                    var check = table.Definition.CheckConstraints[checkIndex];
+
                     RegisterConstraint(tableId, table.Definition.Schema, check.Name, "C");
                 }
 
-                foreach (var foreignKey in table.Definition.ForeignKeys)
+                // WHY: Immutable FK slots retain their authored installation order.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
+                for (var foreignKeyIndex = 0; foreignKeyIndex < table.Definition.ForeignKeys.Count; foreignKeyIndex++)
                 {
+                    var foreignKey = table.Definition.ForeignKeys[foreignKeyIndex];
+
                     Add(foreignKey);
                 }
 
@@ -300,6 +315,9 @@ internal sealed partial class SqlServerProjectedDependencyGraph
         foreach (var name in _constraintNames
             .Where(pair => pair.Value.Owner == id || pair.Value.Object == id)
             .Select(static pair => pair.Key)
+
+            // WHY: Retain this explicit fluent snapshot instead of a collection-spread rewrite.
+            // ReSharper disable once UseCollectionExpression
             .ToArray())
         {
             _constraintNames.Remove(name);
@@ -313,6 +331,9 @@ internal sealed partial class SqlServerProjectedDependencyGraph
         foreach (var key in _columns
             .Keys
             .Where(key => key.Table == id)
+
+            // WHY: Retain this explicit fluent snapshot instead of a collection-spread rewrite.
+            // ReSharper disable once UseCollectionExpression
             .ToArray())
         {
             _columns.Remove(key);
@@ -321,6 +342,9 @@ internal sealed partial class SqlServerProjectedDependencyGraph
 
         foreach (var pair in _foreignKeys
             .Where(pair => pair.Value.Dependent == id)
+
+            // WHY: Retain this explicit fluent snapshot instead of a collection-spread rewrite.
+            // ReSharper disable once UseCollectionExpression
             .ToArray())
         {
             _foreignKeys.Remove(pair.Key);
@@ -340,6 +364,9 @@ internal sealed partial class SqlServerProjectedDependencyGraph
                 index
                     .Keys
                     .Select(static key => key.Column!)
+
+                    // WHY: Retain this explicit fluent snapshot instead of a collection-spread rewrite.
+                    // ReSharper disable once UseCollectionExpression
                     .ToArray());
         }
     }
@@ -461,6 +488,9 @@ internal sealed partial class SqlServerProjectedDependencyGraph
             // names from the original authored definition after a prior DROP.
             foreach (var pair in _constraintNames
                 .Where(pair => pair.Value.Owner == id)
+
+                // WHY: Retain this explicit fluent snapshot instead of a collection-spread rewrite.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray())
             {
                 _constraintNames.Remove(pair.Key);

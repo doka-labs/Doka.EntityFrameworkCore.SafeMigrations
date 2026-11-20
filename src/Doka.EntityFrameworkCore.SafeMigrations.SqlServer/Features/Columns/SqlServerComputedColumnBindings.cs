@@ -55,24 +55,17 @@ internal static class SqlServerComputedColumnBindings
             }
 
             var name = definition?.Name ?? new string(nameSpan);
-            if (!result.TryAdd(name, definition)
-                && !ReferenceEquals(result[name], definition))
-            {
-                throw InvalidBindings();
-            }
-
-            if (++count > expectedReferences)
+            if ((!result.TryAdd(name, definition)
+                    && !ReferenceEquals(result[name], definition))
+                || ++count > expectedReferences)
             {
                 throw InvalidBindings();
             }
         }
 
-        if (count != expectedReferences)
-        {
-            throw InvalidBindings();
-        }
-
-        return result;
+        return count == expectedReferences
+            ? result
+            : throw InvalidBindings();
     }
 
     private static int ReadNumber(

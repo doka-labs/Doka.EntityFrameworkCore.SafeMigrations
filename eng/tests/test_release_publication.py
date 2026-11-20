@@ -17,6 +17,7 @@ from pathlib import Path
 from unittest import mock
 
 from eng.release import lines, publication
+from eng.tests.test_release_lines import policy as initial_policy, toolchain, write_toolchain
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -40,7 +41,7 @@ def environment(attempt="1"):
 
 def authority(policy=None):
     """Make independent frozen evidence that never acts as current permission."""
-    policy = copy.deepcopy(policy) if policy is not None else lines.load_policy()
+    policy = copy.deepcopy(policy) if policy is not None else initial_policy()
 
     return {"schemaVersion": 1, "kind": "release-line-authority-observation", "repository": REPOSITORY,
             "controlCommit": COMMIT, "authorizationRevision": policy["revision"],
@@ -56,7 +57,7 @@ def frozen(policy=None, source_ref="refs/heads/main", publishable=True):
     return {"schemaVersion": 1, "kind": "safe-migrations-release-qualification", "repository": REPOSITORY,
             "sourceRef": source_ref, "sourceCommit": COMMIT, "version": VERSION, "tag": f"v{VERSION}",
             "workflowPath": lines.WORKFLOW_PATH, "workflowRunId": "7", "qualificationAttempt": "1",
-            "releaseLine": snapshot, "toolchain": lines.inspect_toolchain(ROOT, snapshot),
+            "releaseLine": snapshot, "toolchain": lines.validate_toolchain(toolchain(), snapshot),
             "authority": observed, "qualifiedForPublication": publishable, "qualifiedAtUtc": "2026-10-25T02:00:00Z"}
 
 
@@ -85,7 +86,7 @@ class FakeGitHub:
     """Observe routing and return bounded synthetic API data; no writes are available."""
 
     def __init__(self, policy=None):
-        self.policy = copy.deepcopy(policy) if policy is not None else lines.load_policy()
+        self.policy = copy.deepcopy(policy) if policy is not None else initial_policy()
         self.protected = True
         self.head = COMMIT
         self.blob_mismatch = False
@@ -278,14 +279,18 @@ class AuthorityTests(unittest.TestCase):
 
     def test_prepared_qualification_never_reads_publisher_environment(self):
         # Arrange
-        value = lines.load_policy()
+        value = initial_policy()
         value["lines"][0]["state"] = "prepared"
         api = FakeGitHub(value)
         result = subprocess.CompletedProcess([], 0, stdout=COMMIT + "\n")
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        root = Path(directory.name)
+        write_toolchain(root)
 
         # Act
         with mock.patch.object(publication.subprocess, "run", return_value=result):
-            observed = publication.create_qualification(VERSION, True, ROOT, api, environment())
+            observed = publication.create_qualification(VERSION, True, root, api, environment())
 
         # Assert
         self.assertFalse(observed["qualifiedForPublication"])
@@ -293,7 +298,7 @@ class AuthorityTests(unittest.TestCase):
 
     def test_prepared_line_cannot_request_publishable_qualification(self):
         # Arrange
-        value = lines.load_policy()
+        value = initial_policy()
         value["lines"][0]["state"] = "prepared"
         api = FakeGitHub(value)
 
@@ -319,6 +324,7 @@ class PreflightCliTests(unittest.TestCase):
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
         self.root = Path(self.directory.name).resolve()
+        write_toolchain(self.root)
         self.receipt = self.root / "line.json"
         self.outputs = self.root / "github-output.txt"
 
@@ -335,7 +341,7 @@ class PreflightCliTests(unittest.TestCase):
         with mock.patch.dict(os.environ, env, clear=True), mock.patch.object(
                 publication, "GitHubClient", return_value=api), mock.patch.object(
                 publication.subprocess, "run", return_value=git_result) as git_read, mock.patch.object(
-                publication.Path, "cwd", return_value=ROOT), mock.patch.object(sys, "argv", args):
+                publication.Path, "cwd", return_value=self.root), mock.patch.object(sys, "argv", args):
             result = publication.main()
 
         # Assert
@@ -350,20 +356,22 @@ class PreflightCliTests(unittest.TestCase):
         self.assertTrue(value["qualifiedForPublication"])
         self.assertEqual("net10.0", value["toolchain"]["targetFramework"])
         self.assertFalse(any("environments" in call for call in api.calls))
-        git_read.assert_called_once_with(["git", "-C", str(ROOT), "rev-parse", "HEAD"],
+        git_read.assert_called_once_with(["git", "-C", str(self.root), "rev-parse", "HEAD"],
                                          capture_output=True, text=True, check=False)
 
     def test_prepared_cli_preflight_serializes_nonpublishing_branch_identity(self):
         # Arrange
-        policy = lines.load_policy()
+        policy = initial_policy()
+        policy["lines"][0]["packageMajor"] = 11
         policy["lines"][1]["state"] = "prepared"
         api = FakeGitHub(policy)
         api.attempt = 4
         api.branch_name = "maintenance/10.x"
         source_ref = "refs/heads/maintenance/10.x"
+        version = "10.7.4-rc.1"
         env = {**environment("4"), "GITHUB_REF": source_ref, "GITHUB_OUTPUT": str(self.outputs),
                "GITHUB_WORKFLOW_REF": f"{REPOSITORY}/{lines.WORKFLOW_PATH}@{source_ref}"}
-        args = ["publication", "preflight", "--version", VERSION, "--qualification-only", "true",
+        args = ["publication", "preflight", "--version", version, "--qualification-only", "true",
                 "--output", str(self.receipt)]
         git_result = subprocess.CompletedProcess([], 0, stdout=COMMIT + "\n")
 
@@ -371,7 +379,7 @@ class PreflightCliTests(unittest.TestCase):
         with mock.patch.dict(os.environ, env, clear=True), mock.patch.object(
                 publication, "GitHubClient", return_value=api), mock.patch.object(
                 publication.subprocess, "run", return_value=git_result) as git_read, mock.patch.object(
-                publication.Path, "cwd", return_value=ROOT), mock.patch.object(sys, "argv", args):
+                publication.Path, "cwd", return_value=self.root), mock.patch.object(sys, "argv", args):
             result = publication.main()
 
         # Assert
@@ -383,12 +391,27 @@ class PreflightCliTests(unittest.TestCase):
                           "publish-allowed": "false"}, outputs)
         self.assertEqual("4", value["qualificationAttempt"])
         self.assertEqual(source_ref, value["sourceRef"])
+        self.assertEqual(version, value["version"])
+        self.assertEqual("net10.0", value["toolchain"]["targetFramework"])
         self.assertEqual("prepared", value["releaseLine"]["stateAtQualification"])
+        self.assertEqual(11, value["authority"]["policy"]["lines"][0]["packageMajor"])
         self.assertFalse(value["qualifiedForPublication"])
         self.assertFalse(any("environments" in call or "artifacts" in call for call in api.calls))
         self.assertNotIn("NUGET_API_KEY", env)
-        git_read.assert_called_once_with(["git", "-C", str(ROOT), "rev-parse", "HEAD"],
+        git_read.assert_called_once_with(["git", "-C", str(self.root), "rev-parse", "HEAD"],
                                          capture_output=True, text=True, check=False)
+
+    def test_prepared_qualification_cannot_be_relabelled_as_publishable(self):
+        # Arrange
+        policy = initial_policy()
+        policy["lines"][0]["packageMajor"] = 11
+        policy["lines"][1]["state"] = "prepared"
+        value = frozen(policy, source_ref="refs/heads/maintenance/10.x", publishable=False)
+        value["qualifiedForPublication"] = True
+
+        # Act / Assert
+        with self.assertRaisesRegex(publication.PublicationAdmissionError, "cannot be relabelled"):
+            publication.validate_frozen(value)
 
     def test_invalid_cli_preflight_never_emits_candidate_or_publish_permission(self):
         # Arrange

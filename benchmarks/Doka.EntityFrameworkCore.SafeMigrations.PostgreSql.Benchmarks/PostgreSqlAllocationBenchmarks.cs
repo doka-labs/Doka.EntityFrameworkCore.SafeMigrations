@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks;
 
 /// <summary>Reports table-definition composition independently of database latency.</summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public class PostgreSqlAllocationBenchmarks : IDisposable
 {
     private PostgreSqlGenerationContext _context = null!;
@@ -33,6 +34,9 @@ public class PostgreSqlAllocationBenchmarks : IDisposable
                 typeof(int),
                 false,
                 "integer"))
+
+            // WHY: Retain fluent materialization and the resulting snapshot ownership.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var builder = new MigrationBuilder(_context.Database.ProviderName!);
@@ -81,6 +85,7 @@ public class PostgreSqlAllocationBenchmarks : IDisposable
 }
 
 /// <summary>Reports prepared five-marker append and materialization through the production plan.</summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public class PostgreSqlPlaceholderBenchmarks
 {
     private readonly StringBuilder _destination = new(256);
@@ -140,6 +145,7 @@ public class PostgreSqlPlaceholderBenchmarks
 }
 
 /// <summary>Reports complete runtime guards with combined narrowing and NULL proofs.</summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public class PostgreSqlGuardBenchmarks : IDisposable
 {
     private PostgreSqlGenerationContext _context = null!;

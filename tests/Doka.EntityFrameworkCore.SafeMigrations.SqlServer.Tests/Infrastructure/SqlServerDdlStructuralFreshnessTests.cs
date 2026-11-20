@@ -6,7 +6,9 @@ public sealed class SqlServerDdlStructuralFreshnessTests
     private const string ConnectionString = "Server=127.0.0.1,1433;Database=ddl_structure_freshness;"
         + "User ID=sa;Password=unused;TrustServerCertificate=True";
 
-    /// <summary>A captured old dependency's accepted drop cannot prove no new trigger-created dependency exists.</summary>
+    /// <summary>
+    /// A captured old dependency's accepted drop cannot prove no new trigger-created dependency exists.
+    /// </summary>
     /// <param name="riskValue">The captured absence, enabled-trigger, or unproved visibility verdict.</param>
     /// <param name="executes">Whether the old dependency is physically dropped rather than absent.</param>
     [Theory]
@@ -87,7 +89,9 @@ public sealed class SqlServerDdlStructuralFreshnessTests
         }
     }
 
-    /// <summary>Metadata Matching is stale after a trigger-capable drop, even for another table and nonunique index.</summary>
+    /// <summary>
+    /// Metadata Matching is stale after a trigger-capable drop, even for another table and nonunique index.
+    /// </summary>
     [Fact]
     public void CoreMatchingShortcut_CannotRetainTriggerMutableMetadata()
     {
@@ -174,7 +178,9 @@ public sealed class SqlServerDdlStructuralFreshnessTests
         Assert.Null(result.ProviderDeferredOriginOrdinal);
     }
 
-    /// <summary>A dropped owner may be recreated by its DDL trigger and cannot retain a neutral absence shortcut.</summary>
+    /// <summary>
+    /// A dropped owner may be recreated by its DDL trigger and cannot retain a neutral absence shortcut.
+    /// </summary>
     [Fact]
     public void CoreRemovedOwnerShortcut_DefersToActualTriggerResult()
     {
@@ -212,7 +218,9 @@ public sealed class SqlServerDdlStructuralFreshnessTests
         Assert.False(result.PostconditionSatisfied);
     }
 
-    /// <summary>Different or absent captured metadata is mutable, not an independent invariant authoring refusal.</summary>
+    /// <summary>
+    /// Different or absent captured metadata is mutable, not an independent invariant authoring refusal.
+    /// </summary>
     /// <param name="state">The initial metadata verdict that a prior DDL trigger could change.</param>
     [Theory]
     [InlineData(SafeMigrationObservedState.Missing)]

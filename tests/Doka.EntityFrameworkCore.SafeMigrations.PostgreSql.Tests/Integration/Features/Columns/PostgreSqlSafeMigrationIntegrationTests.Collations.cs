@@ -9,9 +9,11 @@ public sealed class PostgreSqlCollationsIntegrationTests : PostgreSqlSafeMigrati
         PostgreSqlContainerFixture fixture
     ) : base(fixture) { }
 
+    /// <summary>Structured Collation Identity Converges Without Schema Or Dot Ambiguity.</summary>
     [Fact]
     public async Task StructuredCollationIdentity_ConvergesWithoutSchemaOrDotAmbiguity()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -85,61 +87,19 @@ public sealed class PostgreSqlCollationsIntegrationTests : PostgreSqlSafeMigrati
             SafeMigrationTableMode.StrictDefinition,
             SafeMigrationPolicy.ThrowIfDifferent);
 
+        // WHY: Register all source columns before indexes that depend on their qualified collations.
+        // ReSharper disable once LoopCanBeConvertedToQuery
         foreach (var definition in definitions)
         {
             builder.EnsureColumn("collation_identity", definition, SafeMigrationPolicy.ThrowIfDifferent);
         }
 
+        // WHY: Keep dependent index registration after the complete source-column baseline.
+        // ReSharper disable once LoopCanBeConvertedToQuery
         foreach (var index in indexes)
         {
             builder.EnsureIndex(index, SafeMigrationPolicy.ThrowIfDifferent);
         }
-
-        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var report = await context
-            .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(
-                context,
-                builder.Operations,
-                new SafeMigrationRunOptions("structured-collations"),
-                CancellationToken.None);
-
-        Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
-        Assert.All(
-            report.Assessments,
-            assessment => Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState));
-
-        Assert.Equal(
-            1,
-            await ScalarIntAsync(
-                connectionString,
-                """
-                SELECT COUNT(*) FROM pg_catalog.pg_attribute a
-                JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
-                JOIN pg_catalog.pg_collation coll ON coll.oid = a.attcollation
-                JOIN pg_catalog.pg_namespace ns ON ns.oid = coll.collnamespace
-                WHERE c.relname = 'collation_identity'
-                AND a.attname = 'dotted' AND ns.nspname = 'collation_a'
-                AND coll.collname = 'name.with.dot';
-                """,
-                cancellationToken: CancellationToken.None));
-
-        Assert.Equal(
-            1,
-            await ScalarIntAsync(
-                connectionString,
-                """
-                SELECT COUNT(*) FROM pg_catalog.pg_attribute a
-                JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
-                JOIN pg_catalog.pg_collation coll ON coll.oid = a.attcollation
-                JOIN pg_catalog.pg_namespace ns ON ns.oid = coll.collnamespace
-                WHERE c.relname = 'collation_table_create'
-                AND a.attname = 'qualified_value'
-                AND ns.nspname = 'collation_a'
-                AND coll.collname = 'shared';
-                """,
-                cancellationToken: CancellationToken.None));
 
         var drift = new MigrationBuilder(context.Database.ProviderName!);
         drift.EnsureColumn(
@@ -152,6 +112,44 @@ public sealed class PostgreSqlCollationsIntegrationTests : PostgreSqlSafeMigrati
                 collation: new SafeMigrationCollationIdentifier("shared", "collation_b")),
             SafeMigrationPolicy.ThrowIfDifferent);
 
+        // Act
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("structured-collations"),
+                CancellationToken.None);
+
+        var dottedCollationCount = await ScalarIntAsync(
+            connectionString,
+            """
+            SELECT COUNT(*) FROM pg_catalog.pg_attribute a
+            JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
+            JOIN pg_catalog.pg_collation coll ON coll.oid = a.attcollation
+            JOIN pg_catalog.pg_namespace ns ON ns.oid = coll.collnamespace
+            WHERE c.relname = 'collation_identity'
+            AND a.attname = 'dotted' AND ns.nspname = 'collation_a'
+            AND coll.collname = 'name.with.dot';
+            """,
+            cancellationToken: CancellationToken.None);
+
+        var createdTableCollationCount = await ScalarIntAsync(
+            connectionString,
+            """
+            SELECT COUNT(*) FROM pg_catalog.pg_attribute a
+            JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
+            JOIN pg_catalog.pg_collation coll ON coll.oid = a.attcollation
+            JOIN pg_catalog.pg_namespace ns ON ns.oid = coll.collnamespace
+            WHERE c.relname = 'collation_table_create'
+            AND a.attname = 'qualified_value'
+            AND ns.nspname = 'collation_a'
+            AND coll.collname = 'shared';
+            """,
+            cancellationToken: CancellationToken.None);
+
         var driftReport = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -160,6 +158,15 @@ public sealed class PostgreSqlCollationsIntegrationTests : PostgreSqlSafeMigrati
                 new SafeMigrationRunOptions("structured-collation-drift"),
                 CancellationToken.None);
 
+        // Assert
+        Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
+        Assert.Equal(8, report.Assessments.Count);
+        Assert.All(
+            report.Assessments,
+            assessment => Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState));
+
+        Assert.Equal(1, dottedCollationCount);
+        Assert.Equal(1, createdTableCollationCount);
         Assert.Equal(SafeMigrationReportStatus.Blocked, driftReport.Status);
         Assert.Equal(
             SafeMigrationObservedState.Different,

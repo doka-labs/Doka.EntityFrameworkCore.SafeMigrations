@@ -9,7 +9,9 @@ public sealed class MySqlRuntimeDiagnosticsIntegrationTests : MySqlSafeMigration
         MySqlEngineContainerFixture fixture
     ) : base(fixture) { }
 
-    /// <summary>Rejects a populated required addition with exact owner, reason and native cause after cleanup.</summary>
+    /// <summary>
+    /// Rejects a populated required addition with exact owner, reason and native cause after cleanup.
+    /// </summary>
     /// <param name="synchronous">Whether to exercise the synchronous rather than asynchronous native scope.</param>
     [Theory]
     [InlineData(false)]
@@ -74,7 +76,9 @@ public sealed class MySqlRuntimeDiagnosticsIntegrationTests : MySqlSafeMigration
         Assert.Equal(1, observer.GuardedBodyCount);
     }
 
-    /// <summary>A durable default supplies existing rows, while an empty owner needs no fabricated replacement.</summary>
+    /// <summary>
+    /// A durable default supplies existing rows, while an empty owner needs no fabricated replacement.
+    /// </summary>
     /// <param name="populated">Whether the original owner contains data.</param>
     /// <param name="hasDefault">Whether the authored target supplies an explicit boolean replacement.</param>
     [Theory]
@@ -144,7 +148,9 @@ public sealed class MySqlRuntimeDiagnosticsIntegrationTests : MySqlSafeMigration
         Assert.Equal(1, cleaned);
     }
 
-    /// <summary>Wrapping metadata does not add dispatches, connection ownership changes or successful diagnostic rows.</summary>
+    /// <summary>
+    /// Wrapping metadata does not add dispatches, connection ownership changes or successful diagnostic rows.
+    /// </summary>
     /// <param name="requiredWithDefault">Whether the accepted column has an explicit replacement.</param>
     [Theory]
     [InlineData(false)]
@@ -201,7 +207,9 @@ public sealed class MySqlRuntimeDiagnosticsIntegrationTests : MySqlSafeMigration
         Assert.DoesNotContain(" AS documentKind", wrapped.CommandText, StringComparison.Ordinal);
     }
 
-    /// <summary>A rejected generated command can recover on the same borrowed session with an explicitly revised contract.</summary>
+    /// <summary>
+    /// A rejected generated command can recover on the same borrowed session with an explicitly revised contract.
+    /// </summary>
     [Fact]
     public async Task RuntimeDiagnosticsOwnedRejectionRetainsSessionForReviewedRetry()
     {
@@ -259,7 +267,9 @@ public sealed class MySqlRuntimeDiagnosticsIntegrationTests : MySqlSafeMigration
         Assert.Equal(1, cleaned);
     }
 
-    /// <summary>An application constraint resembling an owned guard remains the exact ordinary native failure.</summary>
+    /// <summary>
+    /// An application constraint resembling an owned guard remains the exact ordinary native failure.
+    /// </summary>
     /// <param name="name">The exact or similarly prefixed application-owned unique key.</param>
     [Theory]
     [InlineData("doka_sm_data_blocked")]
@@ -308,7 +318,9 @@ public sealed class MySqlRuntimeDiagnosticsIntegrationTests : MySqlSafeMigration
         Assert.True(observer.SetupWasInjected);
     }
 
-    /// <summary>Qualification and owner prerequisites have distinct actionable explanations without inferred row defects.</summary>
+    /// <summary>
+    /// Qualification and owner prerequisites have distinct actionable explanations without inferred row defects.
+    /// </summary>
     /// <param name="foreignQualifier">Whether the authored qualifier mismatches the active database.</param>
     [Theory]
     [InlineData(false)]
@@ -359,7 +371,9 @@ public sealed class MySqlRuntimeDiagnosticsIntegrationTests : MySqlSafeMigration
         Assert.IsType<MySqlException>(diagnostic.InnerException);
     }
 
-    /// <summary>A direct generated script returns its full diagnostic row before the unchanged native error arrives.</summary>
+    /// <summary>
+    /// A direct generated script returns its full diagnostic row before the unchanged native error arrives.
+    /// </summary>
     [Fact]
     public async Task RuntimeDiagnosticsRawScriptPublishesFailureContextBeforeNativeError()
     {
@@ -470,7 +484,9 @@ public sealed class MySqlRuntimeDiagnosticsIntegrationTests : MySqlSafeMigration
                 .Number);
     }
 
-    /// <summary>Final verification retains native cleanup and labels a postcondition, not a preflight rejection.</summary>
+    /// <summary>
+    /// Final verification retains native cleanup and labels a postcondition, not a preflight rejection.
+    /// </summary>
     [Fact]
     public async Task RuntimeDiagnosticsPostconditionFailureRetainsFreshOwnerAndCleanup()
     {
@@ -512,7 +528,9 @@ public sealed class MySqlRuntimeDiagnosticsIntegrationTests : MySqlSafeMigration
                 .Number);
     }
 
-    /// <summary>Uncertain cleanup retains the native provider recovery exception even when the main error is an owned guard.</summary>
+    /// <summary>
+    /// Uncertain cleanup retains the native provider recovery exception even when the main error is an owned guard.
+    /// </summary>
     [Fact]
     public async Task RuntimeDiagnosticsNeverReplaceNativeRecoveryFailure()
     {
@@ -563,7 +581,9 @@ public sealed class MySqlRuntimeDiagnosticsIntegrationTests : MySqlSafeMigration
                 .State);
     }
 
-    /// <summary>A newly inserted row after the empty-state probe is rejected by the exact owned atomic barrier.</summary>
+    /// <summary>
+    /// A newly inserted row after the empty-state probe is rejected by the exact owned atomic barrier.
+    /// </summary>
     [Fact]
     public async Task RuntimeDiagnosticsAtomicRequiredAddCheckRetainsNativeNumberAndDataReason()
     {
@@ -698,7 +718,9 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
         Exception? Failure
     );
 
-    /// <summary>Forces the owned postcondition branch after real DDL without disrupting earlier setup or cleanup.</summary>
+    /// <summary>
+    /// Forces the owned postcondition branch after real DDL without disrupting earlier setup or cleanup.
+    /// </summary>
     protected sealed class DiagnosticPostconditionFailureInterceptor : DbCommandInterceptor
     {
         /// <summary>Gets whether the real guarded body, not an unrelated command, received the failure probe.</summary>

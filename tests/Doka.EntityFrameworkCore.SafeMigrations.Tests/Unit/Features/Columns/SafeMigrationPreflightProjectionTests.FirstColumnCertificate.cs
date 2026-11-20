@@ -79,7 +79,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         // WHY: Observation consumes an accepted decision, but retaining source facts
         // still needs the independent provider certificate and an unbroken lifetime.
         projection.Observe(operation, live, live, decision);
-        var columns = (ISafeMigrationProjectedColumnSource)projection;
+        ISafeMigrationProjectedColumnSource columns = projection;
         var changedPreserved = columns.PreservesLiveColumnValues("items", null, "reference");
         var siblingPreserved = columns.PreservesLiveColumnValues("items", null, "question");
 

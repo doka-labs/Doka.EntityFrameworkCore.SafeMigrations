@@ -1,5 +1,6 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
+/// <summary>Verifies PostgreSQL Model Fingerprint Facet contracts in independently owned test state.</summary>
 public sealed class PostgreSqlModelFingerprintFacetTests
 {
     private const string ProviderContract = "Npgsql.EntityFrameworkCore.PostgreSQL";
@@ -41,30 +42,48 @@ public sealed class PostgreSqlModelFingerprintFacetTests
         (typeof(StoredProcedureName), "stored procedure"),
     ];
 
-    [Fact]
-    public void Create_IsSensitiveToEverySerializedRelationalFacetFamily()
+    /// <summary>Create Is Sensitive To Every Serialized Relational Facet Family.</summary>
+    /// <param name="marker">The independently discoverable model mutation.</param>
+    /// <param name="facet">The diagnostic name of that single serialized facet.</param>
+    [Theory]
+    [MemberData(nameof(RelationalFacetCases))]
+    public void Create_IsSensitiveToEverySerializedRelationalFacetFamily(
+        Type marker,
+        string facet
+    )
     {
+        // Arrange
         using var baselineContext = new FacetContext<Baseline>();
         var baseline = Fingerprint(baselineContext);
+        using var variant = (DbContext)Activator.CreateInstance(typeof(FacetContext<>).MakeGenericType(marker))!;
 
-        foreach (var (marker, facet) in s_variants)
-        {
-            using var variant = (DbContext)Activator.CreateInstance(typeof(FacetContext<>).MakeGenericType(marker))!;
-            var actual = Fingerprint(variant);
+        // Act
+        var actual = Fingerprint(variant);
 
-            Assert.True(
-                !StringComparer.Ordinal.Equals(baseline, actual),
-                $"The '{facet}' mutation did not change the relational model fingerprint.");
-        }
+        // Assert
+        Assert.True(
+            !StringComparer.Ordinal.Equals(baseline, actual),
+            $"The '{facet}' mutation did not change the relational model fingerprint.");
     }
 
+    /// <summary>
+    /// Discovers each independent relational facet instead of hiding thirty-three variants inside one test.
+    /// </summary>
+    /// <returns>The unchanged marker/facet pairs used by the original fixture matrix.</returns>
+    public static IEnumerable<object[]> RelationalFacetCases() => s_variants
+        .Select(static variant => new object[] { variant.Marker, variant.Facet });
+
+    /// <summary>Create Complex Relational Model Has Patch Invariant Golden Fingerprint.</summary>
     [Fact]
     public void Create_ComplexRelationalModelHasPatchInvariantGoldenFingerprint()
     {
+        // Arrange
         using var context = new FacetContext<Baseline>();
 
+        // Act
         var actual = Fingerprint(context);
 
+        // Assert
         Assert.Equal(
             "safe-relational-model:v1:Npgsql.EntityFrameworkCore.PostgreSQL:sha256:"
             + "d3f10dbf2826f558cd812ad3a46544b157e5aef3758a222e16a87eb862e4c191",
@@ -299,6 +318,7 @@ public sealed class PostgreSqlModelFingerprintFacetTests
         }
     }
 
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class Parent
     {
         public int Id { get; set; }
@@ -314,6 +334,7 @@ public sealed class PostgreSqlModelFingerprintFacetTests
         public DateTime CreatedAt { get; set; }
     }
 
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class Child
     {
         public int Id { get; set; }
@@ -321,11 +342,13 @@ public sealed class PostgreSqlModelFingerprintFacetTests
         public int ParentId { get; set; }
     }
 
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class ViewRow
     {
         public string Code { get; set; } = string.Empty;
     }
 
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class QueryRow
     {
         public int Value { get; set; }

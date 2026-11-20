@@ -2,98 +2,124 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
 public sealed partial class SafeMigrationDefinitionTests
 {
+    /// <summary>A key definition snapshots caller-owned member order before that collection is mutated.</summary>
     [Fact]
     public void DefinitionsSnapshotMutableInputs()
     {
+        // Arrange
         var columns = new List<string>
         {
             "tenant_id",
             "id",
         };
 
-        var bytes = new byte[] { 1, 2, 3 };
-
+        // Act
         var key = new ExpectedPrimaryKeyDefinition("pk_items", "items", columns);
-        var defaultValue = SafeMigrationDefaultValue.Literal(bytes);
-
         columns[0] = "changed";
-        bytes[0] = 9;
 
-        var firstRead = Assert.IsType<byte[]>(defaultValue.LiteralValue);
-        firstRead[1] = 9;
-
-        var secondRead = Assert.IsType<byte[]>(defaultValue.LiteralValue);
-
+        // Assert
         Assert.Equal(["tenant_id", "id"], key.Columns);
-        Assert.Equal(new byte[] { 1, 2, 3 }, secondRead);
     }
 
+    /// <summary>Binary defaults isolate both their original input and every returned buffer.</summary>
     [Fact]
-    public void InvalidOrAmbiguousDefinitionsFailAtConstruction()
+    public void BinaryDefaultSnapshotsInputAndEveryRead()
     {
-        Assert.Throws<ArgumentException>(() => new ExpectedIndexKeyDefinition(column: "id", expression: "lower(id)"));
-        Assert.Throws<ArgumentException>(() => new ExpectedColumnDefinition(
-            "computed",
+        // Arrange
+        var bytes = new byte[] { 1, 2, 3 };
+
+        // Act
+        var defaultValue = SafeMigrationDefaultValue.Literal(bytes);
+        bytes[0] = 9;
+        var firstRead = defaultValue.LiteralValue;
+        if (firstRead is byte[] buffer)
+        {
+            buffer[1] = 9;
+        }
+
+        var secondRead = defaultValue.LiteralValue;
+
+        // Assert
+        Assert.IsType<byte[]>(firstRead);
+        Assert.Equal(new byte[] { 1, 2, 3 }, Assert.IsType<byte[]>(secondRead));
+    }
+
+    /// <summary>Each invalid definition is independently rejected at its own constructor boundary.</summary>
+    /// <param name="scenario">The single invalid definition contract exercised by this case.</param>
+    /// <param name="exceptionType">The exact documented rejection type.</param>
+    [Theory]
+    [InlineData("index-key-role", typeof(ArgumentException))]
+    [InlineData("generated-default", typeof(ArgumentException))]
+    [InlineData("foreign-key-arity", typeof(ArgumentException))]
+    [InlineData("duplicate-column", typeof(ArgumentException))]
+    [InlineData("default-type", typeof(ArgumentException))]
+    [InlineData("required-null-default", typeof(ArgumentException))]
+    [InlineData("nonunique-null-policy", typeof(ArgumentException))]
+    [InlineData("included-key-member", typeof(ArgumentException))]
+    [InlineData("delete-action", typeof(ArgumentOutOfRangeException))]
+    [InlineData("missing-key-member", typeof(ArgumentException))]
+    [InlineData("alter-column-identity", typeof(ArgumentException))]
+    public void InvalidOrAmbiguousDefinitionsFailAtConstruction(
+        string scenario,
+        Type exceptionType
+    )
+    {
+        // Arrange
+        var invalidDefinition = scenario;
+
+        // Act
+        var exception = Record.Exception(() => CreateInvalidDefinition(invalidDefinition));
+
+        // Assert
+        Assert.IsType(exceptionType, exception);
+    }
+
+    /// <summary>Constructs one invalid shape without sharing a previously constructed definition.</summary>
+    private static object CreateInvalidDefinition(
+        string scenario
+    ) => scenario switch
+    {
+        "index-key-role" => new ExpectedIndexKeyDefinition(column: "id", expression: "lower(id)"),
+        "generated-default" => new ExpectedColumnDefinition("computed",
             typeof(int),
             false,
             computedColumnSql: "1 + 1",
-            defaultValue: SafeMigrationDefaultValue.Literal(2)));
-
-        Assert.Throws<ArgumentException>(() => new ExpectedForeignKeyDefinition(
-            "fk",
-            "items",
-            ["a", "b"],
-            "parents",
-            ["id"]));
-
-        Assert.Throws<ArgumentException>(() => new ExpectedTableDefinition(
-            "items",
-            [
-                new ExpectedColumnDefinition("id", typeof(int), false),
-                new ExpectedColumnDefinition("id", typeof(int), false),
-            ]));
-
-        Assert.Throws<ArgumentException>(() => new ExpectedColumnDefinition(
-            "value",
+            defaultValue: SafeMigrationDefaultValue.Literal(2)),
+        "foreign-key-arity" => new ExpectedForeignKeyDefinition("fk", "items", ["a", "b"], "parents", ["id"]),
+        "duplicate-column" => new ExpectedTableDefinition("items",
+        [
+            new ExpectedColumnDefinition("id", typeof(int), false),
+            new ExpectedColumnDefinition("id", typeof(int), false),
+        ]),
+        "default-type" => new ExpectedColumnDefinition("value",
             typeof(int),
             false,
-            defaultValue: SafeMigrationDefaultValue.Literal("wrong")));
-
-        Assert.Throws<ArgumentException>(() => new ExpectedColumnDefinition(
-            "value",
+            defaultValue: SafeMigrationDefaultValue.Literal("wrong")),
+        "required-null-default" => new ExpectedColumnDefinition("value",
             typeof(int),
             false,
-            defaultValue: SafeMigrationDefaultValue.Literal(null)));
-
-        Assert.Throws<ArgumentException>(() => new ExpectedIndexDefinition(
-            "ix",
+            defaultValue: SafeMigrationDefaultValue.Literal(null)),
+        "nonunique-null-policy" => new ExpectedIndexDefinition("ix",
             "items",
             [new ExpectedIndexKeyDefinition(column: "id")],
             unique: false,
-            nullsDistinct: true));
-
-        Assert.Throws<ArgumentException>(() => new ExpectedIndexDefinition(
-            "ix",
+            nullsDistinct: true),
+        "included-key-member" => new ExpectedIndexDefinition("ix",
             "items",
             [new ExpectedIndexKeyDefinition(column: "id")],
-            includedColumns: ["id"]));
-
-        Assert.Throws<ArgumentOutOfRangeException>(() => new ExpectedForeignKeyDefinition(
-            "fk",
+            includedColumns: ["id"]),
+        "delete-action" => new ExpectedForeignKeyDefinition("fk",
             "items",
             ["parent_id"],
             "parents",
             ["id"],
-            onDelete: (ReferentialAction)999));
-
-        Assert.Throws<ArgumentException>(() => new ExpectedTableDefinition(
-            "items",
+            onDelete: (ReferentialAction)999),
+        "missing-key-member" => new ExpectedTableDefinition("items",
             [new ExpectedColumnDefinition("id", typeof(int), false)],
-            primaryKey: new ExpectedPrimaryKeyDefinition("pk", "items", ["missing"])));
-
-        Assert.Throws<ArgumentException>(() => new AlterColumnIntent(
-            "items",
+            primaryKey: new ExpectedPrimaryKeyDefinition("pk", "items", ["missing"])),
+        "alter-column-identity" => new AlterColumnIntent("items",
             new ExpectedColumnDefinition("new_name", typeof(int), false),
-            new ExpectedColumnDefinition("old_name", typeof(int), false)));
-    }
+            new ExpectedColumnDefinition("old_name", typeof(int), false)),
+        _ => throw new ArgumentOutOfRangeException(nameof(scenario)),
+    };
 }

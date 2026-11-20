@@ -255,6 +255,7 @@ public sealed class MySqlNullabilityDataProofTests
             ELSE FALSE END
             """,
             analysis);
+
         Assert.Equal("@doka_sm_nullability_blocked", runtime);
         Assert.Equal("nullable", plan.RenderPreparedNullabilityColumnExpression([]));
         Assert.Equal("eligible", plan.RenderPreparedNullabilityRepairInvariantExpression([]));
@@ -271,6 +272,7 @@ public sealed class MySqlNullabilityDataProofTests
         string token
     )
     {
+        // Arrange
         using var context = CreateContext();
         var operation = new SafeMigrationOperation(
             new EnsureColumnIntent(
@@ -285,9 +287,13 @@ public sealed class MySqlNullabilityDataProofTests
                     defaultValue: SafeMigrationDefaultValue.Literal(token))),
             SafeMigrationPolicy.RepairIfSafe);
 
-        var command = Assert.Single(context
+        // Act
+        var commands = context
             .GetService<IMigrationsSqlGenerator>()
-            .Generate([operation], context.Model));
+            .Generate([operation], context.Model);
+
+        // Assert
+        var command = Assert.Single(commands);
 
         var state = Assert.Single(
             DecodePayloads(command.CommandText),
@@ -305,6 +311,7 @@ public sealed class MySqlNullabilityDataProofTests
     [Fact]
     public void ProofRenderer_SkipsQuotedTokensBeforeExpandingStructuralMarker()
     {
+        // Arrange
         const string token = MySqlSafeMigrationRuntimePlan.NullabilityDataProbePlaceholder;
         const string quoted = "'escaped ''" + token + "' + `slash\\``" + token + "` + \"doubled\"\"" + token + "\" + ";
         var plan = new MySqlSafeMigrationRuntimePlan(quoted + token, "TRUE", SafeMigrationRepairCapability.Safe, "TRUE")
@@ -312,8 +319,10 @@ public sealed class MySqlNullabilityDataProofTests
             NullabilityDataProbe = new MySqlSafeMigrationNullabilityDataProbe("nullable", "eligible", "proof"),
         };
 
+        // Act
         var rendered = plan.RenderPreparedStateExpression([]);
 
+        // Assert
         Assert.Equal(quoted + "@doka_sm_nullability_blocked", rendered);
     }
 
@@ -327,6 +336,7 @@ public sealed class MySqlNullabilityDataProofTests
         string quote
     )
     {
+        // Arrange
         var plan = new MySqlSafeMigrationRuntimePlan(
             quote + MySqlSafeMigrationRuntimePlan.NullabilityDataProbePlaceholder,
             "TRUE",
@@ -338,7 +348,11 @@ public sealed class MySqlNullabilityDataProofTests
 
         var render = () => plan.RenderPreparedStateExpression([]);
 
-        var exception = Assert.Throws<InvalidOperationException>(render);
+        // Act
+        var capturedException = Record.Exception(render);
+
+        // Assert
+        var exception = Assert.IsType<InvalidOperationException>(capturedException);
         Assert.Contains("unterminated quoted token", exception.Message, StringComparison.Ordinal);
     }
 
@@ -362,7 +376,7 @@ public sealed class MySqlNullabilityDataProofTests
     {
         const string prefix = "CONVERT(0x";
         const string suffix = " USING utf8mb4)";
-        var payloads = new List<string>();
+        List<string> payloads = [];
         var offset = 0;
         while ((offset = sql.IndexOf(prefix, offset, StringComparison.Ordinal)) >= 0)
         {

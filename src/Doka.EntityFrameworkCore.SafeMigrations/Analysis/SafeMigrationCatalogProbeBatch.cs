@@ -10,9 +10,9 @@ internal static class SafeMigrationCatalogProbeBatch
     /// <param name="commandTimeout">The timeout applied to the native batch or sequential commands.</param>
     /// <param name="buildStatement">Builds the next statement at the supplied candidate offset.</param>
     /// <param name="readStatement">Validates and consumes that statement's exact candidate/result contract.</param>
-    /// <param name="cancellationToken">The token that cancels construction, execution, and reading.</param>
     /// <param name="transaction">The caller-owned transaction to forward without changing its lifetime.</param>
     /// <param name="maximumParameters">The provider's stricter aggregate parameter bound, when required.</param>
+    /// <param name="cancellationToken">The token that cancels construction, execution, and reading.</param>
     /// <returns>A task completed after every statement and result set has been verified.</returns>
     public static async Task ReadAsync(
         DbConnection connection,
@@ -21,9 +21,9 @@ internal static class SafeMigrationCatalogProbeBatch
         int? commandTimeout,
         Func<SafeMigrationCatalogCommand, int, SafeMigrationCatalogProbeStatement> buildStatement,
         Func<DbDataReader, int, int, CancellationToken, Task> readStatement,
-        CancellationToken cancellationToken,
-        DbTransaction? transaction = null,
-        int maximumParameters = SafeMigrationCatalogQueryLimits.MaximumParameters
+        DbTransaction? transaction,
+        int maximumParameters,
+        CancellationToken cancellationToken
     )
     {
         ArgumentNullException.ThrowIfNull(connection);
@@ -47,90 +47,109 @@ internal static class SafeMigrationCatalogProbeBatch
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            await using var batch = new SafeMigrationCatalogBatch(connection, commandTimeout, transaction);
-            var statements = new List<(int Offset, int Count)>(
-                SafeMigrationCatalogQueryLimits.MaximumStatementsPerBatch);
+            var batch = new SafeMigrationCatalogBatch(connection, commandTimeout, transaction);
+            Exception? probeFailure = null;
 
-            var parameters = 0;
-            var payloadBytes = 0;
-            while (batch.Count < SafeMigrationCatalogQueryLimits.MaximumStatementsPerBatch
-                && offset < operationCount)
+            try
             {
-                cancellationToken.ThrowIfCancellationRequested();
+                var statements = new List<(int Offset, int Count)>(
+                    SafeMigrationCatalogQueryLimits.MaximumStatementsPerBatch);
 
-                var command = batch.CreateCommand();
-                var statement = buildStatement(command, offset);
-                if (statement.OperationCount <= 0
-                    || statement.OperationCount > SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement
-                    || statement.OperationCount > operationCount - offset
-                    || statement.ParameterPayloadBytes < 0
-                    || statement.FirstOrdinal < 0
-                    || string.IsNullOrEmpty(command.CommandText))
+                var parameters = 0;
+                var payloadBytes = 0;
+                while (batch.Count < SafeMigrationCatalogQueryLimits.MaximumStatementsPerBatch
+                    && offset < operationCount)
                 {
-                    throw new InvalidOperationException(
-                        "The catalog probe builder returned an invalid statement. Stop migration analysis; "
-                        + "inspect the provider contract and report this invariant failure using redacted evidence.");
-                }
+                    cancellationToken.ThrowIfCancellationRequested();
 
-                var statementPayloadBytes = checked(
-                    Encoding.UTF8.GetByteCount(command.CommandText) + statement.ParameterPayloadBytes);
-
-                if (command.Parameters.Count > maximumParameters
-                    || SafeMigrationCatalogQueryLimits.Exceeded(
-                        command.Parameters.Count,
-                        statementPayloadBytes,
-                        maximumPayloadBytes))
-                {
-                    throw SafeMigrationCatalogQueryLimits.OversizedOperation(
-                        statement.FirstOrdinal,
-                        command.Parameters.Count,
-                        statementPayloadBytes);
-                }
-
-                if (parameters + command.Parameters.Count > maximumParameters
-                    || SafeMigrationCatalogQueryLimits.Exceeded(
-                        parameters + command.Parameters.Count,
-                        checked(payloadBytes + statementPayloadBytes),
-                        maximumPayloadBytes))
-                {
-                    // WHY: Candidate SQL and evidence are immutable within this
-                    // phase. Rebuild the unsubmitted statement in the next batch,
-                    // never cache live results or cross a prerequisite/data barrier.
-                    batch.RemoveLastCommand(command);
-
-                    break;
-                }
-
-                statements.Add((offset, statement.OperationCount));
-                offset += statement.OperationCount;
-                parameters += command.Parameters.Count;
-                payloadBytes += statementPayloadBytes;
-            }
-
-            var resultSet = 0;
-            await batch.ForEachResultSetAsync(
-                async (reader, token) =>
-                {
-                    if (resultSet >= statements.Count)
+                    var command = batch.CreateCommand();
+                    var statement = buildStatement(command, offset);
+                    if (statement.OperationCount <= 0
+                        || statement.OperationCount > SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement
+                        || statement.OperationCount > operationCount - offset
+                        || statement.ParameterPayloadBytes < 0
+                        || statement.FirstOrdinal < 0
+                        || string.IsNullOrEmpty(command.CommandText))
                     {
                         throw new InvalidOperationException(
-                            "The catalog probe transport returned an invalid result-set count. "
-                            + "Stop migration analysis; inspect the provider contract and report this invariant "
-                            + "failure using redacted evidence.");
+                            "The catalog probe builder returned an invalid statement. Stop migration analysis; "
+                            + "inspect the provider contract and report this invariant failure "
+                            + "using redacted evidence.");
                     }
 
-                    var statement = statements[resultSet];
-                    await readStatement(reader, statement.Offset, statement.Count, token);
-                    resultSet++;
-                },
-                cancellationToken);
+                    var statementPayloadBytes = checked(
+                        Encoding.UTF8.GetByteCount(command.CommandText) + statement.ParameterPayloadBytes);
 
-            if (resultSet != statements.Count)
+                    if (command.Parameters.Count > maximumParameters
+                        || SafeMigrationCatalogQueryLimits.Exceeded(
+                            command.Parameters.Count,
+                            statementPayloadBytes,
+                            maximumPayloadBytes))
+                    {
+                        throw SafeMigrationCatalogQueryLimits.OversizedOperation(
+                            statement.FirstOrdinal,
+                            command.Parameters.Count,
+                            statementPayloadBytes);
+                    }
+
+                    if (parameters + command.Parameters.Count > maximumParameters
+                        || SafeMigrationCatalogQueryLimits.Exceeded(
+                            parameters + command.Parameters.Count,
+                            checked(payloadBytes + statementPayloadBytes),
+                            maximumPayloadBytes))
+                    {
+                        // WHY: Candidate SQL and evidence are immutable within this
+                        // phase. Rebuild the unsubmitted statement in the next batch,
+                        // never cache live results or cross a prerequisite/data barrier.
+                        batch.RemoveLastCommand(command);
+
+                        break;
+                    }
+
+                    statements.Add((offset, statement.OperationCount));
+                    offset += statement.OperationCount;
+                    parameters += command.Parameters.Count;
+                    payloadBytes += statementPayloadBytes;
+                }
+
+                var resultSet = 0;
+                await batch.ForEachResultSetAsync(
+                    async (reader, callbackCancellationToken) =>
+                    {
+                        if (resultSet >= statements.Count)
+                        {
+                            throw new InvalidOperationException(
+                                "The catalog probe transport returned an invalid result-set count. "
+                                + "Stop migration analysis; inspect the provider contract and report this invariant "
+                                + "failure using redacted evidence.");
+                        }
+
+                        var statement = statements[resultSet];
+                        await readStatement(reader, statement.Offset, statement.Count, callbackCancellationToken);
+                        resultSet++;
+                    },
+                    cancellationToken);
+
+                if (resultSet != statements.Count)
+                {
+                    throw new InvalidOperationException(
+                        "The catalog probe transport returned an inconsistent result-set count. "
+                        + "Stop migration analysis; inspect the provider contract and report this invariant "
+                        + "failure using redacted evidence.");
+                }
+            }
+            catch (Exception exception)
             {
-                throw new InvalidOperationException(
-                    "The catalog probe transport returned an inconsistent result-set count. "
-                    + "Stop migration analysis; inspect the provider contract and report this invariant "
-                    + "failure using redacted evidence.");
+                probeFailure = exception;
+
+                throw;
+            }
+            finally
+            {
+                await SafeMigrationAnalysisCleanup.DisposeAsync(
+                    batch,
+                    probeFailure,
+                    "SafeMigrations.CatalogBatchDisposeException");
             }
         }
     }

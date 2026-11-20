@@ -193,13 +193,21 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                 Occupy(primary.Name, "p");
             }
 
-            foreach (var unique in table.Definition.UniqueConstraints)
+            // WHY: This pass only reads the stable ordered collection by ordinal.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var uniqueIndex = 0; uniqueIndex < table.Definition.UniqueConstraints.Count; uniqueIndex++)
             {
+                var unique = table.Definition.UniqueConstraints[uniqueIndex];
                 Occupy(unique.Name, "u");
             }
 
-            foreach (var check in table.Definition.CheckConstraints)
+            // WHY: This pass only reads the stable ordered collection by ordinal.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var checkIndex = 0; checkIndex < table.Definition.CheckConstraints.Count; checkIndex++)
             {
+                var check = table.Definition.CheckConstraints[checkIndex];
                 Occupy(check.Name, "c");
             }
 
@@ -322,7 +330,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes,
             commandTimeout,
             (command, offset) => BuildLivePrerequisiteStatement(command, requests, offset),
-            async (reader, offset, count, token) =>
+            async (reader, offset, count, callbackCancellationToken) =>
             {
                 if (reader.FieldCount != 9)
                 {
@@ -338,7 +346,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                 var bothOwnersExist = false;
                 var dependentExists = false;
                 string? collisionKind = null;
-                while (await reader.ReadAsync(token))
+                while (await reader.ReadAsync(callbackCancellationToken))
                 {
                     var ordinal = reader.GetInt32(0);
                     if (ordinal < offset
@@ -488,6 +496,8 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                     throw InvalidLivePrerequisiteEvidence();
                 }
 
+                return;
+
                 void PublishForeignKey()
                 {
                     if (currentOrdinal >= offset
@@ -504,7 +514,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                     }
                 }
             },
-            cancellationToken);
+            transaction: null,
+            maximumParameters: SafeMigrationCatalogQueryLimits.MaximumParameters,
+            cancellationToken: cancellationToken);
 
         var indexFacts = await CaptureIndexInputProofsAsync(
             connection,
@@ -561,32 +573,32 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         for (var ordinal = 0; ordinal < operations.Count; ordinal++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (operations[ordinal].Intent is EnsureColumnIntent column
-                && NeedsGeneratedCaseInputCapture(column, results[ordinal])
-                && IsDynamicGeneratedCaseRejection(results[ordinal])
-                && !liveColumns.ContainsKey(LiveColumnKey(column.Table, column.Schema, column.Definition.Name)))
+            switch (operations[ordinal].Intent)
             {
-                // WHY: The ordered protocol validated every requested member,
-                // including this exact target's absence. Unsupported binding
-                // alone says nothing about whether an ADD would be idempotent.
-                (caseCandidates ??= []).Add(ordinal);
-            }
-            else if (operations[ordinal].Intent is EnsureCheckConstraintIntent check
-                && NeedsGeneratedCaseInputCapture(check, results[ordinal])
-                && (results[ordinal].ObservedState == SafeMigrationObservedState.Missing
-                    || IsDynamicGeneratedCaseRejection(results[ordinal])))
-            {
-                // WHY: The CASE preliminary guard emits this mutable
-                // Unsupported state only for an independently absent CHECK;
-                // ordinary Missing has the same exact absence certificate.
-                // An occupied native name emits Different instead. Retain its
-                // exact symbol so accepted prefix creations expire that proof.
-                (caseCandidates ??= []).Add(ordinal);
-                (requestedNames ??= []).Add(
-                    LiveForeignKeyName(
-                        check.Definition.Table,
-                        check.Definition.Schema,
-                        check.Definition.Name));
+                case EnsureColumnIntent column when NeedsGeneratedCaseInputCapture(column, results[ordinal])
+                    && IsDynamicGeneratedCaseRejection(results[ordinal])
+                    && !liveColumns.ContainsKey(LiveColumnKey(column.Table, column.Schema, column.Definition.Name)):
+                    // WHY: The ordered protocol validated every requested member,
+                    // including this exact target's absence. Unsupported binding
+                    // alone says nothing about whether an ADD would be idempotent.
+                    (caseCandidates ??= []).Add(ordinal);
+                    break;
+                case EnsureCheckConstraintIntent check when NeedsGeneratedCaseInputCapture(check, results[ordinal])
+                    && (results[ordinal].ObservedState == SafeMigrationObservedState.Missing
+                        || IsDynamicGeneratedCaseRejection(results[ordinal])):
+                    // WHY: The CASE preliminary guard emits this mutable
+                    // Unsupported state only for an independently absent CHECK;
+                    // ordinary Missing has the same exact absence certificate.
+                    // An occupied native name emits Different instead. Retain its
+                    // exact symbol so accepted prefix creations expire that proof.
+                    (caseCandidates ??= []).Add(ordinal);
+                    (requestedNames ??= []).Add(
+                        LiveForeignKeyName(
+                            check.Definition.Table,
+                            check.Definition.Schema,
+                            check.Definition.Name));
+
+                    break;
             }
         }
 
@@ -677,15 +689,23 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                 ? GetIndexPrerequisiteColumns(index)
                 : NativePrerequisiteColumns(intent);
 
-            foreach (var column in local)
+            // WHY: This pass only reads the stable ordered collection by ordinal.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var columnIndex = 0; columnIndex < local.Count; columnIndex++)
             {
+                var column = local[columnIndex];
                 relevantColumns.Add(LiveColumnKey(owner.Table!, owner.Schema, column));
             }
 
             if (intent is EnsureForeignKeyIntent foreign)
             {
-                foreach (var column in foreign.Definition.PrincipalColumns)
+                // WHY: This pass only reads the stable ordered collection by ordinal.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
+                for (var columnIndex = 0; columnIndex < foreign.Definition.PrincipalColumns.Count; columnIndex++)
                 {
+                    var column = foreign.Definition.PrincipalColumns[columnIndex];
                     relevantColumns.Add(
                         LiveColumnKey(
                             foreign.Definition.PrincipalTable,
@@ -718,7 +738,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             }
         }
 
-        var requests = new List<LivePrerequisiteRequest>();
+        List<LivePrerequisiteRequest> requests = [];
         var priorColumns = new Dictionary<LiveColumnIdentity, ExpectedColumnDefinition>();
         var priorTypes = new Dictionary<LiveColumnIdentity, HashSet<LiveColumnTypeIdentity>>();
         var requestedColumns = new HashSet<LiveColumnIdentity>();
@@ -735,8 +755,12 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
 
             if (_providerIndexColumnProposals?.TryGetValue(ordinal, out var proposals) == true)
             {
-                foreach (var proposal in proposals)
+                // WHY: This pass only reads the stable ordered collection by ordinal.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
+                for (var proposalIndex = 0; proposalIndex < proposals.Count; proposalIndex++)
                 {
+                    var proposal = proposals[proposalIndex];
                     RecordColumn(
                         LiveColumnKey(proposal.Table, proposal.Schema, proposal.Definition.Name),
                         proposal.Definition);
@@ -752,57 +776,58 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                 continue;
             }
 
-            if (intent is EnsureTableIntent table)
+            switch (intent)
             {
-                foreach (var column in table.Definition.Columns)
-                {
-                    RecordColumn(LiveColumnKey(table.Definition.Table, table.Definition.Schema, column.Name), column);
-                }
-
-                continue;
-            }
-
-            if (intent is EnsureColumnIntent added)
-            {
-                if (NeedsGeneratedCaseInputCapture(intent, results[ordinal]))
-                {
-                    AddColumns(added.Table, added.Schema, NativePrerequisiteColumns(added));
-                    if (IsDynamicGeneratedCaseRejection(results[ordinal]))
+                case EnsureTableIntent table:
+                    // WHY: This pass only reads the stable ordered collection by ordinal.
+                    // ReSharper disable once ForCanBeConvertedToForeach
+                    // ReSharper disable once LoopCanBeConvertedToQuery
+                    for (var columnIndex = 0; columnIndex < table.Definition.Columns.Count; columnIndex++)
                     {
-                        AddColumns(added.Table, added.Schema, [added.Definition.Name]);
-                    }
-                }
-
-                RecordColumn(LiveColumnKey(added.Table, added.Schema, added.Definition.Name), added.Definition);
-
-                continue;
-            }
-
-            if (intent is AlterColumnIntent altered)
-            {
-                var key = LiveColumnKey(altered.Table, altered.Schema, altered.Definition.Name);
-                RecordColumn(key, altered.Definition);
-
-                continue;
-            }
-
-            if (intent is RenameColumnIntent rename
-                && priorColumns.TryGetValue(LiveColumnKey(rename.Table, rename.Schema, rename.Name), out var renamed))
-            {
-                var renamedKey = LiveColumnKey(rename.Table, rename.Schema, rename.NewName);
-                RecordColumn(renamedKey, renamed);
-                if (priorTypes.TryGetValue(LiveColumnKey(rename.Table, rename.Schema, rename.Name), out var oldTypes))
-                {
-                    if (!priorTypes.TryGetValue(renamedKey, out var renamedTypes))
-                    {
-                        renamedTypes = [];
-                        priorTypes.Add(renamedKey, renamedTypes);
+                        var column = table.Definition.Columns[columnIndex];
+                        RecordColumn(
+                            LiveColumnKey(table.Definition.Table, table.Definition.Schema, column.Name),
+                            column);
                     }
 
-                    renamedTypes.UnionWith(oldTypes);
-                }
+                    continue;
+                case EnsureColumnIntent added:
+                    if (NeedsGeneratedCaseInputCapture(intent, results[ordinal]))
+                    {
+                        AddColumns(added.Table, added.Schema, NativePrerequisiteColumns(added));
+                        if (IsDynamicGeneratedCaseRejection(results[ordinal]))
+                        {
+                            AddColumns(added.Table, added.Schema, [added.Definition.Name]);
+                        }
+                    }
 
-                continue;
+                    RecordColumn(LiveColumnKey(added.Table, added.Schema, added.Definition.Name), added.Definition);
+
+                    continue;
+                case AlterColumnIntent altered:
+                    var key = LiveColumnKey(altered.Table, altered.Schema, altered.Definition.Name);
+                    RecordColumn(key, altered.Definition);
+
+                    continue;
+                case RenameColumnIntent rename
+                    when priorColumns.TryGetValue(LiveColumnKey(rename.Table, rename.Schema, rename.Name),
+                        out var renamed):
+                    var renamedKey = LiveColumnKey(rename.Table, rename.Schema, rename.NewName);
+                    RecordColumn(renamedKey, renamed);
+                    if (priorTypes.TryGetValue(
+                        LiveColumnKey(rename.Table, rename.Schema, rename.Name),
+                        out var oldTypes))
+                    {
+                        if (!priorTypes.TryGetValue(renamedKey, out var renamedTypes))
+                        {
+                            renamedTypes = [];
+                            priorTypes.Add(renamedKey, renamedTypes);
+                        }
+
+                        renamedTypes.UnionWith(oldTypes);
+                    }
+
+                    continue;
             }
 
             if (!(results[ordinal].ObservedState == SafeMigrationObservedState.PrerequisiteMissing
@@ -842,28 +867,30 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             }
 
             AddColumns(owner.Table!, owner.Schema, local);
-            if (intent is EnsureCheckConstraintIntent { Definition.Expression: { } expression })
+            switch (intent)
             {
-                foreach (var type in CheckExpressionTypeIdentities(expression))
-                {
-                    if (requestedTypes.Add(type))
+                case EnsureCheckConstraintIntent { Definition.Expression: { } expression }:
+                    foreach (var type in CheckExpressionTypeIdentities(expression))
                     {
-                        requests.Add(new LiveColumnTypeRequest(type));
+                        if (requestedTypes.Add(type))
+                        {
+                            requests.Add(new LiveColumnTypeRequest(type));
+                        }
                     }
-                }
-            }
 
-            if (intent is EnsureForeignKeyIntent foreign)
-            {
-                AddColumns(
-                    foreign.Definition.PrincipalTable,
-                    foreign.Definition.PrincipalSchema,
-                    foreign.Definition.PrincipalColumns);
+                    break;
+                case EnsureForeignKeyIntent foreign:
+                    AddColumns(
+                        foreign.Definition.PrincipalTable,
+                        foreign.Definition.PrincipalSchema,
+                        foreign.Definition.PrincipalColumns);
 
-                if (requestedForeignKeys.Add(foreign.Definition))
-                {
-                    requests.Add(new LiveForeignKeyRequest(foreign.Definition));
-                }
+                    if (requestedForeignKeys.Add(foreign.Definition))
+                    {
+                        requests.Add(new LiveForeignKeyRequest(foreign.Definition));
+                    }
+
+                    break;
             }
         }
 
@@ -875,8 +902,12 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             IReadOnlyList<string> columns
         )
         {
-            foreach (var column in columns)
+            // WHY: This pass only reads the stable ordered collection by ordinal.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var columnIndex = 0; columnIndex < columns.Count; columnIndex++)
             {
+                var column = columns[columnIndex];
                 var key = LiveColumnKey(table, schema, column);
                 if (requestedColumns.Add(key))
                 {
@@ -885,6 +916,8 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
 
                 if (priorTypes.TryGetValue(key, out var types))
                 {
+                    // WHY: Keep the HashSet's struct enumerator and perform one insertion per observed type.
+                    // ReSharper disable once ForeachCanBeConvertedToQueryUsingAnotherGetEnumerator
                     foreach (var type in types)
                     {
                         if (requestedTypes.Add(type))
@@ -967,7 +1000,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     )
     {
         using var parameters = new PostgreSqlCatalogQueryParameters(command, _typeMappingSource);
-        var selections = new List<string>();
+        List<string> selections = [];
         var sqlBytes = Encoding.UTF8.GetByteCount(SafeMigrationCatalogQueryLimits.Trailer);
         while (offset + selections.Count < requests.Count
             && selections.Count < SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
@@ -1204,8 +1237,19 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     private sealed record LiveForeignKeyRequest(ExpectedForeignKeyDefinition Definition) : LivePrerequisiteRequest;
 
     /// <summary>Deduplicates exact ordered FK metadata bindings without delimiter-sensitive string encodings.</summary>
-    private sealed class LiveForeignKeyComparer(string? currentSchema) : IEqualityComparer<ExpectedForeignKeyDefinition>
+    private sealed class LiveForeignKeyComparer : IEqualityComparer<ExpectedForeignKeyDefinition>
     {
+        private readonly string? _currentSchema;
+
+        /// <summary>Retains the observed schema used to compare physically equivalent qualifiers.</summary>
+        /// <param name="currentSchema">The invocation's independently observed current schema.</param>
+        internal LiveForeignKeyComparer(
+            string? currentSchema
+        )
+        {
+            _currentSchema = currentSchema;
+        }
+
         public bool Equals(
             ExpectedForeignKeyDefinition? left,
             ExpectedForeignKeyDefinition? right
@@ -1215,10 +1259,10 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                 && left.Name == right.Name
                 && left.Table == right.Table
                 && left.PrincipalTable == right.PrincipalTable
-                && PostgreSqlSafeMigrationSchemaIdentity.Normalize(left.Schema, currentSchema)
-                == PostgreSqlSafeMigrationSchemaIdentity.Normalize(right.Schema, currentSchema)
-                && PostgreSqlSafeMigrationSchemaIdentity.Normalize(left.PrincipalSchema, currentSchema)
-                == PostgreSqlSafeMigrationSchemaIdentity.Normalize(right.PrincipalSchema, currentSchema)
+                && PostgreSqlSafeMigrationSchemaIdentity.Normalize(left.Schema, _currentSchema)
+                == PostgreSqlSafeMigrationSchemaIdentity.Normalize(right.Schema, _currentSchema)
+                && PostgreSqlSafeMigrationSchemaIdentity.Normalize(left.PrincipalSchema, _currentSchema)
+                == PostgreSqlSafeMigrationSchemaIdentity.Normalize(right.PrincipalSchema, _currentSchema)
                 && left.Columns.SequenceEqual(right.Columns, StringComparer.Ordinal)
                 && left.PrincipalColumns.SequenceEqual(right.PrincipalColumns, StringComparer.Ordinal));
 
@@ -1230,22 +1274,31 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             hash.Add(definition.Name, StringComparer.Ordinal);
             hash.Add(definition.Table, StringComparer.Ordinal);
             hash.Add(
-                PostgreSqlSafeMigrationSchemaIdentity.Normalize(definition.Schema, currentSchema),
+                PostgreSqlSafeMigrationSchemaIdentity.Normalize(definition.Schema, _currentSchema),
                 StringComparer.Ordinal);
 
             hash.Add(definition.PrincipalTable, StringComparer.Ordinal);
             hash.Add(
-                PostgreSqlSafeMigrationSchemaIdentity.Normalize(definition.PrincipalSchema, currentSchema),
+                PostgreSqlSafeMigrationSchemaIdentity.Normalize(definition.PrincipalSchema, _currentSchema),
                 StringComparer.Ordinal);
 
             hash.Add(definition.Columns.Count);
-            foreach (var column in definition.Columns)
+
+            // WHY: This pass only reads the stable ordered collection by ordinal.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var columnIndex = 0; columnIndex < definition.Columns.Count; columnIndex++)
             {
+                var column = definition.Columns[columnIndex];
                 hash.Add(column, StringComparer.Ordinal);
             }
 
-            foreach (var column in definition.PrincipalColumns)
+            // WHY: This pass only reads the stable ordered collection by ordinal.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var columnIndex = 0; columnIndex < definition.PrincipalColumns.Count; columnIndex++)
             {
+                var column = definition.PrincipalColumns[columnIndex];
                 hash.Add(column, StringComparer.Ordinal);
             }
 

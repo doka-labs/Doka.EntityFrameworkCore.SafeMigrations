@@ -1,6 +1,3 @@
-using System.Xml.Linq;
-using TypeFilter = BenchmarkDotNet.Running.TypeFilter;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
 /// <summary>Pins native job, filter and artifact behavior while binding only source-project discovery.</summary>
@@ -51,7 +48,7 @@ public sealed class BenchmarkProgramSourceBoundTests
         Assert.Equal(nativeToolchain.Name, boundToolchain.Name);
         Assert.Same(nativeToolchain.Builder, boundToolchain.Builder);
         Assert.Same(nativeToolchain.Executor, boundToolchain.Executor);
-        var boundGenerator = Assert.IsAssignableFrom<CsProjGenerator>(boundToolchain.Generator);
+        var boundGenerator = Assert.IsType<CsProjGenerator>(boundToolchain.Generator, exactMatch: false);
         Assert.Equal(nativeGenerator.TargetFrameworkMoniker, boundGenerator.TargetFrameworkMoniker);
         Assert.Equal(nativeGenerator.CliPath, boundGenerator.CliPath);
         Assert.Equal(nativeGenerator.PackagesPath, boundGenerator.PackagesPath);

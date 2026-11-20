@@ -136,6 +136,9 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
     public int ModelManagedDependencyCount { get; init; }
 
     /// <summary>Renders only surviving generated-member metadata, without reading application rows.</summary>
+
+    // WHY: Bind the nullable plan member once before invoking the template renderer.
+    // ReSharper disable once InlineTemporaryVariable
     internal string RenderDropLeavesNoGeneratedColumnsExpression(
         Func<MySqlCatalogParameterValue, string> renderValue
     ) => DropLeavesNoGeneratedColumnsExpression is { } expression
@@ -143,6 +146,9 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
         : throw new InvalidOperationException("The DROP plan has no generated-member completeness predicate.");
 
     /// <summary>Renders native source grammar without substituting a missing application table for evidence.</summary>
+
+    // WHY: Keep the proven non-null syntax fragment bound to this one render operation.
+    // ReSharper disable once InlineTemporaryVariable
     internal string RenderCapturedSourceSyntaxExpression(
         Func<MySqlCatalogParameterValue, string> renderValue
     ) => CapturedSourceSyntaxExpression is { } syntax
@@ -150,6 +156,9 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
         : "TRUE";
 
     /// <summary>Renders only name/semantic index identity, never physical width or unique-row predicates.</summary>
+
+    // WHY: Retain the non-null name predicate captured by this branch rather than rereading the plan member.
+    // ReSharper disable once InlineTemporaryVariable
     internal string RenderProjectedIndexIdentityExpression(
         Func<MySqlCatalogParameterValue, string> renderValue
     ) => IndexNameExistsExpression is { } exists
@@ -560,11 +569,12 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
             return rendered;
         }
 
-        var replacement = dataBlocked is null
-            ? RenderTemplate(DataProbe.BuildBlockedExpression(), ParameterValues, renderValue)
-            : dataBlocked.Value
-                ? "TRUE"
-                : "FALSE";
+        var replacement = dataBlocked switch
+        {
+            null => RenderTemplate(DataProbe.BuildBlockedExpression(), ParameterValues, renderValue),
+            true => "TRUE",
+            false => "FALSE",
+        };
 
         return rendered.Replace(DataProbePlaceholder, replacement, StringComparison.Ordinal);
     }
@@ -616,25 +626,37 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
             return rendered;
         }
 
-        var dataReplacement = DataProbe is null
-            ? "FALSE"
-            : dataBlocked is null
-                ? RenderTemplate(DataProbe.BuildBlockedExpression(), ParameterValues, renderValue)
-                : dataBlocked.Value
-                    ? "TRUE"
-                    : "FALSE";
+        var dataReplacement = DataProbe switch
+        {
+            null => "FALSE",
 
-        var transitionReplacement = DataProbe is null
-            ? "FALSE"
-            : transitionEligible is null
-                ? RenderTemplate(
-                    DataProbe.TransitionInvariantExpression
+            // WHY: One probe binding supplies both native-null and externally completed proof paths.
+            // ReSharper disable once InlineTemporaryVariable
+            var probe => dataBlocked switch
+            {
+                null => RenderTemplate(probe.BuildBlockedExpression(), ParameterValues, renderValue),
+                true => "TRUE",
+                false => "FALSE",
+            },
+        };
+
+        var transitionReplacement = DataProbe switch
+        {
+            null => "FALSE",
+
+            // WHY: Keep the transition invariant bound to the same probe tested by this switch.
+            // ReSharper disable once InlineTemporaryVariable
+            var probe => transitionEligible switch
+            {
+                null => RenderTemplate(
+                    probe.TransitionInvariantExpression
                     ?? throw new InvalidOperationException("The runtime plan has no transition evidence."),
                     ParameterValues,
-                    renderValue)
-                : transitionEligible.Value
-                    ? "TRUE"
-                    : "FALSE";
+                    renderValue),
+                true => "TRUE",
+                false => "FALSE",
+            },
+        };
 
         var repairInvariantReplacement = NullabilityDataProbe is null
             ? "FALSE"
@@ -820,17 +842,16 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
                 // WHY: Valid names and values may equal an internal proof token.
                 // Doka renders mode-independent literals (quote doubling or hex),
                 // and identifiers escape quotes by doubling, never by backslash.
-                var quote = character;
                 var closed = false;
                 while (++index < sql.Length)
                 {
-                    if (sql[index] != quote)
+                    if (sql[index] != character)
                     {
                         continue;
                     }
 
                     if (index + 1 < sql.Length
-                        && sql[index + 1] == quote)
+                        && sql[index + 1] == character)
                     {
                         index++;
 

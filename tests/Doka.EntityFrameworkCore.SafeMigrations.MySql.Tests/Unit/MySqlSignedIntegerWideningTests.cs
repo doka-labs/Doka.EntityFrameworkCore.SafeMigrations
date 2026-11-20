@@ -125,8 +125,10 @@ public sealed class MySqlSignedIntegerWideningTests
 
     private static IReadOnlyList<SafeMigrationProviderAnnotation> AutoIncrementMetadata()
     {
-        var operation = new AddColumnOperation();
-        operation["Doka:MySql:ValueGenerationStrategy"] = MySqlValueGenerationStrategy.AutoIncrement;
+        var operation = new AddColumnOperation
+        {
+            ["Doka:MySql:ValueGenerationStrategy"] = MySqlValueGenerationStrategy.AutoIncrement,
+        };
 
         return SafeMigrationProviderAnnotation.Capture(operation);
     }

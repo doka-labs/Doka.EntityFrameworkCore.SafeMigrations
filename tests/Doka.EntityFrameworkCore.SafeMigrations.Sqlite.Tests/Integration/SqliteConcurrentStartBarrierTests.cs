@@ -21,7 +21,7 @@ public sealed class SqliteConcurrentStartBarrierTests
         using var cancellation = new CancellationTokenSource();
         if (cancelBeforeAdmission)
         {
-            cancellation.Cancel();
+            await cancellation.CancelAsync();
         }
 
         Exception? failure;
@@ -47,7 +47,10 @@ public sealed class SqliteConcurrentStartBarrierTests
                 start.RemoveParticipant();
             }
 
-            peer = Task.Run(() => ExecuteWorkerAsync(connectionString, start, CancellationToken.None));
+            // WHY: The awaited worker and failure drain finish before the owning barrier is disposed.
+            // ReSharper disable once AccessToDisposedClosure
+            peer = Task.Run(() => ExecuteWorkerAsync(connectionString, start, CancellationToken.None),
+                CancellationToken.None);
             await peer;
         }
         catch (Exception exception)
@@ -74,7 +77,7 @@ public sealed class SqliteConcurrentStartBarrierTests
         Assert.Equal(1, remainingParticipants);
         if (cancelBeforeAdmission)
         {
-            Assert.IsAssignableFrom<OperationCanceledException>(failure);
+            Assert.IsType<OperationCanceledException>(failure, exactMatch: false);
         }
         else
         {
@@ -100,10 +103,14 @@ public sealed class SqliteConcurrentStartBarrierTests
         try
         {
             // Act
+            // WHY: The finally block drains both actual workers before disposing their shared barrier.
+            // ReSharper disable once AccessToDisposedClosure
             first = Task.Run(() => ExecuteWorkerAsync(connectionString, start, CancellationToken.None));
             second = Task.Run(async () =>
             {
                 await releaseSecond.Task;
+                // WHY: The finally block releases and drains this worker before disposing its barrier.
+                // ReSharper disable once AccessToDisposedClosure
                 await ExecuteWorkerAsync(connectionString, start, CancellationToken.None);
             });
 

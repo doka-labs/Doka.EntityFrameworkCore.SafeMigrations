@@ -7,7 +7,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 public sealed class RepositoryWorkflowContractTests
 {
     private const string DependencyReviewAction =
-        "actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0";
+        "actions/dependency-review-action@bbc44d14a204704ccc493733616cd1e93a0321ec # v5.0.1";
 
     /// <summary>
     /// Keeps untrusted restore separate from snapshot writes and binds verdicts to the PR head.
@@ -75,6 +75,12 @@ public sealed class RepositoryWorkflowContractTests
         Assert.DoesNotContain("continue-on-error:", receiver, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Pins each approved SPDX license in the trusted review workflow without broadening the exception policy.
+    /// </summary>
+    /// <param name="license">
+    /// The approved SPDX license identifier required by the trusted review policy.
+    /// </param>
     [Theory]
     [InlineData("Apache-2.0")]
     [InlineData("BSD-2-Clause")]
@@ -89,9 +95,13 @@ public sealed class RepositoryWorkflowContractTests
         string license
     )
     {
-        var workflow = File.ReadAllText(
-            Path.Combine(RepositoryRoot(), ".github", "workflows", "dependency-review-results.yml"));
+        // Arrange
+        var path = Path.Combine(RepositoryRoot(), ".github", "workflows", "dependency-review-results.yml");
 
+        // Act
+        var workflow = File.ReadAllText(path);
+
+        // Assert
         Assert.Contains(license, workflow, StringComparison.Ordinal);
     }
 
@@ -140,9 +150,14 @@ public sealed class RepositoryWorkflowContractTests
         Assert.DoesNotContain("continue-on-error:", ci + receiver, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Matches documented failure codes to the actual MySQL constraint producer and retains dependency-handoff
+    /// guidance.
+    /// </summary>
     [Fact]
     public void FailureCodeRunbook_CoversGeneratedConstraintAndDependencyCodes()
     {
+        // Arrange
         var repositoryRoot = RepositoryRoot();
         var runbook = File.ReadAllText(
             Path.Combine(repositoryRoot, "docs", "runbooks", "failure-codes.md"));
@@ -155,10 +170,11 @@ public sealed class RepositoryWorkflowContractTests
                 "Analysis",
                 "MySqlSafeMigrationProviderAnalyzer.Indexes.cs"));
 
+        // Act
         var prefixes = Regex
             .Matches(
                 analyzer,
-                "QualifyProjectedConstraint\\(\\s*result,\\s*liveAnalysis,\\s*projectedAnalysis,"
+                @"QualifyProjectedConstraint\(\s*result,\s*liveAnalysis,\s*projectedAnalysis,"
                 + "\\s*\"(?<value>[a-z_]+)\"\\);",
                 RegexOptions.CultureInvariant)
             .Select(static match => match.Groups["value"].Value)
@@ -174,6 +190,7 @@ public sealed class RepositoryWorkflowContractTests
             .Distinct(StringComparer.Ordinal)
             .ToArray();
 
+        // Assert
         Assert.Equal(["primary_key", "unique_constraint"], prefixes);
         Assert.Equal(
             [

@@ -1,5 +1,3 @@
-using System.Buffers;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite;
 
 /// <summary>Matches native constraint vectors without reusing an authored or required physical slot.</summary>

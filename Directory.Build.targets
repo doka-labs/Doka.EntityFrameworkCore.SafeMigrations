@@ -1,0 +1,15 @@
+<Project>
+  <!-- WHY: All shipped adapters use Core internals. The pack SDK collects the actual
+       referenced project's PackageVersion late, so constrain that own-package edge
+       only after collection. External dependency ranges remain untouched. -->
+  <Target Name="PinSafeMigrationsCorePrivateAbi"
+          AfterTargets="_GetProjectReferenceVersions"
+          Condition="'$(IsPackable)' == 'true'">
+    <ItemGroup>
+      <_ProjectReferencesWithVersions
+        Condition="'%(_ProjectReferencesWithVersions.Filename)' == 'Doka.EntityFrameworkCore.SafeMigrations'">
+        <ProjectVersion>[%(_ProjectReferencesWithVersions.ProjectVersion)]</ProjectVersion>
+      </_ProjectReferencesWithVersions>
+    </ItemGroup>
+  </Target>
+</Project>

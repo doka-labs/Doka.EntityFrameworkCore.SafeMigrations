@@ -4,6 +4,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// Contains the deterministic action and stable low-cardinality result code
 /// selected by the provider-neutral planner.
 /// </summary>
+[PublicAPI]
 public sealed class SafeMigrationDecision
 {
     internal SafeMigrationDecision(

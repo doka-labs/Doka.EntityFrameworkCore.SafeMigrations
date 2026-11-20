@@ -1,12 +1,10 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
+/// <summary>
+/// Pins stream identity against operation order, policy, structural facets and caller-owned mutable value snapshots.
+/// </summary>
 public sealed partial class SafeMigrationContractFingerprintTests
 {
-    private static void AssertDifferent(
-        SafeMigrationIntent first,
-        SafeMigrationIntent second
-    ) => Assert.NotEqual(Fingerprint(first), Fingerprint(second));
-
     private static string Fingerprint(
         SafeMigrationIntent intent
     ) => SafeMigrationContractFingerprint.Create(Operations(intent));

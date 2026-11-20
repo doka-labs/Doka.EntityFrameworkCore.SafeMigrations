@@ -3,6 +3,9 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 /// <summary>Exercises operation matrix with independently owned SQLite state.</summary>
 public sealed class SqliteSafeMigrationOperationMatrixIntegrationTests : SqliteSafeMigrationCatalogIntegrationTests
 {
+    /// <summary>
+    /// Existing table drop rename and independent add apply in one structural batch.
+    /// </summary>
     [Fact]
     public async Task ExistingTableDropRenameAndIndependentAdd_ApplyInOneStructuralBatch()
     {
@@ -32,24 +35,31 @@ public sealed class SqliteSafeMigrationOperationMatrixIntegrationTests : SqliteS
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
 
+        var observedScalar1 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM column_transition "
+            + "WHERE Id = 1 AND renamed_code = 'kept' AND AddedCode IS NULL;",
+            cancellationToken: CancellationToken.None);
+
+        var observedScalar2 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM pragma_table_xinfo('column_transition') "
+            + "WHERE name IN ('old_code', 'LegacyCode');",
+            cancellationToken: CancellationToken.None);
+
         // Assert
         Assert.Equal(
             1,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM column_transition "
-                + "WHERE Id = 1 AND renamed_code = 'kept' AND AddedCode IS NULL;",
-                cancellationToken: CancellationToken.None));
+            observedScalar1);
 
         Assert.Equal(
             0,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM pragma_table_xinfo('column_transition') "
-                + "WHERE name IN ('old_code', 'LegacyCode');",
-                cancellationToken: CancellationToken.None));
+            observedScalar2);
     }
 
+    /// <summary>
+    /// Existing table rename does not trust stale definition of renamed target.
+    /// </summary>
     [Fact]
     public async Task ExistingTableRename_DoesNotTrustStaleDefinitionOfRenamedTarget()
     {
@@ -74,19 +84,25 @@ public sealed class SqliteSafeMigrationOperationMatrixIntegrationTests : SqliteS
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None));
 
+        var observedScalar1 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM pragma_table_xinfo('rename_target') WHERE name = 'old_code';",
+            cancellationToken: CancellationToken.None);
+
         // Assert
         Assert.Contains("projected_structure_state_unknown", exception.Message, StringComparison.Ordinal);
         Assert.Equal(
             1,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM pragma_table_xinfo('rename_target') WHERE name = 'old_code';",
-                cancellationToken: CancellationToken.None));
+            observedScalar1);
     }
 
+    /// <summary>
+    /// Table lifecycle create rename drop and replay remain idempotent.
+    /// </summary>
     [Fact]
     public async Task TableLifecycle_CreateRenameDropAndReplayRemainIdempotent()
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var runner = context.GetService<ISafeMigrationRunner>();
@@ -104,6 +120,7 @@ public sealed class SqliteSafeMigrationOperationMatrixIntegrationTests : SqliteS
         var drop = new MigrationBuilder(context.Database.ProviderName!);
         drop.DropTableIfExists("lifecycle_target");
 
+        // Act
         await ExecuteOperationsAsync(context, create.Operations, cancellationToken: CancellationToken.None);
         await ExecuteOperationsAsync(context, create.Operations, cancellationToken: CancellationToken.None);
         await ExecuteOperationsAsync(context, rename.Operations, cancellationToken: CancellationToken.None);
@@ -117,21 +134,28 @@ public sealed class SqliteSafeMigrationOperationMatrixIntegrationTests : SqliteS
             new SafeMigrationRunOptions("sqlite-table-lifecycle-replay"),
             cancellationToken: CancellationToken.None);
 
+        var observedScalar1 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM main.sqlite_schema "
+            + "WHERE type = 'table' AND name IN ('lifecycle_source', 'lifecycle_target');",
+            cancellationToken: CancellationToken.None);
+
+        // Assert
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal(SafeMigrationAction.NoOp, assessment.Action);
         Assert.True(assessment.PostconditionSatisfied);
         Assert.Equal(
             0,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM main.sqlite_schema "
-                + "WHERE type = 'table' AND name IN ('lifecycle_source', 'lifecycle_target');",
-                cancellationToken: CancellationToken.None));
+            observedScalar1);
     }
 
+    /// <summary>
+    /// Column lifecycle default rename alter and drop preserve existing rows.
+    /// </summary>
     [Fact]
     public async Task ColumnLifecycle_DefaultRenameAlterAndDropPreserveExistingRows()
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
@@ -166,6 +190,7 @@ public sealed class SqliteSafeMigrationOperationMatrixIntegrationTests : SqliteS
             new ExpectedColumnDefinition("Code", typeof(string), isNullable: true, storeType: "TEXT"),
             SafeMigrationPolicy.RepairIfSafe);
 
+        // Act
         await ExecuteOperationsAsync(context, add.Operations, cancellationToken: CancellationToken.None);
         await ExecuteOperationsAsync(context, rename.Operations, cancellationToken: CancellationToken.None);
         await ExecuteOperationsAsync(context, rebuild.Operations, cancellationToken: CancellationToken.None);
@@ -179,30 +204,37 @@ public sealed class SqliteSafeMigrationOperationMatrixIntegrationTests : SqliteS
                 new SafeMigrationRunOptions("sqlite-column-lifecycle-replay"),
                 cancellationToken: CancellationToken.None);
 
+        var observedScalar1 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM rebuild_entities WHERE Id = 1 AND Code = 'existing';",
+            cancellationToken: CancellationToken.None);
+
+        var observedScalar2 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM pragma_table_xinfo('rebuild_entities') "
+            + "WHERE name IN ('Legacy', 'Temporary', 'Renamed');",
+            cancellationToken: CancellationToken.None);
+
+        var observedScalar3 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM pragma_table_xinfo('rebuild_entities') "
+            + "WHERE name = 'Code' AND \"notnull\" = 1;",
+            cancellationToken: CancellationToken.None);
+
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
         Assert.All(report.Assessments, assessment => Assert.Equal(SafeMigrationAction.NoOp, assessment.Action));
         Assert.Equal(
             1,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM rebuild_entities WHERE Id = 1 AND Code = 'existing';",
-                cancellationToken: CancellationToken.None));
+            observedScalar1);
 
         Assert.Equal(
             0,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM pragma_table_xinfo('rebuild_entities') "
-                + "WHERE name IN ('Legacy', 'Temporary', 'Renamed');",
-                cancellationToken: CancellationToken.None));
+            observedScalar2);
 
         Assert.Equal(
             1,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM pragma_table_xinfo('rebuild_entities') "
-                + "WHERE name = 'Code' AND \"notnull\" = 1;",
-                cancellationToken: CancellationToken.None));
+            observedScalar3);
     }
 
     /// <summary>A generated arithmetic column applies, replays and retains its physical SQLite facets.</summary>
@@ -244,6 +276,12 @@ public sealed class SqliteSafeMigrationOperationMatrixIntegrationTests : SqliteS
                 new SafeMigrationRunOptions("sqlite-generated-columns-replay"),
                 cancellationToken: CancellationToken.None);
 
+        var observedScalar1 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM pragma_table_xinfo('generated_values') "
+            + "WHERE name = 'sum_value' AND hidden = 2 AND \"notnull\" = 1;",
+            cancellationToken: CancellationToken.None);
+
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
         Assert.Equal(SafeMigrationAction.NoOp,
@@ -252,11 +290,7 @@ public sealed class SqliteSafeMigrationOperationMatrixIntegrationTests : SqliteS
 
         Assert.Equal(
             1,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM pragma_table_xinfo('generated_values') "
-                + "WHERE name = 'sum_value' AND hidden = 2 AND \"notnull\" = 1;",
-                cancellationToken: CancellationToken.None));
+            observedScalar1);
     }
 
     /// <summary>A string default and collation apply, replay and match their physical persisted facets.</summary>
@@ -308,9 +342,13 @@ public sealed class SqliteSafeMigrationOperationMatrixIntegrationTests : SqliteS
         Assert.Equal("NOCASE", column.Collation);
     }
 
+    /// <summary>
+    /// Stored generated column add is rejected before DDL.
+    /// </summary>
     [Fact]
     public async Task StoredGeneratedColumnAdd_IsRejectedBeforeDdl()
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
@@ -333,6 +371,7 @@ public sealed class SqliteSafeMigrationOperationMatrixIntegrationTests : SqliteS
                 isStored: true),
             SafeMigrationPolicy.ThrowIfDifferent);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -341,18 +380,27 @@ public sealed class SqliteSafeMigrationOperationMatrixIntegrationTests : SqliteS
                 new SafeMigrationRunOptions("sqlite-stored-generated-column"),
                 cancellationToken: CancellationToken.None);
 
+        var observedScalar1 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM pragma_table_xinfo('generated_values') WHERE name = 'sum_value';",
+            cancellationToken: CancellationToken.None);
+
+        // Assert
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal(SafeMigrationObservedState.Unsupported, assessment.ObservedState);
         Assert.Equal("stored_generated_column_add", assessment.AnalysisCode);
         Assert.Equal(SafeMigrationAction.RejectUnsupported, assessment.Action);
         Assert.Equal(
             0,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM pragma_table_xinfo('generated_values') WHERE name = 'sum_value';",
-                cancellationToken: CancellationToken.None));
+            observedScalar1);
     }
 
+    /// <summary>
+    /// Unsupported column facets fail closed before DDL.
+    /// </summary>
+    /// <param name="rowVersion">The row version defining this isolated fixture case.</param>
+    /// <param name="comment">The comment defining this isolated fixture case.</param>
+    /// <param name="expectedCode">The exact expected code.</param>
     [Theory]
     [InlineData(true, false, "row_version")]
     [InlineData(false, true, "column_comments")]
@@ -362,6 +410,7 @@ public sealed class SqliteSafeMigrationOperationMatrixIntegrationTests : SqliteS
         string expectedCode
     )
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
@@ -380,6 +429,7 @@ public sealed class SqliteSafeMigrationOperationMatrixIntegrationTests : SqliteS
                 ? "unsupported"
                 : null);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -388,17 +438,20 @@ public sealed class SqliteSafeMigrationOperationMatrixIntegrationTests : SqliteS
                 new SafeMigrationRunOptions("sqlite-unsupported-column"),
                 cancellationToken: CancellationToken.None);
 
+        var observedScalar1 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM pragma_table_xinfo('unsupported_columns') "
+            + "WHERE name = 'unsupported_value';",
+            cancellationToken: CancellationToken.None);
+
+        // Assert
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal(SafeMigrationObservedState.Unsupported, assessment.ObservedState);
         Assert.Equal(expectedCode, assessment.AnalysisCode);
         Assert.Equal(SafeMigrationAction.RejectUnsupported, assessment.Action);
         Assert.Equal(
             0,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM pragma_table_xinfo('unsupported_columns') "
-                + "WHERE name = 'unsupported_value';",
-                cancellationToken: CancellationToken.None));
+            observedScalar1);
     }
 
     /// <summary>The SQLite main schema is already present and needs no migration command.</summary>
@@ -476,9 +529,13 @@ public sealed class SqliteSafeMigrationOperationMatrixIntegrationTests : SqliteS
         Assert.Equal(SafeMigrationAction.RejectUnsupported, assessment.Action);
     }
 
+    /// <summary>
+    /// Virtual table mutation is rejected without catalog damage.
+    /// </summary>
     [Fact]
     public async Task VirtualTableMutation_IsRejectedWithoutCatalogDamage()
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
@@ -493,6 +550,7 @@ public sealed class SqliteSafeMigrationOperationMatrixIntegrationTests : SqliteS
             type: "TEXT",
             nullable: true);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -501,15 +559,18 @@ public sealed class SqliteSafeMigrationOperationMatrixIntegrationTests : SqliteS
                 new SafeMigrationRunOptions("sqlite-virtual-table"),
                 cancellationToken: CancellationToken.None);
 
+        var observedScalar1 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM main.sqlite_schema "
+            + "WHERE type = 'table' AND name = 'search_documents';",
+            cancellationToken: CancellationToken.None);
+
+        // Assert
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal(SafeMigrationObservedState.Unsupported, assessment.ObservedState);
         Assert.Equal("virtual_table", assessment.AnalysisCode);
         Assert.Equal(
             1,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM main.sqlite_schema "
-                + "WHERE type = 'table' AND name = 'search_documents';",
-                cancellationToken: CancellationToken.None));
+            observedScalar1);
     }
 }

@@ -117,15 +117,18 @@ public sealed class SafeMigrationCatalogWorkOrderTests
         int count
     )
     {
+        // Arrange
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
         var calls = 0;
 
+        // Act
         var exception = Record.Exception(() => SafeMigrationCatalogWorkOrder.Create(
             count,
             _ => ++calls > 0,
             cancellation.Token));
 
+        // Assert
         Assert.IsType<OperationCanceledException>(exception);
         Assert.Equal(0, calls);
     }
@@ -134,9 +137,11 @@ public sealed class SafeMigrationCatalogWorkOrderTests
     [Fact]
     public void Create_ObservesCancellationDuringSelection()
     {
+        // Arrange
         using var cancellation = new CancellationTokenSource();
         var calls = 0;
 
+        // Act
         var exception = Record.Exception(() => SafeMigrationCatalogWorkOrder.Create(
             512,
             ordinal =>
@@ -151,6 +156,7 @@ public sealed class SafeMigrationCatalogWorkOrderTests
             },
             cancellation.Token));
 
+        // Assert
         Assert.IsType<OperationCanceledException>(exception);
         Assert.Equal(8, calls);
     }
@@ -159,9 +165,11 @@ public sealed class SafeMigrationCatalogWorkOrderTests
     [Fact]
     public void Create_ObservesCancellationAfterTheFinalPredicate()
     {
+        // Arrange
         using var cancellation = new CancellationTokenSource();
         var calls = 0;
 
+        // Act
         var exception = Record.Exception(() => SafeMigrationCatalogWorkOrder.Create(
             1,
             _ =>
@@ -173,6 +181,7 @@ public sealed class SafeMigrationCatalogWorkOrderTests
             },
             cancellation.Token));
 
+        // Assert
         Assert.IsType<OperationCanceledException>(exception);
         Assert.Equal(1, calls);
     }
@@ -181,11 +190,14 @@ public sealed class SafeMigrationCatalogWorkOrderTests
     [Fact]
     public void ValidateResultOrdinal_AcceptsTheNextSubmittedIdentity()
     {
+        // Arrange
         int[] submitted = [512, 514, 519];
         var consumed = 1;
 
+        // Act
         SafeMigrationCatalogWorkOrder.ValidateResultOrdinal(514, submitted, ref consumed);
 
+        // Assert
         Assert.Equal(2, consumed);
     }
 
@@ -202,12 +214,15 @@ public sealed class SafeMigrationCatalogWorkOrderTests
         int initialConsumed
     )
     {
+        // Arrange
         int[] submitted = [512, 514, 519];
         var consumed = initialConsumed;
 
+        // Act
         var exception = Record.Exception(() =>
             SafeMigrationCatalogWorkOrder.ValidateResultOrdinal(ordinal, submitted, ref consumed));
 
+        // Assert
         Assert.IsType<InvalidOperationException>(exception);
         Assert.Equal(initialConsumed, consumed);
     }
@@ -220,12 +235,15 @@ public sealed class SafeMigrationCatalogWorkOrderTests
         int count
     )
     {
+        // Arrange
         var submitted = Enumerable
             .Range(0, count)
             .ToArray();
 
+        // Act
         var exception = Record.Exception(() => SafeMigrationCatalogWorkOrder.ValidateCompletion(count, submitted));
 
+        // Assert
         Assert.Null(exception);
     }
 
@@ -239,10 +257,13 @@ public sealed class SafeMigrationCatalogWorkOrderTests
         int consumed
     )
     {
+        // Arrange
         int[] submitted = [512, 514, 519];
 
+        // Act
         var exception = Record.Exception(() => SafeMigrationCatalogWorkOrder.ValidateCompletion(consumed, submitted));
 
+        // Assert
         Assert.IsType<InvalidOperationException>(exception);
     }
 }

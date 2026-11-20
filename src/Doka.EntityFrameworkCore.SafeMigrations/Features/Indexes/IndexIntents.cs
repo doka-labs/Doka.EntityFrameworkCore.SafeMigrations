@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations;
 
 /// <summary>Represents ensuring an index exists.</summary>
+[PublicAPI]
 public sealed class EnsureIndexIntent : SafeMigrationIntent
 {
     /// <summary>Initializes the intent.</summary>
@@ -22,6 +23,7 @@ public sealed class EnsureIndexIntent : SafeMigrationIntent
 }
 
 /// <summary>Represents dropping an index when it exists.</summary>
+[PublicAPI]
 public sealed class DropIndexIntent : SafeMigrationIntent
 {
     /// <summary>Initializes the intent.</summary>
@@ -53,6 +55,7 @@ public sealed class DropIndexIntent : SafeMigrationIntent
 }
 
 /// <summary>Represents renaming an index when the source exists.</summary>
+[PublicAPI]
 public sealed class RenameIndexIntent : SafeMigrationIntent
 {
     /// <summary>Initializes the intent.</summary>

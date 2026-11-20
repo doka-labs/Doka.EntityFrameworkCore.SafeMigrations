@@ -1,19 +1,38 @@
-using System.Text.RegularExpressions;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
+/// <summary>
+/// Holds the SqlServerStandaloneForeignKeyProjectionTests test contracts for this focused fixture topic.
+/// </summary>
 public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
 {
     /// <summary>Supplies real graph result shapes without pretending to prove runtime orphan absence.</summary>
-    private sealed class GraphConnection(
-        bool hasKey,
-        string? occupiedKind = null,
-        bool existingChild = false,
-        string keyKind = "PK-default",
-        bool? captureReadyOverride = null,
-        IReadOnlyList<string>? principalColumns = null
-    ) : DbConnection
+    private sealed class GraphConnection : DbConnection
     {
+        private readonly bool? _captureReadyOverride;
+        private readonly bool _existingChild;
+        private readonly bool _hasKey;
+        private readonly string _keyKind;
+        private readonly string? _occupiedKind;
+        private readonly IReadOnlyList<string>? _principalColumns;
+
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        public GraphConnection(
+            bool hasKey,
+            string? occupiedKind = null,
+            bool existingChild = false,
+            string keyKind = "PK-default",
+            bool? captureReadyOverride = null,
+            IReadOnlyList<string>? principalColumns = null
+        )
+        {
+            _hasKey = hasKey;
+            _occupiedKind = occupiedKind;
+            _existingChild = existingChild;
+            _keyKind = keyKind;
+            _captureReadyOverride = captureReadyOverride;
+            _principalColumns = principalColumns;
+        }
+
         /// <summary>Gets the complete ordered capture statements.</summary>
         public List<string> Statements { get; } = [];
 
@@ -106,15 +125,15 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
                     var parent = match.Groups["table"].Value == "parent";
                     var other = match.Groups["table"].Value == "other";
                     var column = Unquote(match.Groups["column"].Value);
-                    var columnOrdinal = principalColumns is null
+                    var columnOrdinal = _principalColumns is null
                         ? 0
-                        : principalColumns
+                        : _principalColumns
                             .Select((name, ordinal) => (name, ordinal))
                             .FirstOrDefault(pair => pair.name == column)
                             .ordinal;
 
                     var name = Unquote(match.Groups["name"].Value);
-                    var occupied = name == "FK_child" && occupiedKind is not null;
+                    var occupied = name == "FK_child" && _occupiedKind is not null;
 
                     table.Rows.Add(
                         match.Groups["schema"].Value,
@@ -126,7 +145,7 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
                             ? 100
                             : other
                                 ? 200
-                                : existingChild
+                                : _existingChild
                                     ? 300
                                     : DBNull.Value,
                         parent && column is not null
@@ -138,26 +157,26 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
                         parent && column is not null
                             ? 0
                             : DBNull.Value,
-                        other && name == "FK_child" && occupiedKind == "F"
+                        other && name == "FK_child" && _occupiedKind == "F"
                             ? 700
                             : DBNull.Value,
                         false,
                         false,
                         parent
-                        && hasKey
+                        && _hasKey
                         && name
-                        == (keyKind == "PK-default"
+                        == (_keyKind == "PK-default"
                             ? "PK_parent"
                             : "IX_parent")
                             ? 1
                             : DBNull.Value,
                         parent
-                        && hasKey
+                        && _hasKey
                         && name
-                        == (keyKind == "PK-default"
+                        == (_keyKind == "PK-default"
                             ? "PK_parent"
-                            : keyKind + "_parent")
-                        && keyKind != "IX"
+                            : _keyKind + "_parent")
+                        && _keyKind != "IX"
                             ? 1
                             : DBNull.Value,
                         parent && column is not null
@@ -167,19 +186,19 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
                             ? 100
                             : other
                                 ? 200
-                                : existingChild
+                                : _existingChild
                                     ? 300
                                     : DBNull.Value,
                         occupied
                             ? 700
                             : DBNull.Value,
                         occupied
-                            ? occupiedKind is "F" or "PK" or "UQ" or "C"
+                            ? _occupiedKind is "F" or "PK" or "UQ" or "C"
                                 ? 200
                                 : 0
                             : DBNull.Value,
                         occupied
-                            ? occupiedKind
+                            ? _occupiedKind
                             : DBNull.Value);
                 }
             }
@@ -195,30 +214,30 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
                     typeof(int),
                     typeof(string));
 
-                if (hasKey)
+                if (_hasKey)
                 {
-                    var names = principalColumns ?? ["Id"];
+                    var names = _principalColumns ?? ["Id"];
                     for (var ordinal = 0; ordinal < names.Count; ordinal++)
                     {
                         table.Rows.Add(
                             100,
                             1,
-                            keyKind == "PK-default"
+                            _keyKind == "PK-default"
                                 ? "PK_parent"
                                 : "IX_parent",
-                            keyKind switch
+                            _keyKind switch
                             {
                                 "IX" => DBNull.Value,
                                 "PK-default" => "PK_parent",
-                                _ => keyKind + "_parent",
+                                _ => _keyKind + "_parent",
                             },
                             names[ordinal],
                             ordinal + 7,
-                            keyKind switch
+                            _keyKind switch
                             {
                                 "IX" => DBNull.Value,
                                 "PK-default" => "PK",
-                                _ => keyKind,
+                                _ => _keyKind,
                             });
                     }
                 }
@@ -232,7 +251,7 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
                 {
                     table.Rows.Add(
                         int.Parse(match.Groups["ordinal"].Value, CultureInfo.InvariantCulture),
-                        captureReadyOverride ?? match.Groups["ready"].Value == "1");
+                        _captureReadyOverride ?? match.Groups["ready"].Value == "1");
                 }
             }
             else
@@ -262,13 +281,26 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
     }
 
     /// <summary>Keeps command/reader ownership identical to the direct compact graph capture.</summary>
-    private sealed class GraphCommand(GraphConnection connection) : DbCommand
+    private sealed class GraphCommand : DbCommand
     {
-        private readonly SqlCommand _parameterOwner = new();
+        private readonly GraphConnection _connection;
+
+        private readonly SqlCommand _parameterOwner;
+
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        public GraphCommand(
+            GraphConnection connection
+        )
+        {
+            _connection = connection;
+            _parameterOwner = new SqlCommand();
+            CommandText = string.Empty;
+            DbConnection = connection;
+        }
 
         /// <inheritdoc />
         [AllowNull]
-        public override string CommandText { get; set; } = string.Empty;
+        public override string CommandText { get; set; }
 
         /// <inheritdoc />
         public override int CommandTimeout { get; set; }
@@ -283,7 +315,7 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
         public override UpdateRowSource UpdatedRowSource { get; set; }
 
         /// <inheritdoc />
-        protected override DbConnection? DbConnection { get; set; } = connection;
+        protected override DbConnection? DbConnection { get; set; }
 
         /// <inheritdoc />
         protected override DbTransaction? DbTransaction { get; set; }
@@ -309,7 +341,7 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
         /// <inheritdoc />
         protected override DbDataReader ExecuteDbDataReader(
             CommandBehavior behavior
-        ) => connection.Read(CommandText);
+        ) => _connection.Read(CommandText);
 
         /// <inheritdoc />
         protected override void Dispose(

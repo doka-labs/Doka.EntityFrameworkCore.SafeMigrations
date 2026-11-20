@@ -324,6 +324,9 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         var columns = CaseTable(stored: false)
             .Columns
             .Where(static column => column.Name != "left_bound")
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToList();
 
         if (source != "missing")

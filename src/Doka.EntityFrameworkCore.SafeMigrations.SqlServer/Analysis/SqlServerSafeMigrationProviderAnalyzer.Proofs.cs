@@ -2,7 +2,9 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer;
 
 internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
 {
-    /// <summary>Evaluates one fresh outer proof through a parameterized scalar statement at its original gate.</summary>
+    /// <summary>
+    /// Evaluates one fresh outer proof through a parameterized scalar statement at its original gate.
+    /// </summary>
     private static string BuildDelayedScalarProof(
         string expression,
         string variable,

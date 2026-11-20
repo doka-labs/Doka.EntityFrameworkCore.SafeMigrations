@@ -1,9 +1,13 @@
 global using System;
 global using System.Globalization;
+global using System.IO;
 global using System.Linq;
 global using System.Reflection;
+global using System.Reflection.Metadata;
+global using System.Reflection.PortableExecutable;
 global using Doka.EntityFrameworkCore.SafeMigrations;
 global using Doka.EntityFrameworkCore.SafeMigrations.Sqlite;
+global using Doka.EntityFrameworkCore.SafeMigrations.Sqlite.PackageConsumer;
 global using Microsoft.Data.Sqlite;
 global using Microsoft.EntityFrameworkCore;
 global using Microsoft.EntityFrameworkCore.Migrations;

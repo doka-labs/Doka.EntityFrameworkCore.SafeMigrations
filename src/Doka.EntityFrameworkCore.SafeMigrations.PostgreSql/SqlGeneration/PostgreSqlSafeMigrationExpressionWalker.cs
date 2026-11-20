@@ -1,5 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql;
 
 /// <summary>Visits structured operands in authored order without recursive calls or wide-list copies.</summary>

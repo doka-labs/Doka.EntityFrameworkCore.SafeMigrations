@@ -2,9 +2,11 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
 public sealed partial class SafeMigrationModelManagedDataTests
 {
+    /// <summary>A newly accepted strict table supplies the complete empty-row proof for a following seed.</summary>
     [Fact]
     public void AcceptedTableCreationProjectsFollowingModelManagedEnsureAsMissing()
     {
+        // Arrange
         var projection = new SafeMigrationPreflightProjection();
         var table = Operation(
             new EnsureTableIntent(
@@ -14,6 +16,8 @@ public sealed partial class SafeMigrationModelManagedDataTests
         Accept(projection, table, SafeMigrationObservedState.Missing);
 
         var ensure = RoleEnsure();
+
+        // Act
         var projected = projection.Project(
             ensure,
             Live(SafeMigrationObservedState.PrerequisiteMissing));
@@ -24,30 +28,37 @@ public sealed partial class SafeMigrationModelManagedDataTests
             ensure.Policy,
             projected.RepairCapability);
 
+        // Assert
         Assert.Equal(SafeMigrationObservedState.Missing, projected.ObservedState);
         Assert.Equal("projected_missing", projected.Code);
         Assert.Equal(SafeMigrationAction.Apply, decision.Action);
     }
 
+    /// <summary>Ordinary provider table creation supplies the same empty-row seed prerequisite.</summary>
     [Fact]
     public void ProviderTableCreationProjectsFollowingModelManagedEnsureAsMissing()
     {
+        // Arrange
         var projection = new SafeMigrationPreflightProjection();
         var createTable = ProviderRoleTable();
 
         projection.ObserveProviderPostcondition(createTable);
 
+        // Act
         var projected = projection.Project(
             RoleEnsure(),
             Live(SafeMigrationObservedState.PrerequisiteMissing));
 
+        // Assert
         Assert.Equal(SafeMigrationObservedState.Missing, projected.ObservedState);
         Assert.Equal("projected_missing", projected.Code);
     }
 
+    /// <summary>A provider rename transports the created owner's empty-row proof to its new identity.</summary>
     [Fact]
     public void ProviderTableRenamePreservesNewTableEmptyRowProof()
     {
+        // Arrange
         var projection = new SafeMigrationPreflightProjection();
 
         projection.ObserveProviderPostcondition(ProviderRoleTable());
@@ -58,33 +69,41 @@ public sealed partial class SafeMigrationModelManagedDataTests
                 NewName = "application_roles",
             });
 
+        // Act
         var projected = projection.Project(
             RoleEnsure("application_roles"),
             Live(SafeMigrationObservedState.PrerequisiteMissing));
 
+        // Assert
         Assert.Equal(SafeMigrationObservedState.Missing, projected.ObservedState);
         Assert.Equal("projected_missing", projected.Code);
     }
 
+    /// <summary>An accepted safe rename transports empty-row evidence without consulting unrelated live rows.</summary>
     [Fact]
     public void AcceptedTableRenamePreservesNewTableEmptyRowProof()
     {
+        // Arrange
         var projection = ProjectionWithNewRoleTable();
         var rename = Operation(new RenameTableIntent("roles", newName: "application_roles"));
 
         Accept(projection, rename, SafeMigrationObservedState.Matching);
 
+        // Act
         var projected = projection.Project(
             RoleEnsure("application_roles"),
             Live(SafeMigrationObservedState.PrerequisiteMissing));
 
+        // Assert
         Assert.Equal(SafeMigrationObservedState.Missing, projected.ObservedState);
         Assert.Equal("projected_missing", projected.Code);
     }
 
+    /// <summary>A provider column rename preserves the new table's empty-row proof under new column names.</summary>
     [Fact]
     public void ProviderColumnRenamePreservesNewTableEmptyRowProof()
     {
+        // Arrange
         var projection = new SafeMigrationPreflightProjection();
 
         projection.ObserveProviderPostcondition(ProviderRoleTable());
@@ -97,34 +116,44 @@ public sealed partial class SafeMigrationModelManagedDataTests
             });
 
         var ensure = RoleEnsureWithDisplayName();
+
+        // Act
         var projected = projection.Project(
             ensure,
             Live(SafeMigrationObservedState.PrerequisiteMissing));
 
+        // Assert
         Assert.Equal(SafeMigrationObservedState.Missing, projected.ObservedState);
         Assert.Equal("projected_missing", projected.Code);
     }
 
+    /// <summary>A safe column rename retains empty-row knowledge for subsequent model-managed data.</summary>
     [Fact]
     public void AcceptedColumnRenamePreservesNewTableEmptyRowProof()
     {
+        // Arrange
         var projection = ProjectionWithNewRoleTable();
         var rename = Operation(new RenameColumnIntent("name", "roles", "display_name"));
 
         Accept(projection, rename, SafeMigrationObservedState.Matching);
 
         var ensure = RoleEnsureWithDisplayName();
+
+        // Act
         var projected = projection.Project(
             ensure,
             Live(SafeMigrationObservedState.PrerequisiteMissing));
 
+        // Assert
         Assert.Equal(SafeMigrationObservedState.Missing, projected.ObservedState);
         Assert.Equal("projected_missing", projected.Code);
     }
 
+    /// <summary>Earlier unrelated DML cannot invalidate an empty-row proof from later table creation.</summary>
     [Fact]
     public void ProviderMutationBeforeTableCreationDoesNotPoisonNewTableEmptyRowProof()
     {
+        // Arrange
         var projection = new SafeMigrationPreflightProjection();
 
         projection.ObserveProviderPostcondition(
@@ -137,10 +166,12 @@ public sealed partial class SafeMigrationModelManagedDataTests
 
         projection.ObserveProviderPostcondition(ProviderRoleTable());
 
+        // Act
         var projected = projection.Project(
             RoleEnsure(),
             Live(SafeMigrationObservedState.PrerequisiteMissing));
 
+        // Assert
         Assert.Equal(SafeMigrationObservedState.Missing, projected.ObservedState);
         Assert.Equal("projected_missing", projected.Code);
     }
@@ -165,9 +196,16 @@ public sealed partial class SafeMigrationModelManagedDataTests
         Assert.False(projected.PostconditionSatisfied);
     }
 
-    [Fact]
-    public void NewlyCreatedTableProjectsModelManagedOperationFamiliesConservatively()
+    /// <summary>An empty table proves deletion unnecessary but cannot invent an update's missing source row.</summary>
+    /// <param name="delete">Whether the independent transition deletes rather than updates.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void NewlyCreatedTableProjectsModelManagedOperationFamiliesConservatively(
+        bool delete
+    )
     {
+        // Arrange
         var projection = ProjectionWithNewRoleTable();
         var update = RoleUpdate();
         var deletion = Operation(
@@ -182,23 +220,34 @@ public sealed partial class SafeMigrationModelManagedDataTests
                 schema: null,
                 foreignKeys: null));
 
-        var projectedUpdate = projection.Project(
-            update,
+        // Act
+        var projected = projection.Project(
+            delete
+                ? deletion
+                : update,
             Live(SafeMigrationObservedState.PrerequisiteMissing));
 
-        var projectedDelete = projection.Project(
-            deletion,
-            Live(SafeMigrationObservedState.PrerequisiteMissing));
+        // Assert
+        Assert.Equal(delete
+                ? SafeMigrationObservedState.Missing
+                : SafeMigrationObservedState.PrerequisiteMissing,
+            projected.ObservedState);
 
-        Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, projectedUpdate.ObservedState);
-        Assert.Equal("projected_prerequisite_missing", projectedUpdate.Code);
-        Assert.Equal(SafeMigrationObservedState.Missing, projectedDelete.ObservedState);
-        Assert.True(projectedDelete.PostconditionSatisfied);
+        if (delete)
+        {
+            Assert.True(projected.PostconditionSatisfied);
+        }
+        else
+        {
+            Assert.Equal("projected_prerequisite_missing", projected.Code);
+        }
     }
 
+    /// <summary>Existing structure alone cannot certify that an authored seed row is absent.</summary>
     [Fact]
     public void ExistingTableNeverInfersMissingModelManagedRowsFromStructureAlone()
     {
+        // Arrange
         var projection = new SafeMigrationPreflightProjection();
         var table = Operation(
             new EnsureTableIntent(
@@ -208,14 +257,19 @@ public sealed partial class SafeMigrationModelManagedDataTests
         Accept(projection, table, SafeMigrationObservedState.Matching);
 
         var live = Live(SafeMigrationObservedState.PrerequisiteMissing);
+
+        // Act
         var projected = projection.Project(RoleEnsure(), live);
 
+        // Assert
         Assert.Same(live, projected);
     }
 
+    /// <summary>An incomplete projected table cannot provide the missing columns required by a seed.</summary>
     [Fact]
     public void IncompleteTableProjectionNeverInfersMissingModelManagedRows()
     {
+        // Arrange
         var projection = new SafeMigrationPreflightProjection();
         var table = Operation(
             new EnsureTableIntent(
@@ -227,14 +281,25 @@ public sealed partial class SafeMigrationModelManagedDataTests
         Accept(projection, table, SafeMigrationObservedState.Missing);
 
         var live = Live(SafeMigrationObservedState.PrerequisiteMissing);
+
+        // Act
         var projected = projection.Project(RoleEnsure(), live);
 
+        // Assert
         Assert.Same(live, projected);
     }
 
-    [Fact]
-    public void ProviderDataMutationInvalidatesNewTableEmptyRowProof()
+    /// <summary>Each ordinary provider DML family invalidates an otherwise valid empty-row seed proof.</summary>
+    /// <param name="kind">The independently observed ordinary data operation.</param>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void ProviderDataMutationInvalidatesNewTableEmptyRowProof(
+        int kind
+    )
     {
+        // Arrange
         MigrationOperation[] dataOperations =
         [
             new InsertDataOperation
@@ -259,37 +324,41 @@ public sealed partial class SafeMigrationModelManagedDataTests
             },
         ];
 
-        foreach (var dataOperation in dataOperations)
-        {
-            var projection = ProjectionWithNewRoleTable();
-            var live = Live(SafeMigrationObservedState.PrerequisiteMissing);
+        var projection = ProjectionWithNewRoleTable();
+        var live = Live(SafeMigrationObservedState.PrerequisiteMissing);
 
-            projection.ObserveProviderPostcondition(dataOperation);
+        // Act
+        projection.ObserveProviderPostcondition(dataOperations[kind]);
+        var projected = projection.Project(RoleEnsure(), live);
 
-            var projected = projection.Project(RoleEnsure(), live);
-
-            Assert.True(projected.IsModelManagedProjectionUnknown);
-            Assert.Equal("projected_model_managed_data_state_unknown", projected.Code);
-        }
+        // Assert
+        Assert.True(projected.IsModelManagedProjectionUnknown);
+        Assert.Equal("projected_model_managed_data_state_unknown", projected.Code);
     }
 
+    /// <summary>Opaque provider SQL revokes the new-table structural proof before later seed decisions.</summary>
     [Fact]
     public void OpaqueProviderOperationInvalidatesNewTableEmptyRowProof()
     {
+        // Arrange
         var projection = ProjectionWithNewRoleTable();
         var live = Live(SafeMigrationObservedState.PrerequisiteMissing);
 
         projection.ObserveProviderPostcondition(new SqlOperation { Sql = "SELECT 1;" });
 
+        // Act
         var projected = projection.Project(RoleEnsure(), live);
 
+        // Assert
         Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, projected.ObservedState);
         Assert.Equal("projected_structure_state_unknown", projected.Code);
     }
 
+    /// <summary>Accepted seed rows retain both their exact target identity and other missing-key knowledge.</summary>
     [Fact]
     public void AcceptedModelManagedRowsPreserveNewTableKnowledgeForLaterKeys()
     {
+        // Arrange
         var projection = ProjectionWithNewRoleTable();
         var administrator = RoleEnsure();
 
@@ -306,6 +375,7 @@ public sealed partial class SafeMigrationModelManagedDataTests
                 schema: null,
                 uniqueKeys: null));
 
+        // Act
         var projectedAdministrator = projection.Project(
             administrator,
             Live(SafeMigrationObservedState.PrerequisiteMissing));
@@ -314,13 +384,16 @@ public sealed partial class SafeMigrationModelManagedDataTests
             member,
             Live(SafeMigrationObservedState.PrerequisiteMissing));
 
+        // Assert
         Assert.Equal(SafeMigrationObservedState.Matching, projectedAdministrator.ObservedState);
         Assert.Equal(SafeMigrationObservedState.Missing, projectedMember.ObservedState);
     }
 
+    /// <summary>An overlapping seed with uncaptured cells remains unknown rather than incorrectly absent.</summary>
     [Fact]
     public void IncompleteProjectedRowNeverBecomesMissingFromNewTableProof()
     {
+        // Arrange
         var projection = new SafeMigrationPreflightProjection();
         var table = Operation(
             new EnsureTableIntent(
@@ -358,15 +431,20 @@ public sealed partial class SafeMigrationModelManagedDataTests
                 uniqueKeys: null));
 
         var live = Live(SafeMigrationObservedState.PrerequisiteMissing);
+
+        // Act
         var projected = projection.Project(overlapping, live);
 
+        // Assert
         Assert.True(projected.IsModelManagedProjectionUnknown);
         Assert.Equal("projected_model_managed_data_state_unknown", projected.Code);
     }
 
+    /// <summary>Opaque SQL revokes the accepted child deletion proof needed by a later parent deletion.</summary>
     [Fact]
     public void OpaqueProviderMutationInvalidatesRowsAndDependencyHandoffTogether()
     {
+        // Arrange
         var projection = new SafeMigrationPreflightProjection();
         var childDelete = Operation(
             new DeleteModelManagedDataIntent(
@@ -412,6 +490,7 @@ public sealed partial class SafeMigrationModelManagedDataTests
                         ["id"]),
                 ]));
 
+        // Act
         var projected = projection.Project(
             parentDelete,
             EvidenceAnalysis(
@@ -419,6 +498,7 @@ public sealed partial class SafeMigrationModelManagedDataTests
                 [SafeMigrationModelManagedRowState.Source],
                 [1]));
 
+        // Assert
         Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, projected.ObservedState);
         Assert.Equal("projected_structure_state_unknown", projected.Code);
     }
@@ -473,9 +553,11 @@ public sealed partial class SafeMigrationModelManagedDataTests
         Assert.Equal(expectedCode, projected.Code);
     }
 
+    /// <summary>Complete accepted candidate keys prove a following unique index on a newly created table.</summary>
     [Fact]
     public void AcceptedModelManagedCandidateKeyAuthorizesFollowingUniqueIndexOnNewTable()
     {
+        // Arrange
         var projection = ProjectionWithNewRoleTable();
         var administrator = RoleEnsure(
             1,
@@ -498,17 +580,21 @@ public sealed partial class SafeMigrationModelManagedDataTests
                     [new ExpectedIndexKeyDefinition(column: "name")],
                     unique: true)));
 
+        // Act
         var projected = projection.Project(
             index,
             Live(SafeMigrationObservedState.PrerequisiteMissing));
 
+        // Assert
         Assert.Equal(SafeMigrationObservedState.Missing, projected.ObservedState);
         Assert.Equal("projected_missing", projected.Code);
     }
 
+    /// <summary>A safe owner rename retains the accepted candidate-key proof for its later unique index.</summary>
     [Fact]
     public void AcceptedModelManagedCandidateKeySurvivesNewTableRename()
     {
+        // Arrange
         var projection = ProjectionWithNewRoleTable();
         var administrator = RoleEnsure(
             1,
@@ -535,17 +621,21 @@ public sealed partial class SafeMigrationModelManagedDataTests
                     [new ExpectedIndexKeyDefinition(column: "name")],
                     unique: true)));
 
+        // Act
         var projected = projection.Project(
             index,
             Live(SafeMigrationObservedState.PrerequisiteMissing));
 
+        // Assert
         Assert.Equal(SafeMigrationObservedState.Missing, projected.ObservedState);
         Assert.Equal("projected_missing", projected.Code);
     }
 
+    /// <summary>A seed batch lacking the declared candidate key revokes later unique-index data evidence.</summary>
     [Fact]
     public void ModelManagedBatchWithoutCandidateKeyInvalidatesFollowingUniqueIndexProof()
     {
+        // Arrange
         var projection = ProjectionWithNewRoleTable();
         var administrator = RoleEnsure(
             1,
@@ -570,15 +660,19 @@ public sealed partial class SafeMigrationModelManagedDataTests
 
         var live = Live(SafeMigrationObservedState.PrerequisiteMissing);
 
+        // Act
         var projected = projection.Project(index, live);
 
+        // Assert
         Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, projected.ObservedState);
         Assert.Equal("projected_data_state_unknown", projected.Code);
     }
 
+    /// <summary>Ordinary candidate-key evidence cannot certify the stronger NULLS NOT DISTINCT contract.</summary>
     [Fact]
     public void ModelManagedCandidateKeyDoesNotAuthorizeNullsNotDistinctIndex()
     {
+        // Arrange
         var projection = ProjectionWithNewRoleTable();
         var administrator = RoleEnsure(
             1,
@@ -596,10 +690,12 @@ public sealed partial class SafeMigrationModelManagedDataTests
                     unique: true,
                     nullsDistinct: false)));
 
+        // Act
         var projected = projection.Project(
             index,
             Live(SafeMigrationObservedState.PrerequisiteMissing));
 
+        // Assert
         Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, projected.ObservedState);
         Assert.Equal("projected_data_state_unknown", projected.Code);
     }

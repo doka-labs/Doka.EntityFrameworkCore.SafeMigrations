@@ -268,7 +268,7 @@ public sealed class SqlServerProjectedIntegerTransitionTests
     )
     {
         // Arrange
-        using var context = new SafeMigrationDbContext(ConnectionString);
+        await using var context = new SafeMigrationDbContext(ConnectionString);
         var analyzer = Analyzer(context);
         await using var connection = new SqlServerCatalogTestConnection(nativeBatch)
         {
@@ -342,7 +342,7 @@ public sealed class SqlServerProjectedIntegerTransitionTests
     )
     {
         // Arrange
-        using var context = new SafeMigrationDbContext(ConnectionString);
+        await using var context = new SafeMigrationDbContext(ConnectionString);
         var analyzer = Analyzer(context);
         await using var connection = new SqlServerCatalogTestConnection(false);
         var operations = new List<SafeMigrationOperation> { Widening() };
@@ -388,7 +388,7 @@ public sealed class SqlServerProjectedIntegerTransitionTests
     )
     {
         // Arrange
-        using var context = new SafeMigrationDbContext(ConnectionString);
+        await using var context = new SafeMigrationDbContext(ConnectionString);
         var analyzer = Analyzer(context);
         var operations = new[] { Widening(table: "items_0"), Widening(table: "items_1") };
         await using var connection = new SqlServerCatalogTestConnection(false)

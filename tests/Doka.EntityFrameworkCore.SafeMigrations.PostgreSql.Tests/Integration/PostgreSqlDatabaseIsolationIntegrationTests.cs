@@ -16,27 +16,27 @@ public sealed class PostgreSqlDatabaseIsolationIntegrationTests : PostgreSqlInte
         // Arrange
         using var firstOwner = new DatabaseOwner(Fixture);
         using var secondOwner = new DatabaseOwner(Fixture);
-        using var deadline = new CancellationTokenSource(TimeSpan.FromMinutes(1));
+        using var cancellation = new CancellationTokenSource();
         var bothWriting = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var ready = 0;
         try
         {
             var connectionStrings = await Task.WhenAll(
-                firstOwner.CreateAsync(deadline.Token),
-                secondOwner.CreateAsync(deadline.Token));
+                firstOwner.CreateAsync(cancellation.Token),
+                secondOwner.CreateAsync(cancellation.Token));
 
             // Act
             var values = await Task.WhenAll(
-                WriteAndReadAsync(connectionStrings[0], 17),
-                WriteAndReadAsync(connectionStrings[1], 29));
+                WriteAndReadAsync(connectionStrings[0], 17, cancellation.Token),
+                WriteAndReadAsync(connectionStrings[1], 29, cancellation.Token));
 
             await using var survivor = new NpgsqlConnection(connectionStrings[1]);
-            await survivor.OpenAsync(deadline.Token);
+            await survivor.OpenAsync(cancellation.Token);
             await firstOwner.DisposeAsync();
             await using var survivingQuery = survivor.CreateCommand();
             survivingQuery.CommandText = "SELECT value FROM parallel_owner;";
             var remainingValue = Convert.ToInt32(
-                await survivingQuery.ExecuteScalarAsync(deadline.Token),
+                await survivingQuery.ExecuteScalarAsync(cancellation.Token),
                 CultureInfo.InvariantCulture);
 
             var firstDatabaseName = new NpgsqlConnectionStringBuilder(connectionStrings[0]).Database;
@@ -48,7 +48,7 @@ public sealed class PostgreSqlDatabaseIsolationIntegrationTests : PostgreSqlInte
                 ?? throw new InvalidOperationException("The first owner has no database name."));
 
             var releasedDatabaseCount = Convert.ToInt32(
-                await absenceQuery.ExecuteScalarAsync(deadline.Token),
+                await absenceQuery.ExecuteScalarAsync(cancellation.Token),
                 CultureInfo.InvariantCulture);
 
             // Assert
@@ -74,38 +74,55 @@ public sealed class PostgreSqlDatabaseIsolationIntegrationTests : PostgreSqlInte
         // barrier before reading the stored value so both database lifetimes overlap.
         async Task<int> WriteAndReadAsync(
             string connectionString,
-            int value
+            int value,
+            CancellationToken cancellationToken
         )
         {
-            deadline.Token.ThrowIfCancellationRequested();
-
-            await using var connection = new NpgsqlConnection(connectionString);
-            await connection.OpenAsync(deadline.Token);
-            await using var setup = connection.CreateCommand();
-            setup.CommandText = "CREATE TABLE parallel_owner (value integer NOT NULL); "
-                + "INSERT INTO parallel_owner (value) VALUES (@value);";
-
-            setup.Parameters.AddWithValue("value", value);
-            await setup.ExecuteNonQueryAsync(deadline.Token);
-
-            // WHY: Both sessions must be alive after writes before either read is allowed;
-            // the barrier proves overlap without measuring machine-dependent elapsed time.
-            if (Interlocked.Increment(ref ready) == 2)
+            try
             {
-                bothWriting.TrySetResult(true);
-            }
+                cancellationToken.ThrowIfCancellationRequested();
 
-            await bothWriting.Task.WaitAsync(deadline.Token);
-            await using var query = connection.CreateCommand();
-            query.CommandText = "SELECT value FROM parallel_owner;";
-            return Convert.ToInt32(await query.ExecuteScalarAsync(deadline.Token), CultureInfo.InvariantCulture);
+                await using var connection = new NpgsqlConnection(connectionString);
+                await connection.OpenAsync(cancellationToken);
+                await using var setup = connection.CreateCommand();
+                setup.CommandText = "CREATE TABLE parallel_owner (value integer NOT NULL); "
+                    + "INSERT INTO parallel_owner (value) VALUES (@value);";
+
+                setup.Parameters.AddWithValue("value", value);
+                await setup.ExecuteNonQueryAsync(cancellationToken);
+
+                // WHY: Both sessions must be alive after writes before either read is allowed;
+                // the barrier proves overlap without measuring machine-dependent elapsed time.
+                if (Interlocked.Increment(ref ready) == 2)
+                {
+                    bothWriting.TrySetResult(true);
+                }
+
+                await bothWriting.Task.WaitAsync(cancellationToken);
+                await using var query = connection.CreateCommand();
+                query.CommandText = "SELECT value FROM parallel_owner;";
+
+                return Convert.ToInt32(
+                    await query.ExecuteScalarAsync(cancellationToken),
+                    CultureInfo.InvariantCulture);
+            }
+            catch (Exception exception)
+            {
+                // WHY: A failed owner releases the peer barrier before both real tasks are drained.
+                bothWriting.TrySetException(exception);
+
+                throw;
+            }
         }
     }
 
-    private sealed class DatabaseOwner(
-        PostgreSqlContainerFixture fixture
-    ) : PostgreSqlIntegrationTestBase(fixture)
+    private sealed class DatabaseOwner : PostgreSqlIntegrationTestBase
     {
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        public DatabaseOwner(
+            PostgreSqlContainerFixture fixture
+        ) : base(fixture) { }
+
         /// <summary>Creates an isolated database owned by this test-local lifetime.</summary>
         /// <param name="cancellationToken">Cancels the owned operation before and during asynchronous work.</param>
         /// <returns>The asynchronous fixture operation or observation.</returns>

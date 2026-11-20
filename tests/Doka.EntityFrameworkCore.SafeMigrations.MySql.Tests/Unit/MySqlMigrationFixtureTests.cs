@@ -28,6 +28,9 @@ public sealed class MySqlMigrationFixtureTests
             .SelectMany(static type => type.GetCustomAttributes(typeof(MigrationAttribute), inherit: false))
             .Cast<MigrationAttribute>()
             .Select(static attribute => attribute.Id)
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         // Assert

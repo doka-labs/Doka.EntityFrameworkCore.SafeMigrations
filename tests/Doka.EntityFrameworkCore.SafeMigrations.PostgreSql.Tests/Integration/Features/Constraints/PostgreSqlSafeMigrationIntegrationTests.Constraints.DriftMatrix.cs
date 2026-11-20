@@ -9,9 +9,11 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
         PostgreSqlContainerFixture fixture
     ) : base(fixture) { }
 
+    /// <summary>Equivalent Unique And Check Constraints With Different Names Are Idempotent No Ops.</summary>
     [Fact]
     public async Task EquivalentUniqueAndCheckConstraintsWithDifferentNames_AreIdempotentNoOps()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -48,6 +50,7 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
                 SqlColumnAndInt("quantity", SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, 0)),
             SafeMigrationPolicy.ThrowIfDifferent);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -59,7 +62,9 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
+        Assert.Equal(2, report.Assessments.Count);
         Assert.All(
             report.Assessments,
             assessment =>
@@ -100,9 +105,11 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
         Assert.True(legacyConstraintCount >= 3);
     }
 
+    /// <summary>Differently Named Unique And Check Constraints With Different Shapes Remain Applicable.</summary>
     [Fact]
     public async Task DifferentlyNamedUniqueAndCheckConstraintsWithDifferentShapes_RemainApplicable()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -129,6 +136,7 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
                 SqlColumnAndInt("quantity", SafeMigrationSqlBinaryOperator.LessThanOrEqual, 100)),
             SafeMigrationPolicy.ThrowIfDifferent);
 
+        // Act
         var preflight = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -148,7 +156,9 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
                 new SafeMigrationRunOptions("constraint-nonidentity-post"),
                 CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
+        Assert.Equal(2, preflight.Assessments.Count);
         Assert.All(
             preflight.Assessments,
             assessment =>
@@ -158,12 +168,15 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
             });
 
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
+        Assert.Equal(2, postflight.Assessments.Count);
         Assert.All(postflight.Assessments, assessment => Assert.Equal(SafeMigrationAction.NoOp, assessment.Action));
     }
 
+    /// <summary>Existing Primary Key With Different Name Is An Idempotent No Op.</summary>
     [Fact]
     public async Task ExistingPrimaryKeyWithDifferentName_IsAnIdempotentNoOp()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -181,6 +194,7 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
             "primary_key_identity",
             ["id", "tenant_id"]);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -192,6 +206,7 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
+        // Assert
         var assessment = Assert.Single(report.Assessments);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -214,9 +229,11 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Differently Named Primary Key With Different Shape Is Rejected Before Ddl.</summary>
     [Fact]
     public async Task DifferentlyNamedPrimaryKeyWithDifferentShape_IsRejectedBeforeDdl()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -234,6 +251,7 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
             "primary_key_singleton",
             ["alternate_id"]);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -242,9 +260,11 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
                 new SafeMigrationRunOptions("primary-key-singleton"),
                 CancellationToken.None);
 
-        var exception = await Assert.ThrowsAsync<PostgresException>(() =>
+        var failure = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
 
+        // Assert
+        var exception = Assert.IsType<PostgresException>(failure);
         var assessment = Assert.Single(report.Assessments);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -265,9 +285,16 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
                 cancellationToken: CancellationToken.None));
     }
 
-    [Fact]
-    public async Task BackingIndexNamespaceCollisions_AreRejectedBeforeDdl()
+    /// <summary>Backing Index Namespace Collisions Are Rejected Before Ddl.</summary>
+    /// <param name="operationIndex">The independently executed member of the full preflight stream.</param>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public async Task BackingIndexNamespaceCollisions_AreRejectedBeforeDdl(
+        int operationIndex
+    )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -292,6 +319,8 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
             "constraint_namespace_target",
             ["code"]);
 
+        // Act
+        // WHY: Preserve the complete preflight stream; each native rejection owns an isolated test case.
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -300,7 +329,12 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
                 new SafeMigrationRunOptions("constraint-namespace"),
                 CancellationToken.None);
 
+        var failure = await Record.ExceptionAsync(() =>
+            ExecuteOperationsAsync(context, [builder.Operations[operationIndex]], CancellationToken.None));
+
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
+        Assert.Equal(2, report.Assessments.Count);
         Assert.All(
             report.Assessments,
             assessment =>
@@ -309,14 +343,9 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
                 Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
             });
 
-        foreach (var operation in builder.Operations)
-        {
-            var exception = await Assert.ThrowsAsync<PostgresException>(() =>
-                ExecuteOperationsAsync(context, [operation], CancellationToken.None));
-
-            Assert.Equal("P1001", exception.SqlState);
-            Assert.StartsWith("doka_sm_different:", exception.MessageText, StringComparison.Ordinal);
-        }
+        var exception = Assert.IsType<PostgresException>(failure);
+        Assert.Equal("P1001", exception.SqlState);
+        Assert.StartsWith("doka_sm_different:", exception.MessageText, StringComparison.Ordinal);
 
         Assert.Equal(
             0,
@@ -341,6 +370,7 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Equivalent Foreign Key With Different Name Is An Idempotent No Op.</summary>
     [Theory]
     [InlineData(1)]
     [InlineData(2)]
@@ -348,6 +378,7 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
         int legacyConstraintCount
     )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var legacyName = new string('l', 63);
         var secondLegacyName = new string('s', 63);
@@ -380,6 +411,7 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
             ["id", "tenant_id"],
             onDelete: ReferentialAction.Cascade);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -391,6 +423,7 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
+        // Assert
         var assessment = Assert.Single(report.Assessments);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -410,9 +443,18 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
                 cancellationToken: CancellationToken.None));
     }
 
-    [Fact]
-    public async Task ExactNameDrift_IsNeverHiddenByEquivalentAliases()
+    /// <summary>Exact Name Drift Is Never Hidden By Equivalent Aliases.</summary>
+    /// <param name="operationIndex">The independently executed member of the full preflight stream.</param>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    public async Task ExactNameDrift_IsNeverHiddenByEquivalentAliases(
+        int operationIndex
+    )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -460,6 +502,8 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
             "identity_precedence_children",
             ["code"]);
 
+        // Act
+        // WHY: Preserve the complete preflight stream; each native rejection owns an isolated test case.
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -468,7 +512,12 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
                 new SafeMigrationRunOptions("identity-precedence"),
                 CancellationToken.None);
 
+        var failure = await Record.ExceptionAsync(() =>
+            ExecuteOperationsAsync(context, [builder.Operations[operationIndex]], CancellationToken.None));
+
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
+        Assert.Equal(4, report.Assessments.Count);
         Assert.All(
             report.Assessments,
             assessment =>
@@ -477,14 +526,9 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
                 Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
             });
 
-        foreach (var operation in builder.Operations)
-        {
-            var exception = await Assert.ThrowsAsync<PostgresException>(() =>
-                ExecuteOperationsAsync(context, [operation], CancellationToken.None));
-
-            Assert.Equal("P1001", exception.SqlState);
-            Assert.StartsWith("doka_sm_different:", exception.MessageText, StringComparison.Ordinal);
-        }
+        var exception = Assert.IsType<PostgresException>(failure);
+        Assert.Equal("P1001", exception.SqlState);
+        Assert.StartsWith("doka_sm_different:", exception.MessageText, StringComparison.Ordinal);
 
         Assert.Equal(
             2,
@@ -499,6 +543,7 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Differently Named Foreign Key With Different Actions Remains Applicable.</summary>
     [Theory]
     [InlineData(ReferentialAction.Cascade, ReferentialAction.Cascade)]
     [InlineData(ReferentialAction.Restrict, ReferentialAction.SetNull)]
@@ -507,6 +552,7 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
         ReferentialAction onDelete
     )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -529,6 +575,7 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
             onUpdate: onUpdate,
             onDelete: onDelete);
 
+        // Act
         var preflight = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -540,6 +587,7 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
+        // Assert
         var assessment = Assert.Single(preflight.Assessments);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -558,9 +606,18 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
                 cancellationToken: CancellationToken.None));
     }
 
-    [Fact]
-    public async Task NonCanonicalConstraintSemantics_AreRejectedBeforeDdl()
+    /// <summary>Non Canonical Constraint Semantics Are Rejected Before Ddl.</summary>
+    /// <param name="operationIndex">The independently executed member of the full preflight stream.</param>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    public async Task NonCanonicalConstraintSemantics_AreRejectedBeforeDdl(
+        int operationIndex
+    )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -605,6 +662,8 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
             "semantic_parent",
             ["id", "alternate_id"]);
 
+        // Act
+        // WHY: Preserve the complete preflight stream; each native rejection owns an isolated test case.
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -613,6 +672,10 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
                 new SafeMigrationRunOptions("constraint-semantics"),
                 CancellationToken.None);
 
+        var failure = await Record.ExceptionAsync(() =>
+            ExecuteOperationsAsync(context, [builder.Operations[operationIndex]], CancellationToken.None));
+
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(4, report.Assessments.Count);
         Assert.All(
@@ -623,19 +686,23 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
                 Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
             });
 
-        foreach (var operation in builder.Operations)
-        {
-            var exception = await Assert.ThrowsAsync<PostgresException>(() =>
-                ExecuteOperationsAsync(context, [operation], CancellationToken.None));
-
-            Assert.Equal("P1001", exception.SqlState);
-            Assert.StartsWith("doka_sm_different:", exception.MessageText, StringComparison.Ordinal);
-        }
+        var exception = Assert.IsType<PostgresException>(failure);
+        Assert.Equal("P1001", exception.SqlState);
+        Assert.StartsWith("doka_sm_different:", exception.MessageText, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public async Task PartitionDerivedConstraints_AreRejectedBeforeDdl()
+    /// <summary>Partition Derived Constraints Are Rejected Before Ddl.</summary>
+    /// <param name="operationIndex">The independently executed member of the full preflight stream.</param>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    public async Task PartitionDerivedConstraints_AreRejectedBeforeDdl(
+        int operationIndex
+    )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -680,6 +747,8 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
             "partition_identity_parents",
             ["tenant_id", "id"]);
 
+        // Act
+        // WHY: Preserve the complete preflight stream; each native rejection owns an isolated test case.
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -688,7 +757,12 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
                 new SafeMigrationRunOptions("partition-constraint-identity"),
                 CancellationToken.None);
 
+        var failure = await Record.ExceptionAsync(() =>
+            ExecuteOperationsAsync(context, [builder.Operations[operationIndex]], CancellationToken.None));
+
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
+        Assert.Equal(4, report.Assessments.Count);
         Assert.All(
             report.Assessments,
             assessment =>
@@ -697,19 +771,21 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
                 Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
             });
 
-        for (var index = 0; index < builder.Operations.Count; index++)
-        {
-            var exception = await Assert.ThrowsAsync<PostgresException>(() =>
-                ExecuteOperationsAsync(context, [builder.Operations[index]], CancellationToken.None));
-
-            Assert.Equal("P1001", exception.SqlState);
-            Assert.StartsWith("doka_sm_different:", exception.MessageText, StringComparison.Ordinal);
-        }
+        var exception = Assert.IsType<PostgresException>(failure);
+        Assert.Equal("P1001", exception.SqlState);
+        Assert.StartsWith("doka_sm_different:", exception.MessageText, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public async Task PartitionDerivedConstraintDrops_AreRejectedBeforeDdl()
+    /// <summary>Partition Derived Constraint Drops Are Rejected Before Ddl.</summary>
+    /// <param name="operationIndex">The independently executed member of the full preflight stream.</param>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public async Task PartitionDerivedConstraintDrops_AreRejectedBeforeDdl(
+        int operationIndex
+    )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -730,6 +806,8 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
         builder.DropCheckConstraintIfExists("ck_partition_drop", "partition_drop_leaf");
         builder.DropForeignKeyIfExists("fk_partition_drop", "partition_drop_leaf");
 
+        // Act
+        // WHY: Preserve the complete preflight stream; each native rejection owns an isolated test case.
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -738,7 +816,12 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
                 new SafeMigrationRunOptions("partition-constraint-drop"),
                 CancellationToken.None);
 
+        var failure = await Record.ExceptionAsync(() =>
+            ExecuteOperationsAsync(context, [builder.Operations[operationIndex]], CancellationToken.None));
+
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
+        Assert.Equal(2, report.Assessments.Count);
         Assert.All(
             report.Assessments,
             assessment =>
@@ -747,19 +830,16 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
                 Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
             });
 
-        foreach (var operation in builder.Operations)
-        {
-            var exception = await Assert.ThrowsAsync<PostgresException>(() =>
-                ExecuteOperationsAsync(context, [operation], CancellationToken.None));
-
-            Assert.Equal("P1001", exception.SqlState);
-            Assert.StartsWith("doka_sm_different:", exception.MessageText, StringComparison.Ordinal);
-        }
+        var exception = Assert.IsType<PostgresException>(failure);
+        Assert.Equal("P1001", exception.SqlState);
+        Assert.StartsWith("doka_sm_different:", exception.MessageText, StringComparison.Ordinal);
     }
 
+    /// <summary>Unique Nulls Not Distinct Is Rejected Before Ddl.</summary>
     [Fact]
     public async Task UniqueNullsNotDistinct_IsRejectedBeforeDdl()
     {
+        // Arrange
         if (Fixture.ServerVersion.Major < 15)
         {
             return;
@@ -781,6 +861,7 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
             "unique_null_semantics",
             ["code"]);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -789,9 +870,11 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
                 new SafeMigrationRunOptions("unique-null-semantics"),
                 CancellationToken.None);
 
-        var exception = await Assert.ThrowsAsync<PostgresException>(() =>
+        var failure = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
 
+        // Assert
+        var exception = Assert.IsType<PostgresException>(failure);
         var assessment = Assert.Single(report.Assessments);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -801,9 +884,11 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
         Assert.StartsWith("doka_sm_different:", exception.MessageText, StringComparison.Ordinal);
     }
 
+    /// <summary>Partial Set Null Foreign Key Is Rejected Before Ddl.</summary>
     [Fact]
     public async Task PartialSetNullForeignKey_IsRejectedBeforeDdl()
     {
+        // Arrange
         if (Fixture.ServerVersion.Major < 15)
         {
             return;
@@ -833,6 +918,7 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
             ["tenant_id", "id"],
             onDelete: ReferentialAction.SetNull);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -841,9 +927,11 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
                 new SafeMigrationRunOptions("partial-set-null"),
                 CancellationToken.None);
 
-        var exception = await Assert.ThrowsAsync<PostgresException>(() =>
+        var failure = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
 
+        // Assert
+        var exception = Assert.IsType<PostgresException>(failure);
         var assessment = Assert.Single(report.Assessments);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -853,9 +941,16 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
         Assert.StartsWith("doka_sm_different:", exception.MessageText, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public async Task PostgreSql18ConstraintSemantics_AreRejectedBeforeDdl()
+    /// <summary>Postgre Sql18 Constraint Semantics Are Rejected Before Ddl.</summary>
+    /// <param name="operationIndex">The independently executed member of the full preflight stream.</param>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public async Task PostgreSql18ConstraintSemantics_AreRejectedBeforeDdl(
+        int operationIndex
+    )
     {
+        // Arrange
         if (Fixture.ServerVersion.Major < 18)
         {
             return;
@@ -889,6 +984,8 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
                 SqlColumnAndInt("quantity", SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, 0)),
             SafeMigrationPolicy.ThrowIfDifferent);
 
+        // Act
+        // WHY: Preserve the complete preflight stream; each native rejection owns an isolated test case.
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -897,6 +994,10 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
                 new SafeMigrationRunOptions("postgresql-18-constraints"),
                 CancellationToken.None);
 
+        var failure = await Record.ExceptionAsync(() =>
+            ExecuteOperationsAsync(context, [builder.Operations[operationIndex]], CancellationToken.None));
+
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(2, report.Assessments.Count);
         Assert.All(
@@ -907,14 +1008,9 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
                 Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
             });
 
-        foreach (var operation in builder.Operations)
-        {
-            var exception = await Assert.ThrowsAsync<PostgresException>(() =>
-                ExecuteOperationsAsync(context, [operation], CancellationToken.None));
-
-            Assert.Equal("P1001", exception.SqlState);
-            Assert.StartsWith("doka_sm_different:", exception.MessageText, StringComparison.Ordinal);
-        }
+        var exception = Assert.IsType<PostgresException>(failure);
+        Assert.Equal("P1001", exception.SqlState);
+        Assert.StartsWith("doka_sm_different:", exception.MessageText, StringComparison.Ordinal);
     }
 
     /// <summary>Applies and replays the complete canonical constraint set without drift.</summary>
@@ -939,6 +1035,8 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
+        Assert.NotEmpty(canonical);
+        Assert.Equal(canonical.Count, report.Assessments.Count);
         Assert.All(
             report.Assessments,
             static assessment => Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState));

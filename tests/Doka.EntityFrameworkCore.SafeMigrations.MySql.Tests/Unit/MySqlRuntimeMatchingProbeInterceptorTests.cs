@@ -23,8 +23,8 @@ public sealed class MySqlRuntimeMatchingProbeInterceptorTests
     {
         // Arrange
         var observer = new MySqlSafeMigrationIntegrationTests.RuntimeMatchingProbeInterceptor();
-        var original = RequiredAddStatusPrefix + RequiredAddCatalogExpression + RequiredAddStatusSuffix;
-        var expected = RequiredAddStatusPrefix
+        const string original = RequiredAddStatusPrefix + RequiredAddCatalogExpression + RequiredAddStatusSuffix;
+        const string expected = RequiredAddStatusPrefix
             + MatchingCounterPrefix
             + RequiredAddCatalogExpression
             + " ELSE NULL END"
@@ -50,8 +50,8 @@ public sealed class MySqlRuntimeMatchingProbeInterceptorTests
         const string prefix = "SET @doka_sm_state = CASE WHEN @doka_sm_state IS NULL THEN ";
         const string expression = "CASE WHEN COALESCE((TRUE), FALSE) THEN 'matching' ELSE NULL END";
         const string suffix = " ELSE @doka_sm_state END;";
-        var original = prefix + expression + suffix;
-        var expected = prefix + MatchingCounterPrefix + expression + " ELSE NULL END" + suffix;
+        const string original = prefix + expression + suffix;
+        const string expected = prefix + MatchingCounterPrefix + expression + " ELSE NULL END" + suffix;
 
         // Act
         var instrumented = observer.InstrumentCommand(original);
@@ -110,8 +110,8 @@ public sealed class MySqlRuntimeMatchingProbeInterceptorTests
     {
         // Arrange
         var observer = new MySqlSafeMigrationIntegrationTests.RuntimeMatchingProbeInterceptor();
-        var nullProof = "SELECT (FALSE) INTO @doka_sm_nullability_blocked;";
-        var lengthProof = "SELECT (FALSE) INTO @doka_sm_data_blocked;";
+        const string nullProof = "SELECT (FALSE) INTO @doka_sm_nullability_blocked;";
+        const string lengthProof = "SELECT (FALSE) INTO @doka_sm_data_blocked;";
         var original = RequiredAddStatusPrefix
             + RequiredAddCatalogExpression
             + RequiredAddStatusSuffix

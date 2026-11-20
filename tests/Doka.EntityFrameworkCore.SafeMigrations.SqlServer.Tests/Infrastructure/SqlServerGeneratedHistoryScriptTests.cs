@@ -1,5 +1,3 @@
-using System.Text.RegularExpressions;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
 /// <summary>Exercises real generated-upgrade migration SQL without depending on a native engine.</summary>
@@ -43,7 +41,7 @@ public sealed class SqlServerGeneratedHistoryScriptTests
     )
     {
         // Arrange
-        var original = "EXEC sys.sp_executesql N'SELECT ''value'';';";
+        const string original = "EXEC sys.sp_executesql N'SELECT ''value'';';";
 
         // Act
         var actual = SqlServerSafeMigrationsSqlGenerator.ProtectCommandSql(original, options);
@@ -277,6 +275,8 @@ public sealed class SqlServerGeneratedHistoryScriptTests
             }
         }
 
+        // WHY: Fluent terminal materialization preserves the existing snapshot and enumeration contract.
+        // ReSharper disable once UseCollectionExpression
         return payloads.ToArray();
     }
 
@@ -337,6 +337,8 @@ public sealed class SqlServerGeneratedHistoryScriptTests
             payloads.Add(reconstructed.ToString());
         }
 
+        // WHY: Fluent terminal materialization preserves the existing snapshot and enumeration contract.
+        // ReSharper disable once UseCollectionExpression
         return payloads.ToArray();
     }
 
@@ -465,6 +467,7 @@ public sealed class SqlServerMultilineScriptContext : DbContext
 }
 
 /// <summary>Creates a raw SQL default whose literal exceeds the non-MAX Unicode concatenation domain.</summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 [DbContext(typeof(SqlServerMultilineScriptContext))]
 [Migration(MigrationIdentifier)]
 public sealed class SqlServerMultilineInitialMigration : Migration
@@ -507,6 +510,7 @@ public sealed class SqlServerMultilineInitialMigration : Migration
 }
 
 /// <summary>Exercises a later migration's independent dynamic scope with another authored multiline default.</summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 [DbContext(typeof(SqlServerMultilineScriptContext))]
 [Migration(MigrationIdentifier)]
 public sealed class SqlServerMultilineUpgradeMigration : Migration

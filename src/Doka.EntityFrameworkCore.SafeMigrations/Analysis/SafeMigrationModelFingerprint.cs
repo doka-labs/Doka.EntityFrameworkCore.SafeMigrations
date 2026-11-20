@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations;
 
 /// <summary>Creates and validates deterministic fingerprints of relational EF target models.</summary>
+[PublicAPI]
 public static partial class SafeMigrationModelFingerprint
 {
     private const string Algorithm = "sha256";
@@ -105,6 +106,7 @@ public static partial class SafeMigrationModelFingerprint
 }
 
 /// <summary>Indicates that a runtime context does not match the canonical Core model.</summary>
+[PublicAPI]
 public sealed class SafeMigrationModelMismatchException : InvalidOperationException
 {
     /// <summary>Initializes the mismatch exception.</summary>

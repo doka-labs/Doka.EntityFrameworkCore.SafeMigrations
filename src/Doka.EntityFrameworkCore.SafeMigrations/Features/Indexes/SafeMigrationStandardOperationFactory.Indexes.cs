@@ -22,6 +22,10 @@ internal static partial class SafeMigrationStandardOperationFactory
             Columns = definition
                 .Keys
                 .Select(static key => key.Column!)
+
+                // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based
+                // materialization.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray(),
             IsUnique = definition.Unique,
             Filter = definition.Filter
@@ -31,6 +35,10 @@ internal static partial class SafeMigrationStandardOperationFactory
             IsDescending = definition
                 .Keys
                 .Select(static key => key.SortOrder == SafeMigrationIndexSortOrder.Descending)
+
+                // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based
+                // materialization.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray(),
         };
     }

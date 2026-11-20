@@ -106,11 +106,13 @@ internal sealed class MySqlSafeMigrationProviderOperationAdapter : ISafeMigratio
 
         var keys = operation.Columns.Select((column, ordinal) => new ExpectedIndexKeyDefinition(
             column,
-            sortOrder: operation.IsDescending is null
-                ? SafeMigrationIndexSortOrder.ProviderDefault
-                : operation.IsDescending[ordinal]
+            sortOrder: operation.IsDescending switch
+            {
+                null => SafeMigrationIndexSortOrder.ProviderDefault,
+                var descending => descending[ordinal]
                     ? SafeMigrationIndexSortOrder.Descending
                     : SafeMigrationIndexSortOrder.Ascending,
+            },
             prefixLength: metadata.IndexPrefixLengths?[ordinal] is > 0
                 ? metadata.IndexPrefixLengths[ordinal]
                 : null));
@@ -163,6 +165,10 @@ internal sealed class MySqlSafeMigrationProviderOperationAdapter : ISafeMigratio
     {
         var annotations = operation
             .GetAnnotations()
+
+            // WHY: Retain fluent materialization and its existing snapshot
+            // ownership rather than replacing this boundary with a spread.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         if (annotations.Length == 0)

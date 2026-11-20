@@ -963,9 +963,9 @@ public sealed class MySqlNativeUuidIntegrationTests : MySqlIntegrationTestBase
                 ? null
                 : true,
             IsNullable = false,
+            ["Doka:MySql:GuidFormat"] = target,
         };
 
-        targetColumn["Doka:MySql:GuidFormat"] = target;
         var definition = SafeMigrationExpectedDefinitionFactory.From(targetColumn);
         builder.EnsureColumn("uuid_format", definition, SafeMigrationPolicy.RepairIfSafe);
 
@@ -1168,7 +1168,7 @@ public sealed class MySqlNativeUuidIntegrationTests : MySqlIntegrationTestBase
         var stored = await context
             .Set<NativeUuidRow>()
             .AsNoTracking()
-            .SingleAsync();
+            .SingleAsync(CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationAction.RejectDifferent,
@@ -1279,6 +1279,7 @@ public sealed class MySqlNativeUuidIntegrationTests : MySqlIntegrationTestBase
     }
 
     /// <summary>The native key and data payload used by the real EF materialization path.</summary>
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class NativeUuidRow
     {
         /// <summary>Gets or sets the Guid retained by the model while its store type is native UUID.</summary>
@@ -1289,8 +1290,14 @@ public sealed class MySqlNativeUuidIntegrationTests : MySqlIntegrationTestBase
     }
 
     /// <summary>Owns the opt-in model used for typed UUID parameters, reads and literal generation.</summary>
-    private sealed class NativeUuidContext(DbContextOptions<NativeUuidContext> options) : DbContext(options)
+    private sealed class NativeUuidContext : DbContext
     {
+        /// <summary>Initializes the explicit dependencies of this isolated test helper.</summary>
+        /// <param name="options">The isolated model and provider options.</param>
+        public NativeUuidContext(
+            DbContextOptions<NativeUuidContext> options
+        ) : base(options) { }
+
         /// <inheritdoc />
         protected override void OnModelCreating(
             ModelBuilder modelBuilder

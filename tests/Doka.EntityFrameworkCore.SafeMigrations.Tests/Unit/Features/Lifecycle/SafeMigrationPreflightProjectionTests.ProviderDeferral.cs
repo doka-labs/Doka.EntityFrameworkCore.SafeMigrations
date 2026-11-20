@@ -35,7 +35,9 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         Assert.Equal(SafeMigrationRepairCapability.None, analysis.RepairCapability);
     }
 
-    /// <summary>Later deferred effects cannot replace the first missing postcondition with invented certainty.</summary>
+    /// <summary>
+    /// Later deferred effects cannot replace the first missing postcondition with invented certainty.
+    /// </summary>
     [Fact]
     public void DeferredProviderBoundary_RetainsFirstConditionalOrigin()
     {
@@ -63,7 +65,9 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         Assert.False(analysis.PostconditionSatisfied);
     }
 
-    /// <summary>Immutable supported catalog states cannot establish a postcondition after deferred structural DDL.</summary>
+    /// <summary>
+    /// Immutable supported catalog states cannot establish a postcondition after deferred structural DDL.
+    /// </summary>
     /// <param name="state">The supported state captured before the ordered stream executes.</param>
     [Theory]
     [InlineData(SafeMigrationObservedState.Missing)]
@@ -101,7 +105,9 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         Assert.Equal(SafeMigrationRepairCapability.None, analysis.RepairCapability);
     }
 
-    /// <summary>Deferred safe DDL does not grant missing permissions or remove unsupported provider contracts.</summary>
+    /// <summary>
+    /// Deferred safe DDL does not grant missing permissions or remove unsupported provider contracts.
+    /// </summary>
     /// <param name="invariant">Whether the live provider also attached the invariant certificate.</param>
     [Theory]
     [InlineData(false)]

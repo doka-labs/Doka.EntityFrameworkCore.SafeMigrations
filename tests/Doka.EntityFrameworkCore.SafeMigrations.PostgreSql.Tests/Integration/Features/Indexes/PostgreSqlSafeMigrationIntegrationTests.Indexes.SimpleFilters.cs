@@ -114,7 +114,7 @@ public sealed class PostgreSqlIndexesSimpleFiltersIntegrationTests : PostgreSqlS
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await CreateSimpleFilterTableAsync(connectionString, CancellationToken.None, column);
+        await CreateSimpleFilterTableAsync(connectionString, column, CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = SimpleFilterBuilder(context, filter);
 
@@ -150,7 +150,7 @@ public sealed class PostgreSqlIndexesSimpleFiltersIntegrationTests : PostgreSqlS
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await CreateSimpleFilterTableAsync(connectionString, cancellationToken: CancellationToken.None);
+        await CreateSimpleFilterTableAsync(connectionString, "parent", CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = SimpleFilterBuilder(context, filter);
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
@@ -183,7 +183,7 @@ public sealed class PostgreSqlIndexesSimpleFiltersIntegrationTests : PostgreSqlS
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await CreateSimpleFilterTableAsync(connectionString, CancellationToken.None, column);
+        await CreateSimpleFilterTableAsync(connectionString, column, CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = SimpleFilterBuilder(context, filter);
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
@@ -216,7 +216,7 @@ public sealed class PostgreSqlIndexesSimpleFiltersIntegrationTests : PostgreSqlS
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await CreateSimpleFilterTableAsync(connectionString, cancellationToken: CancellationToken.None);
+        await CreateSimpleFilterTableAsync(connectionString, "parent", CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = SimpleFilterBuilder(context, filter);
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
@@ -242,7 +242,7 @@ public sealed class PostgreSqlIndexesSimpleFiltersIntegrationTests : PostgreSqlS
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await CreateSimpleFilterTableAsync(connectionString, cancellationToken: CancellationToken.None);
+        await CreateSimpleFilterTableAsync(connectionString, "parent", CancellationToken.None);
         await using var context = CreateContext(connectionString);
         await ExecuteOperationsAsync(
             context,
@@ -274,7 +274,7 @@ public sealed class PostgreSqlIndexesSimpleFiltersIntegrationTests : PostgreSqlS
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await CreateSimpleFilterTableAsync(connectionString, cancellationToken: CancellationToken.None);
+        await CreateSimpleFilterTableAsync(connectionString, "parent", CancellationToken.None);
         await using var context = CreateContext(connectionString);
         await ExecuteOperationsAsync(
             context,

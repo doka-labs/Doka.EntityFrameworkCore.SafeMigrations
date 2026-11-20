@@ -1,5 +1,3 @@
-using System.Data;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql;
 
 internal sealed partial class MySqlSafeMigrationProviderAnalyzer
@@ -60,8 +58,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
 
             var parameterizer = new MySqlCatalogQueryParameterizer(command, _typeMappingSource);
             var setup = new StringBuilder();
-            var selections = new List<string>();
-            var selected = new List<int>();
+            List<string> selections = [];
+            List<int> selected = [];
             var proofCount = 0;
             var sqlBytes = 0;
             var selectionBytes = 0;
@@ -178,8 +176,14 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                 }
 
                 var expected = 0;
-                foreach (var ordinal in selected)
+
+                // WHY: Index this stable list while preserving its order and ownership.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
+                for (var ordinalIndex = 0; ordinalIndex < selected.Count; ordinalIndex++)
                 {
+                    var ordinal = selected[ordinalIndex];
+
                     var plan = plans[ordinal];
                     var bindings = new MySqlSafeMigrationBinaryDefaultProof[plan.BinaryDefaultProofs.Count];
 
@@ -260,7 +264,10 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                     }
                     catch (Exception exception) when (failure is not null)
                     {
-                        failure.Data["SafeMigrations.BinaryDefaultProofCleanupException"] = exception;
+                        SafeMigrationAnalysisCleanup.RetainFailure(
+                            failure,
+                            exception,
+                            "SafeMigrations.BinaryDefaultProofCleanupException");
                     }
                 }
             }

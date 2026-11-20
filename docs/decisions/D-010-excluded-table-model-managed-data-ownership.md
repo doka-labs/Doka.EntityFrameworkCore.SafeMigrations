@@ -1,8 +1,8 @@
 ---
 id: D-010
 status: implemented
-date: 2026-09-05
-decision-makers: [Dominic Kalkbrenner]
+date: 2026-11-19
+decision-makers: ["Dominic Kalkbrenner"]
 consulted: []
 informed: ["@doka-labs/core-maintainers"]
 scope: "Model-managed-data ownership for excluded tables in independent migration lineages"
@@ -133,11 +133,15 @@ lineage. D-005 remains authoritative for bounded evidence and non-disclosure.
 ### Decision History
 
 - 2026-09-05: Decision recorded with status proposed.
-- 2026-09-05: Dominic Kalkbrenner selected explicit default-off ownership;
-  status changed from proposed to accepted.
+- 2026-09-05: Status changed from proposed to accepted.
+- 2026-09-05: Dominic Kalkbrenner selected explicit default-off ownership.
+- 2026-09-05: Status changed from accepted to implemented.
 - 2026-09-05: Implemented Core/provider option propagation, exact filtering,
-  real EF tooling qualification, tests, API documentation, and operator guide;
-  status changed from accepted to implemented.
+  real EF tooling qualification, tests, API documentation, and operator guide.
+- 2026-11-19: Aligned last-update metadata, reciprocal amendments, option titles
+  and source/navigation format with the current documentation profile. Retained
+  the recorded status and historical approval evidence; this migration grants no
+  new architectural acceptance or publication authority.
 
 ### Implementation References
 

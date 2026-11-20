@@ -79,8 +79,13 @@ internal sealed partial class SafeMigrationPreflightProjection
                 createdByProjection: prerequisites.NewlyCreated);
         }
 
-        foreach (var constraint in definition.UniqueConstraints)
+        // WHY: This immutable definition snapshot is indexed; retain its authored order without interface enumeration.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var constraintIndex = 0; constraintIndex < definition.UniqueConstraints.Count; constraintIndex++)
         {
+            var constraint = definition.UniqueConstraints[constraintIndex];
+
             CaptureTableMember(
                 prerequisites.UniqueConstraints,
                 constraint.Name,
@@ -90,8 +95,13 @@ internal sealed partial class SafeMigrationPreflightProjection
                 liveAnalysis);
         }
 
-        foreach (var constraint in definition.CheckConstraints)
+        // WHY: This immutable definition snapshot is indexed; retain its authored order without interface enumeration.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var constraintIndex1 = 0; constraintIndex1 < definition.CheckConstraints.Count; constraintIndex1++)
         {
+            var constraint = definition.CheckConstraints[constraintIndex1];
+
             CaptureTableMember(
                 prerequisites.CheckConstraints,
                 constraint.Name,
@@ -101,8 +111,13 @@ internal sealed partial class SafeMigrationPreflightProjection
                 liveAnalysis);
         }
 
-        foreach (var constraint in definition.ForeignKeys)
+        // WHY: This immutable definition snapshot is indexed; retain its authored order without interface enumeration.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var constraintIndex2 = 0; constraintIndex2 < definition.ForeignKeys.Count; constraintIndex2++)
         {
+            var constraint = definition.ForeignKeys[constraintIndex2];
+
             CaptureTableMember(
                 prerequisites.ForeignKeys,
                 constraint.Name,
@@ -161,6 +176,8 @@ internal sealed partial class SafeMigrationPreflightProjection
             return null;
         }
 
+        // WHY: Return the first certified physical alias directly, without a separate projection/delegate layer.
+        // ReSharper disable once LoopCanBeConvertedToQuery
         foreach (var binding in bindings)
         {
             if (binding.Kind == kind

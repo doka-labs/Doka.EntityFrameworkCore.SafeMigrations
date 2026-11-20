@@ -1,5 +1,8 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
+/// <summary>
+/// Distinguishes proven non-NULL structured defaults from opaque expressions and unknown provider value domains.
+/// </summary>
 public sealed class SafeMigrationColumnRepairHelperTests
 {
     /// <summary>Preserves unknown/default contracts while refusing one structurally proven NULL replacement.</summary>
@@ -15,6 +18,7 @@ public sealed class SafeMigrationColumnRepairHelperTests
         { SafeMigrationDefaultValue.None, false, false },
     };
 
+    /// <summary>Gets independent literal, structured and opaque defaults with their proven non-NULL result.</summary>
     public static TheoryData<SafeMigrationDefaultValue, bool> NonNullDefaultCases => new()
     {
         { SafeMigrationDefaultValue.None, false },
@@ -81,6 +85,11 @@ public sealed class SafeMigrationColumnRepairHelperTests
         Assert.Equal(expected, safe);
     }
 
+    /// <summary>
+    /// Certifies non-NULL defaults only from supported expression semantics, never opaque SQL spelling.
+    /// </summary>
+    /// <param name="defaultValue">The complete literal or structured default contract.</param>
+    /// <param name="expected">Whether the default is independently provable as non-NULL.</param>
     [Theory]
     [MemberData(nameof(NonNullDefaultCases))]
     public void HasProvablyNonNullDefault_RequiresStructuralProof(

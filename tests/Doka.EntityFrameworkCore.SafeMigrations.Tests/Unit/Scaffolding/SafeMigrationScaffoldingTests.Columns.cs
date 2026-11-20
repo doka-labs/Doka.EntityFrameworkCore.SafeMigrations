@@ -17,9 +17,8 @@ public sealed partial class SafeMigrationScaffoldingTests
             ColumnType = "varchar(200)",
             MaxLength = 200,
             IsNullable = false,
+            ["Provider:Facet"] = "value",
         };
-
-        addColumn["Provider:Facet"] = "value";
 
         var alterColumn = new AlterColumnOperation
         {

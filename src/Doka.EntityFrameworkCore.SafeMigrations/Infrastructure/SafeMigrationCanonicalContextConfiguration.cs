@@ -23,6 +23,9 @@ internal sealed record SafeMigrationCanonicalContextConfiguration(
 
         var registrations = services
             .Where(static descriptor => descriptor.ServiceType == typeof(SafeMigrationCanonicalContextConfiguration))
+
+            // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         if (registrations.Length == 0)

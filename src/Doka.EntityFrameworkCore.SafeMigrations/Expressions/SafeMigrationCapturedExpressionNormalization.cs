@@ -12,6 +12,7 @@ internal static class SafeMigrationCapturedExpressionNormalization
     )
     {
         ArgumentNullException.ThrowIfNull(intent);
+
         if (!foldUnquotedIdentifiers)
         {
             return intent;
@@ -34,6 +35,7 @@ internal static class SafeMigrationCapturedExpressionNormalization
     )
     {
         ArgumentNullException.ThrowIfNull(definition);
+
         if (!foldUnquotedIdentifiers)
         {
             return definition;
@@ -50,6 +52,8 @@ internal static class SafeMigrationCapturedExpressionNormalization
             var normalized = NormalizeColumn(original, true);
             if (!ReferenceEquals(original, normalized))
             {
+                // WHY: Preserve the existing copy-on-first-change array and caller ownership boundary.
+                // ReSharper disable once UseCollectionExpression
                 columns ??= definition.Columns.ToArray();
                 columns[ordinal] = normalized;
             }
@@ -66,6 +70,8 @@ internal static class SafeMigrationCapturedExpressionNormalization
             var normalized = NormalizeCheck(original, true);
             if (!ReferenceEquals(original, normalized))
             {
+                // WHY: Copy only the changed immutable snapshot, retaining the exact materialization.
+                // ReSharper disable once UseCollectionExpression
                 checks ??= definition.CheckConstraints.ToArray();
                 checks[ordinal] = normalized;
             }

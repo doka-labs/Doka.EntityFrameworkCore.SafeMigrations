@@ -2,7 +2,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer;
 
 internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
 {
-    private Dictionary<(string Schema, string Table), SqlServerProjectedKeyTable> _projectedKeyTables = new();
+    private Dictionary<(string Schema, string Table), SqlServerProjectedKeyTable> _projectedKeyTables = [];
 
     bool ISafeMigrationProjectedKeyAnalyzer.SharesUniqueConstraintAndIndexIdentity => false;
 
@@ -86,10 +86,16 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         CancellationToken cancellationToken
     )
     {
-        var requested = new Dictionary<(string Schema, string Table), HashSet<string>>();
-        var rowsRequired = new HashSet<(string Schema, string Table)>();
-        foreach (var operation in operations)
+        Dictionary<(string Schema, string Table), HashSet<string>> requested = [];
+        HashSet<(string Schema, string Table)> rowsRequired = [];
+
+        // WHY: The stable indexed snapshot preserves operation and declaration order.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var operationIndex0 = 0; operationIndex0 < operations.Count; operationIndex0++)
         {
+            var operation = operations[operationIndex0];
+
             if ((operation.Intent is EnsureIndexIntent index
                     && (index.Definition.Keys.Count > 32
                         || index.Definition.Keys.Any(static key => key.Column is null)))
@@ -134,8 +140,13 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             switch (operation.Intent)
             {
                 case EnsureIndexIntent value:
-                    foreach (var key in value.Definition.Keys)
+                    // WHY: The stable indexed snapshot preserves operation and declaration order.
+                    // ReSharper disable once ForCanBeConvertedToForeach
+                    // ReSharper disable once LoopCanBeConvertedToQuery
+                    for (var keyIndex0 = 0; keyIndex0 < value.Definition.Keys.Count; keyIndex0++)
                     {
+                        var key = value.Definition.Keys[keyIndex0];
+
                         if (key.Column is not null)
                         {
                             columns.Add(key.Column);
@@ -192,7 +203,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
 
                 return new SafeMigrationCatalogProbeStatement(1, 0, offset);
             },
-            async (reader, slot, _, token) =>
+            async (reader, slot, _, callbackCancellationToken) =>
             {
                 var offset = slot * SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement;
                 var count = Math.Min(
@@ -200,7 +211,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                     tables.Length - offset);
 
                 var received = 0;
-                while (await reader.ReadAsync(token))
+                while (await reader.ReadAsync(callbackCancellationToken))
                 {
                     var ordinal = reader.GetInt32(0);
                     if ((uint)ordinal >= (uint)count
@@ -233,9 +244,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                     throw new InvalidOperationException("SQL Server omitted a projected key catalog result.");
                 }
             },
-            cancellationToken,
             transaction,
-            SqlServerCatalogParameterBindings.MaximumParameters);
+            SqlServerCatalogParameterBindings.MaximumParameters,
+            cancellationToken);
 
         // WHY: Every table header is captured before column facets. Chunk slots
         // transport whole 512-value statements, not individual column operations.
@@ -247,7 +258,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             .Chunk(SafeMigrationCatalogQueryLimits.MaximumInventoryValues)
             .GetEnumerator();
 
-        var pending = new Dictionary<int, (int Ordinal, string Name)[]>();
+        Dictionary<int, (int Ordinal, string Name)[]> pending = [];
         await SafeMigrationCatalogProbeBatch.ReadAsync(
             connection,
             (requested.Values.Sum(static names => names.Count)
@@ -275,20 +286,20 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                         var table = tables[binding.Ordinal];
                         var qualified = _sqlGenerationHelper.DelimitIdentifier(table.Table, table.Schema);
 
-                        return
-                            $"({binding.Ordinal}, OBJECT_ID({KeyLiteral(qualified)}, N'U'), {KeyLiteral(binding.Name)})";
+                        return $"({binding.Ordinal}, OBJECT_ID({KeyLiteral(qualified)}, N'U'), {KeyLiteral(
+                            binding.Name)})";
                     }));
 
                 return new SafeMigrationCatalogProbeStatement(1, 0, slot);
             },
-            async (reader, slot, _, token) =>
+            async (reader, slot, _, callbackCancellationToken) =>
             {
                 var permitted = pending[slot]
                     .ToHashSet();
 
                 pending.Remove(slot);
 
-                while (await reader.ReadAsync(token))
+                while (await reader.ReadAsync(callbackCancellationToken))
                 {
                     var ordinal = reader.GetInt32(0);
                     var name = reader.GetString(1);
@@ -314,9 +325,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                             reader.GetInt32(9) == 1));
                 }
             },
-            cancellationToken,
             transaction,
-            SqlServerCatalogParameterBindings.MaximumParameters);
+            SqlServerCatalogParameterBindings.MaximumParameters,
+            cancellationToken);
 
         // WHY: DbContext analysis is scoped and cannot run concurrently on one
         // context. Replacing the completed snapshot prevents partially captured
@@ -417,12 +428,11 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             .Append("FROM @doka_key_tables ORDER BY ordinal;");
 
         var text = sql.ToString();
-        if (Encoding.UTF8.GetByteCount(text) > SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes)
-        {
-            throw new NotSupportedException("SQL Server projected key catalog payload exceeds its bounded SQL budget.");
-        }
 
-        return text;
+        return Encoding.UTF8.GetByteCount(text) > SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes
+            ? throw new NotSupportedException(
+                "SQL Server projected key catalog payload exceeds its bounded SQL budget.")
+            : text;
     }
 
     private static string BuildProjectedKeyColumnsSql(

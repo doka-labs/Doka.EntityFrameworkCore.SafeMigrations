@@ -1,11 +1,14 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
+/// <summary>Verifies Core Convergence Migration contracts in independently owned test state.</summary>
 [DbContext(typeof(SafeMigrationDbContext))]
 [Migration(MigrationIdentifier)]
 public sealed class CoreConvergenceMigration : Migration
 {
+    /// <summary>Identifies the unchanged migration whose history is shared by convergence fixtures.</summary>
     public const string MigrationIdentifier = "20260817000100_CoreConvergence";
 
+    /// <inheritdoc />
     protected override void Up(
         MigrationBuilder migrationBuilder
     )
@@ -37,6 +40,7 @@ public sealed class CoreConvergenceMigration : Migration
             policy: SafeMigrationPolicy.RepairIfSafe);
     }
 
+    /// <inheritdoc />
     protected override void Down(
         MigrationBuilder migrationBuilder
     ) => throw new NotSupportedException("The convergence baseline is forward-only and has no destructive Down path.");

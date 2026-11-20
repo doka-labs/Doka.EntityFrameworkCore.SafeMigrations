@@ -8,52 +8,68 @@ public sealed class SqlServerCatalogParameterBindingTests
 
     /// <summary>Supplies complete authored values and their natural source mappings.</summary>
     /// <returns>Synthetic Unicode, binary, decimal, and full-precision temporal sources.</returns>
-    public static TheoryData<object, string, SqlDbType> LosslessSources() => new()
+    public static TheoryData<string, string, SqlDbType> LosslessSources() => new()
     {
-        { "a\u20ac\ud83d\ude00", "nvarchar(max)", SqlDbType.NVarChar },
-        { new byte[] { 0, 1, 128, 255 }, "varbinary(max)", SqlDbType.VarBinary },
-        { 123456789.12345678901234567890m, "decimal(38,20)", SqlDbType.Decimal },
-        { 1.0000000000000000000000000000m, "decimal(38,28)", SqlDbType.Decimal },
-        { new DateTime(2026, 1, 2, 3, 4, 5).AddTicks(1234567), "datetime2(7)", SqlDbType.DateTime2 },
-        {
-            new DateTimeOffset(
-                2026,
-                1,
-                2,
-                3,
-                4,
-                5,
-                TimeSpan.FromHours(5.5)).AddTicks(1234567),
-            "datetimeoffset(7)", SqlDbType.DateTimeOffset
-        },
-        { new TimeSpan(123456789), "time(7)", SqlDbType.Time },
+        { "unicode", "nvarchar(max)", SqlDbType.NVarChar },
+        { "binary", "varbinary(max)", SqlDbType.VarBinary },
+        { "decimal-scale20", "decimal(38,20)", SqlDbType.Decimal },
+        { "decimal-scale28", "decimal(38,28)", SqlDbType.Decimal },
+        { "datetime", "datetime2(7)", SqlDbType.DateTime2 },
+        { "datetimeoffset", "datetimeoffset(7)", SqlDbType.DateTimeOffset },
+        { "time", "time(7)", SqlDbType.Time },
     };
 
     /// <summary>Supplies framework-supported scalar domains that must remain valid after parameterization.</summary>
     /// <returns>The source value and an already supported authored store type.</returns>
-    public static TheoryData<object, string> NaturalSources() => new()
+    public static TheoryData<string, string> NaturalSources() => new()
     {
-        { new Guid("13572468-2468-1357-2468-135724681357"), "uniqueidentifier" },
-        { new DateOnly(2026, 1, 2), "date" },
-        { true, "bit" },
-        { (sbyte)-128, "smallint" },
-        { ushort.MaxValue, "int" },
-        { uint.MaxValue, "bigint" },
-        { ulong.MaxValue, "decimal(20,0)" },
-        { BindingValue.Large, "bigint" },
+        { "guid", "uniqueidentifier" },
+        { "date", "date" },
+        { "boolean", "bit" },
+        { "sbyte", "smallint" },
+        { "ushort", "int" },
+        { "uint", "bigint" },
+        { "ulong", "decimal(20,0)" },
+        { "enum", "bigint" },
+    };
+
+    /// <summary>Builds the exact typed source without relying on boxed-object theory serialization.</summary>
+    /// <param name="source">The closed synthetic scalar identity used by discovery.</param>
+    /// <returns>The unchanged CLR value, including temporal ticks and decimal scale.</returns>
+    private static object SourceValue(
+        string source
+    ) => source switch
+    {
+        "unicode" => "a\u20ac\ud83d\ude00",
+        "binary" => new byte[] { 0, 1, 128, 255 },
+        "decimal-scale20" => 123456789.12345678901234567890m,
+        "decimal-scale28" => 1.0000000000000000000000000000m,
+        "datetime" => new DateTime(2026, 1, 2, 3, 4, 5).AddTicks(1234567),
+        "datetimeoffset" => new DateTimeOffset(2026, 1, 2, 3, 4, 5, TimeSpan.FromHours(5.5)).AddTicks(1234567),
+        "time" => new TimeSpan(123456789),
+        "guid" => new Guid("13572468-2468-1357-2468-135724681357"),
+        "date" => new DateOnly(2026, 1, 2),
+        "boolean" => true,
+        "sbyte" => (sbyte)-128,
+        "ushort" => ushort.MaxValue,
+        "uint" => uint.MaxValue,
+        "ulong" => ulong.MaxValue,
+        "enum" => BindingValue.Large,
+        _ => throw new ArgumentOutOfRangeException(nameof(source)),
     };
 
     /// <summary>Retains supported CLR scalar domains without requiring a new destination conversion.</summary>
-    /// <param name="value">The natural authored scalar.</param>
+    /// <param name="sourceCase">The discoverable identity of the natural authored scalar.</param>
     /// <param name="destination">The pre-existing supported destination store type.</param>
     [Theory]
     [MemberData(nameof(NaturalSources))]
     public void NaturalSource_RetainsSupportedLiteralDomain(
-        object value,
+        string sourceCase,
         string destination
     )
     {
         // Arrange
+        var value = SourceValue(sourceCase);
         using var context = new SafeMigrationDbContext(ConnectionString);
         var mappings = context.GetService<IRelationalTypeMappingSource>();
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -125,18 +141,19 @@ public sealed class SqlServerCatalogParameterBindingTests
     }
 
     /// <summary>Preserves source bits before destination conversion can narrow their domain.</summary>
-    /// <param name="value">The complete authored source.</param>
+    /// <param name="source">The discoverable identity of the complete authored source.</param>
     /// <param name="storeType">The lossless source store type.</param>
     /// <param name="sqlType">The corresponding native parameter type.</param>
     [Theory]
     [MemberData(nameof(LosslessSources))]
     public void SourceBinding_PreservesValueAndSourceFacets(
-        object value,
+        string source,
         string storeType,
         SqlDbType sqlType
     )
     {
         // Arrange
+        var value = SourceValue(source);
         using var context = new SafeMigrationDbContext(ConnectionString);
         var bindings = new SqlServerCatalogParameterBindings(context.GetService<IRelationalTypeMappingSource>(), 31);
 
@@ -380,7 +397,9 @@ public sealed class SqlServerCatalogParameterBindingTests
         Assert.Empty(bindings.Values);
     }
 
-    /// <summary>Uses identical delayed templates for differing row keys without sharing their result identity.</summary>
+    /// <summary>
+    /// Uses identical delayed templates for differing row keys without sharing their result identity.
+    /// </summary>
     [Fact]
     public void DistinctKeys_ShareStableInnerSqlButRetainIndependentBindings()
     {
@@ -407,7 +426,9 @@ public sealed class SqlServerCatalogParameterBindingTests
         Assert.Contains("@doka_value", first.StateEvaluationGuardExpression, StringComparison.Ordinal);
     }
 
-    /// <summary>Different parameter payloads cannot reuse a classification merely because SQL templates match.</summary>
+    /// <summary>
+    /// Different parameter payloads cannot reuse a classification merely because SQL templates match.
+    /// </summary>
     /// <param name="nativeBatch">Whether the connection exposes native batching.</param>
     [Theory]
     [InlineData(true)]
@@ -417,7 +438,7 @@ public sealed class SqlServerCatalogParameterBindingTests
     )
     {
         // Arrange
-        using var context = new SafeMigrationDbContext(ConnectionString);
+        await using var context = new SafeMigrationDbContext(ConnectionString);
         await using var connection = new SqlServerCatalogTestConnection(nativeBatch);
         var plans = new[] { BuildUpdate(context, 0, 1), BuildUpdate(context, 1, 2) };
         var results = new SafeMigrationProviderAnalysis[2];
@@ -459,7 +480,7 @@ public sealed class SqlServerCatalogParameterBindingTests
     )
     {
         // Arrange
-        using var context = new SafeMigrationDbContext(ConnectionString);
+        await using var context = new SafeMigrationDbContext(ConnectionString);
         await using var connection = new SqlServerCatalogTestConnection(nativeBatch);
         var mappings = context.GetService<IRelationalTypeMappingSource>();
         var plan = ParameterizedConstantPlan(mappings, 0, 2000);
@@ -491,7 +512,9 @@ public sealed class SqlServerCatalogParameterBindingTests
         Assert.Equal(SafeMigrationObservedState.Missing, results[0].ObservedState);
     }
 
-    /// <summary>A real managed-data operation retains every source at the complete transport parameter boundary.</summary>
+    /// <summary>
+    /// A real managed-data operation retains every source at the complete transport parameter boundary.
+    /// </summary>
     /// <param name="nativeBatch">Whether transport uses native ADO.NET batching.</param>
     [Theory]
     [InlineData(true)]
@@ -501,7 +524,7 @@ public sealed class SqlServerCatalogParameterBindingTests
     )
     {
         // Arrange
-        using var context = new SafeMigrationDbContext(ConnectionString);
+        await using var context = new SafeMigrationDbContext(ConnectionString);
         await using var connection = new SqlServerCatalogTestConnection(nativeBatch);
         var columns = Enumerable
             .Range(0, 16)
@@ -527,6 +550,8 @@ public sealed class SqlServerCatalogParameterBindingTests
             columns,
             Enumerable
                 .Repeat("int", columns.Length)
+                // WHY: Fluent terminal materialization preserves the existing snapshot and enumeration contract.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray(),
             values);
 
@@ -617,7 +642,7 @@ public sealed class SqlServerCatalogParameterBindingTests
     )
     {
         // Arrange
-        using var context = new SafeMigrationDbContext(ConnectionString);
+        await using var context = new SafeMigrationDbContext(ConnectionString);
         await using var connection = new SqlServerCatalogTestConnection(nativeBatch);
         var mappings = context.GetService<IRelationalTypeMappingSource>();
 
@@ -631,7 +656,7 @@ public sealed class SqlServerCatalogParameterBindingTests
             .ToArray();
 
         var results = new SafeMigrationProviderAnalysis[plans.Length];
-        var operationsPerStatement = SqlServerCatalogParameterBindings.MaximumParameters / parametersPerPlan;
+        const int operationsPerStatement = SqlServerCatalogParameterBindings.MaximumParameters / parametersPerPlan;
         var expectedStatements = (plans.Length + operationsPerStatement - 1) / operationsPerStatement;
 
         // Act
@@ -685,7 +710,7 @@ public sealed class SqlServerCatalogParameterBindingTests
     public async Task ParameterPayloadBudget_SplitsBeforeTheWireLimit()
     {
         // Arrange
-        using var context = new SafeMigrationDbContext(ConnectionString);
+        await using var context = new SafeMigrationDbContext(ConnectionString);
         await using var connection = new SqlServerCatalogTestConnection();
         var mappings = context.GetService<IRelationalTypeMappingSource>();
         var plans = Enumerable
@@ -713,7 +738,9 @@ public sealed class SqlServerCatalogParameterBindingTests
         Assert.All(connection.BatchPayloadBytes, bytes => Assert.InRange(bytes, 1, 4 * 1024 * 1024));
     }
 
-    /// <summary>Rejects a single oversized parameter capture rather than entering a non-progressing split loop.</summary>
+    /// <summary>
+    /// Rejects a single oversized parameter capture rather than entering a non-progressing split loop.
+    /// </summary>
     /// <param name="parameterOverflow">Whether count rather than source payload exceeds its limit.</param>
     [Theory]
     [InlineData(true)]
@@ -723,7 +750,7 @@ public sealed class SqlServerCatalogParameterBindingTests
     )
     {
         // Arrange
-        using var context = new SafeMigrationDbContext(ConnectionString);
+        await using var context = new SafeMigrationDbContext(ConnectionString);
         await using var connection = new SqlServerCatalogTestConnection();
         var mappings = context.GetService<IRelationalTypeMappingSource>();
         var plan = ParameterizedConstantPlan(
@@ -889,7 +916,9 @@ public sealed class SqlServerCatalogParameterBindingTests
         return sql[start..end];
     }
 
-    /// <summary>Creates synthetic bound parameters for transport-limit tests without destination dependencies.</summary>
+    /// <summary>
+    /// Creates synthetic bound parameters for transport-limit tests without destination dependencies.
+    /// </summary>
     private static SqlServerSafeMigrationRuntimePlan ParameterizedConstantPlan(
         IRelationalTypeMappingSource mappings,
         int ordinal,

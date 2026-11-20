@@ -117,9 +117,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         string facet,
         string expected,
         string actual
-    ) => $"""
-        CASE WHEN {mismatch} THEN CONCAT_WS(CHAR(31), '{facet}', {expected}, {actual}) END
-        """;
+    ) => $"CASE WHEN {mismatch} THEN CONCAT_WS(CHAR(31), '{facet}', {expected}, {actual}) END";
 
     private static string ValueGenerationKind(
         ExpectedColumnDefinition definition,
@@ -131,11 +129,13 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             return "row_version";
         }
 
-        return MySqlSafeMigrationColumnMetadata.TryCreate(definition, out var metadata)
-            && metadata.ValueGenerationStrategy == MySqlValueGenerationStrategy.AutoIncrement
-                ? "identity"
-                : definition.ComputedColumnSql is not null || definition.ComputedExpression is not null
-                    ? "generated"
-                    : "none";
+        return (MySqlSafeMigrationColumnMetadata.TryCreate(definition, out var metadata)
+                && metadata.ValueGenerationStrategy == MySqlValueGenerationStrategy.AutoIncrement) switch
+            {
+                true => "identity",
+                _ when definition.ComputedColumnSql is not null || definition.ComputedExpression is not null =>
+                    "generated",
+                _ => "none",
+            };
     }
 }

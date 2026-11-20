@@ -218,6 +218,32 @@ Then verify:
 
 Only then release the write fence and mark the instance complete.
 
+## Cleanup ownership
+
+Wait for the actual owned operation to finish before disposing its command,
+transaction or connection owner. Analysis and execution cleanup continue after
+caller cancellation using their protected cleanup contract. An observer-only
+`WaitAsync` deadline is not cancellation of native work and must not allow a
+pending owner to be reused, closed out from underneath that work, or returned
+to a pool. SafeMigrations awaits native cleanup/disposal completion rather than
+abandoning the returned task. Driver-native command timeouts remain in force;
+connection close/disposal has no invented universal completion deadline.
+
+The runner disposes an acquired analysis scope before closing a connection it
+opened. A caller-opened connection retains caller ownership. When work already
+failed or was canceled, that exact primary exception remains primary if cleanup
+also fails; secondary failures are retained as bounded stage evidence where the
+exception supports diagnostic attachment. Successful work followed by cleanup
+failure still fails. An unsafe provider session remains quarantined and must be
+discarded; a timeout or failed cleanup is not permission to retry that context.
+
+[SQL Server recovery](../sqlserver-behavior.md#owned-identity-insert-cleanup)
+and [MySQL/MariaDB cleanup](../mysql-mariadb-ddl-behavior.md) retain their native
+session guarantees. A native provider's `CloseAsync` or `DisposeAsync` may itself
+execute synchronously; changing the observer cannot make that operation safely
+preemptible. Preserve write fences and wait for ownership completion before an
+operator-approved retry.
+
 ## Failure decision table
 
 | Failure point | Database assumption | Response |

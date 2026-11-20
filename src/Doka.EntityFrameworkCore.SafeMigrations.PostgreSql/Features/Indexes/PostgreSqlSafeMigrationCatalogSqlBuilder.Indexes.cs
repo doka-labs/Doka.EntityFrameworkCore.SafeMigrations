@@ -39,7 +39,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             ? UniqueIndexDataBlocked(definition)
             : "FALSE";
 
-        var unsupportedConditions = new List<string>();
+        List<string> unsupportedConditions = [];
         if (definition.NullsDistinct == false)
         {
             unsupportedConditions.Add("current_setting('server_version_num')::integer < 150000");
@@ -255,8 +255,8 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         bool requireIndependentIdentity
     )
     {
-        var conditions = new List<string>
-        {
+        List<string> conditions =
+        [
             "i.indisvalid",
             "i.indisready",
             "i.indislive",
@@ -265,7 +265,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             "i.indnatts = "
             + (definition.Keys.Count + definition.IncludedColumns.Count).ToString(CultureInfo.InvariantCulture),
             $"am.amname = {Literal(definition.Method ?? "btree")}",
-        };
+        ];
 
         if (requireIndependentIdentity)
         {
@@ -516,6 +516,10 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 + $"{(entry.Key.SortOrder == SafeMigrationIndexSortOrder.ProviderDefault ? "TRUE" : "FALSE")}, "
                 + $"{Literal(IndexNullOrderProperty(entry.Key))}, "
                 + $"{(entry.Key.NullOrder == SafeMigrationIndexNullOrder.ProviderDefault ? "TRUE" : "FALSE")})")
+
+            // WHY: Keep explicit fluent materialization and its existing
+            // ownership/evaluation boundary instead of an implicit spread.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         const string orderable = "pg_catalog.pg_index_column_has_property(i.indexrelid, key.pos, 'orderable')";
@@ -569,9 +573,13 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         var keys = definition
             .Keys
             .Select(IndexDataExpression)
+
+            // WHY: Keep explicit fluent materialization and its existing
+            // ownership/evaluation boundary instead of an implicit spread.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
-        var predicates = new List<string>();
+        List<string> predicates = [];
         if (definition.Filter is not null
             || definition.StructuredFilter is not null)
         {
@@ -598,7 +606,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         ? Delimited(key.Column)
         : key.Expression ?? _expressionRenderer.Render(key.StructuredExpression!);
 
-    /// <summary>Proves an expression key's derived default collation without reading or evaluating table rows.</summary>
+    /// <summary>Proves an expression key's derived default collation without evaluating table rows.</summary>
     /// <param name="definition">The index's qualified table contract.</param>
     /// <param name="key">The expression key without an explicit key-level collation.</param>
     /// <param name="optionIndex">The key's zero-based catalog vector position.</param>
@@ -631,11 +639,11 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     {
         var storedExpression = IndexStoredExpression(key);
         var expression = key.Expression ?? _expressionRenderer.Render(storedExpression!);
-        var roots = new List<(string Sql, bool IsValueExpression)>
-        {
+        List<(string Sql, bool IsValueExpression)> roots =
+        [
             (expression, false),
             ($"({expression})", false),
-        };
+        ];
 
         if (storedExpression is not null)
         {
@@ -683,6 +691,10 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 ? root.Sql
                 : Literal(root.Sql))
             .Distinct(StringComparer.Ordinal)
+
+            // WHY: Keep explicit fluent materialization and its existing
+            // ownership/evaluation boundary instead of an implicit spread.
+            // ReSharper disable once UseCollectionExpression
             .ToList();
     }
 
@@ -846,15 +858,15 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             Literal,
             relationOid);
 
-        IEnumerable<string> candidates = new[]
-        {
+        IEnumerable<string> candidates = (string[])
+        [
             Literal(rendered),
             Literal($"({rendered})"),
             catalogCandidate,
             $"({Literal("(")} || {catalogCandidate} || {Literal(")")})",
             deparsedCandidate,
             $"({Literal("(")} || {deparsedCandidate} || {Literal(")")})",
-        };
+        ];
 
         if (nativeCandidate is not null)
         {

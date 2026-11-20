@@ -43,6 +43,9 @@ internal interface ISafeMigrationProviderObjectIdentityNormalizer
     /// <param name="ordinal">Its complete-stream position, including ordinary provider operations.</param>
     /// <returns>False when a later opaque or qualifier-changing boundary prevents identity proof.</returns>
     bool IsPostflightIdentityProven(
+
+        // WHY: Providers must validate the exact historical operation even when their current proof is unconditional.
+        // ReSharper disable once ParameterOnlyUsedForPreconditionCheck.Global
         SafeMigrationIntent intent,
         int ordinal
     ) => true;

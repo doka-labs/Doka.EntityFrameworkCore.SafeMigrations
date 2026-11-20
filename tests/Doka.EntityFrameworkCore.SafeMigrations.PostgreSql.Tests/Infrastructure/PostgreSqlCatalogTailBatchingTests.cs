@@ -311,6 +311,9 @@ public sealed class PostgreSqlCatalogTailBatchingTests
             [],
             [],
             []))
+
+        // WHY: Retain explicit fluent materialization and its independently owned result snapshot.
+        // ReSharper disable once UseCollectionExpression
         .ToArray();
 
     private static DataTable Results(

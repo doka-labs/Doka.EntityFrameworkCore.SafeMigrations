@@ -12,7 +12,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         var joins = string.Join(
             " AND ",
             definition.Columns.Select((column, ordinal) =>
-                $"doka_dependent.{Delimited(column)} = doka_principal.{Delimited(definition.PrincipalColumns[ordinal])}"));
+                $"doka_dependent.{Delimited(column)} = doka_principal.{Delimited(
+                    definition.PrincipalColumns[ordinal])}"));
 
         var required = string.Join(
             " AND ",
@@ -301,8 +302,13 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         var self = foreignKey.PrincipalTable == table.Table
             && (foreignKey.PrincipalSchema ?? "dbo") == (table.Schema ?? "dbo");
 
-        foreach (var column in table.Columns)
+        // WHY: Immutable authored columns retain operand-qualification order.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var columnIndex = 0; columnIndex < table.Columns.Count; columnIndex++)
         {
+            var column = table.Columns[columnIndex];
+
             if ((column.ComputedColumnSql is not null || column.ComputedExpression is not null)
                 && (foreignKey.Columns.Contains(column.Name)
                     || (self && foreignKey.PrincipalColumns.Contains(column.Name))))

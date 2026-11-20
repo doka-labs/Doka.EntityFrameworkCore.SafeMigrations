@@ -147,17 +147,17 @@ internal static partial class SafeMigrationSqlExpressionInspector
                     AcceptCase(value, result);
                     break;
                 default:
-                    if (Ordinal == 0)
+                    switch (Ordinal)
                     {
-                        _first = result;
-                    }
-                    else if (Ordinal == 1)
-                    {
-                        _second = result;
-                    }
-                    else
-                    {
-                        _third = result;
+                        case 0:
+                            _first = result;
+                            break;
+                        case 1:
+                            _second = result;
+                            break;
+                        default:
+                            _third = result;
+                            break;
                     }
 
                     break;

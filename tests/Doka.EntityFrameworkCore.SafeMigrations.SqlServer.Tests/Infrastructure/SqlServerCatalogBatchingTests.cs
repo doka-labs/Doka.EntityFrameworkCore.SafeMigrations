@@ -84,6 +84,8 @@ public sealed class SqlServerCatalogBatchingTests
         {
             TransformOrdinals = ordinals => ordinals
                 .Reverse()
+                // WHY: Fluent terminal materialization preserves the existing snapshot and enumeration contract.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray(),
         };
 
@@ -587,7 +589,7 @@ public sealed class SqlServerCatalogBatchingTests
         // Arrange
         await using var connection = new SqlServerCatalogTestConnection();
         using var cancellation = new CancellationTokenSource();
-        cancellation.Cancel();
+        await cancellation.CancelAsync();
         var results = new SafeMigrationProviderAnalysis[1];
 
         // Act
@@ -1135,7 +1137,7 @@ public sealed class SqlServerCatalogBatchingTests
     public async Task ProductionColumnPlans_AreReusedWithoutSharingPlanInstances()
     {
         // Arrange
-        using var context = new SafeMigrationDbContext(
+        await using var context = new SafeMigrationDbContext(
             "Server=localhost;Database=packing;Integrated Security=true;");
 
         var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(

@@ -60,16 +60,15 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         ObserveAcceptedLiveConstraintName(operation, decision);
         ObserveGeneratedSourceLifetime(operation, analysis);
 
-        if (operation.Intent is EnsureSchemaIntent or DropSchemaIntent)
+        switch (operation.Intent)
         {
-            _schemaIdentityOriginOrdinal ??= _projectedOperationOrdinal;
-        }
+            case EnsureSchemaIntent or DropSchemaIntent:
+                _schemaIdentityOriginOrdinal ??= _projectedOperationOrdinal;
+                break;
+            case ModelManagedDataIntent:
+                InvalidateProjectedDmlTriggerEffects();
 
-        if (operation.Intent is ModelManagedDataIntent)
-        {
-            InvalidateProjectedDmlTriggerEffects();
-
-            return;
+                return;
         }
 
         if (SafeColumnOperationMayEmitDml(operation, decision))
@@ -106,16 +105,15 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             _generatedIndexHasOpaqueBoundary = true;
         }
 
-        if (operation is SqlOperation or EnsureSchemaOperation or DropSchemaOperation)
+        switch (operation)
         {
-            _schemaIdentityOriginOrdinal ??= _projectedOperationOrdinal;
-        }
+            case SqlOperation or EnsureSchemaOperation or DropSchemaOperation:
+                _schemaIdentityOriginOrdinal ??= _projectedOperationOrdinal;
+                break;
+            case InsertDataOperation or UpdateDataOperation or DeleteDataOperation:
+                InvalidateProjectedDmlTriggerEffects();
 
-        if (operation is InsertDataOperation or UpdateDataOperation or DeleteDataOperation)
-        {
-            InvalidateProjectedDmlTriggerEffects();
-
-            return;
+                return;
         }
 
         if (operation is AlterColumnOperation alter

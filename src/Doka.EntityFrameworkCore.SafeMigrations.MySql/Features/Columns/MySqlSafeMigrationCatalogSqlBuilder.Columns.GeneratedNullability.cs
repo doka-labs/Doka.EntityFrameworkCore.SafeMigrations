@@ -44,8 +44,14 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         }
 
         var builder = new StringBuilder();
-        foreach (var source in sources)
+
+        // WHY: Index this stable list while preserving its order and ownership.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var sourceIndex = 0; sourceIndex < sources.Count; sourceIndex++)
         {
+            var source = sources[sourceIndex];
+
             if (builder.Length > 0)
             {
                 builder.Append(" AND ");

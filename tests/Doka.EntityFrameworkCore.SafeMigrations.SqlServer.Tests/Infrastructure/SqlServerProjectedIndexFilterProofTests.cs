@@ -17,7 +17,7 @@ public sealed class SqlServerProjectedIndexFilterProofTests
     )
     {
         // Arrange
-        using var context = new SafeMigrationDbContext(ConnectionString);
+        await using var context = new SafeMigrationDbContext(ConnectionString);
         var analyzer = Analyzer(context);
         var column = new ExpectedColumnDefinition("Code", typeof(int), true, "int");
         var table = new ExpectedTableDefinition("filters", [column]);
@@ -37,7 +37,7 @@ public sealed class SqlServerProjectedIndexFilterProofTests
 
         Task<int> Execute(
             string sql,
-            CancellationToken token
+            CancellationToken cancellationToken
         )
         {
             commands.Add(sql);
@@ -67,7 +67,7 @@ public sealed class SqlServerProjectedIndexFilterProofTests
     public async Task ChangedAuthoredFilterColumn_DoesNotReusePriorTypeProof()
     {
         // Arrange
-        using var context = new SafeMigrationDbContext(ConnectionString);
+        await using var context = new SafeMigrationDbContext(ConnectionString);
         var analyzer = Analyzer(context);
         var initial = new ExpectedColumnDefinition("Code", typeof(int), true, "int");
         var replacement = new ExpectedColumnDefinition("Code", typeof(long), true, "bigint");
@@ -89,7 +89,7 @@ public sealed class SqlServerProjectedIndexFilterProofTests
 
         Task<int> Execute(
             string sql,
-            CancellationToken token
+            CancellationToken cancellationToken
         )
         {
             commands.Add(sql);
@@ -169,9 +169,19 @@ public sealed class SqlServerProjectedIndexFilterProofTests
         false,
         "missing");
 
-    private sealed class Source(ExpectedColumnDefinition column)
+    private sealed class Source
         : ISafeMigrationProjectedColumnSource, ISafeMigrationProjectedTableSource
     {
+        private readonly ExpectedColumnDefinition _column;
+
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        public Source(
+            ExpectedColumnDefinition column
+        )
+        {
+            _column = column;
+        }
+
         public bool TryGetProjectedColumn(
             string table,
             string? schema,
@@ -179,8 +189,8 @@ public sealed class SqlServerProjectedIndexFilterProofTests
             [NotNullWhen(true)] out ExpectedColumnDefinition? definition
         )
         {
-            definition = StringComparer.Ordinal.Equals(column.Name, name)
-                ? column
+            definition = StringComparer.Ordinal.Equals(_column.Name, name)
+                ? _column
                 : null;
 
             return definition is not null;

@@ -1,8 +1,8 @@
 ---
 id: D-014
 status: implemented
-date: 2026-10-05
-decision-makers: [Dominic Kalkbrenner]
+date: 2026-11-19
+decision-makers: ["Dominic Kalkbrenner"]
 consulted: []
 informed: ["@doka-labs/core-maintainers"]
 scope: "Catalog source for batched classification in the MySQL provider on MariaDB"
@@ -18,11 +18,18 @@ doka-profile-version: "1.0"
 
 ## Context and Problem Statement
 
+The numeric timings, spill counters and suite totals below are reported historical
+observations from the October 2026 investigation, not current qualification or
+independently reproducible clean-clone evidence. Their raw transcripts were not
+retained in version control. The retained implementation, parity and ownership
+tests define reproducible functional acceptance; future performance comparisons
+must capture equivalent workloads and reachable evidence afresh.
+
 Batched classification renders one catalog predicate per operation and packs up
 to 32 of them into a statement. Every predicate reads `INFORMATION_SCHEMA`
 directly, so a statement issues roughly twenty catalog subqueries per operation.
 
-MariaDB materialises each such subquery into an internal temporary table, and
+The historical MariaDB probe materialised these subqueries into internal temporary tables, and
 its HEAP engine cannot hold `BLOB` or `TEXT` columns, which the catalog views
 carry. Each subquery therefore spills to an on-disk Aria table. Analysing
 25,600 operations of the large-mixed-migration contract raised
@@ -65,8 +72,8 @@ catalog subquery, without weakening what classification verifies.
 ## Decision Outcome
 
 Chosen option: "Snapshot the scoped catalog into a session temporary table on
-MariaDB", because it is the only measured shape that removes the per-subquery
-on-disk temporary table while leaving every facet predicate unchanged.
+MariaDB", because the investigated shape amortises repeated catalog reads
+while retaining the existing facet predicates and independent parity checks.
 
 Batched classification on MariaDB copies every catalog view the classifier can
 name into a `TEMPORARY TABLE` once per operation window, and the rendered
@@ -142,7 +149,7 @@ Limits that this decision accepts:
   surface to catalog completeness, relation binding and lifecycle. Regression
   tests still prove parity; unchanged predicates alone are not a proof.
 - Good, because the runtime generation path is untouched by construction: with
-  no binding supplied there is no scan, which keeps its allocation budget.
+  no binding supplied there is no scan, retaining the existing generation path.
 - Good, because it needs no server configuration changes or newly mandatory
   privileges; environments prohibiting temporary DDL retain the live path.
   All qualified MariaDB versions remain required qualification targets.
@@ -179,8 +186,9 @@ Local execution:
   `CatalogRelationBindingRedirectsEveryRelation` test only exercises table and
   column references; it is not complete relation coverage on its own.
 - `GeneratedCommandsReadTheLiveCatalog` pins runtime relation identity;
-  `PreparedRuntimeColumnGenerationRemainsBounded` pins generated SQL and its
-  local allocation budget. Snapshot lifecycle tests exercise partial creation,
+  runtime SQL-shape controls retain generated command boundaries. Allocation
+  measurements belong to explicitly requested informational BenchmarkDotNet runs.
+  Snapshot lifecycle tests exercise partial creation,
   denied capability, cancellation, name collisions and cleanup failure.
 
 Live database qualification:
@@ -280,7 +288,8 @@ Hosted qualification:
 - Bad, because every render path must then resolve the sentinel, including the
   runtime generation path that only ever wants the live views. Measured on 128
   generated column operations that cost 1.60 MB on top of 3.74 MB, a 43 percent
-  increase that breaks the generation allocation budget of 4.00 MB.
+  increase that exceeded the historical 4.00 MB investigation budget. That old
+  threshold is decision context, not a current functional performance gate.
 - Bad, because it requires rewriting the relation at all fifty builder sites,
   which enlarges the change without changing any emitted SQL.
 
@@ -336,11 +345,15 @@ Hosted qualification:
   MySQL 8.4.11 qualification results. Both full provider suites report 1,050
   passed, two generated-fixture skips and no failures; these are existing local
   results, not newly executed tests or a substitute for hosted qualification.
+- 2026-11-19: Aligned last-update metadata, reciprocal amendments, option titles
+  and source/navigation format with the current documentation profile. Retained
+  the recorded status and historical approval evidence; this migration grants no
+  new architectural acceptance or publication authority. Explicitly identified
+  the missing raw numerical evidence rather than presenting inaccessible local
+  transcripts as clean-clone performance confirmation.
 
 ### Implementation References
 
-- Evidence, raw logs and the refuted hypotheses:
-  `artifacts/performance/mariadb-tmp-table-spill/README.md`.
 - [Catalog relation binding](../../src/Doka.EntityFrameworkCore.SafeMigrations.MySql/Analysis/MySqlCatalogRelations.cs)
   and [session snapshot lifecycle](../../src/Doka.EntityFrameworkCore.SafeMigrations.MySql/Analysis/MySqlCatalogSnapshot.cs).
 - [Snapshot activation in batched classification](../../src/Doka.EntityFrameworkCore.SafeMigrations.MySql/Analysis/MySqlSafeMigrationProviderAnalyzer.cs).
@@ -348,20 +361,20 @@ Hosted qualification:
   and [snapshot lifecycle regression tests](../../tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Unit/MySqlCatalogSnapshotTests.cs).
 - [Live spill and verdict-parity tests](../../tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Integration/Features/Tables/MySqlSafeMigrationIntegrationTests.Tables.CatalogSnapshot.cs)
   and [live ownership and fallback tests](../../tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Integration/Features/Tables/MySqlSafeMigrationIntegrationTests.Tables.CatalogSnapshot.Safety.cs).
-- Existing local qualification transcripts:
-  `artifacts/performance/runtime-three-paths/verification/span-final/full-mariadb.trx`
-  and `full-mysql.trx`, summarized in
-  `artifacts/performance/runtime-three-paths/README.md`. These local evidence
-  files are intentionally not tracked in the product repository.
+- The numerical October observations have no retained raw artifact in this
+  repository and therefore are not a current performance or release certificate.
+  Re-run the linked native parity/ownership controls and explicitly requested
+  diagnostic workloads at the candidate revision; preserve engine identity,
+  equivalent workload configuration and complete output with that new evidence.
 
 ### Sources
 
-- MySQL 8.4 Reference Manual, Internal Temporary Table Use in MySQL (`https://dev.mysql.com/doc/refman/8.4/en/internal-temporary-tables.html`; primary source; retrieved 2026-10-05)
-- MariaDB 13.1 Feature in Focus: BLOB, TEXT, JSON and GEOMETRY Support in the HEAP Engine (`https://mariadb.org/mariadb-13-1-feature-in-focus-blob-text-json-and-geometry-support-in-the-heap-engine/`; primary source; retrieved 2026-10-05)
-- MariaDB Documentation, MEMORY Storage Engine (`https://mariadb.com/docs/server/server-usage/storage-engines/memory-storage-engine`; primary source; retrieved 2026-10-05)
-- MariaDB Documentation, Created_tmp_disk_tables (`https://mariadb.com/docs/reference/mdb/status-variables/Created_tmp_disk_tables/`; primary source; retrieved 2026-10-05)
-- MariaDB Documentation, CREATE TABLE (`https://mariadb.com/docs/server/server-usage/tables/create-table`; primary source; retrieved 2026-10-05)
-- MariaDB Documentation, START TRANSACTION (`https://mariadb.com/docs/server/reference/sql-statements/transactions/start-transaction`; primary source; retrieved 2026-10-05)
-- MySqlConnector, Command Cancellation (`https://mysqlconnector.net/overview/command-cancellation/`; primary source; retrieved 2026-10-05)
-- MySqlConnector, Connection Options (`https://mysqlconnector.net/connection-options/`; primary source; retrieved 2026-10-05)
-- MariaDB Documentation, default_tmp_storage_engine (`https://mariadb.com/docs/server/server-management/variables-and-modes/server-system-variables#default_tmp_storage_engine`; primary source; retrieved 2026-10-05)
+- [MySQL 8.4 Reference Manual, Internal Temporary Table Use in MySQL](https://dev.mysql.com/doc/refman/8.4/en/internal-temporary-tables.html) (primary source; retrieved 2026-10-05)
+- [MariaDB 13.1 Feature in Focus: BLOB, TEXT, JSON and GEOMETRY Support in the HEAP Engine](https://mariadb.org/mariadb-13-1-feature-in-focus-blob-text-json-and-geometry-support-in-the-heap-engine/) (primary source; retrieved 2026-10-05)
+- [MariaDB Documentation, MEMORY Storage Engine](https://mariadb.com/docs/server/server-usage/storage-engines/memory-storage-engine) (primary source; retrieved 2026-10-05)
+- [MariaDB Documentation, Created_tmp_disk_tables](https://mariadb.com/docs/reference/mdb/status-variables/Created_tmp_disk_tables/) (primary source; retrieved 2026-10-05)
+- [MariaDB Documentation, CREATE TABLE](https://mariadb.com/docs/server/server-usage/tables/create-table) (primary source; retrieved 2026-10-05)
+- [MariaDB Documentation, START TRANSACTION](https://mariadb.com/docs/server/reference/sql-statements/transactions/start-transaction) (primary source; retrieved 2026-10-05)
+- [MySqlConnector, Command Cancellation](https://mysqlconnector.net/overview/command-cancellation/) (primary source; retrieved 2026-10-05)
+- [MySqlConnector, Connection Options](https://mysqlconnector.net/connection-options/) (primary source; retrieved 2026-10-05)
+- [MariaDB Documentation, default_tmp_storage_engine](https://mariadb.com/docs/server/server-management/variables-and-modes/server-system-variables#default_tmp_storage_engine) (primary source; retrieved 2026-10-05)

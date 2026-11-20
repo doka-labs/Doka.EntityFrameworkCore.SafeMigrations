@@ -1,5 +1,3 @@
-using System.Data;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer;
 
 internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
@@ -67,6 +65,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
 
             var safeOperations = operations
                 .OfType<SafeMigrationOperation>()
+
+                // WHY: Retain this explicit fluent snapshot instead of a collection-spread rewrite.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray();
 
             var references = SqlServerIdentifierContract.Collect(safeOperations);
@@ -121,6 +122,10 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
     /// <param name="commandTimeout">The caller's command timeout.</param>
     /// <param name="cancellationToken">The token that cancels scope loading and reading.</param>
     /// <returns>The complete unexpected-object evidence after owned scope cleanup.</returns>
+
+    // WHY: The earlier table-result branch consumes Table before the member-kind switch;
+    // unknown native kinds must retain that switch's existing fail-closed exception.
+    // ReSharper disable once SwitchExpressionHandlesSomeKnownEnumValuesWithExceptionInDefault
     internal async Task<IReadOnlyList<SafeMigrationUnexpectedObject>> ReadUnexpectedObjectsAsync(
         DbConnection connection,
         DbTransaction? transaction,
@@ -129,7 +134,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         CancellationToken cancellationToken
     )
     {
-        var findings = new List<SafeMigrationUnexpectedObject>();
+        List<SafeMigrationUnexpectedObject> findings = [];
         var temporaryTable = "#doka_sm_inventory_"
             + Guid
                 .NewGuid()
@@ -276,7 +281,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
 
                     return new SafeMigrationCatalogProbeStatement(1, 0, slot);
                 },
-                async (reader, slot, _, token) =>
+                async (reader, slot, _, callbackCancellationToken) =>
                 {
                     if (reader.FieldCount
                         != (slot == 0
@@ -286,7 +291,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                         throw new InvalidOperationException("SQL Server returned an unowned inventory result set.");
                     }
 
-                    while (await reader.ReadAsync(token))
+                    while (await reader.ReadAsync(callbackCancellationToken))
                     {
                         if (reader.GetInt32(0) != slot)
                         {
@@ -325,9 +330,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                                 }));
                     }
                 },
-                cancellationToken,
                 transaction,
-                SqlServerCatalogParameterBindings.MaximumParameters);
+                SqlServerCatalogParameterBindings.MaximumParameters,
+                cancellationToken);
 
             return findings.AsReadOnly();
         }
@@ -349,8 +354,13 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         IReadOnlyList<SafeMigrationExpectedTableInventory> expected
     )
     {
-        foreach (var table in expected)
+        // WHY: Stable indexed contracts retain their exact declared ordering.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var tableIndex = 0; tableIndex < expected.Count; tableIndex++)
         {
+            var table = expected[tableIndex];
+
             var schema = table.Schema ?? "dbo";
             yield return (0, schema, table.Table, table.Table);
             foreach (var column in table.Columns)

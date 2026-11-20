@@ -3,6 +3,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// <summary>
 /// Identifies every operation family supported by the SafeMigrations contract.
 /// </summary>
+[PublicAPI]
 public enum SafeMigrationOperationKind
 {
     /// <summary>Ensure a schema exists.</summary>

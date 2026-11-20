@@ -532,10 +532,10 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     )
     {
         var mapping = ColumnMapping(definition);
-        var conditions = new List<string>
-        {
+        List<string> conditions =
+        [
             $"pg_catalog.format_type(a.atttypid, a.atttypmod) = {Literal(ColumnStoreType(definition, mapping))}",
-        };
+        ];
 
         if (includeRepairableFacets)
         {
@@ -801,8 +801,8 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         var defaultMatches = DefaultAndGenerationMatches(definition, mapping);
         var defaultKind = DefaultKind(definition);
         var expectedDefaultPayload = DefaultDiagnosticPayload(definition, mapping);
-        var records = new List<string>
-        {
+        List<string> records =
+        [
             DiagnosticRecord(
                 $"pg_catalog.format_type(a.atttypid, a.atttypmod) <> {Literal(storeType)}",
                 "column_store_type",
@@ -855,7 +855,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 "column_comment_digest",
                 $"md5({Literal(definition.Comment ?? string.Empty)})",
                 "md5(COALESCE(pg_catalog.col_description(c.oid, a.attnum), ''))"),
-        };
+        ];
 
         // WHY: The information schema exposes the declared limit and represents
         // unbounded varchar as null. Decoding atttypmod would bind this contract
@@ -956,15 +956,13 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             return _expressionRenderer.Render(definition.ComputedExpression);
         }
 
-        if (definition.DefaultValue.Kind == SafeMigrationDefaultValueKind.None)
+        switch (definition.DefaultValue.Kind)
         {
-            return "<none>";
-        }
-
-        if (definition.DefaultValue.Kind == SafeMigrationDefaultValueKind.Sql)
-        {
-            return definition.DefaultValue.SqlExpression
-                ?? _expressionRenderer.Render(definition.DefaultValue.StructuredExpression!);
+            case SafeMigrationDefaultValueKind.None:
+                return "<none>";
+            case SafeMigrationDefaultValueKind.Sql:
+                return definition.DefaultValue.SqlExpression
+                    ?? _expressionRenderer.Render(definition.DefaultValue.StructuredExpression!);
         }
 
         var literal = definition.DefaultValue.GetLiteralValue();
@@ -1156,14 +1154,12 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     {
         var strategy = PostgreSqlSafeMigrationColumnMetadata.GetValueGenerationStrategy(definition);
 
-        if (strategy == NpgsqlValueGenerationStrategy.IdentityAlwaysColumn)
+        switch (strategy)
         {
-            return "a.attgenerated = '' AND a.attidentity = 'a'";
-        }
-
-        if (strategy == NpgsqlValueGenerationStrategy.IdentityByDefaultColumn)
-        {
-            return "a.attgenerated = '' AND a.attidentity = 'd'";
+            case NpgsqlValueGenerationStrategy.IdentityAlwaysColumn:
+                return "a.attgenerated = '' AND a.attidentity = 'a'";
+            case NpgsqlValueGenerationStrategy.IdentityByDefaultColumn:
+                return "a.attgenerated = '' AND a.attidentity = 'd'";
         }
 
         if (definition.ComputedColumnSql is not null
@@ -1282,7 +1278,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     {
         var candidates = new HashSet<string>(StringComparer.Ordinal) { expected };
         AddLiteralDefaultCandidates(candidates, value);
-        var conditions = new List<string>();
+        List<string> conditions = [];
         if (nativeTemporalOutput && value is DateOnly or TimeOnly or DateTime or DateTimeOffset or TimeSpan)
         {
             // WHY: Native output can omit zero fractions, normalize interval days,

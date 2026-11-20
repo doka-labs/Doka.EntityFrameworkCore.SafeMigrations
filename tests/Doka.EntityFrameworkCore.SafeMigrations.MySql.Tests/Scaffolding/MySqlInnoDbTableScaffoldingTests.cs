@@ -588,6 +588,7 @@ public sealed class MySqlInnoDbTableScaffoldingTests
             DbContextOptions options
         ) : base(options) { }
 
+        /// <summary>Gets whether the model explicitly requests an InnoDB storage-engine contract.</summary>
         protected virtual bool HasExplicitEngine => false;
 
         /// <inheritdoc />
@@ -616,9 +617,11 @@ public sealed class MySqlInnoDbTableScaffoldingTests
             DbContextOptions options
         ) : base(options) { }
 
+        /// <inheritdoc />
         protected override bool HasExplicitEngine => true;
     }
 
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class EngineRecord
     {
         public long Id { get; set; }

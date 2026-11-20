@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 
 from eng.release import dependencies, lines
+from eng.tests.test_release_lines import policy as initial_policy
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -15,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def target_policy(role: str, major: int) -> tuple[dict, str]:
     """Prepare synthetic active targets without activating any repository line."""
-    policy = copy.deepcopy(lines.load_policy())
+    policy = initial_policy()
     policy["lines"][0]["packageMajor"] = major + 1
     entry = copy.deepcopy(policy["lines"][1])
     entry.update(sourceRef=f"refs/heads/{role}/{major}.x", role=role, packageMajor=major,
@@ -84,12 +85,93 @@ def ignored(requirements: list[str], version: str) -> bool:
 class DependencyPrereleaseBoundTests(unittest.TestCase):
     """Every generated framework target must cover the whole following major."""
 
+    def test_main_blocks_only_sdk_and_framework_major_updates_on_every_line(self):
+        for major in (10, 11, 12):
+            with self.subTest(major=major):
+                # Arrange
+                policy = initial_policy()
+                policy["lines"][0]["packageMajor"] = major
+                source = (ROOT / ".github/dependabot-template.yml").read_text(encoding="ascii")
+                framework_names = ("Microsoft.EntityFrameworkCore.*", "Doka.EntityFrameworkCore.MySql",
+                                   "Npgsql.EntityFrameworkCore.PostgreSQL", "Microsoft.Extensions.*")
+
+                # Act
+                blocks = {ecosystem: body for ecosystem, _, body in
+                          dependencies.entries(dependencies.render_configuration(policy, source))}
+
+                # Assert
+                sdk = blocks["dotnet-sdk"]
+                self.assertIn('    ignore:\n      - dependency-name: "*"\n'
+                              '        update-types:\n          - version-update:semver-major\n', sdk)
+                for name in framework_names:
+                    self.assertIn(f'      - dependency-name: "{name}"\n'
+                                  '        update-types:\n          - version-update:semver-major\n', blocks["nuget"])
+
+                self.assertNotIn("version-update:semver-minor", sdk + blocks["nuget"])
+                self.assertNotIn("version-update:semver-patch", sdk + blocks["nuget"])
+                self.assertNotIn('dependency-name: "*"', blocks["nuget"])
+                self.assertNotIn("    ignore:", blocks["github-actions"])
+                for independent in ("MySqlConnector", "Microsoft.Data.SqlClient", "System.Security.Cryptography.Pkcs",
+                                    "Microsoft.NET.Test.Sdk", "Microsoft.CodeAnalysis.Analyzers", "BenchmarkDotNet"):
+                    self.assertNotIn(f'dependency-name: "{independent}"', blocks["nuget"])
+
+    def test_main_missing_or_widened_rules_are_rejected_even_in_the_template(self):
+        for mutation in ("sdk", "ef", "independent", "servicing", "extra-rule", "separated-extra-rule"):
+            for change_template in (False, True):
+                with self.subTest(mutation=mutation, template=change_template):
+                    # Arrange
+                    policy = initial_policy()
+                    source = (ROOT / ".github/dependabot-template.yml").read_text(encoding="ascii")
+                    if mutation == "sdk":
+                        changed = source.replace('    ignore:\n      - dependency-name: "*"\n'
+                                                 '        update-types:\n'
+                                                 '          - version-update:semver-major\n', "")
+                    elif mutation == "ef":
+                        changed = source.replace('      - dependency-name: "Microsoft.EntityFrameworkCore.*"\n'
+                                                 '        update-types:\n'
+                                                 '          - version-update:semver-major\n', "")
+                    elif mutation == "independent":
+                        changed = source.replace('dependency-name: "Microsoft.Extensions.*"',
+                                                 'dependency-name: "Microsoft.*"')
+                    elif mutation == "servicing":
+                        changed = source.replace("version-update:semver-major", "version-update:semver-minor", 1)
+                    else:
+                        separator = ("\n    # Unexpected rule after a comment.\n"
+                                     if mutation.startswith("separated") else "")
+                        changed = source.replace("    open-pull-requests-limit: 1", separator
+                                                 + '      - dependency-name: "MySqlConnector"\n'
+                                                 + '        versions: [">=3.0.0"]\n'
+                                                 + "    open-pull-requests-limit: 1", 1)
+
+                    # Act / Assert
+                    self.assertNotEqual(source, changed, "The negative probe must alter an existing main rule.")
+                    with self.assertRaises(dependencies.DependencyPolicyError):
+                        dependencies.validate_configuration(policy, changed,
+                                                            template=changed if change_template else source)
+
+    def test_additional_targets_keep_one_ignore_block_and_absolute_prerelease_ceilings(self):
+        # Arrange
+        policy, branch = target_policy("maintenance", 10)
+        source = (ROOT / ".github/dependabot-template.yml").read_text(encoding="ascii")
+
+        # Act
+        blocks = dependencies.entries(dependencies.render_configuration(policy, source))
+
+        # Assert
+        for ecosystem, target, body in blocks:
+            if ecosystem in ("nuget", "dotnet-sdk"):
+                self.assertEqual(1, body.count("    ignore:\n"))
+
+            if target == branch and ecosystem == "nuget":
+                self.assertIn('[">=11.0.0-0", ">=11.0.0--"]', body)
+                self.assertNotIn("update-types:", body)
+
     def test_next_major_prereleases_and_stable_versions_are_ignored_for_every_framework(self):
         for role, major in itertools.product(("maintenance", "preview"), (10, 11, 12)):
             with self.subTest(role=role, major=major):
                 # Arrange
                 policy, branch = target_policy(role, major)
-                source = (ROOT / ".github/dependabot.yml").read_text(encoding="ascii")
+                source = (ROOT / ".github/dependabot-template.yml").read_text(encoding="ascii")
                 next_major = major + 1
                 versions = [f"{next_major}.0.0{suffix}" for suffix in
                             ("-0", "-0.0", "-alpha", "-BETA.1", "-rc.1", "--", "--x", "")]
@@ -111,7 +193,7 @@ class DependencyPrereleaseBoundTests(unittest.TestCase):
             with self.subTest(role=role, major=major):
                 # Arrange
                 policy, branch = target_policy(role, major)
-                source = (ROOT / ".github/dependabot.yml").read_text(encoding="ascii")
+                source = (ROOT / ".github/dependabot-template.yml").read_text(encoding="ascii")
                 versions = [f"{major}.0.0-0", f"{major}.0.0-alpha", f"{major}.0.0-rc.2",
                             f"{major}.0.0", f"{major}.0.13", f"{major}.999.999"]
 
@@ -129,7 +211,7 @@ class DependencyPrereleaseBoundTests(unittest.TestCase):
             with self.subTest(replacement=replacement):
                 # Arrange
                 policy, _ = target_policy("preview", 11)
-                source = (ROOT / ".github/dependabot.yml").read_text(encoding="ascii")
+                source = (ROOT / ".github/dependabot-template.yml").read_text(encoding="ascii")
                 rendered = dependencies.render_configuration(policy, source)
                 tampered = rendered.replace('[">=12.0.0-0", ">=12.0.0--"]', replacement, 1)
 

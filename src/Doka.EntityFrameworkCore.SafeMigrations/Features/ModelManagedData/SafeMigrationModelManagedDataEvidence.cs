@@ -29,7 +29,12 @@ internal sealed class SafeMigrationModelManagedDataEvidence
             throw new ArgumentOutOfRangeException(nameof(dependencyCounts));
         }
 
+        // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+        // ReSharper disable once UseCollectionExpression
         RowStates = rowStates.ToArray();
+
+        // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+        // ReSharper disable once UseCollectionExpression
         DependencyCounts = dependencyCounts.ToArray();
     }
 
@@ -46,6 +51,9 @@ internal sealed class SafeMigrationModelManagedDataEvidence
     /// <summary>Parses compact provider evidence while retaining exact state and cardinality checks.</summary>
     public static SafeMigrationModelManagedDataEvidence Parse(
         string rowStates,
+
+        // WHY: Row evidence is valid only when its exact cardinality matches the authored batch.
+        // ReSharper disable once ParameterOnlyUsedForPreconditionCheck.Global
         int expectedRowCount,
         string dependencyCounts,
         int expectedDependencyCount,

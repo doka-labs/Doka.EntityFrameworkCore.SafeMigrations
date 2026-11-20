@@ -1,16 +1,19 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
 /// <summary>Preserves deep public-tree contracts without imposing the parser's syntax-depth limit.</summary>
-/// <param name="output">The informational allocation-evidence sink.</param>
-public sealed class SafeMigrationSqlExpressionStackTests(ITestOutputHelper output)
+public sealed class SafeMigrationSqlExpressionStackTests
 {
+    /// <summary>The mixed shallow tree retains the independently captured pre-traversal canonical bytes.</summary>
     [Fact]
     public void MixedShallowContractPreservesNullCountsCaseOrderAndCapturedNumericTokens()
     {
+        // Arrange
         var expression = ShallowCorpus();
 
+        // Act
         var canonical = Hash(expression);
 
+        // Assert
         // WHY: This golden is captured independently with the pre-stack-safe writer, not the new traversal itself.
         Assert.Equal("6d458823e246184137a030f2b7a06219b42bf7c31c6a6bfd2a97da9a0e381b45", canonical);
     }
@@ -37,6 +40,7 @@ public sealed class SafeMigrationSqlExpressionStackTests(ITestOutputHelper outpu
         string shape
     )
     {
+        // Arrange
         var left = Deep(shape, 10_000, SafeMigrationSql.Literal(new byte[] { 0, 1, 255 }));
         var right = Deep(shape, 10_000, SafeMigrationSql.Literal(new byte[] { 0, 1, 255 }));
         var different = Deep(shape, 10_000, SafeMigrationSql.Literal(new byte[] { 0, 1, 254 }));
@@ -44,6 +48,7 @@ public sealed class SafeMigrationSqlExpressionStackTests(ITestOutputHelper outpu
         var first = ExpectedCheckConstraintDefinition.FromExpression("ck_one", "items", left);
         var second = ExpectedCheckConstraintDefinition.FromExpression("ck_two", "items", right);
 
+        // Act
         var equal = SafeMigrationSqlExpressionContract.Equivalent(left, right);
         var unequal = SafeMigrationSqlExpressionContract.Equivalent(left, different);
         var canonical = Hash(left);
@@ -51,18 +56,22 @@ public sealed class SafeMigrationSqlExpressionStackTests(ITestOutputHelper outpu
         var differentCanonical = Hash(different);
         var semantic = comparer.GetHashCode(first);
         var repeatedSemantic = comparer.GetHashCode(second);
+        var semanticEqual = comparer.Equals(first, second);
 
+        // Assert
         Assert.True(equal);
         Assert.False(unequal);
         Assert.Equal(canonical, repeatedCanonical);
         Assert.NotEqual(canonical, differentCanonical);
         Assert.Equal(semantic, repeatedSemantic);
-        Assert.True(comparer.Equals(first, second));
+        Assert.True(semanticEqual);
     }
 
+    /// <summary>Wide collections retain their final child, while an absent ELSE differs from explicit NULL.</summary>
     [Fact]
     public void WideListsAndCaseClausesPreserveTheirLastElementAndFallback()
     {
+        // Arrange
         var values = Enumerable
             .Range(0, 10_000)
             .Select(static value => SafeMigrationSql.Literal(value))
@@ -80,6 +89,7 @@ public sealed class SafeMigrationSqlExpressionStackTests(ITestOutputHelper outpu
 
         changed[^1] = SafeMigrationSql.Literal(-1);
 
+        // Act
         var equal = SafeMigrationSqlExpressionContract.Equivalent(first, equivalent);
         var unequal = SafeMigrationSqlExpressionContract.Equivalent(first, SafeMigrationSql.Function("probe", changed));
         var withoutElse = Hash(caseWithoutElse);
@@ -87,29 +97,36 @@ public sealed class SafeMigrationSqlExpressionStackTests(ITestOutputHelper outpu
         var firstCanonical = Hash(first);
         var equivalentCanonical = Hash(equivalent);
 
+        // Assert
         Assert.True(equal);
         Assert.False(unequal);
         Assert.NotEqual(withoutElse, withElse);
         Assert.Equal(firstCanonical, equivalentCanonical);
     }
 
+    /// <summary>Reference-equal roots and children bypass unsupported-node inspection.</summary>
     [Fact]
     public void RootAndChildReferenceFastPathsDoNotInspectUnknownSubclasses()
     {
+        // Arrange
         var unknown = new UnknownExpression();
         var left = SafeMigrationSql.Binary(unknown, SafeMigrationSqlBinaryOperator.Add, SafeMigrationSql.Literal(1));
         var right = SafeMigrationSql.Binary(unknown, SafeMigrationSqlBinaryOperator.Add, SafeMigrationSql.Literal(1));
 
+        // Act
         var rootEqual = SafeMigrationSqlExpressionContract.Equivalent(unknown, unknown);
         var childEqual = SafeMigrationSqlExpressionContract.Equivalent(left, right);
 
+        // Assert
         Assert.True(rootEqual);
         Assert.True(childEqual);
     }
 
+    /// <summary>An earlier unequal child prevents inspection of a later unsupported node.</summary>
     [Fact]
     public void EarlierMismatchShortCircuitsAnUnsupportedLaterChild()
     {
+        // Arrange
         var left = SafeMigrationSql.Binary(
             SafeMigrationSql.Literal(1),
             SafeMigrationSqlBinaryOperator.Add,
@@ -120,28 +137,35 @@ public sealed class SafeMigrationSqlExpressionStackTests(ITestOutputHelper outpu
             SafeMigrationSqlBinaryOperator.Add,
             new UnknownExpression());
 
+        // Act
         var equal = SafeMigrationSqlExpressionContract.Equivalent(left, right);
 
+        // Assert
         Assert.False(equal);
     }
 
+    /// <summary>IN operand inspection still precedes the collection-count shortcut.</summary>
     [Fact]
     public void InOperandStillPrecedesItsMismatchingCollectionCount()
     {
+        // Arrange
         var left = SafeMigrationSql.In(new UnknownExpression(), [SafeMigrationSql.Literal(1)]);
         var right = SafeMigrationSql.In(
             new UnknownExpression(),
             [SafeMigrationSql.Literal(1), SafeMigrationSql.Literal(2)]);
 
-        var failure =
-            Assert.Throws<UnreachableException>(() => SafeMigrationSqlExpressionContract.Equivalent(left, right));
+        // Act
+        var failure = Record.Exception(() => SafeMigrationSqlExpressionContract.Equivalent(left, right));
 
-        Assert.NotNull(failure);
+        // Assert
+        Assert.IsType<UnreachableException>(failure);
     }
 
+    /// <summary>An unsupported write fails without poisoning a subsequent independent traversal.</summary>
     [Fact]
     public void UnsupportedNodeWritingThrowsWithoutPreventingSubsequentTraversal()
     {
+        // Arrange
         var invalid = SafeMigrationSql.Binary(
             SafeMigrationSql.Literal(1),
             SafeMigrationSqlBinaryOperator.Add,
@@ -152,37 +176,35 @@ public sealed class SafeMigrationSqlExpressionStackTests(ITestOutputHelper outpu
             SafeMigrationSqlBinaryOperator.Add,
             SafeMigrationSql.Literal(2));
 
-        var failure = Assert.Throws<UnreachableException>(() => Hash(invalid));
+        // Act
+        var failure = Record.Exception(() => Hash(invalid));
         var recovered = Hash(valid);
         var repeated = Hash(valid);
 
-        Assert.NotNull(failure);
+        // Assert
+        Assert.IsType<UnreachableException>(failure);
         Assert.Equal(repeated, recovered);
     }
 
+    /// <summary>Repeated deep comparisons preserve every result when traversal state is reused.</summary>
     [Fact]
-    public void WarmedEqualityAllocationIsReportedWithoutAHardwareGate()
+    public void RepeatedDeepEqualityPreservesEveryResult()
     {
+        // Arrange
         var left = Deep("left", 1_024, SafeMigrationSql.Literal(1));
         var right = Deep("left", 1_024, SafeMigrationSql.Literal(1));
 
-        for (var iteration = 0; iteration < 20; iteration++)
-        {
-            _ = SafeMigrationSqlExpressionContract.Equivalent(left, right);
-        }
-
-        var before = GC.GetAllocatedBytesForCurrentThread();
         var equal = true;
 
+        // Act
+        // WHY: Repetition checks reusable traversal state; BenchmarkDotNet owns all statistical measurement.
         for (var iteration = 0; iteration < 100; iteration++)
         {
             equal &= SafeMigrationSqlExpressionContract.Equivalent(left, right);
         }
 
-        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-
+        // Assert
         Assert.True(equal);
-        output.WriteLine($"Warmed equality: 100 traversals of 1,024 branches allocated {allocated} bytes.");
     }
 
     /// <summary>Builds a linear public tree without recursion or parser-dependent depth restrictions.</summary>

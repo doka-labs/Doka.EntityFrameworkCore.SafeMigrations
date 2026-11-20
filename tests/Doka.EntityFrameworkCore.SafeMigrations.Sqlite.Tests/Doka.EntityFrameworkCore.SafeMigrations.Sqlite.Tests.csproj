@@ -1,5 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
+    <!-- WHY: Verify the exact runnable sample sources without importing unrelated provider dependencies. -->
+    <Compile Include="..\..\samples\Doka.EntityFrameworkCore.SafeMigrations.Sample\SampleMigrationUsage.cs"
+             Link="Infrastructure\SampleMigrationUsage.cs" />
+    <Compile Include="..\..\samples\Doka.EntityFrameworkCore.SafeMigrations.Sample\SampleDbContext.cs"
+             Link="Infrastructure\SampleDbContext.cs" />
+    <Compile Include="..\..\samples\Doka.EntityFrameworkCore.SafeMigrations.Sample\SampleEntities.cs"
+             Link="Infrastructure\SampleEntities.cs" />
     <Compile Include="..\Shared\ModelManagedDataLargeExecutionContract.cs"
              Link="Infrastructure\ModelManagedDataLargeExecutionContract.cs" />
     <!-- WHY: Execute the actual CLI/bundle readback contract, not a copied SQL predicate. -->

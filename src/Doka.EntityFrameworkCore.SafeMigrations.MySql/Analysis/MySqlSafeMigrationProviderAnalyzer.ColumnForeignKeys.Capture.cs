@@ -1,5 +1,3 @@
-using System.Collections.Frozen;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql;
 
 internal sealed partial class MySqlSafeMigrationProviderAnalyzer
@@ -161,13 +159,15 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                     parameters.Utf8PayloadBytes,
                     requests[offset].Ordinal);
             },
-            (reader, offset, count, token) => ReadColumnDependencyStatementAsync(
+            (reader, offset, count, callbackCancellationToken) => ReadColumnDependencyStatementAsync(
                 reader,
                 requests,
                 offset,
                 count,
                 observe,
-                token),
+                callbackCancellationToken),
+            transaction: null,
+            SafeMigrationCatalogQueryLimits.MaximumParameters,
             cancellationToken);
     }
 

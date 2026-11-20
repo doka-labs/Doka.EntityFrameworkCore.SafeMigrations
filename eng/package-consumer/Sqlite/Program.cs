@@ -1,5 +1,3 @@
-using Doka.EntityFrameworkCore.SafeMigrations.Sqlite.PackageConsumer;
-
 const string designTimeReferenceAttributeName =
     "Microsoft.EntityFrameworkCore.Design.DesignTimeServicesReferenceAttribute";
 
@@ -21,6 +19,8 @@ var expectsDesignTimeReference = args switch
 };
 
 GeneratedExpressionConsumerContract.Verify();
+GeneratedExpressionConsumerContract.VerifyAssemblyContracts(
+    typeof(SqliteSafeMigrationOptionsBuilderExtensions).Assembly);
 
 var migrationBuilder = new MigrationBuilder(providerName);
 migrationBuilder.CreateTableIfNotExists(

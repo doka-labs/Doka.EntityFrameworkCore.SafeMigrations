@@ -19,6 +19,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 ? SafeMigrationRepairCapability.Safe
                 : SafeMigrationRepairCapability.None;
 
+        // WHY: These ordered repair branches own different native protocol builders and proof prerequisites.
+        // ReSharper disable once ConvertIfStatementToSwitchStatement
         if (repairRequested
             && intent.OldDefinition is { } integerSource
             && MySqlSignedIntegerWidening.IsSafe(integerSource, intent.Definition))
@@ -323,7 +325,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 StateEvaluationGuardFailureExpression = "'different'",
                 ClassificationCodeExpression =
                 transition.HasDataProbe
-                    ? $"CASE WHEN {transition.DataBlockedExpression} THEN 'varchar_narrowing_value_too_long' ELSE NULL END"
+                    ? $"CASE WHEN {transition
+                        .DataBlockedExpression} THEN 'varchar_narrowing_value_too_long' ELSE NULL END"
                     : null,
                 RepairOperationalImpact = transition.OperationalImpact,
                 DiagnosticEvidenceExpression = includeAnalysisEvidence
@@ -425,11 +428,12 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         else
         {
             var integerBytes = MySqlSignedIntegerWidening.Width(intent.Definition);
-            targetWidth = integerBytes > 0
-                ? integerBytes.ToString(CultureInfo.InvariantCulture)
-                : IsBooleanTinyInt(targetType, intent.Definition.ClrType)
-                    ? "1"
-                    : "65536";
+            targetWidth = integerBytes switch
+            {
+                > 0 => integerBytes.ToString(CultureInfo.InvariantCulture),
+                _ when IsBooleanTinyInt(targetType, intent.Definition.ClrType) => "1",
+                _ => "65536",
+            };
         }
 
         // WHY: The SQL-layer 65,535-byte limit does not prove that an InnoDB
@@ -722,7 +726,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         // defaults as question marks even while the stored default is intact.
         // Neither accepting that lossy spelling nor mutating before a failed
         // postcondition establishes the exact source/target contract.
-        return literal is not string value || !value.Any(char.IsSurrogate);
+        return literal is not string value || value.All(static character => !char.IsSurrogate(character));
     }
 
     /// <summary>Checks character-limited VARCHAR and byte-limited TEXT against one literal shape.</summary>

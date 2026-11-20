@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations;
 
 /// <summary>Represents ensuring a column exists.</summary>
+[PublicAPI]
 public sealed class EnsureColumnIntent : SafeMigrationIntent
 {
     /// <summary>Initializes the intent.</summary>
@@ -34,6 +35,7 @@ public sealed class EnsureColumnIntent : SafeMigrationIntent
 }
 
 /// <summary>Represents dropping a column when it exists.</summary>
+[PublicAPI]
 public sealed class DropColumnIntent : SafeMigrationIntent
 {
     /// <summary>Initializes the intent.</summary>
@@ -65,6 +67,7 @@ public sealed class DropColumnIntent : SafeMigrationIntent
 }
 
 /// <summary>Represents renaming a column when the source exists.</summary>
+[PublicAPI]
 public sealed class RenameColumnIntent : SafeMigrationIntent
 {
     /// <summary>Initializes the intent.</summary>
@@ -102,6 +105,7 @@ public sealed class RenameColumnIntent : SafeMigrationIntent
 }
 
 /// <summary>Represents altering a column when its definition differs.</summary>
+[PublicAPI]
 public sealed class AlterColumnIntent : SafeMigrationIntent
 {
     /// <summary>Initializes the intent.</summary>

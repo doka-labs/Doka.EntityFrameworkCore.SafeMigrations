@@ -213,7 +213,7 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
         List<IModel?> models = [null, tableModel, new ModelBuilder().FinalizeModel(), null];
 
         // Act
-        var report = await VerifyAsync(operations, analyzer, CancellationToken.None, models);
+        var report = await VerifyAsync(operations, analyzer, models, CancellationToken.None);
 
         // Assert
         Assert.True(report.Assessments[1].PostconditionSatisfied);
@@ -566,13 +566,13 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
     private static async Task<SafeMigrationRunReport> VerifyAsync(
         IReadOnlyList<MigrationOperation> operations,
         FinalCatalogAnalyzer analyzer,
-        CancellationToken cancellationToken,
-        List<IModel?>? targetModels = null
+        List<IModel?>? targetModels,
+        CancellationToken cancellationToken
     )
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        using var context = new DbContext(new DbContextOptionsBuilder().Options);
+        await using var context = new DbContext(new DbContextOptionsBuilder().Options);
         var runner = new SafeMigrationRunner(analyzer);
         var method = typeof(SafeMigrationRunner).GetMethod(
             "AnalyzeOperationsAsync",
@@ -592,10 +592,28 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
         return await task;
     }
 
-    private sealed class FinalCatalogAnalyzer(ExpectedTableDefinition finalTable)
+    /// <summary>Verifies a stream without provider target-model overrides using the caller's token.</summary>
+    private static Task<SafeMigrationRunReport> VerifyAsync(
+        IReadOnlyList<MigrationOperation> operations,
+        FinalCatalogAnalyzer analyzer,
+        CancellationToken cancellationToken
+    ) => VerifyAsync(operations, analyzer, null, cancellationToken);
+
+    private sealed class FinalCatalogAnalyzer
         : ISafeMigrationProviderAnalyzer, ISafeMigrationProviderObjectIdentityNormalizer,
             ISafeMigrationProviderTargetModelAnalyzer
     {
+        private readonly ExpectedTableDefinition _finalTable;
+
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="finalTable">The supplied final table for this fixture.</param>
+        public FinalCatalogAnalyzer(
+            ExpectedTableDefinition finalTable
+        )
+        {
+            _finalTable = finalTable;
+        }
+
         public List<SafeMigrationOperation[]> Batches { get; } = [];
         public List<IModel?[]?> ModelBatches { get; } = [];
         public IReadOnlyList<ModelManagedDataIntent>? FinalManagedContracts { get; init; }
@@ -649,7 +667,7 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
                                 .KeyColumns
                                 .Concat(managed.Columns)
                                 .Any(member =>
-                                    !finalTable.Columns.Any(column =>
+                                    !_finalTable.Columns.Any(column =>
                                         StringComparer.Ordinal.Equals(column.Name, member)));
 
                             var rowMatches = !missing
@@ -677,11 +695,11 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
                         var matching = operation.Intent switch
                         {
                             EnsureTableIntent table => SafeMigrationDefinitionEquivalence.Table(table.Definition,
-                                finalTable),
+                                _finalTable),
                             RenameColumnIntent => RenameSatisfied,
-                            EnsureColumnIntent column => finalTable.Columns.Any(actual =>
+                            EnsureColumnIntent column => _finalTable.Columns.Any(actual =>
                                 SafeMigrationDefinitionEquivalence.Column(actual, column.Definition)),
-                            EnsureCheckConstraintIntent check => finalTable.CheckConstraints.Any(actual =>
+                            EnsureCheckConstraintIntent check => _finalTable.CheckConstraints.Any(actual =>
                                 SafeMigrationDefinitionEquivalence.CheckConstraintSemantics(actual, check.Definition)),
                             _ => true,
                         };
@@ -753,13 +771,28 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
         }
     }
 
-    private sealed class IdentitySnapshot(
-        string? schema,
-        bool historicalProven,
-        int? firstUnproven
-    )
+    private sealed class IdentitySnapshot
         : ISafeMigrationProviderObjectIdentityNormalizer
     {
+        private readonly int? _firstUnproven;
+        private readonly bool _historicalProven;
+        private readonly string? _schema;
+
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="schema">The supplied schema for this fixture.</param>
+        /// <param name="historicalProven">The supplied historical proven for this fixture.</param>
+        /// <param name="firstUnproven">The supplied first unproven for this fixture.</param>
+        public IdentitySnapshot(
+            string? schema,
+            bool historicalProven,
+            int? firstUnproven
+        )
+        {
+            _schema = schema;
+            _historicalProven = historicalProven;
+            _firstUnproven = firstUnproven;
+        }
+
         public StringComparer IdentifierComparer => StringComparer.Ordinal;
         public char? CapturedSqlIdentifierDelimiter => '"';
 
@@ -769,7 +802,7 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
 
         public string? NormalizeSchema(
             string? value
-        ) => value ?? schema;
+        ) => value ?? _schema;
 
         public bool IsObjectIdentityMismatch(
             SafeMigrationProviderAnalysis analysis
@@ -778,6 +811,6 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
         public bool IsPostflightIdentityProven(
             SafeMigrationIntent intent,
             int ordinal
-        ) => historicalProven && (firstUnproven is null || ordinal < firstUnproven);
+        ) => _historicalProven && (_firstUnproven is null || ordinal < _firstUnproven);
     }
 }

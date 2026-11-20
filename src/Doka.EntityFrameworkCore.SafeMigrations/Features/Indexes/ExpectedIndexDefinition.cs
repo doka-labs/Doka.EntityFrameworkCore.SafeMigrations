@@ -3,6 +3,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// <summary>
 /// Describes one ordered key part of an index.
 /// </summary>
+[PublicAPI]
 public sealed class ExpectedIndexKeyDefinition
 {
     /// <summary>Initializes an expected index key.</summary>
@@ -97,6 +98,7 @@ public sealed class ExpectedIndexKeyDefinition
 /// <summary>
 /// Describes the complete provider-neutral definition of an index.
 /// </summary>
+[PublicAPI]
 public sealed class ExpectedIndexDefinition
 {
     /// <summary>Initializes an expected index definition.</summary>

@@ -76,10 +76,7 @@ public sealed partial class
                 gateReleased);
         }
 
-        var interrupted = await ReadAtomicRequiredAddStateAsync(
-            connectionString,
-            operation,
-            cancellationToken: cancellationToken);
+        var interrupted = await ReadAtomicRequiredAddStateAsync(connectionString, operation, null, cancellationToken);
 
         var retry = await context
             .GetService<ISafeMigrationRunner>()
@@ -188,10 +185,7 @@ public sealed partial class
                 gateReleased);
         }
 
-        var final = await ReadAtomicRequiredAddStateAsync(
-            connectionString,
-            operation,
-            cancellationToken: cancellationToken);
+        var final = await ReadAtomicRequiredAddStateAsync(connectionString, operation, null, cancellationToken);
 
         var suppliedValue = await ScalarStringAsync(
             connectionString,
@@ -294,10 +288,7 @@ public sealed partial class
                 gateReleased);
         }
 
-        var interrupted = await ReadAtomicRequiredAddStateAsync(
-            connectionString,
-            operation,
-            cancellationToken: cancellationToken);
+        var interrupted = await ReadAtomicRequiredAddStateAsync(connectionString, operation, null, cancellationToken);
 
         var nullRowsBeforeRetry = await ScalarIntAsync(
             connectionString,
@@ -311,10 +302,7 @@ public sealed partial class
             cancellationToken);
 
         await ExecuteOperationsAsync(context, [operation], cancellationToken);
-        var recovered = await ReadAtomicRequiredAddStateAsync(
-            connectionString,
-            operation,
-            cancellationToken: cancellationToken);
+        var recovered = await ReadAtomicRequiredAddStateAsync(connectionString, operation, null, cancellationToken);
 
         var preserved = await ScalarStringAsync(
             connectionString,
@@ -425,7 +413,8 @@ public sealed partial class
         var interrupted = await ReadAtomicRequiredAddStateAsync(
             connectionString,
             operation,
-            cancellationToken: CancellationToken.None);
+            null,
+            CancellationToken.None);
 
         var valueBeforeRetry = await ScalarStringAsync(
             connectionString,
@@ -436,7 +425,8 @@ public sealed partial class
         var recovered = await ReadAtomicRequiredAddStateAsync(
             connectionString,
             operation,
-            cancellationToken: CancellationToken.None);
+            null,
+            CancellationToken.None);
 
         var sessionAfter = await ContextScalarIntAsync(
             context,
@@ -451,7 +441,7 @@ public sealed partial class
         // Assert
         Assert.True(checkpoint.CheckpointWasReached);
         Assert.True(checkpoint.WasInjected);
-        Assert.IsAssignableFrom<OperationCanceledException>(failure);
+        Assert.IsType<OperationCanceledException>(failure, exactMatch: false);
         Assert.Equal(1, interrupted.Columns);
         Assert.Equal(1, interrupted.NullableColumns);
         Assert.Equal(1, interrupted.Guards);

@@ -1,7 +1,13 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
+/// <summary>Protects ordered support-index coverage, physical lifetimes, aliases, and unsafe-index risk.</summary>
 public sealed class MySqlProjectedForeignKeySupportingIndexesTests
 {
+    /// <summary>
+    /// Requires a complete covering index before an occupied automatic-index name can be considered safe.
+    /// </summary>
+    /// <param name="occupied">Whether the captured automatic-index namespace is already occupied.</param>
+    /// <param name="expected">The independently specified result for this exact input case.</param>
     [Theory]
     [InlineData(false, true)]
     [InlineData(true, false)]
@@ -21,6 +27,9 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         Assert.Equal(expected, result);
     }
 
+    /// <summary>Classifies only an occupied captured name without valid coverage as a proven name collision.</summary>
+    /// <param name="occupied">Whether the captured automatic-index namespace is already occupied.</param>
+    /// <param name="expected">The independently specified result for this exact input case.</param>
     [Theory]
     [InlineData(false, false)]
     [InlineData(true, true)]
@@ -40,6 +49,9 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         Assert.Equal(expected, result);
     }
 
+    /// <summary>
+    /// Retains a known automatic-index collision after an accepted wrong-shape index occupies the captured name.
+    /// </summary>
     [Fact]
     public void AcceptedWrongShapeIndexCreatesAKnownCollisionForTheCapturedRequest()
     {
@@ -55,6 +67,8 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         Assert.True(result);
     }
 
+    /// <summary>Does not report a collision when independently proven native or projected coverage survives.</summary>
+    /// <param name="projected">Whether the prerequisite shape comes from an accepted earlier operation.</param>
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -83,6 +97,8 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         Assert.False(result);
     }
 
+    /// <summary>Does not invent a known collision from an unproven owner state.</summary>
+    /// <param name="boundary">The exact catalog or SQL boundary selected for this case.</param>
     [Theory]
     [InlineData("Opaque")]
     [InlineData("Unknown")]
@@ -136,6 +152,9 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         Assert.False(result);
     }
 
+    /// <summary>
+    /// Does not resurrect dropped covering evidence when the same name is reused for a different shape.
+    /// </summary>
     [Fact]
     public void DroppedCoveringAliasCannotBeResurrectedByWrongShapeNameReuse()
     {
@@ -152,6 +171,7 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         Assert.False(result);
     }
 
+    /// <summary>Keeps independent alias coverage after a different alias is removed.</summary>
     [Fact]
     public void DroppingOneAliasPreservesAnIndependentSurvivingAlias()
     {
@@ -167,6 +187,9 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         Assert.True(result);
     }
 
+    /// <summary>
+    /// Uses the requested ordered left prefix rather than unordered membership to prove support coverage.
+    /// </summary>
     [Fact]
     public void AcceptedSupportingIndexUsesTheRequestedOrderedLeftPrefix()
     {
@@ -182,6 +205,7 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         Assert.True(result);
     }
 
+    /// <summary>Rejects a same-name index whose key members are ordered differently from the required prefix.</summary>
     [Fact]
     public void SameNameWithWrongColumnOrderIsNotCoveringAuthority()
     {
@@ -197,6 +221,10 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         Assert.False(result);
     }
 
+    /// <summary>Does not mint index coverage from a rejected or non-applying operation.</summary>
+    /// <param name="action">The action or decision selected by the test case.</param>
+    /// <param name="state">The selected preexisting native or projected lifecycle state.</param>
+    /// <param name="code">The expected machine-readable classification code.</param>
     [Theory]
     [InlineData(SafeMigrationAction.NoOp, SafeMigrationObservedState.Matching, "NoOpMatching")]
     [InlineData(SafeMigrationAction.NoOp, SafeMigrationObservedState.Different, "NoOpExistsOnlyDifferent")]
@@ -221,6 +249,7 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         Assert.False(result);
     }
 
+    /// <summary>Admits future index evidence only after its accepted operation ordinal has been reached.</summary>
     [Fact]
     public void FutureIndexDoesNotParticipateInAnEarlierForeignKeyProof()
     {
@@ -243,6 +272,9 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         Assert.True(after);
     }
 
+    /// <summary>
+    /// Does not carry a renamed and subsequently dropped index lifetime into a wrong-shape name reuse.
+    /// </summary>
     [Fact]
     public void RenamedThenDroppedAliasCannotSurviveWrongShapeReuse()
     {
@@ -260,6 +292,7 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         Assert.False(result);
     }
 
+    /// <summary>Moves the existing physical coverage certificate with an accepted index rename.</summary>
     [Fact]
     public void AcceptedIndexRenameRetainsThePhysicalCoverageLifetime()
     {
@@ -276,6 +309,9 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         Assert.True(result);
     }
 
+    /// <summary>
+    /// Tracks name occupancy when an uncaptured index is renamed into the foreign-key support symbol.
+    /// </summary>
     [Fact]
     public void RenamingAnUncapturedIndexIntoTheForeignKeySymbolOccupiesItsName()
     {
@@ -291,6 +327,7 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         Assert.False(result);
     }
 
+    /// <summary>Revokes a captured physical index identity when its accepted repair replaces the shape.</summary>
     [Fact]
     public void IndexRepairRevokesTheCapturedPhysicalIdentity()
     {
@@ -311,6 +348,8 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         Assert.False(result);
     }
 
+    /// <summary>Does not establish coverage for an index whose physical key shape is unavailable.</summary>
+    /// <param name="shape">The independently selected physical index or column shape.</param>
     [Theory]
     [InlineData("prefix")]
     [InlineData("expression")]
@@ -357,6 +396,10 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         Assert.False(result);
     }
 
+    /// <summary>Uses the captured engine's ordinary B-tree direction rules for support coverage.</summary>
+    /// <param name="isMariaDb">Whether the selected physical contract belongs to MariaDB rather than MySQL.</param>
+    /// <param name="sortOrder">The authored native index direction.</param>
+    /// <param name="expected">The independently specified result for this exact input case.</param>
     [Theory]
     [InlineData(false, SafeMigrationIndexSortOrder.ProviderDefault, true)]
     [InlineData(true, SafeMigrationIndexSortOrder.ProviderDefault, true)]
@@ -388,6 +431,10 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         Assert.Equal(expected, result);
     }
 
+    /// <summary>
+    /// Allows accepted physical primary or unique keys to satisfy the requested ordered support prefix.
+    /// </summary>
+    /// <param name="kind">The independently selected object or transition family.</param>
     [Theory]
     [InlineData("primary")]
     [InlineData("unique")]
@@ -411,6 +458,7 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         Assert.True(result);
     }
 
+    /// <summary>Uses the engine's physical PRIMARY identity when retiring a dropped primary key's coverage.</summary>
     [Fact]
     public void PrimaryKeyDropUsesItsNativePhysicalIndexName()
     {
@@ -426,6 +474,7 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         Assert.False(result);
     }
 
+    /// <summary>Revokes coverage only for indexes affected by the changed column boundary.</summary>
     [Fact]
     public void AffectedColumnBoundaryRevokesOnlyItsCoverageCertificates()
     {
@@ -445,6 +494,10 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         Assert.True(independent);
     }
 
+    /// <summary>
+    /// Retains physical coverage and unsafe-index risk across a certified same-layout nullability change.
+    /// </summary>
+    /// <param name="sourceNullable">Whether the source column admits NULL values.</param>
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -485,6 +538,10 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         Assert.False(unrelatedRisk);
     }
 
+    /// <summary>
+    /// Revokes unproven coverage without pretending that the underlying unsafe-index risk disappeared.
+    /// </summary>
+    /// <param name="difference">The independently changed relational facet.</param>
     [Theory]
     [InlineData("Storage")]
     [InlineData("Collation")]
@@ -510,9 +567,9 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         {
             Table = "child",
             Name = "parent_id",
+            ["MySql:UnreviewedStorageFacet"] = "changed",
         };
 
-        annotatedColumn["MySql:UnreviewedStorageFacet"] = "changed";
         var target = new ExpectedColumnDefinition(
             "parent_id",
             typeof(string),
@@ -562,6 +619,10 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         Assert.True(unsafeRisk);
     }
 
+    /// <summary>
+    /// Requires the physical-key preservation certificate before carrying coverage through an ensure-column repair.
+    /// </summary>
+    /// <param name="certified">Whether physical-key preservation is independently certified.</param>
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -604,6 +665,7 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         Assert.Equal(!certified, unrelatedRisk);
     }
 
+    /// <summary>Does not mint new coverage or retire unsafe risk merely because a column repair is certified.</summary>
     [Fact]
     public void CertifiedEnsureColumnRepairCannotMintCoverageOrRetireUnsafeRisk()
     {
@@ -636,6 +698,9 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         Assert.True(unsafeRisk);
     }
 
+    /// <summary>Does not consume a physical-key certificate for a repair that will not execute.</summary>
+    /// <param name="action">The action or decision selected by the test case.</param>
+    /// <param name="capturedCoverage">Whether independently captured native index coverage exists.</param>
     [Theory]
     [InlineData(SafeMigrationAction.NoOp, false)]
     [InlineData(SafeMigrationAction.NoOp, true)]
@@ -681,6 +746,7 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         Assert.False(unrelatedRisk);
     }
 
+    /// <summary>Does not waive automatic-index name collision protection across opaque SQL.</summary>
     [Fact]
     public void OpaqueSqlCannotWaiveANameCollision()
     {
@@ -696,6 +762,8 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         Assert.False(result);
     }
 
+    /// <summary>Treats a provider index mutation without a known owner as an opaque coverage boundary.</summary>
+    /// <param name="rename">Whether the captured physical index changes its alias before removal.</param>
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -722,6 +790,9 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         Assert.False(result);
     }
 
+    /// <summary>
+    /// Accounts for automatic-index namespace occupancy created by an uncaptured provider foreign key.
+    /// </summary>
     [Fact]
     public void UncapturedProviderForeignKeyCanOccupyTheAutomaticIndexNamespace()
     {
@@ -745,6 +816,7 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         Assert.False(result);
     }
 
+    /// <summary>Ends old alias evidence when its table is dropped and a new owner reuses the name.</summary>
     [Fact]
     public void TableDropAndReuseCannotRetainTheOldAliasLifetime()
     {
@@ -760,6 +832,7 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         Assert.False(result);
     }
 
+    /// <summary>Starts a fresh support-index namespace only after an accepted concrete table creation.</summary>
     [Fact]
     public void PlainAcceptedTableCreationStartsAFreshIndexNamespace()
     {
@@ -779,6 +852,9 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         Assert.True(result);
     }
 
+    /// <summary>Preserves inline key occupancy and key shape when a fresh table is created.</summary>
+    /// <param name="inlineColumn">Whether the prerequisite column is declared inline with its owner.</param>
+    /// <param name="expected">The independently specified result for this exact input case.</param>
     [Theory]
     [InlineData("parent_id", true)]
     [InlineData("old_parent_id", false)]
@@ -806,6 +882,7 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         Assert.Equal(expected, result);
     }
 
+    /// <summary>Does not invent a fresh index namespace from table creation deferred to runtime.</summary>
     [Fact]
     public void RuntimeDeferredTableCreationCannotMintAFreshNamespace()
     {
@@ -837,6 +914,9 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         Assert.False(result);
     }
 
+    /// <summary>
+    /// Moves a table's physical index lifetime to the accepted rename destination without leaving an old-owner alias.
+    /// </summary>
     [Fact]
     public void TableRenameMovesThePhysicalLifetimeWithoutReusingTheOldOwner()
     {
@@ -861,6 +941,7 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         Assert.True(newOwner);
     }
 
+    /// <summary>Uses the captured schema and identifier comparison rules for owner identity.</summary>
     [Fact]
     public void SchemaNormalizationAndIdentifierComparersMatchTheNativeDomains()
     {
@@ -891,6 +972,9 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         Assert.False(differentOwner);
     }
 
+    /// <summary>
+    /// Does not resurrect an automatic support alias after the index that replaced it is itself dropped.
+    /// </summary>
     [Fact]
     public void AutomaticallyCreatedAliasCannotBeResurrectedAfterItsReplacementIsDropped()
     {
@@ -907,6 +991,7 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         Assert.False(result);
     }
 
+    /// <summary>Keeps a captured primary index outside ordinary automatic-index pruning.</summary>
     [Fact]
     public void CapturedPrimaryIndexSurvivesAutomaticIndexPruning()
     {
@@ -923,6 +1008,7 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         Assert.True(result);
     }
 
+    /// <summary>Keeps an explicitly authored physical index outside automatic support-index pruning.</summary>
     [Fact]
     public void ExplicitPhysicalIndexSurvivesAutomaticIndexPruning()
     {
@@ -940,6 +1026,7 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         Assert.True(result);
     }
 
+    /// <summary>Retains automatic-index name occupancy when only the foreign key is dropped.</summary>
     [Fact]
     public void DroppingTheForeignKeyDoesNotDropItsAutomaticIndexOccupancy()
     {
@@ -955,6 +1042,7 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         Assert.False(result);
     }
 
+    /// <summary>Tracks an unsafe index independently of otherwise sufficient ordinary support coverage.</summary>
     [Fact]
     public void CapturedUnsafeIndexIsIndependentOfOrdinaryCoverage()
     {
@@ -970,6 +1058,7 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         Assert.True(result);
     }
 
+    /// <summary>Retires a captured unsafe-index lifetime only after its exact accepted physical drop.</summary>
     [Fact]
     public void PreciseAcceptedDropRemovesTheCapturedUnsafeLifetime()
     {
@@ -985,6 +1074,8 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         Assert.False(result);
     }
 
+    /// <summary>Does not clear unsafe-index risk for a rejected or otherwise nonexecuting drop.</summary>
+    /// <param name="action">The action or decision selected by the test case.</param>
     [Theory]
     [InlineData(SafeMigrationAction.NoOp)]
     [InlineData(SafeMigrationAction.RejectDifferent)]
@@ -1006,6 +1097,7 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         Assert.True(result);
     }
 
+    /// <summary>Does not use a future drop to clear risk before that operation's ordinal.</summary>
     [Fact]
     public void FutureDropDoesNotReleaseAnEarlierUnsafeIndex()
     {
@@ -1022,6 +1114,7 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         Assert.IsType<DropIndexIntent>(future.Intent);
     }
 
+    /// <summary>Does not clear unsafe-index risk by removing a different physical alias.</summary>
     [Fact]
     public void WrongPhysicalAliasDoesNotReleaseUnsafeIndexRisk()
     {
@@ -1037,6 +1130,9 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         Assert.True(result);
     }
 
+    /// <summary>
+    /// Keeps a reused unsafe alias conservative instead of treating name reuse as fresh safety evidence.
+    /// </summary>
     [Fact]
     public void ReoccupiedUnsafeAliasRemainsConservativelyUnsafe()
     {
@@ -1053,6 +1149,9 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         Assert.True(result);
     }
 
+    /// <summary>Requires the currently renamed unsafe-index identity when proving its removal.</summary>
+    /// <param name="dropAlias">The physical alias selected for removal.</param>
+    /// <param name="expected">The independently specified result for this exact input case.</param>
     [Theory]
     [InlineData("unsafe_mvi", true)]
     [InlineData("renamed_mvi", false)]
@@ -1074,6 +1173,7 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         Assert.Equal(expected, result);
     }
 
+    /// <summary>Does not clear an independent unsafe alias when a different unsafe index is removed.</summary>
     [Fact]
     public void DroppingOneUnsafeAliasCannotReleaseAnother()
     {
@@ -1089,6 +1189,7 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         Assert.True(result);
     }
 
+    /// <summary>Keeps unsafe-index lifetimes separate for different owner tables.</summary>
     [Fact]
     public void UnsafeIndexDropOnAnotherOwnerCannotReleaseTheCapturedOwner()
     {
@@ -1104,6 +1205,7 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         Assert.True(result);
     }
 
+    /// <summary>Does not assume an exact earlier drop proves an empty unsafe-index set across opaque SQL.</summary>
     [Fact]
     public void OpaqueBoundaryAfterExactDropCannotProveNoUnsafeIndex()
     {
@@ -1120,6 +1222,7 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         Assert.True(result);
     }
 
+    /// <summary>Does not clear unsafe-index risk through an unknown provider mutation.</summary>
     [Fact]
     public void UnknownProviderIndexMutationCannotReleaseUnsafeIndexRisk()
     {
@@ -1142,6 +1245,7 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         Assert.True(result);
     }
 
+    /// <summary>Clears old unsafe aliases when an accepted fresh table starts a new physical lifetime.</summary>
     [Fact]
     public void FreshAcceptedTableLifetimeClearsOldUnsafeAliases()
     {
@@ -1162,6 +1266,7 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         Assert.False(result);
     }
 
+    /// <summary>Does not clear captured unsafe aliases when ensuring a table is only a matching no-op.</summary>
     [Fact]
     public void MatchingTableNoOpCannotClearCapturedUnsafeAliases()
     {
@@ -1184,6 +1289,7 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         Assert.True(result);
     }
 
+    /// <summary>Matches unsafe-index risk by its captured ordered ordinary-column prefix.</summary>
     [Fact]
     public void UnsafeIndexRiskUsesItsCapturedOrdinaryColumnPrefix()
     {
@@ -1201,6 +1307,9 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         Assert.False(different);
     }
 
+    /// <summary>
+    /// Does not certify a different requested prefix after the unsafe index's member shape becomes unknown.
+    /// </summary>
     [Fact]
     public void ChangedUnsafeIndexMembersCannotCertifyADifferentRequestedPrefix()
     {
@@ -1217,6 +1326,9 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         Assert.True(result);
     }
 
+    /// <summary>
+    /// Allows an exact accepted physical drop to retire an unsafe index even after member shape is unknown.
+    /// </summary>
     [Fact]
     public void PreciseDropStillRemovesAnUnsafeIndexAfterMemberShapeBecameUnknown()
     {
@@ -1234,6 +1346,7 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         Assert.False(result);
     }
 
+    /// <summary>Ends unsafe-index lifetime at an exact accepted table drop.</summary>
     [Fact]
     public void PreciseAcceptedTableDropEndsItsUnsafeIndexLifetime()
     {
@@ -1249,6 +1362,7 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         Assert.False(result);
     }
 
+    /// <summary>Keeps differently cased unsafe owners separate under an ordinal owner profile.</summary>
     [Fact]
     public void IdentityOwnerProfileKeepsDifferentlyCasedUnsafeOwnersDistinct()
     {
@@ -1264,6 +1378,9 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         Assert.True(result);
     }
 
+    /// <summary>
+    /// Shares mixed-case accepted lifetimes only under the supplied verified case-insensitive owner profile.
+    /// </summary>
     [Fact]
     public void SuppliedCaseInsensitiveOwnerProfileSharesAcceptedMixedCaseLifetimes()
     {

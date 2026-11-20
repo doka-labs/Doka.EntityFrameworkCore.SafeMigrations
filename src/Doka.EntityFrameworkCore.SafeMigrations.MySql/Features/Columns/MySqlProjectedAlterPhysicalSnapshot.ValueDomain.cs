@@ -13,8 +13,8 @@ internal sealed partial class MySqlProjectedAlterPhysicalSnapshot
     )
     {
         var target = intent.Definition;
-        if (!columns.TryGetValue(target.Name, out var original)
-            || (source.IsNullable && !target.IsNullable && !environment.StrictSqlMode)
+        if (!_columns.TryGetValue(target.Name, out var original)
+            || (source.IsNullable && !target.IsNullable && !_environment.StrictSqlMode)
             || source.ClrType != typeof(string)
             || target.ClrType != typeof(string)
             || !MySqlSafeMigrationColumnMetadata.CanSafelyConverge(source)
@@ -36,7 +36,7 @@ internal sealed partial class MySqlProjectedAlterPhysicalSnapshot
         if (source.Collation is { } collation)
         {
             characterSet = collation.Schema is null
-                && environment.CollationCharacterSets is { } characterSets
+                && _environment.CollationCharacterSets is { } characterSets
                 && characterSets.TryGetValue(collation.Name, out var resolved)
                     ? resolved
                     : null;
@@ -44,16 +44,16 @@ internal sealed partial class MySqlProjectedAlterPhysicalSnapshot
 
         if (!sourceIsString
             || (MySqlProjectedColumnTransition.RequiresStrictConversion(sourceType, targetType)
-                && !environment.StrictSqlMode)
+                && !_environment.StrictSqlMode)
             || !MySqlSafeMigrationCatalogSqlBuilder.CanRepresentAlterColumnBackfill(
                 source,
                 target,
                 sourceType,
                 targetType,
                 characterSet,
-                environment.StrictSqlMode,
-                environment.SupportsQuotedExpressionDefaults,
-                environment.SupportsTextExpressionControlCharacters))
+                _environment.StrictSqlMode,
+                _environment.SupportsQuotedExpressionDefaults,
+                _environment.SupportsTextExpressionControlCharacters))
         {
             return false;
         }

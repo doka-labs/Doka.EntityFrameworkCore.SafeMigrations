@@ -3,22 +3,22 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 public sealed partial class SafeMigrationRunContractTests
 {
     private static readonly (SafeMigrationReportMode Value, string Code)[] s_modes =
-    {
+    [
         (Value: SafeMigrationReportMode.Preflight, Code: "preflight"),
         (Value: SafeMigrationReportMode.Postflight, Code: "postflight"),
-    };
+    ];
 
     private static readonly (SafeMigrationReportStatus Value, string Code)[] s_statuses =
-    {
+    [
         (Value: SafeMigrationReportStatus.NoOperations, Code: "no_operations"),
         (Value: SafeMigrationReportStatus.Ready, Code: "ready"),
         (Value: SafeMigrationReportStatus.ReadyWithProviderOperations, Code: "ready_with_provider_operations"),
         (Value: SafeMigrationReportStatus.Blocked, Code: "blocked"),
         (Value: SafeMigrationReportStatus.RuntimeValidationRequired, Code: "runtime_validation_required"),
-    };
+    ];
 
     private static readonly (SafeMigrationOperationKind Value, string Code)[] s_operationKinds =
-    {
+    [
         (Value: SafeMigrationOperationKind.EnsureSchema, Code: "ensure_schema"),
         (Value: SafeMigrationOperationKind.DropSchema, Code: "drop_schema"),
         (Value: SafeMigrationOperationKind.EnsureTable, Code: "ensure_table"),
@@ -42,10 +42,10 @@ public sealed partial class SafeMigrationRunContractTests
         (Value: SafeMigrationOperationKind.EnsureModelManagedData, Code: "ensure_model_managed_data"),
         (Value: SafeMigrationOperationKind.UpdateModelManagedData, Code: "update_model_managed_data"),
         (Value: SafeMigrationOperationKind.DeleteModelManagedData, Code: "delete_model_managed_data"),
-    };
+    ];
 
     private static readonly (SafeMigrationObservedState Value, string Code)[] s_states =
-    {
+    [
         (Value: SafeMigrationObservedState.Missing, Code: "missing"),
         (Value: SafeMigrationObservedState.Matching, Code: "matching"),
         (Value: SafeMigrationObservedState.Different, Code: "different"),
@@ -53,10 +53,10 @@ public sealed partial class SafeMigrationRunContractTests
         (Value: SafeMigrationObservedState.DataBlocked, Code: "data_blocked"),
         (Value: SafeMigrationObservedState.PrerequisiteMissing, Code: "prerequisite_missing"),
         (Value: SafeMigrationObservedState.TransitionReady, Code: "transition_ready"),
-    };
+    ];
 
     private static readonly (SafeMigrationAction Value, string Code)[] s_actions =
-    {
+    [
         (Value: SafeMigrationAction.Apply, Code: "apply"),
         (Value: SafeMigrationAction.NoOp, Code: "no_op"),
         (Value: SafeMigrationAction.Repair, Code: "repair"),
@@ -65,17 +65,17 @@ public sealed partial class SafeMigrationRunContractTests
         (Value: SafeMigrationAction.RejectDataBlocked, Code: "reject_data_blocked"),
         (Value: SafeMigrationAction.RejectPrerequisiteMissing, Code: "reject_prerequisite_missing"),
         (Value: SafeMigrationAction.ValidateAtRuntime, Code: "validate_at_runtime"),
-    };
+    ];
 
     private static readonly (SafeMigrationOperationalImpact Value, string Code)[] s_operationalImpacts =
-    {
+    [
         (Value: SafeMigrationOperationalImpact.NotApplicable, Code: "not_applicable"),
         (Value: SafeMigrationOperationalImpact.TableRewritePossible, Code: "table_rewrite_possible"),
         (Value: SafeMigrationOperationalImpact.Unknown, Code: "unknown"),
-    };
+    ];
 
     private static readonly (SafeMigrationDatabaseObjectKind Value, string Code)[] s_objectKinds =
-    {
+    [
         (Value: SafeMigrationDatabaseObjectKind.Table, Code: "table"),
         (Value: SafeMigrationDatabaseObjectKind.Column, Code: "column"),
         (Value: SafeMigrationDatabaseObjectKind.Index, Code: "index"),
@@ -83,7 +83,7 @@ public sealed partial class SafeMigrationRunContractTests
         (Value: SafeMigrationDatabaseObjectKind.UniqueConstraint, Code: "unique_constraint"),
         (Value: SafeMigrationDatabaseObjectKind.CheckConstraint, Code: "check_constraint"),
         (Value: SafeMigrationDatabaseObjectKind.ForeignKey, Code: "foreign_key"),
-    };
+    ];
 
     /// <summary>Gets every original report-mode and status pairing as serializable discovery arguments.</summary>
     public static IEnumerable<object[]> ModeStatusCodes

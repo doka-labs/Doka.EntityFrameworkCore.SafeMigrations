@@ -88,10 +88,19 @@ public sealed class BenchmarkProgramInvocationTests
     [InlineData("safe_migrations_sqlserver_attribution_output:synthetic", false)]
     [InlineData("SAFE_MIGRATIONS_SQLSERVER_ATTRIBUTION_CONNECTION:synthetic", false)]
     [InlineData("safe_migrations_sqlserver_attribution_connection:synthetic", false)]
+    [InlineData("SAFE_MIGRATIONS_MYSQL_BENCHMARK_CONNECTION:synthetic", false)]
+    [InlineData("safe_migrations_mysql_benchmark_connection:synthetic", false)]
+    [InlineData("SAFE_MIGRATIONS_POSTGRES_BENCHMARK_CONNECTION:synthetic", false)]
+    [InlineData("safe_migrations_postgres_benchmark_connection:synthetic", false)]
+    [InlineData("SAFE_MIGRATIONS_SQLSERVER_BENCHMARK_CONNECTION:synthetic", false)]
+    [InlineData("safe_migrations_sqlserver_benchmark_connection:synthetic", false)]
     [InlineData("DOKA_BENCHMARK_TEST_LABEL:synthetic", true)]
     [InlineData("SAFE_MIGRATIONS_ATTRIBUTION_OUTPUT_BACKUP:synthetic", true)]
     [InlineData("SAFE_MIGRATIONS_SQLSERVER_ATTRIBUTION_OUTPUT_BACKUP:synthetic", true)]
     [InlineData("SAFE_MIGRATIONS_SQLSERVER_ATTRIBUTION_CONNECTION_BACKUP:synthetic", true)]
+    [InlineData("SAFE_MIGRATIONS_MYSQL_BENCHMARK_CONNECTION_BACKUP:synthetic", true)]
+    [InlineData("SAFE_MIGRATIONS_POSTGRES_BENCHMARK_CONNECTION_BACKUP:synthetic", true)]
+    [InlineData("SAFE_MIGRATIONS_SQLSERVER_BENCHMARK_CONNECTION_BACKUP:synthetic", true)]
     public void IsSafeInvocation_ProtectsOwnedNativeEnvironmentVariables(
         string variable,
         bool expectedSafe
@@ -122,10 +131,19 @@ public sealed class BenchmarkProgramInvocationTests
     [InlineData("safe_migrations_sqlserver_attribution_output:synthetic", false)]
     [InlineData("SAFE_MIGRATIONS_SQLSERVER_ATTRIBUTION_CONNECTION:synthetic", false)]
     [InlineData("safe_migrations_sqlserver_attribution_connection:synthetic", false)]
+    [InlineData("SAFE_MIGRATIONS_MYSQL_BENCHMARK_CONNECTION:synthetic", false)]
+    [InlineData("safe_migrations_mysql_benchmark_connection:synthetic", false)]
+    [InlineData("SAFE_MIGRATIONS_POSTGRES_BENCHMARK_CONNECTION:synthetic", false)]
+    [InlineData("safe_migrations_postgres_benchmark_connection:synthetic", false)]
+    [InlineData("SAFE_MIGRATIONS_SQLSERVER_BENCHMARK_CONNECTION:synthetic", false)]
+    [InlineData("safe_migrations_sqlserver_benchmark_connection:synthetic", false)]
     [InlineData("DOKA_BENCHMARK_TEST_LABEL:synthetic", true)]
     [InlineData("SAFE_MIGRATIONS_ATTRIBUTION_OUTPUT_BACKUP:synthetic", true)]
     [InlineData("SAFE_MIGRATIONS_SQLSERVER_ATTRIBUTION_OUTPUT_BACKUP:synthetic", true)]
     [InlineData("SAFE_MIGRATIONS_SQLSERVER_ATTRIBUTION_CONNECTION_BACKUP:synthetic", true)]
+    [InlineData("SAFE_MIGRATIONS_MYSQL_BENCHMARK_CONNECTION_BACKUP:synthetic", true)]
+    [InlineData("SAFE_MIGRATIONS_POSTGRES_BENCHMARK_CONNECTION_BACKUP:synthetic", true)]
+    [InlineData("SAFE_MIGRATIONS_SQLSERVER_BENCHMARK_CONNECTION_BACKUP:synthetic", true)]
     public void IsSafeInvocation_ProtectsOwnedNativeResponseFileEnvironmentVariables(
         string variable,
         bool expectedSafe

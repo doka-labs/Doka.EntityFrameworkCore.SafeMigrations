@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Benchmarks;
 
 /// <summary>Measures MySQL model fingerprinting with ten properties per configured entity.</summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public class MySqlModelFingerprintBenchmarks : IDisposable
 {
     private DbContext _context = null!;

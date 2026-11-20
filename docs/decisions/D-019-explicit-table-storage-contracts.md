@@ -1,8 +1,8 @@
 ---
 id: D-019
 status: proposed
-date: 2026-11-09
-decision-makers: [Dominic Kalkbrenner]
+date: 2026-11-19
+decision-makers: ["Dominic Kalkbrenner"]
 consulted: []
 informed: ["@doka-labs/core-maintainers"]
 scope: "Immutable provider-certified InnoDB table metadata from scaffolding to runtime"
@@ -132,6 +132,10 @@ server-default mutation or new engine-repair permission.
   internal annotation relocation into the existing typed constraints callbacks.
   Preserve complete storage verification without adding public APIs. This
   implementation revision does not change the architectural approval status.
+- 2026-11-19: Aligned last-update metadata, reciprocal amendments, option titles
+  and source/navigation format with the current documentation profile. Retained
+  the recorded status and historical approval evidence; this migration grants no
+  new architectural acceptance or publication authority.
 
 ### Implementation References
 
@@ -143,13 +147,8 @@ server-default mutation or new engine-repair permission.
 
 ### Sources
 
-- [MySQL 8.4 CREATE TABLE](https://docs.oracle.com/cd/E17952_01/mysql-8.4-en/create-table.html)
-  (primary source; retrieved 2026-11-09)
-- [MariaDB CREATE TABLE](https://mariadb.com/docs/server/server-usage/tables/create-table.md)
-  (primary source; retrieved 2026-11-09)
-- [EF Core 10.0.14 typed table callback](https://github.com/dotnet/efcore/blob/v10.0.14/src/EFCore.Relational/Migrations/MigrationBuilder.cs#L818-L823)
-  (primary source; retrieved 2026-11-09)
-- [EF Core 10.0.14 table annotation builder](https://github.com/dotnet/efcore/blob/v10.0.14/src/EFCore.Relational/Migrations/Operations/Builders/CreateTableBuilder.cs#L160-L167)
-  (primary source; retrieved 2026-11-09)
-- [EF Core 10.0.14 table source generation](https://github.com/dotnet/efcore/blob/v10.0.14/src/EFCore.Design/Migrations/Design/CSharpMigrationOperationGenerator.cs#L1093-L1222)
-  (primary source; retrieved 2026-11-09)
+- [MySQL 8.4 CREATE TABLE](https://docs.oracle.com/cd/E17952_01/mysql-8.4-en/create-table.html) (primary source; retrieved 2026-11-09)
+- [MariaDB CREATE TABLE](https://mariadb.com/docs/server/server-usage/tables/create-table.md) (primary source; retrieved 2026-11-09)
+- [EF Core 10.0.14 typed table callback](https://github.com/dotnet/efcore/blob/v10.0.14/src/EFCore.Relational/Migrations/MigrationBuilder.cs#L818-L823) (primary source; retrieved 2026-11-09)
+- [EF Core 10.0.14 table annotation builder](https://github.com/dotnet/efcore/blob/v10.0.14/src/EFCore.Relational/Migrations/Operations/Builders/CreateTableBuilder.cs#L160-L167) (primary source; retrieved 2026-11-09)
+- [EF Core 10.0.14 table source generation](https://github.com/dotnet/efcore/blob/v10.0.14/src/EFCore.Design/Migrations/Design/CSharpMigrationOperationGenerator.cs#L1093-L1222) (primary source; retrieved 2026-11-09)

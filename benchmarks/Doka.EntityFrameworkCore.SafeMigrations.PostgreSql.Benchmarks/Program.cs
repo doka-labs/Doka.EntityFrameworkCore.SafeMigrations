@@ -8,6 +8,16 @@ if (args is ["--column-attribution", .. var columnArgs])
     return PostgreSqlColumnAttributionWorkload.Run(columnArgs);
 }
 
+if (args is ["--live-catalog", .. var liveCatalogArgs])
+{
+    return BenchmarkProgram.Run(liveCatalogArgs, typeof(PostgreSqlLiveCatalogBenchmarks));
+}
+
+if (args is ["--live-column-attribution", .. var liveColumnArgs])
+{
+    return BenchmarkProgram.Run(liveColumnArgs, typeof(PostgreSqlLiveColumnAttributionBenchmarks));
+}
+
 return BenchmarkProgram.Run(
     args,
     typeof(PostgreSqlGenerationBenchmarks),
@@ -29,6 +39,7 @@ internal sealed class PostgreSqlGenerationContext : DbContext
 }
 
 [DbContext(typeof(PostgreSqlGenerationContext))]
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 internal sealed class PostgreSqlGenerationContextModelSnapshot : ModelSnapshot
 {
     protected override void BuildModel(

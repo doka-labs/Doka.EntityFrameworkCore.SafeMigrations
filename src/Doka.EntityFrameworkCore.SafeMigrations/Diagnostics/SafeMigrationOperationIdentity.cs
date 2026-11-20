@@ -1,5 +1,3 @@
-using System.Collections.ObjectModel;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations;
 
 /// <summary>Identifies an authored operation without retaining SQL, defaults or row values.</summary>
@@ -7,6 +5,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// Qualifiers remain exactly as authored. A null schema means unqualified when a table is known;
 /// it is not a resolved live database identity. Unknown or inapplicable owners remain null.
 /// </remarks>
+[PublicAPI]
 public sealed class SafeMigrationOperationIdentity
 {
     private static readonly ReadOnlyCollection<string> s_emptyColumns
@@ -232,15 +231,9 @@ public sealed class SafeMigrationOperationIdentity
     /// <returns>An immutable identifier snapshot, or null when the member name is unavailable.</returns>
     internal static IReadOnlyList<string>? CaptureSingleColumn(
         string? name
-    )
-    {
-        if (string.IsNullOrWhiteSpace(name))
-        {
-            return null;
-        }
-
-        return SingleColumn(name);
-    }
+    ) => string.IsNullOrWhiteSpace(name)
+        ? null
+        : SingleColumn(name);
 
     private static ReadOnlyCollection<string> CaptureTableColumns(
         IReadOnlyList<ExpectedColumnDefinition> columns

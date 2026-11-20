@@ -90,9 +90,14 @@ internal sealed class PostgreSqlIndexPrerequisiteCertificates
     )
     {
         var owners = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var operation in operations)
+
+        // WHY: This pass only reads the stable ordered collection by ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var operationIndex = 0; operationIndex < operations.Count; operationIndex++)
         {
-            if (operation?.Intent is EnsureIndexIntent { Definition.Schema: null } index)
+            var operation = operations[operationIndex];
+            if (operation is { Intent: EnsureIndexIntent { Definition.Schema: null } index })
             {
                 owners.Add(index.Definition.Table);
             }

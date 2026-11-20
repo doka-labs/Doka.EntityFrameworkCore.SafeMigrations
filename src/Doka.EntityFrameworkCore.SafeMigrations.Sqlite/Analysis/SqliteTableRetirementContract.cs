@@ -33,7 +33,8 @@ internal sealed class SqliteTableRetirementContract
         IReadOnlyList<MigrationOperation> operations
     )
     {
-        if (!operations.Any(static operation => operation is SafeMigrationOperation { Intent: DropForeignKeyIntent }))
+        if (operations.All(static operation =>
+            operation is not SafeMigrationOperation { Intent: DropForeignKeyIntent }))
         {
             return s_empty;
         }

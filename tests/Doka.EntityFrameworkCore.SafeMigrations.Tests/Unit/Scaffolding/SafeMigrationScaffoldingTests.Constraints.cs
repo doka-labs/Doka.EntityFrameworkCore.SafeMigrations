@@ -280,9 +280,8 @@ public sealed partial class SafeMigrationScaffoldingTests
             Columns = ["role_id"],
             PrincipalTable = "roles",
             PrincipalColumns = ["id"],
+            ["Provider:PhysicalOption"] = "value",
         };
-
-        operation["Provider:PhysicalOption"] = "value";
 
         // Act
         var exception = Assert.Throws<InvalidOperationException>(() =>

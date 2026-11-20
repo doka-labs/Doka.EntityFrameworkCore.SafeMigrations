@@ -1,5 +1,3 @@
-using System.Collections.ObjectModel;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations;
 
 internal abstract class ModelManagedDataIntent : SafeMigrationIntent
@@ -72,6 +70,9 @@ internal abstract class ModelManagedDataIntent : SafeMigrationIntent
 
     protected static ModelManagedDataMatrix SnapshotMatrix(
         object?[,] values,
+
+        // WHY: The declared member count must validate the caller's matrix before its values are retained.
+        // ReSharper disable once ParameterOnlyUsedForPreconditionCheck.Global
         int expectedColumns,
         string parameterName
     )
@@ -122,8 +123,13 @@ internal abstract class ModelManagedDataIntent : SafeMigrationIntent
             definitions ?? [],
             nameof(definitions));
 
-        foreach (var definition in snapshot)
+        // WHY: Validate the owned immutable snapshot by ordinal without adapting its collection enumerator.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var index = 0; index < snapshot.Count; index++)
         {
+            var definition = snapshot[index];
+
             if (definition.Columns.Any(column => !columns.Contains(column, StringComparer.Ordinal)))
             {
                 throw new ArgumentException(
@@ -146,6 +152,10 @@ internal abstract class ModelManagedDataIntent : SafeMigrationIntent
             var ordinals = uniqueKey
                 .Columns
                 .Select(column => ColumnOrdinal(columns, column))
+
+                // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based
+                // materialization.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray();
 
             // WHY: Compare each authored unique target only with later rows, not itself or earlier pairs.
@@ -208,6 +218,8 @@ internal abstract class ModelManagedDataIntent : SafeMigrationIntent
     {
         ArgumentNullException.ThrowIfNull(values);
 
+        // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+        // ReSharper disable once UseCollectionExpression
         var snapshot = values.ToArray();
         if (snapshot.Length != expectedCount)
         {
@@ -376,6 +388,9 @@ internal sealed class EnsureModelManagedDataIntent : ModelManagedDataIntent
 
         var ordinals = keyColumns
             .Select(keyColumn => Array.FindIndex(columns, column => StringComparer.Ordinal.Equals(column, keyColumn)))
+
+            // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         if (ordinals.Any(static ordinal => ordinal < 0))
@@ -515,8 +530,13 @@ internal sealed class DeleteModelManagedDataIntent : ModelManagedDataIntent
                 nameof(oldValues));
         }
 
-        foreach (var foreignKey in ForeignKeys)
+        // WHY: This immutable definition snapshot is indexed; retain its authored order without interface enumeration.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var foreignKeyIndex = 0; foreignKeyIndex < ForeignKeys.Count; foreignKeyIndex++)
         {
+            var foreignKey = ForeignKeys[foreignKeyIndex];
+
             if (foreignKey.PrincipalColumns.Any(column => !Columns.Contains(column, StringComparer.Ordinal)))
             {
                 throw new ArgumentException(

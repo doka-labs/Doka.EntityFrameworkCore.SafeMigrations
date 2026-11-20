@@ -40,6 +40,7 @@ public sealed class MySqlNullProofEligibilityTests
             ELSE FALSE END
             """,
             state);
+
         Assert.Equal(state, repair);
         Assert.Equal("@doka_sm_nullability_blocked", runtime);
         Assert.DoesNotContain("@doka_sm_", state, StringComparison.Ordinal);

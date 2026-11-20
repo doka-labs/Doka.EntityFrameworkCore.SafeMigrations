@@ -37,8 +37,13 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
                 context,
                 operations
                     .OfType<SafeMigrationOperation>()
+
+                    // WHY: Retain fluent materialization and its existing snapshot
+                    // ownership rather than replacing this boundary with a spread.
+                    // ReSharper disable once UseCollectionExpression
                     .ToArray(),
                 captureRenameSources: true,
+                null,
                 cancellationToken);
         }
         finally

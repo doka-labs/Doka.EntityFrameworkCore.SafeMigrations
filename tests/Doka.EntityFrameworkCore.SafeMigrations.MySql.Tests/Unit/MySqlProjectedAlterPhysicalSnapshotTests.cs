@@ -25,6 +25,7 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
         string rowFormat
     )
     {
+        // Arrange
         var original = new Dictionary<string, MySqlAlterColumnPhysicalShape>(StringComparer.Ordinal)
         {
             ["id"] = Catalog("char", length: 36),
@@ -67,8 +68,10 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
             ],
         };
 
+        // Act
         var result = snapshot.IsSafe(Alter("hash", 64), table, Mappings);
 
+        // Assert
         Assert.True(result);
     }
 
@@ -76,11 +79,14 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
     [Fact]
     public void SiblingTransitionsCannotIndependentlyReuseTheWholeRowBudget()
     {
+        // Arrange
         var snapshot = Snapshot(("left_value", Catalog("longtext")), ("right_value", Catalog("longtext")));
         var table = new TableView(Varchar("left_value", 8000), Character("right_value", "longtext"));
 
+        // Act
         var result = snapshot.IsSafe(Alter("right_value", 9000), table, Mappings);
 
+        // Assert
         Assert.False(result);
     }
 
@@ -105,6 +111,7 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
         bool expected
     )
     {
+        // Arrange
         var columns = Enumerable
             .Range(0, count)
             .ToDictionary(
@@ -120,10 +127,15 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
         var table = new TableView(columns
             .Keys
             .Select(name => Varchar(name, 63))
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray());
 
+        // Act
         var result = snapshot.IsSafe(Alter("value_0", 63), table, Mappings);
 
+        // Assert
         Assert.Equal(expected, result);
     }
 
@@ -131,6 +143,7 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
     [Fact]
     public void PrimaryKeyColumnRetainsItsFullInlineWidth()
     {
+        // Arrange
         var columns = Enumerable
             .Range(0, 21)
             .ToDictionary(
@@ -149,12 +162,17 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
             .Select(name => name == "id"
                 ? Varchar(name, 700)
                 : Varchar(name, 63))
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var table = new TableView(definitions);
 
+        // Act
         var result = snapshot.IsSafe(Alter("value_0", 63), table, Mappings);
 
+        // Assert
         Assert.False(result);
     }
 
@@ -170,6 +188,7 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
         bool retainedPrimary
     )
     {
+        // Arrange
         var columns = Enumerable
             .Range(0, 750)
             .ToDictionary(
@@ -183,6 +202,9 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
             .Select(name => name == "id"
                 ? Varchar(name, 100)
                 : new ExpectedColumnDefinition(name, typeof(double), false, "double"))
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var table = new TableView(definitions)
@@ -199,7 +221,7 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
                 : [],
         };
 
-        var indexes = new List<MySqlAlterIndexPhysicalShape>();
+        List<MySqlAlterIndexPhysicalShape> indexes = [];
         if (!projected)
         {
             indexes.Add(new MySqlAlterIndexPhysicalShape(false, [new MySqlAlterIndexPart("id", null)], IsUnique: true));
@@ -216,11 +238,13 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
 
         var snapshot = new MySqlProjectedAlterPhysicalSnapshot(columns, indexes, Environment());
 
+        // Act
         var result = snapshot.IsSafe(
             new AlterColumnIntent("records", Varchar("id", 768), Varchar("id", 100)),
             table,
             Mappings);
 
+        // Assert
         Assert.False(result);
     }
 
@@ -228,6 +252,7 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
     [Fact]
     public void RetainedFullTextIndexDoesNotConsumeBtreeKeyBudget()
     {
+        // Arrange
         var snapshot = new MySqlProjectedAlterPhysicalSnapshot(
             new Dictionary<string, MySqlAlterColumnPhysicalShape> { ["value"] = Catalog("longtext") },
             [new MySqlAlterIndexPhysicalShape(true, [new MySqlAlterIndexPart("value", null)])],
@@ -235,8 +260,10 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
 
         var table = new TableView(Character("value", "longtext"));
 
+        // Act
         var result = snapshot.IsSafe(Alter("value", 5000), table, Mappings);
 
+        // Assert
         Assert.True(result);
     }
 
@@ -254,6 +281,7 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
         bool expected
     )
     {
+        // Arrange
         var source = new ExpectedColumnDefinition("value", typeof(string), true, "varchar(4)");
         var target = new ExpectedColumnDefinition(
             "value",
@@ -270,6 +298,7 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
 
         var table = new TableView(source);
 
+        // Act
         var result = MySqlProjectedColumnTransition.IsSafe(
             new AlterColumnIntent("records", target, source),
             source,
@@ -278,6 +307,7 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
             Mappings,
             canReuseCreationCharacterSet: true);
 
+        // Assert
         Assert.Equal(expected, result);
     }
 
@@ -367,6 +397,7 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
         bool resolved
     )
     {
+        // Arrange
         var collation = new SafeMigrationCollationIdentifier("latin1_bin");
         var source = new ExpectedColumnDefinition("value", typeof(string), true, "varchar(4)", collation: collation);
         var target = new ExpectedColumnDefinition(
@@ -386,6 +417,7 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
                 : null,
         };
 
+        // Act
         var result = MySqlProjectedColumnTransition.IsSafe(
             new AlterColumnIntent("records", target, source),
             source,
@@ -394,6 +426,7 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
             Mappings,
             canReuseCreationCharacterSet: true);
 
+        // Assert
         Assert.Equal(resolved, result);
     }
 
@@ -418,6 +451,7 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
         bool expected
     )
     {
+        // Arrange
         var collation = explicitCollation
             ? new SafeMigrationCollationIdentifier("utf8mb4_bin")
             : null;
@@ -438,6 +472,7 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
             CollationCharacterSets = new Dictionary<string, string> { ["utf8mb4_bin"] = "utf8mb4" },
         };
 
+        // Act
         var result = MySqlProjectedColumnTransition.IsSafe(
             new AlterColumnIntent("records", target, source),
             source,
@@ -446,6 +481,7 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
             Mappings,
             canReuseCreationCharacterSet: reusableDefault);
 
+        // Assert
         Assert.Equal(expected, result);
     }
 
@@ -463,11 +499,14 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
         bool expected
     )
     {
+        // Arrange
         var snapshot = Snapshot(("value", Catalog("varchar", originalLength)));
         var source = Character("value", "longtext");
 
+        // Act
         var result = snapshot.PreservesOriginalValueDomain(Alter("value", targetLength), source);
 
+        // Assert
         Assert.Equal(expected, result);
     }
 
@@ -480,14 +519,17 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
         bool nullable
     )
     {
+        // Arrange
         var original = nullable
             ? Catalog("varchar", 200) with { IsNullable = true }
             : Catalog("longtext");
 
         var snapshot = Snapshot(("value", original));
 
+        // Act
         var result = snapshot.PreservesOriginalValueDomain(Alter("value", 500), Character("value", "longtext"));
 
+        // Assert
         Assert.False(result);
     }
 
@@ -495,10 +537,13 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
     [Fact]
     public void OriginalDomainDoesNotOverrideLiveForeignKeyDependency()
     {
+        // Arrange
         var snapshot = Snapshot(("value", Catalog("varchar", 200) with { HasForeignKey = true }));
 
+        // Act
         var result = snapshot.PreservesOriginalValueDomain(Alter("value", 500), Character("value", "longtext"));
 
+        // Assert
         Assert.False(result);
     }
 
@@ -513,6 +558,7 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
         bool expected
     )
     {
+        // Arrange
         var snapshot = Snapshot(
             ("value", Catalog("varchar", 200, 1) with
             {
@@ -528,8 +574,10 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
             "varchar(500)",
             defaultValue: SafeMigrationDefaultValue.Literal(literal));
 
+        // Act
         var result = snapshot.PreservesOriginalValueDomain(new AlterColumnIntent("records", target, source), source);
 
+        // Assert
         Assert.Equal(expected, result);
     }
 
@@ -542,6 +590,7 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
         bool defaultCompact
     )
     {
+        // Arrange
         var source = Varchar("value", 100);
         var target = Varchar("value", 200);
         var table = new TableView(source)
@@ -566,6 +615,7 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
                         : "Dynamic"),
             };
 
+        // Act
         var result = MySqlProjectedColumnTransition.IsSafe(
             new AlterColumnIntent("records", target, source),
             source,
@@ -574,6 +624,7 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
             Mappings,
             canReuseCreationCharacterSet: true);
 
+        // Assert
         Assert.Equal(!defaultCompact, result);
     }
 
@@ -581,10 +632,12 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
     [Fact]
     public void EmptyNarrowingWithoutStrictModeRemainsUnproven()
     {
+        // Arrange
         var source = Character("value", "longtext");
         var table = new TableView(source);
         var environment = Environment() with { StrictSqlMode = false };
 
+        // Act
         var result = MySqlProjectedColumnTransition.IsSafe(
             Alter("value", 500),
             source,
@@ -593,6 +646,7 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
             Mappings,
             canReuseCreationCharacterSet: true);
 
+        // Assert
         Assert.False(result);
     }
 
@@ -605,10 +659,12 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
         bool strict
     )
     {
+        // Arrange
         var source = new ExpectedColumnDefinition("value", typeof(string), false, maxLength: 1000);
         var target = new ExpectedColumnDefinition("value", typeof(string), false, maxLength: 500);
         var environment = Environment() with { StrictSqlMode = strict };
 
+        // Act
         var result = MySqlProjectedColumnTransition.IsSafe(
             new AlterColumnIntent("records", target, source),
             source,
@@ -617,6 +673,7 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
             Mappings,
             canReuseCreationCharacterSet: true);
 
+        // Assert
         Assert.Equal(strict, result);
     }
 
@@ -629,6 +686,7 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
         string rowFormat
     )
     {
+        // Arrange
         var snapshot = new MySqlProjectedAlterPhysicalSnapshot(
             new Dictionary<string, MySqlAlterColumnPhysicalShape> { ["value"] = Catalog("longtext") },
             [],
@@ -636,8 +694,10 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
 
         var table = new TableView(Character("value", "longtext"));
 
+        // Act
         var result = snapshot.IsSafe(Alter("value", 80), table, Mappings);
 
+        // Assert
         Assert.False(result);
     }
 
@@ -664,14 +724,17 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
         long expected
     )
     {
+        // Arrange
         var shape = Catalog(type, length, characterBytes: 1);
 
+        // Act
         var known = MySqlProjectedAlterPhysicalSnapshot.TryGetInlineBytes(
             shape,
             primaryKey,
             Environment(rowFormat: format),
             out var bytes);
 
+        // Assert
         Assert.True(known);
         Assert.Equal(expected, bytes);
     }
@@ -680,11 +743,14 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
     [Fact]
     public void AddedSiblingColumnConsumesDeclaredRowBudget()
     {
+        // Arrange
         var snapshot = Snapshot(("value", Catalog("longtext")));
         var table = new TableView(Varchar("added_value", 8000), Character("value", "longtext"));
 
+        // Act
         var result = snapshot.IsSafe(Alter("value", 9000), table, Mappings);
 
+        // Assert
         Assert.False(result);
     }
 
@@ -917,11 +983,14 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
     [Fact]
     public void CompositeLiveIndexRejectsCumulativeWidthOverflow()
     {
+        // Arrange
         var snapshot = CompositeSnapshot(3072, 4);
         var table = new TableView(Varchar("left_value", 400), Varchar("right_value", 200));
 
+        // Act
         var result = snapshot.IsSafe(Alter("right_value", 400), table, Mappings);
 
+        // Assert
         Assert.False(result);
     }
 
@@ -929,11 +998,14 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
     [Fact]
     public void CompositeLiveIndexRetainsActualAsciiWidthAcrossRename()
     {
+        // Arrange
         var snapshot = CompositeSnapshot(3072, 1);
         var table = new TableView(Varchar("left_value", 1000, "latin1_bin"), Varchar("right_value", 200));
 
+        // Act
         var result = snapshot.IsSafe(Alter("right_value", 1000), table, Mappings);
 
+        // Assert
         Assert.True(result);
     }
 
@@ -941,11 +1013,14 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
     [Fact]
     public void ChangedSiblingCollationInvalidatesCapturedCharacterWidth()
     {
+        // Arrange
         var snapshot = CompositeSnapshot(3072, 1);
         var table = new TableView(Varchar("left_value", 800, "utf8mb4_bin"), Varchar("right_value", 200));
 
+        // Act
         var result = snapshot.IsSafe(Alter("right_value", 200), table, Mappings);
 
+        // Assert
         Assert.False(result);
     }
 
@@ -953,11 +1028,14 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
     [Fact]
     public void CompactSourceKeepsItsRestrictiveCompositeKeyBudget()
     {
+        // Arrange
         var snapshot = CompositeSnapshot(767, 4);
         var table = new TableView(Varchar("left_value", 96), Varchar("right_value", 80));
 
+        // Act
         var result = snapshot.IsSafe(Alter("right_value", 96), table, Mappings);
 
+        // Assert
         Assert.False(result);
     }
 
@@ -965,6 +1043,7 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
     [Fact]
     public void ProjectedIndexParticipatesInCumulativeWidthValidation()
     {
+        // Arrange
         var snapshot = Snapshot(("left_value", Catalog("varchar", 200)), ("right_value", Catalog("varchar", 200)));
         var table = new TableView(Varchar("left_value", 400), Varchar("right_value", 200))
         {
@@ -977,8 +1056,10 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
             ],
         };
 
+        // Act
         var result = snapshot.IsSafe(Alter("right_value", 400), table, Mappings);
 
+        // Assert
         Assert.False(result);
     }
 
@@ -991,14 +1072,17 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
         bool missingTarget
     )
     {
+        // Arrange
         var snapshot = missingTarget
             ? Snapshot(("other", Catalog("longtext")))
             : Snapshot(("value", Catalog("longtext")), ("other", Catalog("unknown_family")));
 
         var table = new TableView(Character("value", "longtext"));
 
+        // Act
         var result = snapshot.IsSafe(Alter("value", 800), table, Mappings);
 
+        // Assert
         Assert.False(result);
     }
 
@@ -1006,6 +1090,7 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
     [Fact]
     public void RetainedPrefixLongerThanTargetIsRejected()
     {
+        // Arrange
         var snapshot = new MySqlProjectedAlterPhysicalSnapshot(
             new Dictionary<string, MySqlAlterColumnPhysicalShape> { ["value"] = Catalog("longtext") },
             [new MySqlAlterIndexPhysicalShape(false, [new MySqlAlterIndexPart("value", 128)])],
@@ -1013,8 +1098,10 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
 
         var table = new TableView(Character("value", "longtext"));
 
+        // Act
         var result = snapshot.IsSafe(Alter("value", 64), table, Mappings);
 
+        // Assert
         Assert.False(result);
     }
 
@@ -1035,14 +1122,17 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
         long width
     )
     {
+        // Arrange
         var definition = Character("value", storeType);
 
+        // Act
         var known = MySqlProjectedAlterPhysicalSnapshot.TryCreateProjectedColumn(
             definition,
             Mappings,
             4,
             out var shape);
 
+        // Assert
         Assert.True(known);
         Assert.Equal(width, shape.DeclaredRowBytes);
     }
@@ -1295,10 +1385,22 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
         return new DbContext(options.Options);
     }
 
-    private sealed class TableView(params ExpectedColumnDefinition[] definitions) : ISafeMigrationProjectedAlterTable
+    private sealed class TableView : ISafeMigrationProjectedAlterTable
     {
-        private readonly Dictionary<string, ExpectedColumnDefinition> _columns = definitions
-            .ToDictionary(static definition => definition.Name, StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, ExpectedColumnDefinition> _columns;
+
+        /// <summary>Initializes the explicit dependencies of this isolated test helper.</summary>
+        /// <param name="definitions">The accepted projected definitions, indexed by column identity.</param>
+        public TableView(
+            params ExpectedColumnDefinition[] definitions
+        )
+        {
+            _columns = definitions
+                .ToDictionary(static definition => definition.Name, StringComparer.OrdinalIgnoreCase);
+
+            UniqueConstraints = [];
+            Indexes = [];
+        }
 
         public IEnumerable<ExpectedColumnDefinition> Columns => _columns.Values;
 
@@ -1306,9 +1408,9 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
         public ExpectedPrimaryKeyDefinition? PrimaryKey { get; init; }
 
         /// <inheritdoc />
-        public IEnumerable<ExpectedUniqueConstraintDefinition> UniqueConstraints { get; init; } = [];
+        public IEnumerable<ExpectedUniqueConstraintDefinition> UniqueConstraints { get; init; }
 
-        public IEnumerable<ExpectedIndexDefinition> Indexes { get; init; } = [];
+        public IEnumerable<ExpectedIndexDefinition> Indexes { get; init; }
 
         public bool TryGetProjectedColumn(
             string table,

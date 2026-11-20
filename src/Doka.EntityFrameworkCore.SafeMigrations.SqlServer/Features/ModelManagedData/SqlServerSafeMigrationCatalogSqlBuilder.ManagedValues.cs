@@ -11,6 +11,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         string storeType
     )
     {
+        // WHY: Null and non-finite values are independent admission guards before target-domain parsing.
+        // ReSharper disable once ConvertIfStatementToSwitchStatement
         if (value is null)
         {
             return true;
@@ -42,6 +44,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 
         if (date is { } instant)
         {
+            // WHY: Each temporal family has a distinct overflow boundary before optional precision parsing.
+            // ReSharper disable once ConvertIfStatementToSwitchStatement
             if (name == "datetime")
             {
                 // WHY: Rounding the final datetime tick to its 1/300-second
@@ -217,7 +221,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     /// <param name="storeType">The bounded or maximum ANSI destination type.</param>
     /// <param name="collation">The validated authored collation, or null for the database default.</param>
     /// <returns>A scalar predicate without destination-row access.</returns>
-    internal string ManagedAnsiValueRepresentationGuard(
+    private string ManagedAnsiValueRepresentationGuard(
         object? value,
         string storeType,
         string? collation = null
@@ -260,19 +264,14 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         bool externalParameter = false
     )
     {
-        if (value is null)
+        switch (value)
         {
-            return "NULL";
-        }
-
-        if (value is string text)
-        {
-            return UnicodeManagedLiteral(text, externalParameter);
-        }
-
-        if (value is char character)
-        {
-            return UnicodeManagedLiteral(character.ToString(), externalParameter);
+            case null:
+                return "NULL";
+            case string text:
+                return UnicodeManagedLiteral(text, externalParameter);
+            case char character:
+                return UnicodeManagedLiteral(character.ToString(), externalParameter);
         }
 
         if (_sourceParameter is not null)

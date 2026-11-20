@@ -1,8 +1,8 @@
 ---
 id: D-015
 status: proposed
-date: 2026-10-12
-decision-makers: [Dominic Kalkbrenner]
+date: 2026-11-19
+decision-makers: ["Dominic Kalkbrenner"]
 consulted: []
 informed: ["@doka-labs/core-maintainers"]
 scope: "Owned atomic required-column additions and forward recovery in the MySQL/MariaDB adapter"
@@ -404,6 +404,10 @@ manual data replacement or bypass of the protected release environment.
 - 2026-10-12: Source provenance distinguishes observed required-ADD behavior
   from MySQL's documented DML defaults and MariaDB's documented Instant ADD
   defaults. The chosen protocol does not rely on implicit ADD replacement.
+- 2026-11-19: Aligned last-update metadata, reciprocal amendments, option titles
+  and source/navigation format with the current documentation profile. Retained
+  the recorded status and historical approval evidence; this migration grants no
+  new architectural acceptance or publication authority.
 
 ### Implementation References
 
@@ -436,16 +440,16 @@ manual data replacement or bypass of the protected release environment.
 
 ### Sources
 
-- MySQL 8.4 ALTER TABLE and enforced CHECK validation (`https://dev.mysql.com/doc/refman/8.4/en/alter-table.html`; primary source; retrieved 2026-10-12)
-- MySQL 8.4 implicit defaults for INSERT, REPLACE and UPDATE, not an ADD guarantee (`https://dev.mysql.com/doc/refman/8.4/en/data-type-defaults.html`; primary source; retrieved 2026-10-12)
-- MySQL 8.4 atomic DDL and its transaction boundary (`https://dev.mysql.com/doc/refman/8.4/en/atomic-ddl.html`; primary source; retrieved 2026-10-12)
-- MySQL 8.4 identifier case sensitivity (`https://dev.mysql.com/doc/refman/8.4/en/identifier-case-sensitivity.html`; primary source; retrieved 2026-10-12)
-- MySQL 8.4 string literals and session quote/escape modes (`https://dev.mysql.com/doc/refman/8.4/en/string-literals.html`; primary source; retrieved 2026-10-12)
-- MySQL 8.4 ENUM member representation and order (`https://dev.mysql.com/doc/refman/8.4/en/enum.html`; primary source; retrieved 2026-10-12)
-- MySQL 8.4 SET member representation and order (`https://dev.mysql.com/doc/refman/8.4/en/set.html`; primary source; retrieved 2026-10-12)
-- MariaDB atomic DDL (`https://mariadb.com/docs/server/reference/sql-statements/data-definition/atomic-ddl`; primary source; retrieved 2026-10-12)
-- MariaDB Instant ADD COLUMN and type-implied NOT NULL defaults (`https://mariadb.com/docs/server/server-usage/storage-engines/innodb/innodb-online-ddl/instant-add-column-for-innodb`; primary source; retrieved 2026-10-12)
-- MariaDB session CHECK enforcement (`https://mariadb.com/docs/server/server-management/variables-and-modes/server-system-variables#check_constraint_checks`; primary source; retrieved 2026-10-12)
-- MariaDB TIMESTAMP automatic values (`https://mariadb.com/docs/server/reference/data-types/date-and-time-data-types/timestamp#automatic-values`; primary source; retrieved 2026-10-12)
-- Doka 10.4.2 immutable model-differ source (`https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/b2408bfbe29517d742734d06d848081cdb9e1de0/src/Doka.EntityFrameworkCore.MySql/Internal/Migrations/MySqlMigrationsModelDiffer.cs`; primary source; retrieved 2026-10-12)
-- Doka 10.4.2 immutable column-renderer source (`https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/b2408bfbe29517d742734d06d848081cdb9e1de0/src/Doka.EntityFrameworkCore.MySql/Internal/Migrations/MySqlMigrationsSqlGenerator.Columns.cs`; primary source; retrieved 2026-10-12)
+- [MySQL 8.4 ALTER TABLE and enforced CHECK validation](https://dev.mysql.com/doc/refman/8.4/en/alter-table.html) (primary source; retrieved 2026-10-12)
+- [MySQL 8.4 implicit defaults for INSERT, REPLACE and UPDATE, not an ADD guarantee](https://dev.mysql.com/doc/refman/8.4/en/data-type-defaults.html) (primary source; retrieved 2026-10-12)
+- [MySQL 8.4 atomic DDL and its transaction boundary](https://dev.mysql.com/doc/refman/8.4/en/atomic-ddl.html) (primary source; retrieved 2026-10-12)
+- [MySQL 8.4 identifier case sensitivity](https://dev.mysql.com/doc/refman/8.4/en/identifier-case-sensitivity.html) (primary source; retrieved 2026-10-12)
+- [MySQL 8.4 string literals and session quote/escape modes](https://dev.mysql.com/doc/refman/8.4/en/string-literals.html) (primary source; retrieved 2026-10-12)
+- [MySQL 8.4 ENUM member representation and order](https://dev.mysql.com/doc/refman/8.4/en/enum.html) (primary source; retrieved 2026-10-12)
+- [MySQL 8.4 SET member representation and order](https://dev.mysql.com/doc/refman/8.4/en/set.html) (primary source; retrieved 2026-10-12)
+- [MariaDB atomic DDL](https://mariadb.com/docs/server/reference/sql-statements/data-definition/atomic-ddl) (primary source; retrieved 2026-10-12)
+- [MariaDB Instant ADD COLUMN and type-implied NOT NULL defaults](https://mariadb.com/docs/server/server-usage/storage-engines/innodb/innodb-online-ddl/instant-add-column-for-innodb) (primary source; retrieved 2026-10-12)
+- [MariaDB session CHECK enforcement](https://mariadb.com/docs/server/server-management/variables-and-modes/server-system-variables#check_constraint_checks) (primary source; retrieved 2026-10-12)
+- [MariaDB TIMESTAMP automatic values](https://mariadb.com/docs/server/reference/data-types/date-and-time-data-types/timestamp#automatic-values) (primary source; retrieved 2026-10-12)
+- [Doka 10.4.2 immutable model-differ source](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/b2408bfbe29517d742734d06d848081cdb9e1de0/src/Doka.EntityFrameworkCore.MySql/Internal/Migrations/MySqlMigrationsModelDiffer.cs) (primary source; retrieved 2026-10-12)
+- [Doka 10.4.2 immutable column-renderer source](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/b2408bfbe29517d742734d06d848081cdb9e1de0/src/Doka.EntityFrameworkCore.MySql/Internal/Migrations/MySqlMigrationsSqlGenerator.Columns.cs) (primary source; retrieved 2026-10-12)

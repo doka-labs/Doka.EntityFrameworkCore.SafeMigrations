@@ -3,6 +3,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// <summary>
 /// Defines the provider-neutral action selected for a classified operation.
 /// </summary>
+[PublicAPI]
 public enum SafeMigrationAction
 {
     /// <summary>Apply the requested target operation.</summary>

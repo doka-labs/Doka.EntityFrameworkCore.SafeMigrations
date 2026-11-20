@@ -2,8 +2,12 @@
 
 import fnmatch
 import json
+import os
 import re
 import shlex
+import shutil
+import subprocess
+import tempfile
 import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path, PurePosixPath
@@ -411,6 +415,218 @@ class ParallelTestConfigurationTests(unittest.TestCase):
         excluded = "Unit/Features/Lifecycle/SafeMigrationPreflightProjectionTests.Allocations.cs"
         self.assertIn(excluded, compile_paths)
         self.assertNotIn(excluded, mapping)
+
+
+class DatabaseImageCatalogTests(unittest.TestCase):
+    """Exercise the actual data-only image resolver without Docker or database startup."""
+
+    @staticmethod
+    def offline_registry(directory: str, **variables: str) -> dict:
+        """Replace registry transport only; retain real catalog and workflow execution."""
+        executable = Path(directory) / "docker"
+        executable.write_text('#!/usr/bin/env bash\nset -euo pipefail\n'
+                              '[[ "$#" == 3 && "$1 $2" == "manifest inspect" && "$3" == *@sha256:* ]] || exit 86\n'
+                              'printf "%s\\n" "$3" >> "$IMAGE_ADMISSION_LOG"\n'
+                              'repository="${3%@*}"\n'
+                              '[[ "${repository##*/}" != *:* ]] || exit 86\n', encoding="ascii")
+        executable.chmod(0o755)
+
+        return dict(os.environ, PATH=directory + os.pathsep + os.environ["PATH"],
+                    IMAGE_ADMISSION_LOG=str(Path(directory) / "images.log"), **variables)
+
+    @staticmethod
+    def resolve(target: str, manifest: str) -> subprocess.CompletedProcess:
+        """Run the real utility against an isolated repository-shaped manifest fixture."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "eng").mkdir()
+            (root / "docker").mkdir()
+            script = root / "eng/select-database-image.sh"
+            shutil.copyfile(REPOSITORY_ROOT / "eng/select-database-image.sh", script)
+            (root / "docker/database-images.Dockerfile").write_text(manifest, encoding="ascii")
+
+            return subprocess.run(["bash", str(script), target], capture_output=True,
+                                  text=True, check=False)
+
+    @staticmethod
+    def workflow_resolution(job: str) -> str:
+        """Select the actual native job's executable image-resolution step independently of YAML libraries."""
+        source = (REPOSITORY_ROOT / ".github/workflows/quality-gates.yml").read_text(encoding="ascii")
+        body = source.split(f"  {job}:\n", 1)[1]
+        boundary = re.search(r"^  [a-z][a-z0-9-]*:\n", body, re.M)
+        body = body[:boundary.start()] if boundary else body
+        match = re.search(r"      - name: Resolve canonical[^\n]*\n        run: \|\n((?:          [^\n]*\n)+)", body)
+        if match is None:
+            raise AssertionError("Every native consumer must resolve its canonical image before use.")
+
+        return "\n".join(line[10:] for line in match[1].splitlines())
+
+    def test_real_catalog_selects_every_pinned_reference(self) -> None:
+        """Every actual target resolves to exactly the image declared in the canonical source."""
+        # Arrange
+        manifest = (REPOSITORY_ROOT / "docker/database-images.Dockerfile").read_text(encoding="ascii")
+        entries = re.findall(r"^FROM (\S+) AS ([a-z][a-z0-9]*)$", manifest, re.M)
+
+        # Act
+        observed = [(image, self.resolve(target, manifest)) for image, target in entries]
+
+        # Assert
+        self.assertEqual(14, len(entries))
+        self.assertEqual(14, len({target for _, target in entries}))
+        for image, result in observed:
+            self.assertEqual(0, result.returncode, result.stderr)
+            self.assertEqual(image + "\n", result.stdout)
+
+    def test_comments_blank_lines_and_crlf_preserve_selection(self) -> None:
+        """A comment cannot create a target and ordinary text line endings remain data."""
+        # Arrange
+        image = "mariadb:12.3.3@sha256:" + "a" * 64
+        manifest = f"# FROM hidden AS hidden\r\n\r\n  FROM {image} AS mariadb123\r\n"
+
+        # Act
+        result = self.resolve("mariadb123", manifest)
+
+        # Assert
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(image + "\n", result.stdout)
+
+    def test_unknown_or_malformed_targets_are_rejected(self) -> None:
+        """Selection never interprets a target as a shell expression or fallback image."""
+        image = "postgres:18.6@sha256:" + "b" * 64
+        for target in ("missing", "", "postgres18;false", "$(echo hidden)", "../postgres18"):
+            with self.subTest(target=target):
+                # Arrange
+                manifest = f"FROM {image} AS postgres18\n"
+
+                # Act
+                result = self.resolve(target, manifest)
+
+                # Assert
+                self.assertNotEqual(0, result.returncode)
+                self.assertEqual("", result.stdout)
+
+    def test_any_invalid_entry_rejects_the_whole_manifest(self) -> None:
+        """A valid requested row cannot conceal duplicate, mutable or executable content."""
+        image = "mysql:8.4.13@sha256:" + "c" * 64
+        valid = f"FROM {image} AS mysql84\n"
+        variants = (
+            valid + valid,
+            valid + "RUN echo hidden\n",
+            valid + "FROM mysql:8.4.13 AS mysql97\n",
+            valid + "FROM mysql@sha256:" + "d" * 64 + " AS mysql97\n",
+            valid + "FROM mysql:9.7.4@sha256:" + "D" * 64 + " AS mysql97\n",
+            valid + "FROM mysql:9.7.4@sha256:" + "d" * 63 + " AS mysql97\n",
+            valid + f"FROM {image} AS mysql97 EXTRA\n",
+            valid + f"FROM {image} AS invalid_target\n",
+            valid + f"FROM {image} AS mysql97 # comment\n",
+        )
+        for manifest in variants:
+            with self.subTest(manifest=manifest):
+                # Act
+                result = self.resolve("mysql84", manifest)
+
+                # Assert
+                self.assertNotEqual(0, result.returncode)
+                self.assertEqual("", result.stdout)
+
+    def test_native_workflow_steps_export_resolved_digest_references(self) -> None:
+        """Every real pin is checked without its mutable tag, then exported unchanged to actual consumers."""
+        manifest = (REPOSITORY_ROOT / "docker/database-images.Dockerfile").read_text(encoding="ascii")
+        entries = re.findall(r"^FROM (\S+) AS ([a-z][a-z0-9]*)$", manifest, re.M)
+        cases = [(job, variable, target, image)
+                 for prefix, job, variable in (
+                     (("mysql", "mariadb"), "mysql-engine", "SAFE_MIGRATIONS_MYSQL_IMAGE"),
+                     (("postgres",), "postgresql-engine", "SAFE_MIGRATIONS_POSTGRES_IMAGE"),
+                     (("sqlserver",), "sqlserver-engine", "SAFE_MIGRATIONS_SQLSERVER_IMAGE"))
+                 for image, target in entries if target.startswith(prefix)]
+        self.assertEqual(14, len(cases))
+        for job, variable, target, image in cases:
+            with self.subTest(job=job, target=target), tempfile.TemporaryDirectory() as directory:
+                # Arrange
+                command = self.workflow_resolution(job)
+                output = Path(directory) / "environment"
+                environment = self.offline_registry(directory, GITHUB_ENV=str(output))
+                environment[variable] = target
+
+                # Act
+                result = subprocess.run(["bash", "-euo", "pipefail", "-c", command], cwd=REPOSITORY_ROOT,
+                                        env=environment, capture_output=True, text=True, check=False)
+
+                # Assert
+                self.assertEqual(0, result.returncode, result.stderr)
+                exported = output.read_text(encoding="ascii")
+                self.assertEqual(f"{variable}={image}\n", exported)
+                self.assertEqual(image.partition("@")[0].rpartition(":")[0] + "@" + image.partition("@")[2],
+                                 (Path(directory) / "images.log").read_text(encoding="ascii").strip())
+                self.assertEqual("", result.stdout)
+
+    def test_invalid_workflow_selection_cannot_be_hidden_by_environment_export(self) -> None:
+        """A failed command substitution must fail the real step rather than echoing an empty image successfully."""
+        for job, variable in (("mysql-engine", "SAFE_MIGRATIONS_MYSQL_IMAGE"),
+                              ("postgresql-engine", "SAFE_MIGRATIONS_POSTGRES_IMAGE"),
+                              ("sqlserver-engine", "SAFE_MIGRATIONS_SQLSERVER_IMAGE")):
+            with self.subTest(job=job), tempfile.TemporaryDirectory() as directory:
+                # Arrange
+                command = self.workflow_resolution(job)
+                output = Path(directory) / "environment"
+                environment = dict(os.environ, GITHUB_ENV=str(output))
+                environment[variable] = "missing"
+
+                # Act
+                result = subprocess.run(["bash", "-euo", "pipefail", "-c", command], cwd=REPOSITORY_ROOT,
+                                        env=environment, capture_output=True, text=True, check=False)
+
+                # Assert
+                self.assertNotEqual(0, result.returncode)
+                self.assertFalse(output.exists())
+
+    def test_coverage_resolves_all_three_actual_default_images(self) -> None:
+        """The combined coverage job must not retain a separate set of mutable/default image declarations."""
+        with tempfile.TemporaryDirectory() as directory:
+            # Arrange
+            command = self.workflow_resolution("coverage")
+            output = Path(directory) / "environment"
+            environment = self.offline_registry(directory, GITHUB_ENV=str(output),
+                                                SAFE_MIGRATIONS_MYSQL_IMAGE="mariadb123",
+                                                SAFE_MIGRATIONS_POSTGRES_IMAGE="postgres18",
+                                                SAFE_MIGRATIONS_SQLSERVER_IMAGE="sqlserver2022")
+            images = {row.split()[3]: row.split()[1] for row in
+                      (REPOSITORY_ROOT / "docker/database-images.Dockerfile").read_text(encoding="ascii").splitlines()
+                      if row.startswith("FROM ")}
+            targets = (("SAFE_MIGRATIONS_MYSQL_IMAGE", "mariadb123"),
+                       ("SAFE_MIGRATIONS_POSTGRES_IMAGE", "postgres18"),
+                       ("SAFE_MIGRATIONS_SQLSERVER_IMAGE", "sqlserver2022"))
+            expected = [f"{variable}={images[target]}" for variable, target in targets]
+            inspected = [images[target].partition("@")[0].rpartition(":")[0] + "@" + images[target].partition("@")[2]
+                         for _, target in targets]
+
+            # Act
+            result = subprocess.run(["bash", "-euo", "pipefail", "-c", command], cwd=REPOSITORY_ROOT,
+                                    env=environment, capture_output=True, text=True, check=False)
+
+            # Assert
+            self.assertEqual(0, result.returncode, result.stderr)
+            exports = output.read_text(encoding="ascii").splitlines()
+            self.assertEqual(expected, exports)
+            self.assertEqual(inspected,
+                             (Path(directory) / "images.log").read_text(encoding="ascii").splitlines())
+
+    def test_registry_double_distinguishes_moved_tags_from_immutable_addresses(self) -> None:
+        """A moved tag is rejected by the transport counterprobe while the same immutable address remains valid."""
+        for reference, expected_status in (("example.invalid/team/database:1.2@sha256:", 86),
+                                           ("example.invalid/team/database@sha256:", 0)):
+            with self.subTest(reference=reference), tempfile.TemporaryDirectory() as directory:
+                # Arrange
+                image = reference + "a" * 64
+                environment = self.offline_registry(directory)
+
+                # Act
+                result = subprocess.run(["docker", "manifest", "inspect", image], env=environment,
+                                        capture_output=True, text=True, check=False)
+
+                # Assert
+                self.assertEqual(expected_status, result.returncode, result.stderr)
+                self.assertEqual([image], (Path(directory) / "images.log").read_text(encoding="ascii").splitlines())
 
 
 if __name__ == "__main__":

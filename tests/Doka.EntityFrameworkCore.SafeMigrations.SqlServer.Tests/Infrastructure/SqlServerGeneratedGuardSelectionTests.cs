@@ -27,12 +27,20 @@ public sealed class SqlServerGeneratedGuardSelectionTests
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.RenameColumnIfExists("Caption", table, "DisplayCaption");
         var operation = Assert.IsType<SafeMigrationOperation>(Assert.Single(builder.Operations));
-        var commands = context.GetService<IMigrationsSqlGenerator>().Generate(builder.Operations, context.Model);
-        var preambles = commands.Where(candidate => candidate.CommandText.Contains(
-            "CREATE TABLE #doka_sm_identifiers_", StringComparison.Ordinal)).ToArray();
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate(builder.Operations, context.Model);
 
-        var inventory = commands.Where(candidate => !SqlServerGuardedSqlTestContract.IsOperationGuard(
-            candidate.CommandText)).ToArray();
+        var preambles = commands
+            .Where(candidate => candidate.CommandText.Contains(
+                "CREATE TABLE #doka_sm_identifiers_",
+                StringComparison.Ordinal))
+            .ToArray();
+
+        var inventory = commands
+            .Where(candidate => !SqlServerGuardedSqlTestContract.IsOperationGuard(
+                candidate.CommandText))
+            .ToArray();
 
         // Act
         var body = SqlServerGuardedSqlTestContract.GenerateBody(context, operation);
@@ -40,31 +48,41 @@ public sealed class SqlServerGeneratedGuardSelectionTests
         // Assert
         Assert.Contains("DECLARE @doka_state nvarchar", body, StringComparison.Ordinal);
         Assert.Contains(
-            "N'[dbo].[" + table.Replace("]", "]]", StringComparison.Ordinal)
-                .Replace("'", "''", StringComparison.Ordinal) + "]'",
+            "N'[dbo].["
+            + table
+                .Replace("]", "]]", StringComparison.Ordinal)
+                .Replace("'", "''", StringComparison.Ordinal)
+            + "]'",
             body,
             StringComparison.Ordinal);
 
         Assert.Equal(1, SqlServerGuardedSqlTestContract.CountStateDeclarations(body));
-        Assert.Single(commands, candidate => SqlServerGuardedSqlTestContract.IsOperationGuard(
-            candidate.CommandText));
+        Assert.Single(commands,
+            candidate => SqlServerGuardedSqlTestContract.IsOperationGuard(
+                candidate.CommandText));
 
         Assert.DoesNotContain("CREATE TABLE #doka_sm_identifiers_", body, StringComparison.Ordinal);
         Assert.NotEmpty(preambles);
-        Assert.All(preambles, preamble => Assert.False(SqlServerGuardedSqlTestContract.IsOperationGuard(
-            preamble.CommandText)));
+        Assert.All(preambles,
+            preamble => Assert.False(SqlServerGuardedSqlTestContract.IsOperationGuard(
+                preamble.CommandText)));
 
-        Assert.All(inventory, preamble => Assert.Equal(0,
-            SqlServerGuardedSqlTestContract.CountStateDeclarations(
-                SqlServerGuardedSqlTestContract.DecodeScope(preamble.CommandText))));
+        Assert.All(inventory,
+            preamble => Assert.Equal(0,
+                SqlServerGuardedSqlTestContract.CountStateDeclarations(
+                    SqlServerGuardedSqlTestContract.DecodeScope(preamble.CommandText))));
 
         if (table.Contains("DECLARE @doka_state", StringComparison.Ordinal))
         {
-            Assert.Contains(inventory, preamble => preamble.CommandText.Contains(
-                "DECLARE @doka_state", StringComparison.Ordinal));
+            Assert.Contains(inventory,
+                preamble => preamble.CommandText.Contains(
+                    "DECLARE @doka_state",
+                    StringComparison.Ordinal));
         }
 
-        Assert.Equal(ConnectionState.Closed, context.Database.GetDbConnection().State);
+        Assert.Equal(ConnectionState.Closed,
+            context.Database.GetDbConnection()
+                .State);
     }
 
     /// <summary>Native declarations are distinct from quoted names, data and nested comment text.</summary>

@@ -7,6 +7,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         string storeType
     )
     {
+        // WHY: These two early guards precede the separate lazy expression-qualification path.
+        // ReSharper disable once ConvertIfStatementToSwitchStatement
         if (definition.DefaultValue.Kind == SafeMigrationDefaultValueKind.None)
         {
             return null;
@@ -69,7 +71,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                     && function.Name.Equals("COALESCE", StringComparison.OrdinalIgnoreCase))
                 {
                     if (current.Index == 0
-                        && (function.Arguments.Count < 2 || !function.Arguments.Any(IsNonNullDefaultExpression)))
+                        && (function.Arguments.Count < 2
+                            || function.Arguments.All(static argument => !IsNonNullDefaultExpression(argument))))
                     {
                         return "default_expression_unproven";
                     }
@@ -112,16 +115,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         switch (expression)
         {
             case SafeMigrationSqlLiteralExpression literal:
-                if (literal.NumericSourceToken.Span.IndexOfAny('e', 'E') >= 0)
-                {
-                    return "default_expression_unproven";
-                }
-
-                return (literal.StoreType is null
-                        || IsDefaultValueRepresentable(literal.BorrowedValue, literal.StoreType, nullable))
-                    && IsDefaultValueRepresentable(literal.BorrowedValue, storeType, nullable)
-                        ? null
-                        : SqlServerSafeMigrationRuntimePlan.DefaultValueUnsupportedCode;
+                return GetDefaultLiteralFeature(literal, storeType, nullable);
 
             case SafeMigrationSqlCastExpression { Operand: SafeMigrationSqlLiteralExpression literal } cast:
                 // WHY: A single typed constant cast has a bounded input domain.
@@ -133,8 +127,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                     return "default_expression_unproven";
                 }
 
-                return GetDefaultLeafFeature(literal, cast.StoreType, nullable)
-                    ?? GetDefaultLeafFeature(literal, storeType, nullable);
+                return GetDefaultLiteralFeature(literal, cast.StoreType, nullable)
+                    ?? GetDefaultLiteralFeature(literal, storeType, nullable);
 
             case SafeMigrationSqlCurrentValueExpression current:
                 return IsCompatibleCurrentTemporalType(current.Value, storeType)
@@ -151,6 +145,25 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             default:
                 return "default_expression_unproven";
         }
+    }
+
+    /// <summary>Qualifies one literal without reentering the expression-dispatch path for typed casts.</summary>
+    private string? GetDefaultLiteralFeature(
+        SafeMigrationSqlLiteralExpression literal,
+        string storeType,
+        bool nullable
+    )
+    {
+        if (literal.NumericSourceToken.Span.IndexOfAny('e', 'E') >= 0)
+        {
+            return "default_expression_unproven";
+        }
+
+        return (literal.StoreType is null
+                || IsDefaultValueRepresentable(literal.BorrowedValue, literal.StoreType, nullable))
+            && IsDefaultValueRepresentable(literal.BorrowedValue, storeType, nullable)
+                ? null
+                : SqlServerSafeMigrationRuntimePlan.DefaultValueUnsupportedCode;
     }
 
     private static bool IsNonNullDefaultExpression(
@@ -171,8 +184,6 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                         Operand: SafeMigrationSqlLiteralExpression { BorrowedValue: not null },
                     }:
                     case SafeMigrationSqlCurrentValueExpression:
-                        return true;
-
                     case SafeMigrationSqlFunctionExpression temporal
                         when SqlServerSafeMigrationSqlExpressionRenderer.IsCurrentTemporalFunction(temporal.Name):
                         return true;
@@ -273,9 +284,15 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     )
     {
         var definitions = GetAuthoredColumnDefinitions(intent);
-        var predicates = new List<string>();
-        foreach (var definition in definitions)
+        List<string> predicates = [];
+
+        // WHY: Immutable indexed slots retain their authored order without mutating the source.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var definitionIndex = 0; definitionIndex < definitions.Count; definitionIndex++)
         {
+            var definition = definitions[definitionIndex];
+
             if (definition.DefaultValue.Kind == SafeMigrationDefaultValueKind.None)
             {
                 continue;
@@ -297,8 +314,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         EnsureColumnIntent column => [column.Definition],
         AlterColumnIntent column => column.OldDefinition is null
             ? [column.Definition]
-            : new[] { column.Definition, column.OldDefinition },
-        _ => Array.Empty<ExpectedColumnDefinition>(),
+            : [column.Definition, column.OldDefinition],
+        _ => [],
     };
 
     private string? BuildColumnCollationSupportExpression(
@@ -310,6 +327,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             .OfType<SafeMigrationCollationIdentifier>()
             .Select(static collation => collation.Name)
             .Distinct(StringComparer.Ordinal)
+
+            // WHY: Retain this explicit fluent snapshot instead of a collection-spread rewrite.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         if (names.Length == 0)

@@ -15,7 +15,8 @@ public sealed class SqlServerGeneratedTransportReaderTests
     {
         // Arrange
         var command = SqlServerSafeMigrationsSqlGenerator.ProtectCommandSql(
-            body, MigrationsSqlGenerationOptions.Idempotent);
+            body,
+            MigrationsSqlGenerationOptions.Idempotent);
 
         var nativeCarrier = SqlServerGuardedSqlTestContract.DecodeScope(command);
 
@@ -45,7 +46,8 @@ public sealed class SqlServerGeneratedTransportReaderTests
     {
         // Arrange
         var command = SqlServerSafeMigrationsSqlGenerator.ProtectCommandSql(
-            "DECLARE @doka_state int;\r\nSELECT 1;", MigrationsSqlGenerationOptions.Idempotent);
+            "DECLARE @doka_state int;\r\nSELECT 1;",
+            MigrationsSqlGenerationOptions.Idempotent);
 
         var nativeCarrier = SqlServerGuardedSqlTestContract.DecodeScope(command);
         Assert.Contains(original, nativeCarrier, StringComparison.Ordinal);

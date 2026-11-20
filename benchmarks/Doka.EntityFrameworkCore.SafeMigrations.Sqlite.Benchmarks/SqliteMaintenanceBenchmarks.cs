@@ -1,7 +1,9 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Benchmarks;
 
 /// <summary>Attributes model-owned rebuild capture and complete interleaved structural-window analysis.</summary>
-public class SqliteMaintenanceAttribution : IDisposable
+// WHY: BenchmarkDotNet discovers methods, assigns parameters, and generates derived benchmark hosts.
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
+public class SqliteMaintenanceAttribution : IDisposable, IAsyncDisposable
 {
     private bool _disposed;
     private SqliteMaintenanceAttributionFixture _fixture = null!;
@@ -17,6 +19,24 @@ public class SqliteMaintenanceAttribution : IDisposable
     /// <summary>Gets or sets whether consecutive windows alternate distinct EF model references.</summary>
     [Params(false, true)]
     public bool ChangingModel { get; set; }
+
+    /// <inheritdoc />
+    public async ValueTask DisposeAsync()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        // WHY: Fixture construction can fail before assignment; a missing resource still completes cleanup.
+        await SafeMigrationAnalysisCleanup.DisposeAsync(
+            _fixture,
+            null,
+            "SafeMigrations.SqliteInterleavedBenchmarkFixtureDisposeException");
+
+        _disposed = true;
+        GC.SuppressFinalize(this);
+    }
 
     /// <summary>Releases model contexts and the owned embedded database.</summary>
     public void Dispose()
@@ -36,11 +56,13 @@ public class SqliteMaintenanceAttribution : IDisposable
         typeof(SqliteContiguousMaintenanceAttribution));
 
     /// <summary>Opens embedded SQLite and validates snapshot freshness and operation-reference controls.</summary>
+    /// <returns>The complete asynchronous fixture initialization.</returns>
     [GlobalSetup]
-    public void Setup()
+    public async Task Setup()
     {
         _disposed = false;
         _fixture = new SqliteMaintenanceAttributionFixture(ModelTables, Windows, ChangingModel, interleaved: true);
+        await _fixture.InitializeAsync(CancellationToken.None);
     }
 
     /// <summary>Captures rebuild contracts for the complete prepared structural-window sequence.</summary>
@@ -51,11 +73,12 @@ public class SqliteMaintenanceAttribution : IDisposable
     /// <summary>Analyzes the complete interleaved operation sequence against embedded SQLite.</summary>
     /// <returns>The complete observed operation count.</returns>
     [Benchmark]
-    public int AnalyzeWindows() => _fixture.Analyze();
+    public Task<int> AnalyzeWindows() => _fixture.AnalyzeAsync(CancellationToken.None);
 
     /// <summary>Disposes model contexts and the owned embedded database.</summary>
+    /// <returns>The asynchronous, noncancellable release of owned resources.</returns>
     [GlobalCleanup]
-    public void Cleanup() => Dispose();
+    public async Task Cleanup() => await DisposeAsync();
 
     /// <summary>Releases owned managed resources once while supporting generated benchmark subclasses.</summary>
     /// <param name="disposing">Whether managed resources should be released.</param>
@@ -68,13 +91,17 @@ public class SqliteMaintenanceAttribution : IDisposable
             return;
         }
 
+        // WHY: Cleanup also runs when BenchmarkDotNet setup has not acquired this resource.
+        // ReSharper disable once ConditionalAccessQualifierIsNonNullableAccordingToAPIContract
         _fixture?.Dispose();
         _disposed = true;
     }
 }
 
 /// <summary>Attributes complete contiguous structural-window analysis independently of interleaved capture.</summary>
-public class SqliteContiguousMaintenanceAttribution : IDisposable
+// WHY: BenchmarkDotNet discovers methods, assigns parameters, and generates derived benchmark hosts.
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
+public class SqliteContiguousMaintenanceAttribution : IDisposable, IAsyncDisposable
 {
     private bool _disposed;
     private SqliteMaintenanceAttributionFixture _fixture = null!;
@@ -87,6 +114,24 @@ public class SqliteContiguousMaintenanceAttribution : IDisposable
     [Params(1, 16, 128)]
     public int Operations { get; set; }
 
+    /// <inheritdoc />
+    public async ValueTask DisposeAsync()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        // WHY: Fixture construction can fail before assignment; a missing resource still completes cleanup.
+        await SafeMigrationAnalysisCleanup.DisposeAsync(
+            _fixture,
+            null,
+            "SafeMigrations.SqliteContiguousBenchmarkFixtureDisposeException");
+
+        _disposed = true;
+        GC.SuppressFinalize(this);
+    }
+
     /// <summary>Releases model contexts and the owned embedded database.</summary>
     public void Dispose()
     {
@@ -95,8 +140,9 @@ public class SqliteContiguousMaintenanceAttribution : IDisposable
     }
 
     /// <summary>Prepares the contiguous workload and validates fresh capture and exact classification.</summary>
+    /// <returns>The complete asynchronous fixture initialization.</returns>
     [GlobalSetup]
-    public void Setup()
+    public async Task Setup()
     {
         _disposed = false;
         _fixture = new SqliteMaintenanceAttributionFixture(
@@ -104,16 +150,19 @@ public class SqliteContiguousMaintenanceAttribution : IDisposable
             Operations,
             changingModel: false,
             interleaved: false);
+
+        await _fixture.InitializeAsync(CancellationToken.None);
     }
 
     /// <summary>Analyzes the complete contiguous safe-operation sequence against embedded SQLite.</summary>
     /// <returns>The complete observed operation count.</returns>
     [Benchmark]
-    public int AnalyzeWindow() => _fixture.Analyze();
+    public Task<int> AnalyzeWindow() => _fixture.AnalyzeAsync(CancellationToken.None);
 
     /// <summary>Disposes model contexts and the owned embedded database.</summary>
+    /// <returns>The asynchronous, noncancellable release of owned resources.</returns>
     [GlobalCleanup]
-    public void Cleanup() => Dispose();
+    public async Task Cleanup() => await DisposeAsync();
 
     /// <summary>Releases owned managed resources once while supporting generated benchmark subclasses.</summary>
     /// <param name="disposing">Whether managed resources should be released.</param>
@@ -126,6 +175,8 @@ public class SqliteContiguousMaintenanceAttribution : IDisposable
             return;
         }
 
+        // WHY: Cleanup also runs when BenchmarkDotNet setup has not acquired this resource.
+        // ReSharper disable once ConditionalAccessQualifierIsNonNullableAccordingToAPIContract
         _fixture?.Dispose();
         _disposed = true;
     }

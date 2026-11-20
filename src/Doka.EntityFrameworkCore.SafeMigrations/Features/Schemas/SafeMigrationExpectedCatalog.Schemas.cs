@@ -9,7 +9,10 @@ internal static partial class SafeMigrationExpectedCatalog
     {
         var keys = tables
             .Keys
-            .Where(key => tables.Comparer.Equals(key, new TableKey(intent.Name, key.Table)))
+            .Where(key => tables.Comparer.Equals(key, key with { Schema = intent.Name }))
+
+            // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         foreach (var key in keys)

@@ -1,5 +1,6 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
+/// <summary>Verifies PostgreSQL Catalog Query Parameters contracts in independently owned test state.</summary>
 public sealed class PostgreSqlCatalogQueryParametersTests
 {
     /// <summary>Typed bindings retain provider-specific identity, facets, converters and typed nulls.</summary>
@@ -234,16 +235,20 @@ public sealed class PostgreSqlCatalogQueryParametersTests
         }
     }
 
+    /// <summary>Add String Interns Values And Tracks Utf8 Payload.</summary>
     [Fact]
     public void AddString_InternsValuesAndTracksUtf8Payload()
     {
+        // Arrange
         using var command = new NpgsqlCommand();
         using var parameters = new PostgreSqlCatalogQueryParameters(command);
 
+        // Act
         var first = parameters.AddString("schema");
         var duplicate = parameters.AddString("schema");
         var unicode = parameters.AddString("\u00fc");
 
+        // Assert
         Assert.Equal("@doka_sm_p0", first);
         Assert.Equal(first, duplicate);
         Assert.Equal("@doka_sm_p1", unicode);
@@ -254,21 +259,33 @@ public sealed class PostgreSqlCatalogQueryParametersTests
             parameters.Utf8PayloadBytes);
     }
 
+    /// <summary>Rollback Restores Parameter And Payload State.</summary>
     [Fact]
     public void Rollback_RestoresParameterAndPayloadState()
     {
+        // Arrange
         using var command = new NpgsqlCommand();
         using var parameters = new PostgreSqlCatalogQueryParameters(command);
         _ = parameters.AddString("retained");
         var checkpoint = parameters.Capture();
         _ = parameters.AddString("discarded");
 
+        // Act
         parameters.Rollback(checkpoint);
+        var retainedCount = parameters.Count;
+        var retainedParameters = command
+            .Parameters
+            .Cast<NpgsqlParameter>()
+            .ToArray();
 
-        Assert.Equal(1, parameters.Count);
-        Assert.Single(command.Parameters);
-        Assert.Equal(checkpoint.Utf8PayloadBytes, parameters.Utf8PayloadBytes);
-        Assert.Equal("@doka_sm_p1", parameters.AddString("discarded"));
+        var retainedPayloadBytes = parameters.Utf8PayloadBytes;
+        var reusedName = parameters.AddString("discarded");
+
+        // Assert
+        Assert.Equal(1, retainedCount);
+        Assert.Single(retainedParameters);
+        Assert.Equal(checkpoint.Utf8PayloadBytes, retainedPayloadBytes);
+        Assert.Equal("@doka_sm_p1", reusedName);
     }
 
     /// <summary>Invalid count and payload checkpoints cannot mutate parameter accounting.</summary>

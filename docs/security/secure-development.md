@@ -29,19 +29,19 @@ acceptance criteria, not invented labels or an empty template.
 
 [Directory.Build.props](../../Directory.Build.props) enables nullable analysis,
 warnings-as-errors, the SDK's recommended .NET analyzers, and NuGet audit of all
-dependencies. Publishable projects additionally enable locked restore through
-[src/Directory.Build.props](../../src/Directory.Build.props). SDK code-analysis
+dependencies. All 24 default source-mode projects inherit CI locked restore
+from that root after CI identity is established. SDK code-analysis
 rules are separate from compiler warnings. The shared quality workflow
 additionally runs public API, style/import, architecture, coverage, performance,
 engineering, package, and SBOM checks. Record the SDK and enabled rules with
 analysis evidence; a build command name alone does not establish which analysis
 ran.
 
-The five committed package-project lockfiles define the exact graph used to
-compile and qualify package artifacts. Engineering projects resolve the central
-declarations during CI. Dependabot proposes declaration and package-lockfile
-updates through ordinary pull requests, where the complete quality workflow
-tests every resolved graph. Dependency Review separates PR-owned resolution
+All 24 committed default-profile lockfiles retain reviewed graphs and content
+hashes. Dependabot proposes declaration and every affected lock update through
+ordinary pull requests. Shipping providers declare their own security floors
+explicitly without shipping transitive promotion; matching-Core constraints
+protect the own-package private ABI. The complete workflow tests these graphs. Dependency Review separates PR-owned resolution
 from trusted data validation and publication:
 
 - The unprivileged PR workflow resolves the exact base/head revisions in separate
@@ -326,9 +326,13 @@ Restoring repository access is distinct from restoring a consumer database.
   retrieved 2026-08-28; the published response contract does not specify the
   snapshot-warning header consumed by the official action.
 - [Dependency Review Action v5.0.0](https://github.com/actions/dependency-review-action/tree/a1d282b36b6f3519aa1f3fc636f609c47dddb294),
-  retrieved 2026-08-28; the workflow uses the exact tagged commit and checks
+  retrieved 2026-08-28; the historical workflow used the exact tagged commit and checked
   the comparison warning header read in the pinned
   `src/dependency-graph.ts` implementation after its bounded retry.
+- [Action v5.0.1](https://github.com/actions/dependency-review-action/tree/bbc44d14a204704ccc493733616cd1e93a0321ec),
+  retrieved 2026-11-20; the current workflow uses this tagged commit. Its
+  PURL comparison still ignores versions and its retry can retain snapshot
+  warnings, so the independent exact-license and completeness guards remain.
 - [OpenSSF Passing criteria](https://www.bestpractices.dev/en/criteria/0),
   retrieved 2026-08-28; analysis and response evidence must be measured.
 - [GitHub private vulnerability reporting](https://docs.github.com/en/code-security/how-tos/report-and-fix-vulnerabilities/configure-vulnerability-reporting/configure-for-a-repository),

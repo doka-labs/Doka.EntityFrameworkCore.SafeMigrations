@@ -4,6 +4,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite;
 /// Composes the standard EF Core SQLite generator with transactionally guarded
 /// SafeMigrations commands for live migration and bundle execution.
 /// </summary>
+[PublicAPI]
 public sealed class SqliteSafeMigrationsSqlGenerator : IMigrationsSqlGenerator
 {
     private readonly SqliteSafeMigrationProviderAnalyzer _analyzer;
@@ -102,7 +103,7 @@ public sealed class SqliteSafeMigrationsSqlGenerator : IMigrationsSqlGenerator
             // their order while limiting each table to one atomic rebuild.
             if (SqliteSafeMigrationOperationClassifier.CanParticipateInStructuralBatch(operation))
             {
-                var structuralOperations = new List<MigrationOperation>();
+                List<MigrationOperation> structuralOperations = [];
 
                 // WHY: Batch-local positions lose preceding provider and safe
                 // segments. Retain the original supplied-stream origin for errors.
@@ -139,8 +140,14 @@ public sealed class SqliteSafeMigrationsSqlGenerator : IMigrationsSqlGenerator
                 }
                 else
                 {
-                    foreach (var command in _baselineGenerator.Generate(structuralOperations, effectiveModel, options))
+                    var commands = _baselineGenerator.Generate(structuralOperations, effectiveModel, options);
+
+                    // WHY: The provider has already returned an ordered indexed command snapshot.
+                    // ReSharper disable once ForCanBeConvertedToForeach
+                    // ReSharper disable once LoopCanBeConvertedToQuery
+                    for (var commandIndex = 0; commandIndex < commands.Count; commandIndex++)
                     {
+                        var command = commands[commandIndex];
                         result.Add(WrapProviderCommand(command, invalidatesCatalog: true));
                     }
                 }
@@ -150,7 +157,7 @@ public sealed class SqliteSafeMigrationsSqlGenerator : IMigrationsSqlGenerator
 
             if (operation is not SafeMigrationOperation safeOperation)
             {
-                var providerOperations = new List<MigrationOperation>();
+                List<MigrationOperation> providerOperations = [];
                 while (ordinal < operations.Count
                     && operations[ordinal] is not SafeMigrationOperation
                     && operations[ordinal] is not SafeMigrationDesignTimeServicesRequiredOperation
@@ -162,8 +169,14 @@ public sealed class SqliteSafeMigrationsSqlGenerator : IMigrationsSqlGenerator
                 }
 
                 var invalidatesCatalog = providerOperations.Any(InvalidatesCatalog);
-                foreach (var command in _baselineGenerator.Generate(providerOperations, effectiveModel, options))
+                var commands = _baselineGenerator.Generate(providerOperations, effectiveModel, options);
+
+                // WHY: The provider has already returned an ordered indexed command snapshot.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
+                for (var commandIndex = 0; commandIndex < commands.Count; commandIndex++)
                 {
+                    var command = commands[commandIndex];
                     result.Add(WrapProviderCommand(command, invalidatesCatalog));
                 }
 
@@ -199,6 +212,8 @@ public sealed class SqliteSafeMigrationsSqlGenerator : IMigrationsSqlGenerator
         int operationOrdinal
     )
     {
+        // WHY: Independent early exits have different structural prerequisites, not one common dispatch contract.
+        // ReSharper disable once ConvertIfStatementToSwitchStatement
         if (operation.Intent is ModelManagedDataIntent or EnsureSchemaIntent or DropSchemaIntent or RenameIndexIntent)
         {
             return [];
@@ -374,8 +389,12 @@ public sealed class SqliteSafeMigrationsSqlGenerator : IMigrationsSqlGenerator
         int operationOrdinal
     )
     {
-        foreach (var command in commands)
+        // WHY: Traverse the stable ordered source by ordinal without materializing another collection.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var commandIndex = 0; commandIndex < commands.Count; commandIndex++)
         {
+            var command = commands[commandIndex];
             if (command.TransactionSuppressed
                 && !command
                     .CommandText

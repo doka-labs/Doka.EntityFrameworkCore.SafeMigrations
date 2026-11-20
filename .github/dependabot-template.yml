@@ -1,11 +1,11 @@
 version: 2
 updates:
-  # Central Package Management defines the shipped dependency ranges. The five
-  # publishable package lock files preserve their qualified compile graphs.
-  # Test, benchmark, sample, and engineering projects intentionally restore from
-  # the same central declarations without maintaining per-project lock files.
-  # D-006 records the accepted loss of content-hash and transitive-diff evidence
-  # for those execution projects.
+  # Central Package Management defines dependency ranges; all 24 repository
+  # projects retain reviewed default-profile locks, including execution projects.
+  # RID, compatibility-matrix and isolated package profiles have separate graphs;
+  # their temporary locks are generated and then validated in their own workspaces.
+  # D-006 retains the earlier five-shipping-lock policy as history and records
+  # the expanded current reproducibility boundary.
   # Group normal updates so one pull request exercises the complete
   # qualification matrix. Three days leave time for early release feedback
   # without requiring a full week's minimum age. Security updates are not delayed.
@@ -22,6 +22,21 @@ updates:
       nuget-dependencies:
         patterns:
           - "*"
+    # Framework adoption is deliberate on main too. Relative exclusions survive
+    # the 10.x -> 11.x cutover without blocking servicing or independent tools.
+    ignore:
+      - dependency-name: "Microsoft.EntityFrameworkCore.*"
+        update-types:
+          - version-update:semver-major
+      - dependency-name: "Doka.EntityFrameworkCore.MySql"
+        update-types:
+          - version-update:semver-major
+      - dependency-name: "Npgsql.EntityFrameworkCore.PostgreSQL"
+        update-types:
+          - version-update:semver-major
+      - dependency-name: "Microsoft.Extensions.*"
+        update-types:
+          - version-update:semver-major
     open-pull-requests-limit: 1
     commit-message:
       prefix: chore
@@ -66,6 +81,11 @@ updates:
       timezone: Europe/Berlin
     cooldown:
       default-days: 3
+    # A release line never adopts another framework major through a routine bump.
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
     open-pull-requests-limit: 1
     commit-message:
       prefix: chore

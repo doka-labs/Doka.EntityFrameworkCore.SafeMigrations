@@ -53,6 +53,8 @@ internal static class SafeMigrationSemanticCandidateFactory
                 continue;
             }
 
+            // WHY: Yield candidates lazily in authored order without an additional filtering/enumeration layer.
+            // ReSharper disable once ForeachCanBePartlyConvertedToQueryUsingAnotherGetEnumerator
             foreach (var operation in expectedOperations)
             {
                 var candidate = RenameForCandidate(
@@ -77,12 +79,10 @@ internal static class SafeMigrationSemanticCandidateFactory
             bool projectUniqueIndexesAsUniqueConstraints
         )
     {
-        var result =
-            new Dictionary<(SafeMigrationDatabaseObjectKind Kind, string? Schema, string Table),
-                List<SafeMigrationOperation>>();
+        Dictionary<(SafeMigrationDatabaseObjectKind Kind, string? Schema, string Table),
+            List<SafeMigrationOperation>> result = [];
 
-        var seen =
-            new HashSet<(SafeMigrationDatabaseObjectKind Kind, string? Schema, string Table, string Fingerprint)>();
+        HashSet<(SafeMigrationDatabaseObjectKind Kind, string? Schema, string Table, string Fingerprint)> seen = [];
 
         foreach (var operation in EnumerateExpectedOperations(operations))
         {
@@ -208,18 +208,38 @@ internal static class SafeMigrationSemanticCandidateFactory
                 yield return CreateOperation(new EnsurePrimaryKeyIntent(table.Definition.PrimaryKey));
             }
 
-            foreach (var definition in table.Definition.UniqueConstraints)
+            // WHY: This immutable definition snapshot is indexed; retain its authored order without interface
+            // enumeration.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var definitionIndex = 0; definitionIndex < table.Definition.UniqueConstraints.Count; definitionIndex++)
             {
+                var definition = table.Definition.UniqueConstraints[definitionIndex];
+
                 yield return CreateOperation(new EnsureUniqueConstraintIntent(definition));
             }
 
-            foreach (var definition in table.Definition.CheckConstraints)
+            // WHY: This immutable definition snapshot is indexed; retain its authored order without interface
+            // enumeration.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var definitionIndex1 = 0;
+                definitionIndex1 < table.Definition.CheckConstraints.Count;
+                definitionIndex1++)
             {
+                var definition = table.Definition.CheckConstraints[definitionIndex1];
+
                 yield return CreateOperation(new EnsureCheckConstraintIntent(definition));
             }
 
-            foreach (var definition in table.Definition.ForeignKeys)
+            // WHY: This immutable definition snapshot is indexed; retain its authored order without interface
+            // enumeration.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var definitionIndex2 = 0; definitionIndex2 < table.Definition.ForeignKeys.Count; definitionIndex2++)
             {
+                var definition = table.Definition.ForeignKeys[definitionIndex2];
+
                 yield return CreateOperation(new EnsureForeignKeyIntent(definition));
             }
         }

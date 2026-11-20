@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations;
 
 /// <summary>Identifies whether a report was produced before or after migration execution.</summary>
+[PublicAPI]
 public enum SafeMigrationReportMode
 {
     /// <summary>Read-only analysis before migration execution.</summary>
@@ -11,6 +12,7 @@ public enum SafeMigrationReportMode
 }
 
 /// <summary>Summarizes whether a safe migration run can proceed or has converged.</summary>
+[PublicAPI]
 public enum SafeMigrationReportStatus
 {
     /// <summary>No migration operations were supplied or remain pending.</summary>
@@ -37,6 +39,7 @@ public enum SafeMigrationReportStatus
 }
 
 /// <summary>Identifies the earlier operation that invalidated a preflight state proof.</summary>
+[PublicAPI]
 public sealed class SafeMigrationDeferredOrigin
 {
     /// <summary>Initializes the source of an unknown projected state.</summary>
@@ -73,6 +76,7 @@ public sealed class SafeMigrationDeferredOrigin
 }
 
 /// <summary>Contains one immutable operation assessment.</summary>
+[PublicAPI]
 public sealed class SafeMigrationAssessment
 {
     /// <summary>Initializes an assessment.</summary>
@@ -243,7 +247,12 @@ public sealed class SafeMigrationAssessment
                 nameof(deferredOrigin));
         }
 
+        // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+        // ReSharper disable once UseCollectionExpression
         var differenceSnapshot = (differences ?? []).ToArray();
+
+        // WHY: Nullable annotations do not stop malformed caller-owned collections at the public boundary.
+        // ReSharper disable once ConditionIsAlwaysTrueOrFalseAccordingToNullableAPIContract
         if (differenceSnapshot.Any(static difference => difference is null))
         {
             throw new ArgumentException("Differences cannot contain null values.", nameof(differences));
@@ -343,6 +352,7 @@ public sealed class SafeMigrationAssessment
 }
 
 /// <summary>Contains an immutable preflight or postflight report.</summary>
+[PublicAPI]
 public sealed class SafeMigrationRunReport
 {
     /// <summary>Gets the current machine-readable report schema version.</summary>
@@ -394,13 +404,23 @@ public sealed class SafeMigrationRunReport
         SafeMigrationContractFingerprint.Validate(contractFingerprint, nameof(contractFingerprint));
         ArgumentNullException.ThrowIfNull(assessments);
 
+        // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+        // ReSharper disable once UseCollectionExpression
         var assessmentSnapshot = assessments.ToArray();
+
+        // WHY: Keep the public runtime element guard even when callers ignore nullable metadata.
+        // ReSharper disable once ConditionIsAlwaysTrueOrFalseAccordingToNullableAPIContract
         if (assessmentSnapshot.Any(static assessment => assessment is null))
         {
             throw new ArgumentException("Assessments cannot contain null values.", nameof(assessments));
         }
 
+        // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+        // ReSharper disable once UseCollectionExpression
         var unexpectedObjectSnapshot = (unexpectedObjects ?? []).ToArray();
+
+        // WHY: A supplied collection can contain null despite its annotated element type.
+        // ReSharper disable once ConditionIsAlwaysTrueOrFalseAccordingToNullableAPIContract
         if (unexpectedObjectSnapshot.Any(static value => value is null))
         {
             throw new ArgumentException("Unexpected objects cannot contain null values.", nameof(unexpectedObjects));

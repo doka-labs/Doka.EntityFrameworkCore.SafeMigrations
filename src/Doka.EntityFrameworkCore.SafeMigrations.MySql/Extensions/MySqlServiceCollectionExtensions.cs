@@ -4,6 +4,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql;
 /// Registers the SafeMigrations Doka operation handler for applications that
 /// deliberately own EF Core's internal service provider.
 /// </summary>
+[PublicAPI]
 public static class MySqlServiceCollectionExtensions
 {
     /// <summary>
@@ -11,6 +12,9 @@ public static class MySqlServiceCollectionExtensions
     /// </summary>
     /// <param name="services">The service collection to configure.</param>
     /// <returns>The same service collection so additional registrations can be chained.</returns>
+
+    // WHY: Preserve shipped API/XML identities; extension-block qualification currently fails RS0016.
+    // ReSharper disable once ConvertToExtensionBlock
     public static IServiceCollection AddEntityFrameworkDokaMySqlSafeMigrations(
         this IServiceCollection services
     ) => services.AddEntityFrameworkDokaMySqlSafeMigrations(canonicalContextType: null);
@@ -21,12 +25,17 @@ public static class MySqlServiceCollectionExtensions
     /// <param name="services">The service collection to configure.</param>
     /// <typeparam name="TCanonicalMigrationContext">The canonical migration context.</typeparam>
     /// <returns>The same service collection so additional registrations can be chained.</returns>
+
+    // WHY: Preserve shipped API/XML identities; extension-block qualification currently fails RS0016.
+    // ReSharper disable once ConvertToExtensionBlock
     public static IServiceCollection AddEntityFrameworkDokaMySqlSafeMigrations<TCanonicalMigrationContext>(
         this IServiceCollection services
     )
         where TCanonicalMigrationContext : DbContext
         => services.AddEntityFrameworkDokaMySqlSafeMigrations(typeof(TCanonicalMigrationContext));
 
+    // WHY: Preserve shipped API/XML identities; extension-block qualification currently fails RS0016.
+    // ReSharper disable once ConvertToExtensionBlock
     internal static IServiceCollection AddEntityFrameworkDokaMySqlSafeMigrations(
         this IServiceCollection services,
         Type? canonicalContextType

@@ -398,11 +398,12 @@ internal sealed class MySqlSafeMigrationSqlExpressionRenderer
                 break;
             case SafeMigrationSqlCaseExpression value:
                 builder.Append(
-                    index == value.WhenClauses.Count * 2
-                        ? " ELSE "
-                        : index % 2 == 0
-                            ? " WHEN "
-                            : " THEN ");
+                    index switch
+                    {
+                        _ when index == value.WhenClauses.Count * 2 => " ELSE ",
+                        _ when index % 2 == 0 => " WHEN ",
+                        _ => " THEN ",
+                    });
 
                 break;
         }

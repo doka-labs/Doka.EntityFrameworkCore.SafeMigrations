@@ -4,11 +4,15 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite;
 /// Provides <see cref="DbContextOptionsBuilder" /> extensions for SQLite
 /// SafeMigrations, baseline-generator composition, and canonical migration discovery.
 /// </summary>
+[PublicAPI]
 public static class SqliteSafeMigrationOptionsBuilderExtensions
 {
     /// <summary>Activates SQLite SafeMigrations for the exact runtime context.</summary>
     /// <param name="optionsBuilder">The EF Core options builder to configure.</param>
     /// <returns>The same options builder so additional calls can be chained.</returns>
+
+    // WHY: PublicApiAnalyzers 5.6.0 treats extension blocks as new symbols, breaking the shipped inventory.
+    // ReSharper disable once ConvertToExtensionBlock
     public static DbContextOptionsBuilder UseSqliteSafeMigrations(
         this DbContextOptionsBuilder optionsBuilder
     ) => ConfigureOptions(
@@ -21,6 +25,9 @@ public static class SqliteSafeMigrationOptionsBuilderExtensions
     /// <param name="optionsBuilder">The EF Core options builder to configure.</param>
     /// <param name="configure">The SafeMigrations design-time configuration.</param>
     /// <returns>The same options builder so additional calls can be chained.</returns>
+
+    // WHY: PublicApiAnalyzers 5.6.0 treats extension blocks as new symbols, breaking the shipped inventory.
+    // ReSharper disable once ConvertToExtensionBlock
     public static DbContextOptionsBuilder UseSqliteSafeMigrations(
         this DbContextOptionsBuilder optionsBuilder,
         Action<SafeMigrationOptionsBuilder> configure
@@ -30,6 +37,9 @@ public static class SqliteSafeMigrationOptionsBuilderExtensions
     /// <param name="optionsBuilder">The EF Core options builder to configure.</param>
     /// <typeparam name="TCanonicalMigrationContext">The context that owns migration discovery and history.</typeparam>
     /// <returns>The same options builder so additional calls can be chained.</returns>
+
+    // WHY: PublicApiAnalyzers 5.6.0 treats extension blocks as new symbols, breaking the shipped inventory.
+    // ReSharper disable once ConvertToExtensionBlock
     public static DbContextOptionsBuilder UseSqliteSafeMigrations<TCanonicalMigrationContext>(
         this DbContextOptionsBuilder optionsBuilder
     )
@@ -44,6 +54,9 @@ public static class SqliteSafeMigrationOptionsBuilderExtensions
     /// <param name="configure">The SafeMigrations design-time configuration.</param>
     /// <typeparam name="TCanonicalMigrationContext">The context that owns migration discovery and history.</typeparam>
     /// <returns>The same options builder so additional calls can be chained.</returns>
+
+    // WHY: PublicApiAnalyzers 5.6.0 treats extension blocks as new symbols, breaking the shipped inventory.
+    // ReSharper disable once ConvertToExtensionBlock
     public static DbContextOptionsBuilder UseSqliteSafeMigrations<TCanonicalMigrationContext>(
         this DbContextOptionsBuilder optionsBuilder,
         Action<SafeMigrationOptionsBuilder> configure
@@ -59,6 +72,9 @@ public static class SqliteSafeMigrationOptionsBuilderExtensions
     /// <typeparam name="TBaselineGenerator">The generator used for ordinary SQLite operations.</typeparam>
     /// <typeparam name="TCanonicalMigrationContext">The context that owns migration discovery and history.</typeparam>
     /// <returns>The same options builder so additional calls can be chained.</returns>
+
+    // WHY: PublicApiAnalyzers 5.6.0 treats extension blocks as new symbols, breaking the shipped inventory.
+    // ReSharper disable once ConvertToExtensionBlock
     public static DbContextOptionsBuilder UseSqliteSafeMigrations<TBaselineGenerator, TCanonicalMigrationContext>(
         this DbContextOptionsBuilder optionsBuilder
     )
@@ -78,6 +94,9 @@ public static class SqliteSafeMigrationOptionsBuilderExtensions
     /// <typeparam name="TBaselineGenerator">The generator used for ordinary SQLite operations.</typeparam>
     /// <typeparam name="TCanonicalMigrationContext">The context that owns migration discovery and history.</typeparam>
     /// <returns>The same options builder so additional calls can be chained.</returns>
+
+    // WHY: PublicApiAnalyzers 5.6.0 treats extension blocks as new symbols, breaking the shipped inventory.
+    // ReSharper disable once ConvertToExtensionBlock
     public static DbContextOptionsBuilder UseSqliteSafeMigrations<TBaselineGenerator, TCanonicalMigrationContext>(
         this DbContextOptionsBuilder optionsBuilder,
         Action<SafeMigrationOptionsBuilder> configure
@@ -93,6 +112,9 @@ public static class SqliteSafeMigrationOptionsBuilderExtensions
     /// <param name="optionsBuilder">The EF Core options builder to configure.</param>
     /// <typeparam name="TContext">The runtime context type being configured.</typeparam>
     /// <returns>The same options builder so additional calls can be chained.</returns>
+
+    // WHY: PublicApiAnalyzers 5.6.0 treats extension blocks as new symbols, breaking the shipped inventory.
+    // ReSharper disable once ConvertToExtensionBlock
     public static DbContextOptionsBuilder<TContext> UseSqliteSafeMigrations<TContext>(
         this DbContextOptionsBuilder<TContext> optionsBuilder
     )
@@ -106,6 +128,9 @@ public static class SqliteSafeMigrationOptionsBuilderExtensions
     /// <param name="configure">The SafeMigrations design-time configuration.</param>
     /// <typeparam name="TContext">The runtime context type being configured.</typeparam>
     /// <returns>The same options builder so additional calls can be chained.</returns>
+
+    // WHY: PublicApiAnalyzers 5.6.0 treats extension blocks as new symbols, breaking the shipped inventory.
+    // ReSharper disable once ConvertToExtensionBlock
     public static DbContextOptionsBuilder<TContext> UseSqliteSafeMigrations<TContext>(
         this DbContextOptionsBuilder<TContext> optionsBuilder,
         Action<SafeMigrationOptionsBuilder> configure
@@ -121,6 +146,9 @@ public static class SqliteSafeMigrationOptionsBuilderExtensions
     /// <typeparam name="TBaselineGenerator">The generator used for ordinary SQLite operations.</typeparam>
     /// <typeparam name="TCanonicalMigrationContext">The context that owns migration discovery and history.</typeparam>
     /// <returns>The same options builder so additional calls can be chained.</returns>
+
+    // WHY: PublicApiAnalyzers 5.6.0 treats extension blocks as new symbols, breaking the shipped inventory.
+    // ReSharper disable once ConvertToExtensionBlock
     public static DbContextOptionsBuilder<TContext> UseSqliteSafeMigrations<TContext, TBaselineGenerator,
         TCanonicalMigrationContext>(
         this DbContextOptionsBuilder<TContext> optionsBuilder
@@ -142,6 +170,9 @@ public static class SqliteSafeMigrationOptionsBuilderExtensions
     /// <typeparam name="TBaselineGenerator">The generator used for ordinary SQLite operations.</typeparam>
     /// <typeparam name="TCanonicalMigrationContext">The context that owns migration discovery and history.</typeparam>
     /// <returns>The same options builder so additional calls can be chained.</returns>
+
+    // WHY: PublicApiAnalyzers 5.6.0 treats extension blocks as new symbols, breaking the shipped inventory.
+    // ReSharper disable once ConvertToExtensionBlock
     public static DbContextOptionsBuilder<TContext> UseSqliteSafeMigrations<TContext, TBaselineGenerator,
         TCanonicalMigrationContext>(
         this DbContextOptionsBuilder<TContext> optionsBuilder,

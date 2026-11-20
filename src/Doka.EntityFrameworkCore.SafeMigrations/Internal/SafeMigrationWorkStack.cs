@@ -7,6 +7,8 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// </remarks>
 internal ref struct SafeMigrationWorkStack<T>
 {
+    // WHY: Nullable storage retains an injected owner's identity while default stacks borrow the shared pool.
+    // ReSharper disable once ReplaceWithFieldKeyword
     private readonly ArrayPool<T>? _pool;
     private T[]? _items;
     private int _count;

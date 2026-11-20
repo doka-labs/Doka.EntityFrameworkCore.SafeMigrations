@@ -32,8 +32,14 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
     )
     {
         var builder = new StringBuilder();
-        foreach (var proof in plan.IdentifierReferenceProofs)
+
+        // WHY: Index this stable list while preserving its order and ownership.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var proofIndex = 0; proofIndex < plan.IdentifierReferenceProofs.Count; proofIndex++)
         {
+            var proof = plan.IdentifierReferenceProofs[proofIndex];
+
             var root = Convert.ToHexString(Encoding.UTF8.GetBytes(proof.RootIdentifier));
             var eligibility = "EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.KEYWORDS k "
                 + $"WHERE k.WORD = CONVERT(0x{root} USING utf8mb4))";

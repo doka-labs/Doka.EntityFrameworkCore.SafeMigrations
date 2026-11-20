@@ -47,6 +47,10 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
 
         var candidateOperations = candidates
             .Select(static candidate => candidate.Operation)
+
+            // WHY: Retain fluent materialization and its existing snapshot
+            // ownership rather than replacing this boundary with a spread.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var expectedUniqueIndexes = MySqlSafeMigrationPlanCapture.CreateExpectedUniqueIndexes(
@@ -125,15 +129,15 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
 
                     return new SafeMigrationCatalogProbeStatement(1, parameters.Utf8PayloadBytes, ordinal);
                 },
-                async (reader, ordinal, _, token) =>
+                async (reader, ordinal, _, callbackCancellationToken) =>
                 {
-                    if (!await reader.ReadAsync(token))
+                    if (!await reader.ReadAsync(callbackCancellationToken))
                     {
                         throw new InvalidOperationException("MySQL omitted a required-add recovery ownership result.");
                     }
 
                     var owned = reader.GetBoolean(0);
-                    if (await reader.ReadAsync(token))
+                    if (await reader.ReadAsync(callbackCancellationToken))
                     {
                         throw new InvalidOperationException("MySQL returned multiple required-add ownership results.");
                     }
@@ -146,6 +150,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                         (recovered ??= []).Add(probes[ordinal].FindingIndex);
                     }
                 },
+                transaction: null,
+                SafeMigrationCatalogQueryLimits.MaximumParameters,
                 cancellationToken);
         }
 
@@ -226,8 +232,13 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         Dictionary<(string? Schema, string Table, string Column),
             (SafeMigrationOperation Operation, int FindingIndex)>? candidates = null;
 
-        foreach (var operation in operations)
+        // WHY: Index this stable list while preserving its order and ownership.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var operationIndex = 0; operationIndex < operations.Count; operationIndex++)
         {
+            var operation = operations[operationIndex];
+
             if (operation is not SafeMigrationOperation { Intent: EnsureColumnIntent ensure } safe
                 || !MySqlSafeMigrationCatalogSqlBuilder.TargetsDatabase(ensure, currentDatabase))
             {
@@ -288,6 +299,10 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
 
         return candidates is null
             ? []
+
+            // WHY: Retain fluent materialization and its existing snapshot
+            // ownership rather than replacing this boundary with a spread.
+            // ReSharper disable once UseCollectionExpression
             : candidates.Values.ToArray();
     }
 }

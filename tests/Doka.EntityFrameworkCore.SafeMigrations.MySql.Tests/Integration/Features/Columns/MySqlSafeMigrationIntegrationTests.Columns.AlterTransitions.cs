@@ -41,7 +41,7 @@ public sealed class MySqlColumnsAlterTransitionsIntegrationTests : MySqlSafeMigr
         var operation = AlterTransitionOperation(sourceType, targetType);
         var observer = new RuntimeMatchingProbeInterceptor();
         await using var context = CreateRuntimeMatchingContext(connectionString, observer);
-        await context.Database.OpenConnectionAsync();
+        await context.Database.OpenConnectionAsync(CancellationToken.None);
         await context.Database.ExecuteSqlRawAsync(RuntimeMatchingResetSql);
         await using var analysisContext = CreateContext(connectionString);
         await using var connection = new CatalogClassificationCountingConnection(new MySqlConnection(connectionString));
@@ -305,7 +305,7 @@ public sealed class MySqlColumnsAlterTransitionsIntegrationTests : MySqlSafeMigr
 
         var observer = new RuntimeMatchingProbeInterceptor();
         await using var context = CreateRuntimeMatchingContext(connectionString, observer);
-        await context.Database.OpenConnectionAsync();
+        await context.Database.OpenConnectionAsync(CancellationToken.None);
         await context.Database.ExecuteSqlRawAsync(RuntimeMatchingResetSql);
 
         // Act
@@ -471,6 +471,9 @@ public sealed class MySqlColumnsAlterTransitionsIntegrationTests : MySqlSafeMigr
 
         var shared = intents
             .Select(intent => new SafeMigrationOperation(intent, SafeMigrationPolicy.RepairIfSafe))
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var operations = Enumerable
@@ -478,6 +481,9 @@ public sealed class MySqlColumnsAlterTransitionsIntegrationTests : MySqlSafeMigr
             .SelectMany(_ => reuseOperations
                 ? shared
                 : intents.Select(intent => new SafeMigrationOperation(intent, SafeMigrationPolicy.RepairIfSafe)))
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         // Act
@@ -529,7 +535,7 @@ public sealed class MySqlColumnsAlterTransitionsIntegrationTests : MySqlSafeMigr
 
         var observer = new RuntimeMatchingProbeInterceptor();
         await using var context = CreateRuntimeMatchingContext(connectionString, observer);
-        await context.Database.OpenConnectionAsync();
+        await context.Database.OpenConnectionAsync(CancellationToken.None);
         await context.Database.ExecuteSqlRawAsync(RuntimeMatchingResetSql);
         var operation = new SafeMigrationOperation(
             new AlterColumnIntent(
@@ -625,7 +631,7 @@ public sealed class MySqlColumnsAlterTransitionsIntegrationTests : MySqlSafeMigr
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
-        await context.Database.OpenConnectionAsync();
+        await context.Database.OpenConnectionAsync(CancellationToken.None);
         var operation = AlterTransitionOperation("varchar(20)", "varchar(5)");
 
         // Act
@@ -711,7 +717,7 @@ public sealed class MySqlColumnsAlterTransitionsIntegrationTests : MySqlSafeMigr
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
-        await context.Database.OpenConnectionAsync();
+        await context.Database.OpenConnectionAsync(CancellationToken.None);
         if (permissiveMode)
         {
             await context.Database.ExecuteSqlRawAsync("SET SESSION sql_mode = '';");
@@ -1433,7 +1439,7 @@ public sealed class MySqlColumnsAlterTransitionsIntegrationTests : MySqlSafeMigr
             && replacement.Any(static character => character == '\\' || char.IsControl(character))
             : noBackslashEscapes && replacement.Contains('\'');
 
-        await context.Database.OpenConnectionAsync();
+        await context.Database.OpenConnectionAsync(CancellationToken.None);
         if (noBackslashEscapes)
         {
             await context.Database.ExecuteSqlRawAsync(
@@ -1574,7 +1580,7 @@ public sealed class MySqlColumnsAlterTransitionsIntegrationTests : MySqlSafeMigr
 
         var configuredConnection = new MySqlConnectionStringBuilder(connectionString) { NoBackslashEscapes = true };
         await using var context = CreateContext(configuredConnection.ConnectionString);
-        await context.Database.OpenConnectionAsync();
+        await context.Database.OpenConnectionAsync(CancellationToken.None);
         await context.Database.ExecuteSqlRawAsync(
             "SET SESSION sql_mode = CONCAT_WS(',', @@SESSION.sql_mode, 'NO_BACKSLASH_ESCAPES');");
 

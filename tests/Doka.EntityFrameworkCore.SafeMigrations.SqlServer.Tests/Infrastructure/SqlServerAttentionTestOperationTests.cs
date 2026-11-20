@@ -45,7 +45,7 @@ public sealed class SqlServerAttentionTestOperationTests
         // Arrange
         using var cancellation = new CancellationTokenSource();
         using var observerCancellation = new CancellationTokenSource();
-        observerCancellation.Cancel();
+        await observerCancellation.CancelAsync();
         var execution = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var observerCalls = 0;
 
@@ -84,7 +84,7 @@ public sealed class SqlServerAttentionTestOperationTests
         // Arrange
         using var cancellation = new CancellationTokenSource();
         var callbackFailure = new InvalidOperationException("cancel callback failed");
-        using var registration = cancellation.Token.Register(() => throw callbackFailure);
+        await using var registration = cancellation.Token.Register(() => throw callbackFailure);
         var executionFailure = new InvalidOperationException("native command failed");
         var execution = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -114,12 +114,13 @@ public sealed class SqlServerAttentionTestOperationTests
         using var cancellation = new CancellationTokenSource();
         using var releaseCallback = new ManualResetEventSlim();
         var callbackEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        using var registration = cancellation.Token.Register(() =>
+        await using var registration = cancellation.Token.Register(() =>
         {
             callbackEntered.SetResult();
 
             // WHY: Cancellation callbacks are synchronous framework hooks.
             // This explicit gate, not a sleep or deadline, controls their lifetime.
+            // ReSharper disable once MethodSupportsCancellation
             releaseCallback.Wait();
         });
 
@@ -194,7 +195,7 @@ public sealed class SqlServerAttentionTestOperationTests
         // Arrange
         using var cancellation = new CancellationTokenSource();
         var execution = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        using var registration = cancellation.Token.Register(() => execution.SetCanceled(cancellation.Token));
+        await using var registration = cancellation.Token.Register(() => execution.SetCanceled(cancellation.Token));
 
         // Act
         var failure = await Record.ExceptionAsync(() => SqlServerAttentionTestOperation.ObserveAsync(
@@ -275,7 +276,7 @@ public sealed class SqlServerAttentionTestOperationTests
         await using var observer = new SqlConnection();
         using var cancellation = new CancellationTokenSource();
         using var producerCancellation = new CancellationTokenSource();
-        producerCancellation.Cancel();
+        await producerCancellation.CancelAsync();
         var commandFailure = new InvalidOperationException("producer failed before readiness");
         var execution = completion switch
         {
@@ -305,11 +306,11 @@ public sealed class SqlServerAttentionTestOperationTests
         else if (completion == "cancellation")
         {
             Assert.Equal(producerCancellation.Token,
-                Assert.IsAssignableFrom<OperationCanceledException>(result.ReadinessFailure)
+                Assert.IsType<OperationCanceledException>(result.ReadinessFailure, exactMatch: false)
                     .CancellationToken);
 
             Assert.Equal(producerCancellation.Token,
-                Assert.IsAssignableFrom<OperationCanceledException>(result.ExecutionFailure)
+                Assert.IsType<OperationCanceledException>(result.ExecutionFailure, exactMatch: false)
                     .CancellationToken);
         }
         else

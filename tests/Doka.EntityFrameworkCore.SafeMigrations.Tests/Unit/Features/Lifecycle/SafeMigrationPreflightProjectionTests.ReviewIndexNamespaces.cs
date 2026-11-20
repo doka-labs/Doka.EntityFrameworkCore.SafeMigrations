@@ -412,20 +412,32 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     };
 
     /// <summary>Models verified PostgreSQL or SQLite schema scope without broadening object identity.</summary>
-    private sealed class ReviewIndexNamespaceNormalizer(
-        bool schemaScoped = true,
-        bool backingNames = true
-    )
+    private sealed class ReviewIndexNamespaceNormalizer
         : ISafeMigrationProviderObjectIdentityNormalizer
     {
+        private readonly bool _backingNames;
+        private readonly bool _schemaScoped;
+
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="schemaScoped">The supplied schema scoped for this fixture.</param>
+        /// <param name="backingNames">The supplied backing names for this fixture.</param>
+        public ReviewIndexNamespaceNormalizer(
+            bool schemaScoped = true,
+            bool backingNames = true
+        )
+        {
+            _schemaScoped = schemaScoped;
+            _backingNames = backingNames;
+        }
+
         /// <inheritdoc />
         public StringComparer IdentifierComparer => StringComparer.Ordinal;
 
         /// <inheritdoc />
-        public bool IndexUsesSchemaScopedIdentity => schemaScoped;
+        public bool IndexUsesSchemaScopedIdentity => _schemaScoped;
 
         /// <inheritdoc />
-        public bool KeyConstraintsUseSchemaScopedBackingIndexNames => backingNames;
+        public bool KeyConstraintsUseSchemaScopedBackingIndexNames => _backingNames;
 
         /// <inheritdoc />
         public string NormalizeIdentifier(

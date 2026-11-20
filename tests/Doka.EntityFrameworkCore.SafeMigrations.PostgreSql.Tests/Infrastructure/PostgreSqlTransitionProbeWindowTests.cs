@@ -23,16 +23,14 @@ public sealed class PostgreSqlTransitionProbeWindowTests
             new SafeMigrationObservedState?[33],
             CancellationToken.None);
 
-        using (var command = connection.CreateCommand())
+        await using (var command = connection.CreateCommand())
         {
             command.CommandText = "SELECT 0, TRUE, FALSE;";
-            using var reader = command.ExecuteReader();
-            _ = reader.Read();
+            await using var reader = await command.ExecuteReaderAsync(CancellationToken.None);
+            _ = await reader.ReadAsync(CancellationToken.None);
         }
 
-        connection
-            .BeginTransaction()
-            .Dispose();
+        await using (await connection.BeginTransactionAsync(CancellationToken.None)) { }
 
         var before = (
             Commands: connection.CommandsDisposed,
@@ -509,6 +507,9 @@ public sealed class PostgreSqlTransitionProbeWindowTests
                 new ExpectedColumnDefinition($"value_{index:D5}", typeof(string), true, "character varying(40)"),
                 new ExpectedColumnDefinition($"value_{index:D5}", typeof(string), true, "character varying(80)")),
             SafeMigrationPolicy.RepairIfSafe))
+
+        // WHY: Retain explicit fluent materialization and its independently owned result snapshot.
+        // ReSharper disable once UseCollectionExpression
         .ToArray();
 
     private static string EligibilitySql(
@@ -576,7 +577,7 @@ public sealed class PostgreSqlTransitionProbeWindowTests
         DbConnection connection,
         IReadOnlyList<SafeMigrationOperation> operations,
         SafeMigrationObservedState?[] states,
-        CancellationToken token
+        CancellationToken cancellationToken
     )
     {
         var method = typeof(PostgreSqlSafeMigrationProviderAnalyzer).GetMethod(
@@ -584,7 +585,7 @@ public sealed class PostgreSqlTransitionProbeWindowTests
                 BindingFlags.Instance | BindingFlags.NonPublic)
             ?? throw new InvalidOperationException("The narrowing resolution method is absent.");
 
-        var task = (Task)(method.Invoke(analyzer, [connection, operations, states, 71, token])
+        var task = (Task)(method.Invoke(analyzer, [connection, operations, states, 71, cancellationToken])
             ?? throw new InvalidOperationException("The narrowing resolution task is absent."));
 
         await task;

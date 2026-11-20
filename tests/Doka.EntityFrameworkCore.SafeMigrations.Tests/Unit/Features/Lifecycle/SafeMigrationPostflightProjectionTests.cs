@@ -1,7 +1,14 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
+/// <summary>
+/// Verifies only final resource writers supersede earlier checks while owner, row and provider boundaries remain
+/// distinct.
+/// </summary>
 public sealed class SafeMigrationPostflightProjectionTests
 {
+    /// <summary>
+    /// Gets source removal, target removal and final rename contracts for every renamed object family.
+    /// </summary>
     public static TheoryData<SafeMigrationIntent, SafeMigrationIntent, SafeMigrationIntent>
         RenameFinalWriterCases => new()
     {
@@ -16,9 +23,14 @@ public sealed class SafeMigrationPostflightProjectionTests
         },
     };
 
+    /// <summary>
+    /// Lets the later safe index writer supersede its earlier drop across ordinary metadata-only table and column
+    /// DDL.
+    /// </summary>
     [Fact]
     public void LaterWriterSupersedesAnEarlierPostconditionAcrossProviderOperations()
     {
+        // Arrange
         const string indexName = "ix_records_tenant_id_code";
         var operations = new MigrationOperation[]
         {
@@ -47,15 +59,21 @@ public sealed class SafeMigrationPostflightProjectionTests
                         ]))),
         };
 
+        // Act
         var projection = new SafeMigrationPostflightProjection(operations);
 
+        // Assert
         Assert.True(projection.IsSuperseded(0));
         Assert.False(projection.IsSuperseded(3));
     }
 
+    /// <summary>
+    /// Keeps identically named indexes on different owners as independent final postconditions.
+    /// </summary>
     [Fact]
     public void SameObjectNameOnAnotherTableDoesNotSupersedeThePostcondition()
     {
+        // Arrange
         const string indexName = "ix_code";
         var operations = new MigrationOperation[]
         {
@@ -68,15 +86,21 @@ public sealed class SafeMigrationPostflightProjectionTests
                         [new ExpectedIndexKeyDefinition(column: "code")]))),
         };
 
+        // Act
         var projection = new SafeMigrationPostflightProjection(operations);
 
+        // Assert
         Assert.False(projection.IsSuperseded(0));
         Assert.False(projection.IsSuperseded(1));
     }
 
+    /// <summary>
+    /// Does not treat ordinary provider index DDL as a certified replacement for an earlier safe postcondition.
+    /// </summary>
     [Fact]
     public void ProviderOperationCannotSupersedeAnEarlierSafePostcondition()
     {
+        // Arrange
         const string indexName = "ix_records_code";
         var operations = new MigrationOperation[]
         {
@@ -89,15 +113,22 @@ public sealed class SafeMigrationPostflightProjectionTests
             },
         };
 
+        // Act
         var projection = new SafeMigrationPostflightProjection(operations);
 
+        // Assert
         Assert.False(projection.IsSuperseded(0));
         Assert.False(projection.IsSuperseded(1));
     }
 
+    /// <summary>
+    /// Makes only the last safe column writer authoritative across ensure, alter and removal of one physical
+    /// member.
+    /// </summary>
     [Fact]
     public void OnlyTheFinalWriterRemainsAuthoritativeForOneResource()
     {
+        // Arrange
         var operations = new MigrationOperation[]
         {
             Safe(new EnsureColumnIntent("records", Column("code", "varchar(80)"))),
@@ -105,13 +136,28 @@ public sealed class SafeMigrationPostflightProjectionTests
             Safe(new DropColumnIntent("code", "records")),
         };
 
+        // Act
         var projection = new SafeMigrationPostflightProjection(operations);
 
+        // Assert
         Assert.True(projection.IsSuperseded(0));
         Assert.True(projection.IsSuperseded(1));
         Assert.False(projection.IsSuperseded(2));
     }
 
+    /// <summary>
+    /// Retains the final rename's source and target postconditions while superseding earlier writers at both
+    /// endpoints.
+    /// </summary>
+    /// <param name="sourceWriter">
+    /// The earlier writer for the rename's source resource.
+    /// </param>
+    /// <param name="targetWriter">
+    /// The earlier writer for the rename's target resource.
+    /// </param>
+    /// <param name="rename">
+    /// The complete final rename operation for the same resource family.
+    /// </param>
     [Theory]
     [MemberData(nameof(RenameFinalWriterCases))]
     public void RenameSupersedesEarlierWritersForItsSourceAndTarget(
@@ -135,6 +181,18 @@ public sealed class SafeMigrationPostflightProjectionTests
         Assert.False(targetProjection.IsSuperseded(1));
     }
 
+    /// <summary>
+    /// Keeps the rename's source-removal postcondition live when a later writer changes only its target.
+    /// </summary>
+    /// <param name="_">
+    /// The unused counterpart retained by the shared rename-case fixture.
+    /// </param>
+    /// <param name="targetWriter">
+    /// The earlier writer for the rename's target resource.
+    /// </param>
+    /// <param name="rename">
+    /// The complete final rename operation for the same resource family.
+    /// </param>
     [Theory]
     [MemberData(nameof(RenameFinalWriterCases))]
     public void LaterTargetWriterDoesNotSupersedeRenameSourcePostcondition(
@@ -158,6 +216,18 @@ public sealed class SafeMigrationPostflightProjectionTests
         Assert.False(projection.IsSuperseded(1));
     }
 
+    /// <summary>
+    /// Supersedes the rename's source-removal postcondition only when a later writer addresses that same source.
+    /// </summary>
+    /// <param name="sourceWriter">
+    /// The earlier writer for the rename's source resource.
+    /// </param>
+    /// <param name="_">
+    /// The unused counterpart retained by the shared rename-case fixture.
+    /// </param>
+    /// <param name="rename">
+    /// The complete final rename operation for the same resource family.
+    /// </param>
     [Theory]
     [MemberData(nameof(RenameFinalWriterCases))]
     public void LaterSourceWriterSupersedesRenameSourcePostcondition(
@@ -181,11 +251,32 @@ public sealed class SafeMigrationPostflightProjectionTests
         Assert.False(projection.IsSuperseded(1));
     }
 
+    /// <summary>
+    /// Normalizes current-database qualifiers for every structural and managed-row resource without reversing final
+    /// writers.
+    /// </summary>
+    /// <param name="earlierIsQualified">
+    /// Whether the earlier writer uses the current database qualifier instead of the later writer.
+    /// </param>
+    /// <param name="resourceOrdinal">The independent table, index, constraint or managed-row resource pair.</param>
     [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
+    [InlineData(true, 0)]
+    [InlineData(true, 1)]
+    [InlineData(true, 2)]
+    [InlineData(true, 3)]
+    [InlineData(true, 4)]
+    [InlineData(true, 5)]
+    [InlineData(true, 6)]
+    [InlineData(false, 0)]
+    [InlineData(false, 1)]
+    [InlineData(false, 2)]
+    [InlineData(false, 3)]
+    [InlineData(false, 4)]
+    [InlineData(false, 5)]
+    [InlineData(false, 6)]
     public void ProviderNormalizedIdentitySupersedesAcrossEveryQualifiedResourceFamily(
-        bool earlierIsQualified
+        bool earlierIsQualified,
+        int resourceOrdinal
     )
     {
         // Arrange
@@ -205,28 +296,27 @@ public sealed class SafeMigrationPostflightProjectionTests
         var normalizer = new CurrentDatabaseIdentityNormalizer(database);
 
         // Act
-        var projections = earlier
-            .Zip(later, (first, second) => new SafeMigrationPostflightProjection([first, second], normalizer))
-            .ToArray();
+        var projection = new SafeMigrationPostflightProjection(
+            [earlier[resourceOrdinal], later[resourceOrdinal]],
+            normalizer);
 
         // Assert
+        Assert.Equal(7, earlier.Length);
         Assert.Equal(earlier.Length, later.Length);
-        Assert.Equal(earlier.Length, projections.Length);
+        Assert.True(
+            projection.IsSuperseded(0),
+            $"Resource pair {resourceOrdinal} ({earlier[resourceOrdinal].Intent.GetType().Name}, "
+            + $"{later[resourceOrdinal].Intent.GetType().Name}) was not normalized to one physical identity. "
+            + $"Earlier={Describe(earlier[resourceOrdinal].Intent)}, "
+            + $"later={Describe(later[resourceOrdinal].Intent)}.");
 
-        for (var index = 0; index < projections.Length; index++)
-        {
-            Assert.True(
-                projections[index]
-                    .IsSuperseded(0),
-                $"Resource pair {index} ({earlier[index].Intent.GetType().Name}, "
-                + $"{later[index].Intent.GetType().Name}) was not normalized to one physical identity. "
-                + $"Earlier={Describe(earlier[index].Intent)}, later={Describe(later[index].Intent)}.");
-
-            Assert.False(projections[index]
-                .IsSuperseded(1));
-        }
+        Assert.False(projection.IsSuperseded(1));
     }
 
+    /// <summary>
+    /// Keeps foreign-database resources separate from the current database despite equal local owner and object
+    /// names.
+    /// </summary>
     [Fact]
     public void ForeignDatabaseIdentityDoesNotSupersedeCurrentDatabaseResource()
     {
@@ -253,9 +343,13 @@ public sealed class SafeMigrationPostflightProjectionTests
         Assert.False(projection.IsSuperseded(1));
     }
 
+    /// <summary>
+    /// Uses the provider's certified case-insensitive identity to select the single final physical index writer.
+    /// </summary>
     [Fact]
     public void ProviderIdentifierNormalizationSupersedesCaseVariantPhysicalResource()
     {
+        // Arrange
         var operations = new MigrationOperation[]
         {
             Safe(new DropIndexIntent("IX_RECORDS_CODE", "RECORDS")),
@@ -267,10 +361,12 @@ public sealed class SafeMigrationPostflightProjectionTests
                         [new ExpectedIndexKeyDefinition(column: "code")]))),
         };
 
+        // Act
         var projection = new SafeMigrationPostflightProjection(
             operations,
             new CaseInsensitiveIdentityNormalizer());
 
+        // Assert
         Assert.True(projection.IsSuperseded(0));
         Assert.False(projection.IsSuperseded(1));
     }
@@ -347,10 +443,19 @@ public sealed class SafeMigrationPostflightProjectionTests
             .ToArray();
     }
 
-    private sealed class CurrentDatabaseIdentityNormalizer(
-        string currentDatabase
-    ) : ISafeMigrationProviderObjectIdentityNormalizer
+    private sealed class CurrentDatabaseIdentityNormalizer : ISafeMigrationProviderObjectIdentityNormalizer
     {
+        private readonly string _currentDatabase;
+
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="currentDatabase">The supplied current database for this fixture.</param>
+        public CurrentDatabaseIdentityNormalizer(
+            string currentDatabase
+        )
+        {
+            _currentDatabase = currentDatabase;
+        }
+
         public StringComparer IdentifierComparer => StringComparer.Ordinal;
 
         public string NormalizeIdentifier(
@@ -359,7 +464,7 @@ public sealed class SafeMigrationPostflightProjectionTests
 
         public string? NormalizeSchema(
             string? schema
-        ) => StringComparer.Ordinal.Equals(schema, currentDatabase)
+        ) => StringComparer.Ordinal.Equals(schema, _currentDatabase)
             ? null
             : schema;
 

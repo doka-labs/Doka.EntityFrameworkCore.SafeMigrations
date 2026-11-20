@@ -108,6 +108,7 @@ public abstract class PostgreSqlIntegrationTestBase : IClassFixture<PostgreSqlCo
         }
     }
 
+    /// <summary>Creates a configured PostgreSQL context for the isolated fixture connection.</summary>
     protected static SafeMigrationDbContext CreateContext(
         string connectionString,
         bool registerSafeMigrations = true

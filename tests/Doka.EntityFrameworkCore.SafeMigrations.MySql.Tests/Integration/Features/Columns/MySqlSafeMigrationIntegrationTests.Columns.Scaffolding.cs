@@ -9,9 +9,11 @@ public sealed class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeMigration
         MySqlEngineContainerFixture fixture
     ) : base(fixture) { }
 
+    /// <summary>Repairs annotated defaults and comments without replacing stored application values.</summary>
     [Fact]
     public async Task AnnotatedColumns_RepairDefaultsAndCommentsWithoutLosingRows()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -78,6 +80,8 @@ public sealed class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeMigration
 
         var runner = context.GetService<ISafeMigrationRunner>();
         var options = new SafeMigrationRunOptions("annotated-column-repair");
+
+        // Act
         var preflight = await runner.AnalyzeAsync(context, builder.Operations, options, CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
@@ -93,6 +97,7 @@ public sealed class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeMigration
 
         var postflight = await runner.VerifyAsync(context, builder.Operations, options, CancellationToken.None);
 
+        // Assert
         Assert.Contains(preflight.Assessments, static assessment => assessment.Action == SafeMigrationAction.Repair);
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
         Assert.All(postflight.Assessments, static assessment => Assert.True(assessment.PostconditionSatisfied));
@@ -117,9 +122,13 @@ public sealed class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeMigration
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>
+    /// Rejects tightening an annotated nullable column while NULL rows remain, without native mutation.
+    /// </summary>
     [Fact]
     public async Task AnnotatedNullableColumn_WithNullRows_IsDataBlockedWithoutMutation()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -148,6 +157,7 @@ public sealed class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeMigration
             },
             policy: SafeMigrationPolicy.RepairIfSafe);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -161,6 +171,7 @@ public sealed class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeMigration
                 ExecuteOperationsAsync(context, builder.Operations, operationToken),
             cancellationToken: CancellationToken.None);
 
+        // Assert
         var assessment = Assert.Single(
             report.Assessments,
             static candidate => candidate.ObjectName == "value");
@@ -184,9 +195,11 @@ public sealed class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeMigration
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Does not rewrite an auto-increment mismatch under the safe-repair policy.</summary>
     [Fact]
     public async Task RepairIfSafe_DoesNotRewriteAutoIncrementMismatch()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -208,6 +221,7 @@ public sealed class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeMigration
             constraints: table => table.PrimaryKey("pk_annotated_identity_mismatch", value => value.id),
             policy: SafeMigrationPolicy.RepairIfSafe);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -221,6 +235,7 @@ public sealed class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeMigration
                 ExecuteOperationsAsync(context, builder.Operations, operationToken),
             cancellationToken: CancellationToken.None);
 
+        // Assert
         Assert.Contains(
             report.Assessments,
             static assessment => assessment is
@@ -244,14 +259,17 @@ public sealed class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeMigration
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Preserves scaffolded native auto-increment generation and idempotent replay.</summary>
     [Fact]
     public async Task ScaffoldedAutoIncrementTable_PreservesGenerationAndIsIdempotent()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         _ = AddScaffoldedAutoIncrementTable(builder, "scaffolded_identity");
 
+        // Act
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         await ExecuteSqlAsync(
@@ -267,6 +285,7 @@ public sealed class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeMigration
                 new SafeMigrationRunOptions("scaffolded-identity"),
                 CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
         Assert.Equal(SafeMigrationObservedState.Matching,
             Assert.Single(report.Assessments)
@@ -292,9 +311,11 @@ public sealed class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeMigration
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Rejects an existing ordinary column when the scaffolded contract requires native generation.</summary>
     [Fact]
     public async Task ScaffoldedAutoIncrementTable_RejectsExistingNonGeneratedColumn()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -306,6 +327,7 @@ public sealed class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeMigration
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         _ = AddScaffoldedAutoIncrementTable(builder, "scaffolded_identity_drift");
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -319,6 +341,7 @@ public sealed class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeMigration
                 ExecuteOperationsAsync(context, builder.Operations, operationToken),
             cancellationToken: CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationObservedState.Different,
             Assert.Single(report.Assessments)
@@ -338,15 +361,18 @@ public sealed class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeMigration
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Rejects an unsupported operation-level scaffolding annotation before native DDL.</summary>
     [Fact]
     public async Task ScaffoldedOperationLevelAnnotation_IsRejectedBeforeDdl()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         var operation = AddScaffoldedAutoIncrementTable(builder, "unsupported_scaffolded_annotation");
         operation["Test:UnsupportedOperationFacet"] = true;
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -360,6 +386,7 @@ public sealed class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeMigration
                 ExecuteOperationsAsync(context, builder.Operations, operationToken),
             cancellationToken: CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationObservedState.Unsupported,
             Assert.Single(report.Assessments)
@@ -378,6 +405,8 @@ public sealed class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeMigration
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Preserves scaffolded client-GUID relationship shapes through initial migration and replay.</summary>
+    /// <param name="mode">The explicitly selected strict or legacy-convergence scaffolding mode.</param>
     [Theory]
     [InlineData(SafeMigrationScaffoldingMode.Strict)]
     [InlineData(SafeMigrationScaffoldingMode.LegacyConvergence)]
@@ -385,6 +414,7 @@ public sealed class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeMigration
         SafeMigrationScaffoldingMode mode
     )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -436,6 +466,7 @@ public sealed class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeMigration
             "client_guid_leaves",
             "root_id");
 
+        // Act
         var preflight = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -463,6 +494,7 @@ public sealed class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeMigration
                 new SafeMigrationRunOptions("client-guid-relationship"),
                 CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
         Assert.All(
             preflight.Assessments,
@@ -490,6 +522,11 @@ public sealed class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeMigration
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>
+    /// Preserves scaffolded native-GUID relationship shapes without imposing incompatible client generation.
+    /// </summary>
+    /// <param name="mode">The explicitly selected strict or legacy-convergence scaffolding mode.</param>
+    /// <param name="guidFormat">The native GUID storage-format annotation under test.</param>
     [Theory]
     [InlineData(
         SafeMigrationScaffoldingMode.Strict,
@@ -508,6 +545,7 @@ public sealed class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeMigration
         DokaMySqlGuidFormat guidFormat
     )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -684,6 +722,8 @@ public sealed class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeMigration
 
         var runner = context.GetService<ISafeMigrationRunner>();
         var options = new SafeMigrationRunOptions($"native-guid-{mode}-{guidFormat}");
+
+        // Act
         var preflight = await runner.AnalyzeAsync(context, builder.Operations, options, CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
@@ -714,6 +754,7 @@ public sealed class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeMigration
 
         var replay = await runner.AnalyzeAsync(context, builder.Operations, options, CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
         Assert.DoesNotContain(
             preflight.Assessments,
@@ -757,6 +798,8 @@ public sealed class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeMigration
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Rejects an invalid scaffolded GUID-format annotation before native DDL.</summary>
+    /// <param name="testCase">The independently discoverable unsupported-metadata variant.</param>
     [Theory]
     [InlineData(UnsupportedGuidAnnotationCase.UndefinedValue)]
     [InlineData(UnsupportedGuidAnnotationCase.BinaryWithCharStoreType)]
@@ -766,6 +809,7 @@ public sealed class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeMigration
         UnsupportedGuidAnnotationCase testCase
     )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -800,6 +844,7 @@ public sealed class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeMigration
             },
             constraints: table => table.PrimaryKey("pk_invalid_guid_format", value => value.id));
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -813,6 +858,7 @@ public sealed class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeMigration
                 ExecuteOperationsAsync(context, builder.Operations, operationToken),
             cancellationToken: CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationObservedState.Unsupported,
             Assert.Single(report.Assessments)
@@ -828,6 +874,8 @@ public sealed class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeMigration
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Rejects unsupported scaffolded column annotations before native DDL.</summary>
+    /// <param name="useUnknownAnnotation">Whether an unsupported provider annotation is deliberately included.</param>
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -835,6 +883,7 @@ public sealed class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeMigration
         bool useUnknownAnnotation
     )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -858,6 +907,7 @@ public sealed class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeMigration
             },
             constraints: table => table.PrimaryKey($"pk_{tableName}", value => value.id));
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions(tableName), CancellationToken.None);
@@ -867,6 +917,7 @@ public sealed class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeMigration
                 ExecuteOperationsAsync(context, builder.Operations, operationToken),
             cancellationToken: CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationObservedState.Unsupported,
             Assert.Single(report.Assessments)
@@ -909,6 +960,15 @@ public sealed class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeMigration
 
 public abstract partial class MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>
+    /// Adds a table through the selected real scaffolding mode without dropping authored constraints.
+    /// </summary>
+    /// <param name="builder">The migration builder retaining the authored operation order.</param>
+    /// <param name="mode">The explicitly selected strict or legacy-convergence scaffolding mode.</param>
+    /// <param name="name">The authored object, function, or identifier name.</param>
+    /// <param name="columns">The typed callback defining the scaffolded table columns.</param>
+    /// <param name="constraints">The callback defining the table constraints after its columns exist.</param>
+    /// <typeparam name="TColumns">The typed scaffolded column builder contract.</typeparam>
     protected static OperationBuilder<SafeMigrationOperation> AddScaffoldedTable<TColumns>(
         MigrationBuilder builder,
         SafeMigrationScaffoldingMode mode,
@@ -928,6 +988,8 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
         _ => throw new ArgumentOutOfRangeException(nameof(mode), mode, "Unsupported scaffolding mode."),
     };
 
+    /// <summary>Selects the physical store type required by the declared GUID format.</summary>
+    /// <param name="format">The native GUID storage format used by the model and literal.</param>
     protected static string GuidStoreType(
         DokaMySqlGuidFormat format
     ) => format switch
@@ -940,6 +1002,9 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
 
 public abstract partial class MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Spells the supplied GUID in the native literal form required by its physical format.</summary>
+    /// <param name="format">The native GUID storage format used by the model and literal.</param>
+    /// <param name="value">The authored typed literal whose value and storage semantics must be preserved.</param>
     private protected static string GuidLiteral(
         DokaMySqlGuidFormat format,
         string value
@@ -953,11 +1018,19 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
 
 public abstract partial class MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Identifies independently invalid GUID annotation and physical mapping combinations.</summary>
     public enum UnsupportedGuidAnnotationCase
     {
+        /// <summary>Supplies an undefined provider GUID-format enumeration value.</summary>
         UndefinedValue,
+
+        /// <summary>Combines a binary GUID format with an incompatible character store type.</summary>
         BinaryWithCharStoreType,
+
+        /// <summary>Combines a character GUID format with an incompatible binary store type.</summary>
         CharWithBinaryStoreType,
+
+        /// <summary>Applies a GUID-format annotation to an incompatible CLR value type.</summary>
         NonGuidClrType,
     }
 }

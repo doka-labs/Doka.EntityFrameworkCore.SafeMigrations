@@ -31,7 +31,7 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
         };
 
         await using var context = CreateContext(settings.ConnectionString);
-        await context.Database.OpenConnectionAsync();
+        await context.Database.OpenConnectionAsync(CancellationToken.None);
         await SetEscapeModeAsync(
             context.Database.GetDbConnection(),
             noBackslashEscapes,
@@ -60,8 +60,13 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
         preflight.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
         await context.Database.CloseConnectionAsync();
-        var stored = await InsertReopenedDefaultsAsync(connectionString, cancellationToken: CancellationToken.None);
-        await context.Database.OpenConnectionAsync();
+        var stored = await InsertReopenedDefaultsAsync(
+            connectionString,
+            "persisted_defaults",
+            "value",
+            CancellationToken.None);
+
+        await context.Database.OpenConnectionAsync(CancellationToken.None);
         await SetEscapeModeAsync(
             context.Database.GetDbConnection(),
             noBackslashEscapes,
@@ -132,7 +137,7 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
         };
 
         await using var context = CreateContext(settings.ConnectionString);
-        await context.Database.OpenConnectionAsync();
+        await context.Database.OpenConnectionAsync(CancellationToken.None);
         await SetEscapeModeAsync(
             context.Database.GetDbConnection(),
             noBackslashEscapes,
@@ -187,7 +192,7 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
         };
 
         await using var context = CreateContext(settings.ConnectionString);
-        await context.Database.OpenConnectionAsync();
+        await context.Database.OpenConnectionAsync(CancellationToken.None);
         await SetEscapeModeAsync(
             context.Database.GetDbConnection(),
             noBackslashEscapes,
@@ -241,7 +246,7 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
         };
 
         await using var context = CreateContext(settings.ConnectionString);
-        await context.Database.OpenConnectionAsync();
+        await context.Database.OpenConnectionAsync(CancellationToken.None);
         await SetEscapeModeAsync(
             context.Database.GetDbConnection(),
             noBackslashEscapes,
@@ -304,7 +309,7 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
         };
 
         await using var context = CreateContext(settings.ConnectionString);
-        await context.Database.OpenConnectionAsync();
+        await context.Database.OpenConnectionAsync(CancellationToken.None);
         await SetEscapeModeAsync(
             context.Database.GetDbConnection(),
             noBackslashEscapes,
@@ -386,7 +391,11 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
             [operation],
             CancellationToken.None));
 
-        var stored = await InsertReopenedDefaultsAsync(connectionString, cancellationToken: CancellationToken.None);
+        var stored = await InsertReopenedDefaultsAsync(
+            connectionString,
+            "persisted_defaults",
+            "value",
+            CancellationToken.None);
 
         // Assert
         var assessment = Assert.Single(preflight.Assessments);
@@ -428,7 +437,7 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
         };
 
         await using var context = CreateContext(settings.ConnectionString);
-        await context.Database.OpenConnectionAsync();
+        await context.Database.OpenConnectionAsync(CancellationToken.None);
         await SetEscapeModeAsync(
             context.Database.GetDbConnection(),
             noBackslashEscapes,
@@ -481,7 +490,7 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
         };
 
         await using var context = CreateContext(settings.ConnectionString);
-        await context.Database.OpenConnectionAsync();
+        await context.Database.OpenConnectionAsync(CancellationToken.None);
         await SetEscapeModeAsync(
             context.Database.GetDbConnection(),
             noBackslashEscapes,
@@ -513,7 +522,12 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
             CancellationToken.None));
 
         await context.Database.CloseConnectionAsync();
-        var stored = await InsertReopenedDefaultsAsync(connectionString, cancellationToken: CancellationToken.None);
+        var stored = await InsertReopenedDefaultsAsync(
+            connectionString,
+            "persisted_defaults",
+            "value",
+            CancellationToken.None);
+
         var afterCatalog = await ReadDefaultCatalogAsync(connectionString, cancellationToken: CancellationToken.None);
         var unchanged = await ScalarIntAsync(
             connectionString,
@@ -555,7 +569,7 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
         };
 
         await using var context = CreateContext(settings.ConnectionString);
-        await context.Database.OpenConnectionAsync();
+        await context.Database.OpenConnectionAsync(CancellationToken.None);
         await SetEscapeModeAsync(
             context.Database.GetDbConnection(),
             noBackslashEscapes,
@@ -611,7 +625,7 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
         };
 
         await using var context = CreateContext(settings.ConnectionString);
-        await context.Database.OpenConnectionAsync();
+        await context.Database.OpenConnectionAsync(CancellationToken.None);
         await SetEscapeModeAsync(
             context.Database.GetDbConnection(),
             noBackslashEscapes,
@@ -972,7 +986,7 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
             CancellationToken.None);
 
         await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
-        var stored = await InsertReopenedDefaultsAsync(connectionString, CancellationToken.None, table, column);
+        var stored = await InsertReopenedDefaultsAsync(connectionString, table, column, CancellationToken.None);
         var postflight = await runner.VerifyAsync(
             context,
             [operation],
@@ -1023,7 +1037,7 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
-        await context.Database.OpenConnectionAsync();
+        await context.Database.OpenConnectionAsync(CancellationToken.None);
         var operation = new SafeMigrationOperation(
             new EnsureColumnIntent(
                 "persisted_defaults",
@@ -1150,7 +1164,12 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
             [operation],
             CancellationToken.None));
 
-        var stored = await InsertReopenedDefaultsAsync(connectionString, cancellationToken: CancellationToken.None);
+        var stored = await InsertReopenedDefaultsAsync(
+            connectionString,
+            "persisted_defaults",
+            "value",
+            CancellationToken.None);
+
         var afterCatalog = await ReadDefaultCatalogAsync(connectionString, cancellationToken: CancellationToken.None);
 
         // Assert
@@ -1272,7 +1291,12 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
         preflight.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, [operation], cancellationToken);
         await context.Database.CloseConnectionAsync();
-        var stored = await InsertReopenedDefaultsAsync(connectionString, cancellationToken: cancellationToken);
+        var stored = await InsertReopenedDefaultsAsync(
+            connectionString,
+            "persisted_defaults",
+            "value",
+            cancellationToken);
+
         await context.Database.OpenConnectionAsync(cancellationToken: cancellationToken);
         var connection = context.Database.GetDbConnection();
         var noBackslashEscapes = new MySqlConnectionStringBuilder(connection.ConnectionString).NoBackslashEscapes;
@@ -1328,9 +1352,9 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static async Task<string[]> InsertReopenedDefaultsAsync(
         string connectionString,
-        CancellationToken cancellationToken,
-        string table = "persisted_defaults",
-        string column = "value"
+        string table,
+        string column,
+        CancellationToken cancellationToken
     )
     {
         cancellationToken.ThrowIfCancellationRequested();

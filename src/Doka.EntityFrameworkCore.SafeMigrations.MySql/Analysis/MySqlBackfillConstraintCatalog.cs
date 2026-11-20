@@ -1,8 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql;
 
 /// <summary>Retains backfill hazards independently of complete table ownership or final schema state.</summary>
-/// <param name="constrained">Exact operation references whose backfills require NULL-free rows.</param>
-internal sealed class MySqlBackfillConstraintCatalog(HashSet<SafeMigrationOperation> constrained)
+internal sealed class MySqlBackfillConstraintCatalog
 {
     // WHY: Hazard evidence belongs to captured operation instances, not equal-looking contracts
     // from another capture. Reference identity prevents accidental proof reuse; Rebind explicitly
@@ -10,12 +9,23 @@ internal sealed class MySqlBackfillConstraintCatalog(HashSet<SafeMigrationOperat
     private static readonly MySqlBackfillConstraintCatalog s_empty = new(
         new HashSet<SafeMigrationOperation>(ReferenceEqualityComparer.Instance));
 
+    private readonly HashSet<SafeMigrationOperation> _constrained;
+
+    /// <summary>Retains exact operation identities without cloning their shared hazard evidence.</summary>
+    /// <param name="constrained">Exact operation references whose backfills require NULL-free rows.</param>
+    private MySqlBackfillConstraintCatalog(
+        HashSet<SafeMigrationOperation> constrained
+    )
+    {
+        _constrained = constrained;
+    }
+
     /// <summary>Tests whether this exact operation needs a NULL-free proof for a declared constraint.</summary>
     /// <param name="operation">The operation captured or rendered.</param>
     /// <returns>Whether a retained declaration constrains its backfill.</returns>
     internal bool RequiresNullFreeRows(
         SafeMigrationOperation operation
-    ) => constrained.Contains(operation);
+    ) => _constrained.Contains(operation);
 
     /// <summary>Transfers complete-stream evidence to exact source-bound analysis operations.</summary>
     /// <param name="originals">The original operation references in source-capture order.</param>
@@ -38,7 +48,7 @@ internal sealed class MySqlBackfillConstraintCatalog(HashSet<SafeMigrationOperat
         // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < originals.Count; index++)
         {
-            if (constrained.Contains(originals[index]))
+            if (_constrained.Contains(originals[index]))
             {
                 result.Add(rebound[index]);
             }
@@ -60,7 +70,7 @@ internal sealed class MySqlBackfillConstraintCatalog(HashSet<SafeMigrationOperat
         StringComparer? tableComparer = null
     )
     {
-        if (!operations.Any(MySqlSafeMigrationPlanCapture.RequiresAlterBackfillContract))
+        if (operations.All(static operation => !MySqlSafeMigrationPlanCapture.RequiresAlterBackfillContract(operation)))
         {
             return s_empty;
         }
@@ -69,9 +79,15 @@ internal sealed class MySqlBackfillConstraintCatalog(HashSet<SafeMigrationOperat
             new MySqlTableIdentityComparer(
                 tableComparer ?? StringComparer.Ordinal));
 
-        var hazards = new Dictionary<int, TableHazards>();
-        foreach (var operation in operations)
+        Dictionary<int, TableHazards> hazards = [];
+
+        // WHY: Index this stable list while preserving its order and ownership.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var operationIndex = 0; operationIndex < operations.Count; operationIndex++)
         {
+            var operation = operations[operationIndex];
+
             if (operation.Intent is RenameTableIntent rename)
             {
                 tables.Union(
@@ -83,23 +99,13 @@ internal sealed class MySqlBackfillConstraintCatalog(HashSet<SafeMigrationOperat
             }
         }
 
-        TableHazards For(
-            string table,
-            string? schema
-        )
+        // WHY: Index this stable list while preserving its order and ownership.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var operationIndex = 0; operationIndex < operations.Count; operationIndex++)
         {
-            var identity = tables.Resolve(MySqlTableIdentity.Create(table, schema, currentDatabase));
-            if (!hazards.TryGetValue(identity, out var result))
-            {
-                result = new TableHazards();
-                hazards.Add(identity, result);
-            }
+            var operation = operations[operationIndex];
 
-            return result;
-        }
-
-        foreach (var operation in operations)
-        {
             if (operation.Intent is RenameColumnIntent rename)
             {
                 For(rename.Table, rename.Schema)
@@ -113,8 +119,13 @@ internal sealed class MySqlBackfillConstraintCatalog(HashSet<SafeMigrationOperat
         // respect transient declarations. Retaining their alias union is
         // conservative and never pretends to prove a complete table shape.
         // All unions finish before constraint sets retain integer root IDs.
-        foreach (var operation in operations)
+        // WHY: Index this stable list while preserving its order and ownership.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var operationIndex = 0; operationIndex < operations.Count; operationIndex++)
         {
+            var operation = operations[operationIndex];
+
             switch (operation.Intent)
             {
                 case EnsureTableIntent table:
@@ -125,8 +136,13 @@ internal sealed class MySqlBackfillConstraintCatalog(HashSet<SafeMigrationOperat
                         tableHazards.Add(tablePrimary.Columns);
                     }
 
-                    foreach (var unique in table.Definition.UniqueConstraints)
+                    // WHY: Index this stable list while preserving its order and ownership.
+                    // ReSharper disable once ForCanBeConvertedToForeach
+                    // ReSharper disable once LoopCanBeConvertedToQuery
+                    for (var uniqueIndex = 0; uniqueIndex < table.Definition.UniqueConstraints.Count; uniqueIndex++)
                     {
+                        var unique = table.Definition.UniqueConstraints[uniqueIndex];
+
                         tableHazards.Add(unique.Columns);
                     }
 
@@ -148,8 +164,14 @@ internal sealed class MySqlBackfillConstraintCatalog(HashSet<SafeMigrationOperat
                     break;
                 case EnsureIndexIntent { Definition.Unique: true } index:
                     var indexHazards = For(index.Definition.Table, index.Definition.Schema);
-                    foreach (var key in index.Definition.Keys)
+
+                    // WHY: Index this stable list while preserving its order and ownership.
+                    // ReSharper disable once ForCanBeConvertedToForeach
+                    // ReSharper disable once LoopCanBeConvertedToQuery
+                    for (var keyIndex = 0; keyIndex < index.Definition.Keys.Count; keyIndex++)
                     {
+                        var key = index.Definition.Keys[keyIndex];
+
                         if (key.Column is { } column)
                         {
                             indexHazards.ConstrainedColumns.Add(indexHazards.Columns.Resolve(column));
@@ -165,8 +187,14 @@ internal sealed class MySqlBackfillConstraintCatalog(HashSet<SafeMigrationOperat
         }
 
         var constrained = new HashSet<SafeMigrationOperation>(ReferenceEqualityComparer.Instance);
-        foreach (var operation in operations)
+
+        // WHY: Index this stable list while preserving its order and ownership.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var operationIndex = 0; operationIndex < operations.Count; operationIndex++)
         {
+            var operation = operations[operationIndex];
+
             if (!MySqlSafeMigrationPlanCapture.RequiresAlterBackfillContract(operation)
                 || operation.Intent is not AlterColumnIntent alter)
             {
@@ -184,6 +212,21 @@ internal sealed class MySqlBackfillConstraintCatalog(HashSet<SafeMigrationOperat
         return constrained.Count == 0
             ? s_empty
             : new MySqlBackfillConstraintCatalog(constrained);
+
+        TableHazards For(
+            string table,
+            string? schema
+        )
+        {
+            var identity = tables.Resolve(MySqlTableIdentity.Create(table, schema, currentDatabase));
+            if (!hazards.TryGetValue(identity, out var result))
+            {
+                result = new TableHazards();
+                hazards.Add(identity, result);
+            }
+
+            return result;
+        }
     }
 
     /// <summary>Contains only constraint participation, never an inferred physical table definition.</summary>
@@ -201,8 +244,13 @@ internal sealed class MySqlBackfillConstraintCatalog(HashSet<SafeMigrationOperat
             IReadOnlyList<string> columns
         )
         {
-            foreach (var column in columns)
+            // WHY: Index this stable list while preserving its order and ownership.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var columnIndex = 0; columnIndex < columns.Count; columnIndex++)
             {
+                var column = columns[columnIndex];
+
                 ConstrainedColumns.Add(Columns.Resolve(column));
             }
         }
@@ -210,13 +258,23 @@ internal sealed class MySqlBackfillConstraintCatalog(HashSet<SafeMigrationOperat
 
     /// <summary>Bounds alias resolution with path compression and union by size.</summary>
     /// <typeparam name="T">The exact table or column identity represented by each alias.</typeparam>
-    /// <param name="comparer">The equality rules for this specific identifier domain.</param>
-    private sealed class Aliases<T>(IEqualityComparer<T> comparer)
+    private sealed class Aliases<T>
         where T : notnull
     {
-        private readonly Dictionary<T, int> _identities = new(comparer);
-        private readonly List<int> _parents = [];
-        private readonly List<int> _sizes = [];
+        private readonly Dictionary<T, int> _identities;
+        private readonly List<int> _parents;
+        private readonly List<int> _sizes;
+
+        /// <summary>Initializes identity storage before its corresponding parent and size slots.</summary>
+        /// <param name="comparer">The equality rules for this specific identifier domain.</param>
+        internal Aliases(
+            IEqualityComparer<T> comparer
+        )
+        {
+            _identities = new Dictionary<T, int>(comparer);
+            _parents = [];
+            _sizes = [];
+        }
 
         /// <summary>Creates an unseen identity or resolves its root while compressing the traversed path.</summary>
         /// <param name="value">The alias whose current root is required.</param>

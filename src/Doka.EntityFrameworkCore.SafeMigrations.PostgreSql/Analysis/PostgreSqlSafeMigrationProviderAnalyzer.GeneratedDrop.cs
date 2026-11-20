@@ -83,18 +83,19 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < operations.Count; ordinal++)
         {
-            if (operations[ordinal].Intent is DropColumnIntent
-                && results[ordinal].Code == "generated_column_drop_dependency")
+            switch (operations[ordinal].Intent)
             {
-                (captured ??= new HashSet<SafeMigrationOperation>(ReferenceEqualityComparer.Instance))
-                    .Add(operations[ordinal]);
-            }
-            else if (operations[ordinal].Intent is DropColumnIntent
-                && results[ordinal].ObservedState == SafeMigrationObservedState.Unsupported
-                && results[ordinal].Code == "generated_column_drop_unproven")
-            {
-                (capabilities ??= new HashSet<SafeMigrationOperation>(ReferenceEqualityComparer.Instance))
-                    .Add(operations[ordinal]);
+                case DropColumnIntent when results[ordinal].Code == "generated_column_drop_dependency":
+                    (captured ??= new HashSet<SafeMigrationOperation>(ReferenceEqualityComparer.Instance))
+                        .Add(operations[ordinal]);
+
+                    break;
+                case DropColumnIntent when results[ordinal].ObservedState == SafeMigrationObservedState.Unsupported
+                    && results[ordinal].Code == "generated_column_drop_unproven":
+                    (capabilities ??= new HashSet<SafeMigrationOperation>(ReferenceEqualityComparer.Instance))
+                        .Add(operations[ordinal]);
+
+                    break;
             }
         }
 

@@ -1,9 +1,90 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
+/// <summary>
+/// Pins every defined policy-table input and invalid-enum rejection against an independently declared decision oracle.
+/// </summary>
 public sealed class SafeMigrationDecisionPlannerTests
 {
-    [Fact]
-    public void Planner_ProducesExpectedDecisionForEveryDefinedInputCombination()
+    /// <summary>Matches the independent planner oracle for every defined input tuple.</summary>
+    /// <param name="kind">The operation family.</param>
+    /// <param name="state">The observed catalog state.</param>
+    /// <param name="policy">The authored migration policy.</param>
+    /// <param name="repair">The separately established repair capability.</param>
+    [Theory]
+    [MemberData(nameof(DefinedInputCombinations))]
+    public void Planner_ProducesExpectedDecisionForEveryDefinedInputCombination(
+        SafeMigrationOperationKind kind,
+        SafeMigrationObservedState state,
+        SafeMigrationPolicy policy,
+        SafeMigrationRepairCapability repair
+    )
+    {
+        // Arrange
+        var expected = ExpectedDecision(kind, state, policy, repair);
+
+        // Act
+        var decision = SafeMigrationDecisionPlanner.Plan(kind, state, policy, repair);
+
+        // Assert
+        Assert.Equal(expected.Action, decision.Action);
+        Assert.Equal(expected.Code, decision.Code);
+    }
+
+    /// <summary>Rejects each terminal failure independently of operation family and policy.</summary>
+    /// <param name="kind">The operation family.</param>
+    /// <param name="policy">The authored migration policy.</param>
+    /// <param name="state">The terminal failure state.</param>
+    /// <param name="expected">The exact required rejection action.</param>
+    [Theory]
+    [MemberData(nameof(TerminalFailureInputs))]
+    public void TerminalFailureStates_AlwaysReject(
+        SafeMigrationOperationKind kind,
+        SafeMigrationPolicy policy,
+        SafeMigrationObservedState state,
+        SafeMigrationAction expected
+    )
+    {
+        // Arrange: The theory supplies the terminal state and exact expected action.
+
+        // Act
+        var decision = SafeMigrationDecisionPlanner.Plan(kind, state, policy);
+
+        // Assert
+        Assert.Equal(expected, decision.Action);
+    }
+
+    /// <summary>Requires both an explicit repair policy and independently proven repair capability.</summary>
+    /// <param name="policy">The authored migration policy.</param>
+    /// <param name="repair">The established repair capability.</param>
+    /// <param name="expected">The exact planner action.</param>
+    [Theory]
+    [InlineData(SafeMigrationPolicy.RepairIfSafe, SafeMigrationRepairCapability.Safe, SafeMigrationAction.Repair)]
+    [InlineData(SafeMigrationPolicy.RepairIfSafe,
+        SafeMigrationRepairCapability.None,
+        SafeMigrationAction.RejectDifferent)]
+    [InlineData(SafeMigrationPolicy.ThrowIfDifferent,
+        SafeMigrationRepairCapability.Safe,
+        SafeMigrationAction.RejectDifferent)]
+    public void RepairRequiresExplicitPolicyAndProvenCapability(
+        SafeMigrationPolicy policy,
+        SafeMigrationRepairCapability repair,
+        SafeMigrationAction expected
+    )
+    {
+        // Arrange
+        const SafeMigrationOperationKind kind = SafeMigrationOperationKind.EnsureColumn;
+        const SafeMigrationObservedState state = SafeMigrationObservedState.Different;
+
+        // Act
+        var decision = SafeMigrationDecisionPlanner.Plan(kind, state, policy, repair);
+
+        // Assert
+        Assert.Equal(expected, decision.Action);
+    }
+
+    /// <summary>Enumerates every originally covered planner tuple as a discoverable independent case.</summary>
+    /// <returns>The complete operation, state, policy and repair Cartesian product.</returns>
+    public static IEnumerable<object[]> DefinedInputCombinations()
     {
         foreach (var kind in Enum.GetValues<SafeMigrationOperationKind>())
         {
@@ -13,115 +94,113 @@ public sealed class SafeMigrationDecisionPlannerTests
                 {
                     foreach (var repair in Enum.GetValues<SafeMigrationRepairCapability>())
                     {
-                        var expected = ExpectedDecision(kind, state, policy, repair);
-                        var decision = SafeMigrationDecisionPlanner.Plan(kind, state, policy, repair);
-
-                        Assert.Equal(expected.Action, decision.Action);
-                        Assert.Equal(expected.Code, decision.Code);
+                        yield return [kind, state, policy, repair];
                     }
                 }
             }
         }
     }
 
-    [Fact]
-    public void TerminalFailureStates_AlwaysReject()
+    /// <summary>Enumerates the complete terminal-failure matrix with exact rejection actions.</summary>
+    /// <returns>Every operation and policy paired with each terminal failure and expected rejection.</returns>
+    public static IEnumerable<object[]> TerminalFailureInputs()
     {
         foreach (var kind in Enum.GetValues<SafeMigrationOperationKind>())
         {
             foreach (var policy in Enum.GetValues<SafeMigrationPolicy>())
             {
-                Assert.Equal(
+                yield return
+                [
+                    kind, policy, SafeMigrationObservedState.Unsupported,
                     SafeMigrationAction.RejectUnsupported,
-                    SafeMigrationDecisionPlanner.Plan(kind, SafeMigrationObservedState.Unsupported, policy)
-                        .Action);
+                ];
 
-                Assert.Equal(
+                yield return
+                [
+                    kind, policy, SafeMigrationObservedState.DataBlocked,
                     SafeMigrationAction.RejectDataBlocked,
-                    SafeMigrationDecisionPlanner.Plan(kind, SafeMigrationObservedState.DataBlocked, policy)
-                        .Action);
+                ];
 
-                Assert.Equal(
+                yield return
+                [
+                    kind, policy, SafeMigrationObservedState.PrerequisiteMissing,
                     SafeMigrationAction.RejectPrerequisiteMissing,
-                    SafeMigrationDecisionPlanner.Plan(kind, SafeMigrationObservedState.PrerequisiteMissing, policy)
-                        .Action);
+                ];
             }
         }
     }
 
-    [Fact]
-    public void RepairRequiresExplicitPolicyAndProvenCapability()
-    {
-        Assert.Equal(
-            SafeMigrationAction.Repair,
-            SafeMigrationDecisionPlanner.Plan(
-                    SafeMigrationOperationKind.EnsureColumn,
-                    SafeMigrationObservedState.Different,
-                    SafeMigrationPolicy.RepairIfSafe,
-                    SafeMigrationRepairCapability.Safe)
-                .Action);
-
-        Assert.Equal(
-            SafeMigrationAction.RejectDifferent,
-            SafeMigrationDecisionPlanner.Plan(
-                    SafeMigrationOperationKind.EnsureColumn,
-                    SafeMigrationObservedState.Different,
-                    SafeMigrationPolicy.RepairIfSafe)
-                .Action);
-
-        Assert.Equal(
-            SafeMigrationAction.RejectDifferent,
-            SafeMigrationDecisionPlanner.Plan(
-                    SafeMigrationOperationKind.EnsureColumn,
-                    SafeMigrationObservedState.Different,
-                    SafeMigrationPolicy.ThrowIfDifferent,
-                    SafeMigrationRepairCapability.Safe)
-                .Action);
-    }
-
+    /// <summary>Rejects an undefined operationKind before producing a decision.</summary>
     [Fact]
     public void Planner_RejectsUndefinedOperationKind()
     {
-        var exception = Assert.Throws<ArgumentOutOfRangeException>(() => SafeMigrationDecisionPlanner.Plan(
+        // Arrange: The operation below supplies one invalid enum component.
+
+        // Act
+        var exception = Record.Exception(() => SafeMigrationDecisionPlanner.Plan(
             (SafeMigrationOperationKind)(-1),
             SafeMigrationObservedState.Missing,
             SafeMigrationPolicy.ExistenceOnly));
 
-        Assert.Equal("operationKind", exception.ParamName);
+        // Assert
+        Assert.Equal("operationKind",
+            Assert.IsType<ArgumentOutOfRangeException>(exception)
+                .ParamName);
     }
 
+    /// <summary>Rejects an undefined observedState before producing a decision.</summary>
     [Fact]
     public void Planner_RejectsUndefinedObservedState()
     {
-        var exception = Assert.Throws<ArgumentOutOfRangeException>(() => SafeMigrationDecisionPlanner.Plan(
+        // Arrange: The operation below supplies one invalid enum component.
+
+        // Act
+        var exception = Record.Exception(() => SafeMigrationDecisionPlanner.Plan(
             SafeMigrationOperationKind.EnsureTable,
             (SafeMigrationObservedState)(-1),
             SafeMigrationPolicy.ExistenceOnly));
 
-        Assert.Equal("observedState", exception.ParamName);
+        // Assert
+        Assert.Equal("observedState",
+            Assert.IsType<ArgumentOutOfRangeException>(exception)
+                .ParamName);
     }
 
+    /// <summary>Rejects an undefined policy before producing a decision.</summary>
     [Fact]
     public void Planner_RejectsUndefinedPolicy()
     {
-        var exception = Assert.Throws<ArgumentOutOfRangeException>(() => SafeMigrationDecisionPlanner.Plan(
+        // Arrange: The operation below supplies one invalid enum component.
+
+        // Act
+        var exception = Record.Exception(() => SafeMigrationDecisionPlanner.Plan(
             SafeMigrationOperationKind.EnsureTable,
             SafeMigrationObservedState.Missing,
             (SafeMigrationPolicy)(-1)));
 
-        Assert.Equal("policy", exception.ParamName);
+        // Assert
+        Assert.Equal("policy",
+            Assert.IsType<ArgumentOutOfRangeException>(exception)
+                .ParamName);
     }
 
+    /// <summary>Rejects an undefined repairCapability before producing a decision.</summary>
     [Fact]
     public void Planner_RejectsUndefinedRepairCapability()
     {
-        var exception = Assert.Throws<ArgumentOutOfRangeException>(() => SafeMigrationDecisionPlanner.Plan(
+        // Arrange: The operation below supplies one invalid enum component.
+
+        // Act
+        var exception = Record.Exception(() => SafeMigrationDecisionPlanner.Plan(
             SafeMigrationOperationKind.EnsureTable,
             SafeMigrationObservedState.Missing,
             SafeMigrationPolicy.ExistenceOnly,
             (SafeMigrationRepairCapability)(-1)));
 
-        Assert.Equal("repairCapability", exception.ParamName);
+        // Assert
+        Assert.Equal("repairCapability",
+            Assert.IsType<ArgumentOutOfRangeException>(exception)
+                .ParamName);
     }
 
     private static (SafeMigrationAction Action, string Code) ExpectedDecision(

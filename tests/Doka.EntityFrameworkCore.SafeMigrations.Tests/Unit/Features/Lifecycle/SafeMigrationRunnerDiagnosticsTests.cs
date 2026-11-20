@@ -130,6 +130,8 @@ public sealed class SafeMigrationRunnerDiagnosticsTests
             postflight
                 ? SafeMigrationReportMode.Postflight
                 : SafeMigrationReportMode.Preflight,
+            postconditionsSatisfied: true,
+            capturedAnalysis: null,
             cancellationToken: CancellationToken.None);
 
         using var document = JsonDocument.Parse(SafeMigrationReportJson.SerializeToUtf8Bytes(report));
@@ -189,6 +191,8 @@ public sealed class SafeMigrationRunnerDiagnosticsTests
             operations,
             migrationIds,
             SafeMigrationReportMode.Preflight,
+            postconditionsSatisfied: true,
+            capturedAnalysis: null,
             cancellationToken: CancellationToken.None);
 
         var text = SafeMigrationReportText.Format(report, SafeMigrationReportSelection.NonMatching);
@@ -223,6 +227,8 @@ public sealed class SafeMigrationRunnerDiagnosticsTests
             operations,
             migrationIds: null,
             SafeMigrationReportMode.Preflight,
+            postconditionsSatisfied: true,
+            capturedAnalysis: null,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -250,6 +256,7 @@ public sealed class SafeMigrationRunnerDiagnosticsTests
             ["202610140001_Target"],
             SafeMigrationReportMode.Postflight,
             postconditionsSatisfied: false,
+            capturedAnalysis: null,
             cancellationToken: CancellationToken.None);
 
         var text = SafeMigrationReportText.Format(report);
@@ -298,6 +305,7 @@ public sealed class SafeMigrationRunnerDiagnosticsTests
             operations,
             ["202610140001_Target"],
             SafeMigrationReportMode.Preflight,
+            postconditionsSatisfied: true,
             capturedAnalysis: providerAnalysis,
             cancellationToken: CancellationToken.None);
 
@@ -349,6 +357,8 @@ public sealed class SafeMigrationRunnerDiagnosticsTests
             operations,
             ["202610140001_Target"],
             SafeMigrationReportMode.Postflight,
+            postconditionsSatisfied: true,
+            capturedAnalysis: null,
             cancellationToken: CancellationToken.None);
 
         var text = SafeMigrationReportText.Format(report, SafeMigrationReportSelection.Complete);
@@ -388,14 +398,14 @@ public sealed class SafeMigrationRunnerDiagnosticsTests
         IReadOnlyList<MigrationOperation> operations,
         List<string>? migrationIds,
         SafeMigrationReportMode mode,
-        CancellationToken cancellationToken,
-        bool postconditionsSatisfied = true,
-        SafeMigrationProviderAnalysis? capturedAnalysis = null
+        bool postconditionsSatisfied,
+        SafeMigrationProviderAnalysis? capturedAnalysis,
+        CancellationToken cancellationToken
     )
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        using var context = new DbContext(new DbContextOptionsBuilder().Options);
+        await using var context = new DbContext(new DbContextOptionsBuilder().Options);
         var runner = new SafeMigrationRunner(new CapturedAnalyzer(postconditionsSatisfied, capturedAnalysis));
         var method = typeof(SafeMigrationRunner).GetMethod(
             "AnalyzeOperationsAsync",
@@ -417,11 +427,23 @@ public sealed class SafeMigrationRunnerDiagnosticsTests
     }
 
     /// <summary>Returns fixed captured evidence; it performs no I/O or fabricated projection inference.</summary>
-    private sealed class CapturedAnalyzer(
-        bool postconditionsSatisfied,
-        SafeMigrationProviderAnalysis? capturedAnalysis
-    ) : ISafeMigrationProviderAnalyzer
+    private sealed class CapturedAnalyzer : ISafeMigrationProviderAnalyzer
     {
+        private readonly SafeMigrationProviderAnalysis? _capturedAnalysis;
+        private readonly bool _postconditionsSatisfied;
+
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="postconditionsSatisfied">The supplied postconditions satisfied for this fixture.</param>
+        /// <param name="capturedAnalysis">The supplied captured analysis for this fixture.</param>
+        public CapturedAnalyzer(
+            bool postconditionsSatisfied,
+            SafeMigrationProviderAnalysis? capturedAnalysis
+        )
+        {
+            _postconditionsSatisfied = postconditionsSatisfied;
+            _capturedAnalysis = capturedAnalysis;
+        }
+
         /// <inheritdoc />
         public string ProviderId => "doka_mysql";
 
@@ -450,11 +472,11 @@ public sealed class SafeMigrationRunnerDiagnosticsTests
         ) => Task.FromResult<IReadOnlyList<SafeMigrationProviderAnalysis>>(
             operations
                 .Select(_ =>
-                    capturedAnalysis
+                    _capturedAnalysis
                     ?? new SafeMigrationProviderAnalysis(
                         SafeMigrationObservedState.Matching,
                         SafeMigrationRepairCapability.None,
-                        postconditionsSatisfied,
+                        _postconditionsSatisfied,
                         "classified_matching"))
                 .ToArray());
 

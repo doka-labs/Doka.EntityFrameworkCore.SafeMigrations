@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations;
 
 /// <summary>Represents ensuring a unique constraint exists.</summary>
+[PublicAPI]
 public sealed class EnsureUniqueConstraintIntent : SafeMigrationIntent
 {
     /// <summary>Initializes the intent.</summary>
@@ -22,6 +23,7 @@ public sealed class EnsureUniqueConstraintIntent : SafeMigrationIntent
 }
 
 /// <summary>Represents dropping a unique constraint when it exists.</summary>
+[PublicAPI]
 public sealed class DropUniqueConstraintIntent : SafeMigrationIntent
 {
     /// <summary>Initializes the intent.</summary>

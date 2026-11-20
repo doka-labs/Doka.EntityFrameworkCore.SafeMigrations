@@ -186,15 +186,27 @@ public sealed class SafeMigrationPostflightSharedIndexIdentityTests
     };
 
     /// <summary>Certifies only native namespace/member identity, never key shape or row safety.</summary>
-    private sealed class SharedIndexIdentityContract(
-        bool shared,
-        bool insensitive
-    ) :
+    private sealed class SharedIndexIdentityContract :
         ISafeMigrationProviderObjectIdentityNormalizer,
         ISafeMigrationProjectedKeyAnalyzer
     {
+        private readonly bool _insensitive;
+        private readonly bool _shared;
+
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="shared">The supplied shared for this fixture.</param>
+        /// <param name="insensitive">The supplied insensitive for this fixture.</param>
+        public SharedIndexIdentityContract(
+            bool shared,
+            bool insensitive
+        )
+        {
+            _shared = shared;
+            _insensitive = insensitive;
+        }
+
         /// <inheritdoc />
-        public bool SharesUniqueConstraintAndIndexIdentity => shared;
+        public bool SharesUniqueConstraintAndIndexIdentity => _shared;
 
         /// <inheritdoc />
         public SafeMigrationProviderAnalysis ValidateProjectedIndex(
@@ -224,7 +236,7 @@ public sealed class SafeMigrationPostflightSharedIndexIdentityTests
         public StringComparer IdentifierComparer => StringComparer.Ordinal;
 
         /// <inheritdoc />
-        public StringComparer IndexIdentifierComparer => insensitive
+        public StringComparer IndexIdentifierComparer => _insensitive
             ? StringComparer.OrdinalIgnoreCase
             : StringComparer.Ordinal;
 

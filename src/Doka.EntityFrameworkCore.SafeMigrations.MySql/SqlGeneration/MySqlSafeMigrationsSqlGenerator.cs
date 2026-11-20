@@ -72,6 +72,9 @@ internal sealed class MySqlSafeMigrationsSqlGenerator : IMigrationsSqlGenerator
 
             // WHY: The native scoped command remains the execution owner.
             // A shared empty base command avoids duplicating every SQL payload.
+            // WHY: Retain fluent materialization and its existing snapshot
+            // ownership rather than replacing this boundary with a spread.
+            // ReSharper disable once UseCollectionExpression
             decorated ??= commands.ToArray();
             metadataCommand ??= dependencies
                 .CommandBuilderFactory

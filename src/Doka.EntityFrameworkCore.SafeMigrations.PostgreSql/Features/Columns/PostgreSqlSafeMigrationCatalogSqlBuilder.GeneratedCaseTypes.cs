@@ -86,8 +86,12 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
 
         if (inputs.Comparisons is not null)
         {
-            foreach (var (left, right) in inputs.Comparisons)
+            // WHY: This pass only reads the stable ordered collection by ordinal.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var comparisonIndex = 0; comparisonIndex < inputs.Comparisons.Count; comparisonIndex++)
             {
+                var (left, right) = inputs.Comparisons[comparisonIndex];
                 var first = sourceType(owner.Table!, owner.Schema, left);
                 var second = sourceType(owner.Table!, owner.Schema, right);
                 if (first is null
@@ -116,8 +120,12 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         IReadOnlyList<ExpectedColumnDefinition> definitions
     )
     {
-        foreach (var definition in definitions)
+        // WHY: This pass only reads the stable ordered collection by ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var definitionIndex = 0; definitionIndex < definitions.Count; definitionIndex++)
         {
+            var definition = definitions[definitionIndex];
             if (definition.ComputedExpression is not { } expression
                 || (!ContainsGeneratedCase(expression) && !RequiresCapturedOperandBinding(definition)))
             {
@@ -256,8 +264,13 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
 
             if (inputs.Comparisons is not null)
             {
-                foreach (var (left, right) in inputs.Comparisons)
+                // WHY: This pass only reads the stable ordered collection by ordinal.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
+                for (var comparisonIndex = 0; comparisonIndex < inputs.Comparisons.Count; comparisonIndex++)
                 {
+                    var (left, right) = inputs.Comparisons[comparisonIndex];
+
                     // WHY: Two unresolved identifiers have no literal which
                     // chooses an operator family. Prove the actual pair instead
                     // of independently accepting two unrelated builtin types.
@@ -286,6 +299,10 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 .Where(static item => item.Category == GeneratedCaseCategory.Text)
                 .Select(static item => item.Name)
                 .Distinct(StringComparer.Ordinal)
+
+                // WHY: Keep explicit fluent materialization and its existing
+                // ownership/evaluation boundary instead of an implicit spread.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray();
 
             if (textInputs.Length > 1)
@@ -358,8 +375,12 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             _ => Array.Empty<ExpectedColumnDefinition>(),
         };
 
-        foreach (var column in columns)
+        // WHY: This pass only reads the stable ordered collection by ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var columnIndex = 0; columnIndex < columns.Count; columnIndex++)
         {
+            var column = columns[columnIndex];
             if (column.ComputedExpression is { } expression
                 && (ContainsGeneratedCase(expression) || RequiresCapturedOperandBinding(column)))
             {
@@ -374,8 +395,12 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             _ => Array.Empty<ExpectedCheckConstraintDefinition>(),
         };
 
-        foreach (var check in checks)
+        // WHY: This pass only reads the stable ordered collection by ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var checkIndex = 0; checkIndex < checks.Count; checkIndex++)
         {
+            var check = checks[checkIndex];
             if (check.Expression is { } expression
                 && ContainsGeneratedCase(expression))
             {
@@ -398,8 +423,12 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             ? ownerTable.Definition.CheckConstraints
             : [((EnsureCheckConstraintIntent)intent).Definition];
 
-        foreach (var check in checks)
+        // WHY: This pass only reads the stable ordered collection by ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var checkIndex = 0; checkIndex < checks.Count; checkIndex++)
         {
+            var check = checks[checkIndex];
             if (check.CapturedSql is { } source
                 && !SafeMigrationSqlExpressionParser.IsCapturedSourceDialectCompatible(source, '"'))
             {
@@ -677,8 +706,12 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 var listCategory = InferGeneratedCaseCategory(list.Operand, declared);
                 if (listCategory == GeneratedCaseCategory.Unknown)
                 {
-                    foreach (var value in list.Values)
+                    // WHY: This pass only reads the stable ordered collection by ordinal.
+                    // ReSharper disable once ForCanBeConvertedToForeach
+                    // ReSharper disable once LoopCanBeConvertedToQuery
+                    for (var valueIndex = 0; valueIndex < list.Values.Count; valueIndex++)
                     {
+                        var value = list.Values[valueIndex];
                         listCategory = InferGeneratedCaseCategory(value, declared);
                         if (listCategory != GeneratedCaseCategory.Unknown)
                         {
@@ -893,6 +926,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         GeneratedCaseCategory.Text => "25, 1042, 1043",
         GeneratedCaseCategory.Uuid => "2950",
         GeneratedCaseCategory.Any => "16, 20, 21, 23, 25, 700, 701, 1042, 1043, 1700, 2950",
+        GeneratedCaseCategory.Unknown => throw new UnreachableException(),
         _ => throw new UnreachableException(),
     };
 
@@ -947,16 +981,27 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         || (first.TypeOid == second.TypeOid && first.TypeOid is 16 or 2950);
 
     /// <summary>Keeps sibling position and contextual type without modifying immutable public expressions.</summary>
-    private struct GeneratedCaseOperandFrame(
-        SafeMigrationSqlExpression expression,
-        GeneratedCaseCategory category,
-        bool compareIdentifiers = false
-    )
+    private struct GeneratedCaseOperandFrame
     {
-        internal readonly SafeMigrationSqlExpression Expression = expression;
-        internal readonly GeneratedCaseCategory Category = category;
-        internal readonly bool CompareIdentifiers = compareIdentifiers;
+        internal readonly SafeMigrationSqlExpression Expression;
+        internal readonly GeneratedCaseCategory Category;
+        internal readonly bool CompareIdentifiers;
         internal int NextChild;
+
+        /// <summary>Begins a mutable traversal frame with the original immutable operand facts.</summary>
+        /// <param name="expression">The expression whose children will be visited.</param>
+        /// <param name="category">The contextual native type family.</param>
+        /// <param name="compareIdentifiers">Whether identifier operands require pairwise comparison.</param>
+        internal GeneratedCaseOperandFrame(
+            SafeMigrationSqlExpression expression,
+            GeneratedCaseCategory category,
+            bool compareIdentifiers = false
+        )
+        {
+            Expression = expression;
+            Category = category;
+            CompareIdentifiers = compareIdentifiers;
+        }
     }
 
     /// <summary>Retains first-known CASE result selection without allocating one frame per result branch.</summary>

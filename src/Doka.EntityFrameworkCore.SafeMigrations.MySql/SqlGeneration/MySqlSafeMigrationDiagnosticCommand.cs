@@ -6,7 +6,9 @@ internal sealed class MySqlSafeMigrationDiagnosticCommand : MigrationCommand
     private readonly MySqlSafeMigrationRuntimeDiagnostic _diagnostic;
 
     /// <summary>Retains scoped native execution instead of copying its body into an ordinary EF command.</summary>
-    /// <param name="original">The native command whose resource and transaction ownership remains authoritative.</param>
+    /// <param name="original">
+    /// The native command whose resource and transaction ownership remains authoritative.
+    /// </param>
     /// <param name="diagnostic">The bounded authored operation and correlation.</param>
     /// <param name="dependencies">The existing EF metadata services.</param>
     /// <param name="metadataCommand">A shared empty base command, not a copy of the native SQL.</param>

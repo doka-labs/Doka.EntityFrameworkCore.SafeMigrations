@@ -5,6 +5,9 @@
     <ArtifactsPath>$(MSBuildThisFileDirectory)artifacts</ArtifactsPath>
     <IncludeProjectNameInArtifactsPaths>true</IncludeProjectNameInArtifactsPaths>
     <UseArtifactsIntermediateOutput>true</UseArtifactsIntermediateOutput>
+    <!-- WHY: Legacy local outputs and BDN-generated child sources must not enter
+         SDK default globs when the repository uses centralized artifact output. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);**/bin/**;**/obj/**;**/BenchmarkDotNet.Artifacts/**</DefaultItemExcludes>
   </PropertyGroup>
 
   <PropertyGroup Label="Compiler and analysis">
@@ -18,6 +21,10 @@
   </PropertyGroup>
 
   <PropertyGroup Label="Dependency restore and audit">
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <!-- WHY: Repository execution projects also need reviewed transitive graphs.
+         Shipping projects disable promotion and declare their owning floors. -->
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
     <NuGetAudit>true</NuGetAudit>
     <NuGetAuditMode>all</NuGetAuditMode>
     <NuGetAuditLevel>low</NuGetAuditLevel>
@@ -29,6 +36,12 @@
 
   <PropertyGroup Label="CI and release isolation">
     <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+    <!-- WHY: Evaluate after CI identity. RID restores and isolated package/profile
+         creation have distinct graphs; their callers explicitly lock the second restore. -->
+    <RestoreLockedMode
+      Condition="'$(ContinuousIntegrationBuild)' == 'true'
+                 And '$(RuntimeIdentifier)' == ''
+                 And '$(SafeMigrationsPackageConsumerMode)' != 'Package'">true</RestoreLockedMode>
     <!-- WHY: Evaluate after the GitHub CI flag so inherited developer exceptions
          cannot silently weaken workflow or explicit release qualification. -->
     <WarningsNotAsErrors Condition="'$(ContinuousIntegrationBuild)' == 'true'" />
@@ -36,6 +49,7 @@
 
   <PropertyGroup Label="Project defaults">
     <IsPackable>false</IsPackable>
+    <IsTestProject>false</IsTestProject>
     <!-- WHY: Publishable source projects enable their public XML documentation separately. -->
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>

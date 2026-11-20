@@ -7,70 +7,50 @@ public sealed class SqlServerManagedValueRepresentationTests
         + "User ID=sa;Password=unused;TrustServerCertificate=True";
 
     /// <summary>Gets documented positive and negative temporal and numeric representability boundaries.</summary>
-    public static IEnumerable<object[]> DomainCases()
+    public static TheoryData<string, string, bool> DomainCases() => new()
     {
-        yield return ["datetime", DateTime.MinValue, false];
-        yield return ["datetime", new DateTime(1753, 1, 1), true];
-        yield return
-        [
-            "datetime", new DateTime(
-                9999,
-                12,
-                31,
-                23,
-                59,
-                59,
-                997),
-            true,
-        ];
-
-        yield return ["datetime", DateTime.MaxValue, false];
-        yield return ["smalldatetime", new DateTime(1899, 12, 31), false];
-        yield return ["smalldatetime", new DateTime(1900, 1, 1), true];
-        yield return
-        [
-            "smalldatetime", new DateTime(
-                2079,
-                6,
-                6,
-                23,
-                59,
-                29,
-                998),
-            true,
-        ];
-
-        yield return ["smalldatetime", new DateTime(2079, 6, 6, 23, 59, 30), false];
-        yield return ["datetime2(7)", DateTime.MinValue, true];
-        yield return ["datetime2(7)", DateTime.MaxValue, true];
-        yield return ["datetime2(3)", DateTime.MaxValue, false];
-        yield return ["date", DateOnly.MinValue, true];
-        yield return ["time(7)", TimeSpan.FromHours(-1), false];
-        yield return ["time(7)", TimeSpan.FromDays(1), false];
-        yield return ["time(7)", TimeSpan.Zero, true];
-        yield return ["tinyint", 255, true];
-        yield return ["tinyint", 256, false];
-        yield return ["decimal(3,2)", 9.994m, true];
-        yield return ["decimal(3,2)", 9.995m, false];
-        yield return ["money", 922337203685477.5807m, true];
-        yield return ["money", 922337203685477.5808m, false];
-        yield return ["real", double.MaxValue, false];
-        yield return ["float", double.NaN, false];
-        yield return ["float", double.PositiveInfinity, false];
-        yield return ["float", 1.5d, true];
-    }
+        { "datetime", "date-min", false },
+        { "datetime", "datetime-lower", true },
+        { "datetime", "datetime-upper", true },
+        { "datetime", "date-max", false },
+        { "smalldatetime", "smalldatetime-underflow", false },
+        { "smalldatetime", "smalldatetime-lower", true },
+        { "smalldatetime", "smalldatetime-upper", true },
+        { "smalldatetime", "smalldatetime-overflow", false },
+        { "datetime2(7)", "date-min", true },
+        { "datetime2(7)", "date-max", true },
+        { "datetime2(3)", "date-max", false },
+        { "date", "date-only-min", true },
+        { "time(7)", "time-negative", false },
+        { "time(7)", "time-day", false },
+        { "time(7)", "time-zero", true },
+        { "tinyint", "byte-max", true },
+        { "tinyint", "byte-overflow", false },
+        { "decimal(3,2)", "decimal-rounded-fit", true },
+        { "decimal(3,2)", "decimal-rounded-overflow", false },
+        { "money", "money-max", true },
+        { "money", "money-overflow", false },
+        { "real", "double-max", false },
+        { "float", "nan", false },
+        { "float", "infinity", false },
+        { "float", "finite", true },
+    };
 
     /// <summary>Rejects known scalar overflows while preserving valid minimum and rounded boundary values.</summary>
+    /// <param name="storeType">The native destination domain.</param>
+    /// <param name="source">The serializable identity of the exact CLR boundary value.</param>
+    /// <param name="expected">Whether the scalar is representable in the native domain.</param>
     [Theory]
     [MemberData(nameof(DomainCases))]
     public void ScalarDomain_UsesBuiltInSqlServerRanges(
         string storeType,
-        object value,
+        string source,
         bool expected
     )
     {
         // Arrange
-        var candidate = value;
+        // WHY: Primitive case identities are discoverable without serializing heterogeneous boxed CLR values.
+        var candidate = DomainValue(source);
 
         // Act
         var representable = SqlServerSafeMigrationCatalogSqlBuilder.IsManagedValueRepresentable(candidate, storeType);
@@ -78,6 +58,38 @@ public sealed class SqlServerManagedValueRepresentationTests
         // Assert
         Assert.Equal(expected, representable);
     }
+
+    /// <summary>Creates the exact CLR type and value identified by one discoverable scalar case.</summary>
+    /// <param name="source">The closed synthetic case identity.</param>
+    /// <returns>The original scalar boundary value, retaining its CLR representation.</returns>
+    private static object DomainValue(
+        string source
+    ) => source switch
+    {
+        "date-min" => DateTime.MinValue,
+        "date-max" => DateTime.MaxValue,
+        "datetime-lower" => new DateTime(1753, 1, 1),
+        "datetime-upper" => new DateTime(9999, 12, 31, 23, 59, 59, 997),
+        "smalldatetime-underflow" => new DateTime(1899, 12, 31),
+        "smalldatetime-lower" => new DateTime(1900, 1, 1),
+        "smalldatetime-upper" => new DateTime(2079, 6, 6, 23, 59, 29, 998),
+        "smalldatetime-overflow" => new DateTime(2079, 6, 6, 23, 59, 30),
+        "date-only-min" => DateOnly.MinValue,
+        "time-negative" => TimeSpan.FromHours(-1),
+        "time-day" => TimeSpan.FromDays(1),
+        "time-zero" => TimeSpan.Zero,
+        "byte-max" => 255,
+        "byte-overflow" => 256,
+        "decimal-rounded-fit" => 9.994m,
+        "decimal-rounded-overflow" => 9.995m,
+        "money-max" => 922337203685477.5807m,
+        "money-overflow" => 922337203685477.5808m,
+        "double-max" => double.MaxValue,
+        "nan" => double.NaN,
+        "infinity" => double.PositiveInfinity,
+        "finite" => 1.5d,
+        _ => throw new ArgumentOutOfRangeException(nameof(source)),
+    };
 
     /// <summary>
     /// Unrepresentable authored dates become invariant Unsupported before any CAST-bearing plan is generated.

@@ -23,8 +23,8 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
         var probes = ManagedProbes(operations);
 
         // Assert
-        var rebound = Assert.IsAssignableFrom<ModelManagedDataIntent>(Assert.Single(probes!)
-            .Operation.Intent);
+        var rebound = Assert.IsType<ModelManagedDataIntent>(Assert.Single(probes!)
+            .Operation.Intent, exactMatch: false);
 
         Assert.Equal(["source"], rebound.KeyColumns);
         Assert.Contains("renamed_payload", rebound.Columns);

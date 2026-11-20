@@ -160,7 +160,7 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
 
         if (liveAnalysis.ObservedState == SafeMigrationObservedState.Unsupported
             && operation.Intent is EnsureForeignKeyIntent foreignKey
-            && _livePrerequisiteSource?.CanRequalifyLiveForeignKeyPrerequisites(foreignKey, liveAnalysis, this) == true)
+            && _livePrerequisiteSource?.CanRequalifyLiveForeignKeyPrerequisites(foreignKey, liveAnalysis) == true)
         {
             // WHY: An exact accepted removal can discharge a dynamic native
             // capability blocker. It proves neither the reference key nor rows;
@@ -174,7 +174,7 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
 
         if (liveAnalysis.ObservedState == SafeMigrationObservedState.Unsupported
             && operation.Intent is DropIndexIntent dropIndex
-            && _livePrerequisiteSource?.CanRequalifyLiveDropIndexPrerequisites(dropIndex, liveAnalysis, this) == true)
+            && _livePrerequisiteSource?.CanRequalifyLiveDropIndexPrerequisites(dropIndex, liveAnalysis) == true)
         {
             // WHY: Only certified removal of every affected physical dependency
             // discharges this native index-removal blocker. Presence is a metadata
@@ -229,8 +229,7 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
 
         var projectedAnalysis = operation.Intent switch
         {
-            EnsureSchemaIntent value => Project(value, liveAnalysis),
-            DropSchemaIntent value => Project(value, liveAnalysis),
+            EnsureSchemaIntent or DropSchemaIntent => liveAnalysis,
             EnsureTableIntent value => Project(value, liveAnalysis),
             DropTableIntent value => Project(value, liveAnalysis),
             RenameTableIntent value => Project(value, liveAnalysis),
@@ -394,11 +393,9 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
         // update this in-memory catalog so later operations observe prior ones.
         switch (operation.Intent)
         {
-            case EnsureSchemaIntent value:
-                Observe(value, decision);
-                break;
-            case DropSchemaIntent value:
-                Observe(value, decision);
+            // WHY: Schema state belongs to the provider; these accepted intents do not mutate table projection.
+            case EnsureSchemaIntent:
+            case DropSchemaIntent:
                 break;
             case EnsureTableIntent value:
                 Observe(value, liveAnalysis, analysis, operation.Policy != SafeMigrationPolicy.ExistenceOnly);
@@ -644,6 +641,9 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
 
     private static string StateCode(
         SafeMigrationObservedState state
+
+        // WHY: This structural constructor accepts only these three proven shapes; other states require richer evidence.
+        // ReSharper disable once SwitchExpressionHandlesSomeKnownEnumValuesWithExceptionInDefault
     ) => state switch
     {
         SafeMigrationObservedState.Missing => "projected_missing",

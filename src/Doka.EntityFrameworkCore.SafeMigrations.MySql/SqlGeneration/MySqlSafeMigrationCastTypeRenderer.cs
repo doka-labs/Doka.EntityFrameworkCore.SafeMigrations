@@ -169,6 +169,7 @@ internal static class MySqlSafeMigrationCastTypeRenderer
         }
 
         castType = string.Empty;
+
         return false;
     }
 
@@ -230,6 +231,7 @@ internal static class MySqlSafeMigrationCastTypeRenderer
         }
 
         castType = $"{target}({length.ToString(CultureInfo.InvariantCulture)})";
+
         return true;
     }
 
@@ -253,6 +255,7 @@ internal static class MySqlSafeMigrationCastTypeRenderer
         }
 
         castType = $"{target}({precision.ToString(CultureInfo.InvariantCulture)})";
+
         return true;
     }
 

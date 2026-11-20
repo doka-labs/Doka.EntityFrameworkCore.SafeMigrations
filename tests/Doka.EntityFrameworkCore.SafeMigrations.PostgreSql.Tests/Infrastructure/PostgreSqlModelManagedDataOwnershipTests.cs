@@ -1,30 +1,41 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
+/// <summary>Verifies PostgreSQL Model Managed Data Ownership contracts in independently owned test state.</summary>
 public sealed class PostgreSqlModelManagedDataOwnershipTests
 {
+    /// <summary>Enabled Ownership Filters Only Excluded Model Managed Data.</summary>
     [Fact]
     public void EnabledOwnership_FiltersOnlyExcludedModelManagedData()
     {
+        // Arrange
         using var context = new EnabledMixedOwnershipContext();
         var model = RelationalModel(context);
         var differ = context.GetService<IMigrationsModelDiffer>();
 
+        // Act
         var operations = differ.GetDifferences(source: null, model);
 
+        var hasDifferences = differ.HasDifferences(source: null, model);
+
+        // Assert
         Assert.DoesNotContain(operations, operation => Table(operation) == "core_roles");
         Assert.Contains(operations, operation => Table(operation) == "custom_profiles");
-        Assert.True(differ.HasDifferences(source: null, model));
+        Assert.True(hasDifferences);
     }
 
+    /// <summary>Disabled Ownership Preserves Provider Generated Core Data Difference.</summary>
     [Fact]
     public void DisabledOwnership_PreservesProviderGeneratedCoreDataDifference()
     {
+        // Arrange
         using var context = new DisabledMixedOwnershipContext();
         var model = RelationalModel(context);
         var differ = context.GetService<IMigrationsModelDiffer>();
 
+        // Act
         var operations = differ.GetDifferences(source: null, model);
 
+        // Assert
         Assert.Contains(
             operations,
             operation => operation is InsertDataOperation { Table: "core_roles", Schema: "shared" });
@@ -34,9 +45,11 @@ public sealed class PostgreSqlModelManagedDataOwnershipTests
             operation => operation is InsertDataOperation { Table: "custom_profiles", Schema: "instance" });
     }
 
+    /// <summary>Ownership Filter Uses Exact Schema Identity And Fails Closed.</summary>
     [Fact]
     public void OwnershipFilter_UsesExactSchemaIdentityAndFailsClosed()
     {
+        // Arrange
         using var context = new EnabledExternalOnlyOwnershipContext();
         var operation = new InsertDataOperation
         {
@@ -46,24 +59,33 @@ public sealed class PostgreSqlModelManagedDataOwnershipTests
             Values = new object[,] { { 1, "sensitive-value" } },
         };
 
-        var exception = Assert.Throws<InvalidOperationException>(() =>
+        // Act
+        var failure = Record.Exception(() =>
             SafeMigrationModelManagedDataOwnershipFilter.Filter(
                 [operation],
                 source: null,
                 RelationalModel(context)));
 
+        // Assert
+        var exception = Assert.IsType<InvalidOperationException>(failure);
         Assert.Contains("insert target", exception.Message, StringComparison.Ordinal);
         Assert.Contains("instance.core_roles", exception.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("sensitive-value", exception.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>Ownership Filter Handles One Hundred Thousand Same Named Cross Schema Operations In Order.</summary>
     [Fact]
     public void OwnershipFilter_HandlesOneHundredThousandSameNamedCrossSchemaOperationsInOrder()
     {
+        // Arrange
         using var context = new ExactSchemaOwnershipContext();
         var model = RelationalModel(context);
         var values = new object[,] { { 1, "shared" } };
         var operations = new MigrationOperation[100_000];
+
+        // WHY: The alternating source position is the exact operation-identity oracle.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < operations.Length; ordinal++)
         {
             operations[ordinal] = new InsertDataOperation
@@ -77,12 +99,18 @@ public sealed class PostgreSqlModelManagedDataOwnershipTests
             };
         }
 
+        // Act
         var filtered = SafeMigrationModelManagedDataOwnershipFilter.Filter(
             operations,
             source: null,
             model);
 
+        // Assert
         Assert.Equal(50_000, filtered.Count);
+
+        // WHY: Compare retained operations with their exact source positions.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < filtered.Count; ordinal++)
         {
             Assert.Same(operations[ordinal * 2 + 1], filtered[ordinal]);
@@ -240,6 +268,7 @@ public sealed class PostgreSqlModelManagedDataOwnershipTests
         }
     }
 
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class CoreRole
     {
         public int Id { get; set; }
@@ -247,6 +276,7 @@ public sealed class PostgreSqlModelManagedDataOwnershipTests
         public string Name { get; set; } = string.Empty;
     }
 
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class CustomProfile
     {
         public int Id { get; set; }
@@ -254,6 +284,7 @@ public sealed class PostgreSqlModelManagedDataOwnershipTests
         public string Name { get; set; } = string.Empty;
     }
 
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class CustomRole
     {
         public int Id { get; set; }

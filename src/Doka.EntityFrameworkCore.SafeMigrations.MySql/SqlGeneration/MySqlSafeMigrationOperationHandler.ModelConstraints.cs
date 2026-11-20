@@ -57,7 +57,7 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
         IModel model
     )
     {
-        var result = new Dictionary<ModelTableKey, IReadOnlyList<ExpectedIndexDefinition>>();
+        Dictionary<ModelTableKey, IReadOnlyList<ExpectedIndexDefinition>> result = [];
         foreach (var table in model.GetRelationalModel()
             .Tables)
         {
@@ -66,6 +66,10 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
                 .Where(static index => index.IsUnique)
                 .Select(index => CreateModelIndexDefinition(table, index))
                 .OrderBy(static index => index.Name, StringComparer.Ordinal)
+
+                // WHY: Retain fluent materialization and its existing snapshot
+                // ownership rather than replacing this boundary with a spread.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray();
 
             if (indexes.Length > 0)
@@ -126,6 +130,10 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
                 prefixLength: prefixLengths?[ordinal] is > 0
                     ? prefixLengths[ordinal]
                     : null))
+
+            // WHY: Retain fluent materialization and its existing snapshot
+            // ownership rather than replacing this boundary with a spread.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         return new ExpectedIndexDefinition(index.Name, table.Name, keys, table.Schema, index.IsUnique, index.Filter);
@@ -145,8 +153,12 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
         _ => SafeMigrationIndexSortOrder.Ascending,
     };
 
+    // WHY: Both positional members are consumed by the dictionary key's generated equality and hashing.
+    // ReSharper disable NotAccessedPositionalProperty.Local
     private readonly record struct ModelTableKey(
         string Table,
         string? Schema
     );
+
+    // ReSharper restore NotAccessedPositionalProperty.Local
 }

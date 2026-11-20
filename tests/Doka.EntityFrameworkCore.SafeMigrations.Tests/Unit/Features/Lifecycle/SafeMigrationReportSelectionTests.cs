@@ -1,10 +1,17 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
+/// <summary>
+/// Pins canonical and selected JSON views, exact blocker ordering and rejection before partial output is written.
+/// </summary>
 public sealed class SafeMigrationReportSelectionTests
 {
+    /// <summary>
+    /// Keeps deferred origin metadata in the nonmatching view while allowing a report with no proven blocker.
+    /// </summary>
     [Fact]
     public void DeferredAssessment_RemainsVisibleWithoutBecomingAProvenBlocker()
     {
+        // Arrange
         var origin = new SafeMigrationDeferredOrigin(
             "20260925000002_DataPreparation",
             1,
@@ -31,6 +38,7 @@ public sealed class SafeMigrationReportSelectionTests
             SafeMigrationReportStatus.RuntimeValidationRequired,
             [assessment]);
 
+        // Act
         using var nonMatching = JsonDocument.Parse(
             SafeMigrationReportJson.SerializeToUtf8Bytes(
                 report,
@@ -41,6 +49,9 @@ public sealed class SafeMigrationReportSelectionTests
                 report,
                 SafeMigrationReportSelection.BlockingOnly));
 
+        var blockedFailure = Record.Exception(report.ThrowIfBlocked);
+
+        // Assert
         var deferred = nonMatching
             .RootElement
             .GetProperty("assessments")[0];
@@ -67,12 +78,17 @@ public sealed class SafeMigrationReportSelectionTests
             .GetProperty("assessments")
             .EnumerateArray());
 
-        report.ThrowIfBlocked();
+        Assert.Null(blockedFailure);
     }
 
+    /// <summary>
+    /// Preserves the complete selected order, source metadata and buffer/writer parity without altering canonical
+    /// JSON.
+    /// </summary>
     [Fact]
     public void CompleteView_IsSelfDescribingAndPreservesTheCompleteSourceOrder()
     {
+        // Arrange
         var report = CreateReport(
             SafeMigrationReportMode.Preflight,
             SafeMigrationReportStatus.Blocked,
@@ -82,11 +98,22 @@ public sealed class SafeMigrationReportSelectionTests
                 ProviderAssessment(14),
             ]);
 
+        using var stream = new MemoryStream();
+
+        // Act
         var bytes = SafeMigrationReportJson.SerializeToUtf8Bytes(
             report,
             SafeMigrationReportSelection.Complete);
 
+        using (var writer = new Utf8JsonWriter(stream))
+        {
+            SafeMigrationReportJson.Write(writer, report, SafeMigrationReportSelection.Complete);
+        }
+
+        using var canonicalDocument = JsonDocument.Parse(SafeMigrationReportJson.SerializeToUtf8Bytes(report));
         using var document = JsonDocument.Parse(bytes);
+
+        // Assert
         var root = document.RootElement;
         var sourceReport = root.GetProperty("sourceReport");
 
@@ -172,15 +199,7 @@ public sealed class SafeMigrationReportSelectionTests
                 .GetProperty("unexpectedObjects")
                 .GetArrayLength());
 
-        using var stream = new MemoryStream();
-        using (var writer = new Utf8JsonWriter(stream))
-        {
-            SafeMigrationReportJson.Write(writer, report, SafeMigrationReportSelection.Complete);
-        }
-
         Assert.Equal(bytes, stream.ToArray());
-
-        using var canonicalDocument = JsonDocument.Parse(SafeMigrationReportJson.SerializeToUtf8Bytes(report));
 
         Assert.False(canonicalDocument.RootElement.TryGetProperty("documentKind", out _));
         Assert.Equal(report.SchemaVersion,
@@ -190,9 +209,14 @@ public sealed class SafeMigrationReportSelectionTests
                 .GetInt32());
     }
 
+    /// <summary>
+    /// Retains unresolved safe and provider-owned assessments in original order while excluding only converged safe
+    /// entries.
+    /// </summary>
     [Fact]
     public void NonMatchingView_ExcludesOnlyFullyConvergedSafeAssessments()
     {
+        // Arrange
         var report = CreateReport(
             SafeMigrationReportMode.Preflight,
             SafeMigrationReportStatus.ReadyWithProviderOperations,
@@ -204,11 +228,13 @@ public sealed class SafeMigrationReportSelectionTests
                 ProviderAssessment(4),
             ]);
 
+        // Act
         using var document = JsonDocument.Parse(
             SafeMigrationReportJson.SerializeToUtf8Bytes(
                 report,
                 SafeMigrationReportSelection.NonMatching));
 
+        // Assert
         var root = document.RootElement;
 
         Assert.Equal("non_matching",
@@ -236,9 +262,13 @@ public sealed class SafeMigrationReportSelectionTests
                     .GetInt32()));
     }
 
+    /// <summary>
+    /// Selects exactly the four rejecting safe actions and excludes provider entries and unexpected-object detail.
+    /// </summary>
     [Fact]
     public void BlockingOnlyPreflightView_IncludesExactlyTheRejectActions()
     {
+        // Arrange
         var report = CreateReport(
             SafeMigrationReportMode.Preflight,
             SafeMigrationReportStatus.Blocked,
@@ -257,11 +287,13 @@ public sealed class SafeMigrationReportSelectionTests
                 ProviderAssessment(7),
             ]);
 
+        // Act
         using var document = JsonDocument.Parse(
             SafeMigrationReportJson.SerializeToUtf8Bytes(
                 report,
                 SafeMigrationReportSelection.BlockingOnly));
 
+        // Assert
         var root = document.RootElement;
 
         Assert.Equal("blocking_only",
@@ -293,9 +325,13 @@ public sealed class SafeMigrationReportSelectionTests
             .EnumerateArray());
     }
 
+    /// <summary>
+    /// Selects only safe postconditions explicitly known to fail, not unknown or provider-owned results.
+    /// </summary>
     [Fact]
     public void BlockingOnlyPostflightView_IncludesOnlyFailedSafePostconditions()
     {
+        // Arrange
         var report = CreateReport(
             SafeMigrationReportMode.Postflight,
             SafeMigrationReportStatus.Blocked,
@@ -307,11 +343,13 @@ public sealed class SafeMigrationReportSelectionTests
                 ProviderAssessment(4, postconditionSatisfied: false),
             ]);
 
+        // Act
         using var document = JsonDocument.Parse(
             SafeMigrationReportJson.SerializeToUtf8Bytes(
                 report,
                 SafeMigrationReportSelection.BlockingOnly));
 
+        // Assert
         var root = document.RootElement;
 
         Assert.Equal(
@@ -324,15 +362,22 @@ public sealed class SafeMigrationReportSelectionTests
                     .GetInt32()));
     }
 
+    /// <summary>
+    /// Writes an explicitly empty blocking selection for a ready report while respecting caller indentation
+    /// options.
+    /// </summary>
     [Fact]
     public void BlockingOnlyView_RepresentsANonBlockedReportAsAnEmptyView()
     {
+        // Arrange
         var report = CreateReport(
             SafeMigrationReportMode.Preflight,
             SafeMigrationReportStatus.Ready,
             [Assessment(0, SafeMigrationObservedState.Matching, SafeMigrationAction.NoOp, true)]);
 
         using var stream = new MemoryStream();
+
+        // Act
         using (var writer = new Utf8JsonWriter(
             stream,
             new JsonWriterOptions
@@ -344,6 +389,8 @@ public sealed class SafeMigrationReportSelectionTests
         }
 
         using var document = JsonDocument.Parse(stream.ToArray());
+
+        // Assert
         var root = document.RootElement;
 
         Assert.Equal(0,
@@ -358,9 +405,14 @@ public sealed class SafeMigrationReportSelectionTests
         Assert.Contains((byte)'\n', stream.ToArray());
     }
 
+    /// <summary>
+    /// Retains exact late-blocker ordinals from a large report without imposing a machine-dependent performance
+    /// limit.
+    /// </summary>
     [Fact]
     public void BlockingOnlyView_SelectsTailBlockersFromFiftyThousandOrderedAssessments()
     {
+        // Arrange
         const int assessmentCount = 50_000;
         var assessments = new SafeMigrationAssessment[assessmentCount];
         for (var index = 0; index < assessmentCount; index++)
@@ -401,11 +453,13 @@ public sealed class SafeMigrationReportSelectionTests
             SafeMigrationReportStatus.Blocked,
             assessments);
 
+        // Act
         using var document = JsonDocument.Parse(
             SafeMigrationReportJson.SerializeToUtf8Bytes(
                 report,
                 SafeMigrationReportSelection.BlockingOnly));
 
+        // Assert
         var root = document.RootElement;
 
         Assert.Equal(assessmentCount,
@@ -429,9 +483,13 @@ public sealed class SafeMigrationReportSelectionTests
                     .GetInt32()));
     }
 
+    /// <summary>
+    /// Rejects a contradictory blocked report identically through both render APIs before any bytes are buffered.
+    /// </summary>
     [Fact]
     public void BlockingOnlyView_RejectsABlockedReportWithoutSelectedEvidenceBeforeWriting()
     {
+        // Arrange
         var report = CreateReport(
             SafeMigrationReportMode.Preflight,
             SafeMigrationReportStatus.Blocked,
@@ -440,11 +498,16 @@ public sealed class SafeMigrationReportSelectionTests
         using var stream = new MemoryStream();
         using var writer = new Utf8JsonWriter(stream);
 
-        var serializeException = Assert.Throws<InvalidOperationException>(() =>
+        // Act
+        var serializeFailure = Record.Exception(() =>
             SafeMigrationReportJson.SerializeToUtf8Bytes(report, SafeMigrationReportSelection.BlockingOnly));
 
-        var writeException = Assert.Throws<InvalidOperationException>(() =>
+        var writeFailure = Record.Exception(() =>
             SafeMigrationReportJson.Write(writer, report, SafeMigrationReportSelection.BlockingOnly));
+
+        // Assert
+        var serializeException = Assert.IsType<InvalidOperationException>(serializeFailure);
+        var writeException = Assert.IsType<InvalidOperationException>(writeFailure);
 
         Assert.Contains("no assessment selected as blocking", serializeException.Message, StringComparison.Ordinal);
         Assert.Equal(serializeException.Message, writeException.Message);
@@ -452,6 +515,12 @@ public sealed class SafeMigrationReportSelectionTests
         Assert.Equal(0, writer.BytesPending);
     }
 
+    /// <summary>
+    /// Rejects unknown selection values through both render APIs without emitting a partial JSON document.
+    /// </summary>
+    /// <param name="value">
+    /// The invalid numeric selection value supplied to both report renderers.
+    /// </param>
     [Theory]
     [InlineData(0)]
     [InlineData(4)]
@@ -460,6 +529,7 @@ public sealed class SafeMigrationReportSelectionTests
         int value
     )
     {
+        // Arrange
         var report = CreateReport(
             SafeMigrationReportMode.Preflight,
             SafeMigrationReportStatus.Ready,
@@ -469,11 +539,16 @@ public sealed class SafeMigrationReportSelectionTests
         using var writer = new Utf8JsonWriter(stream);
         var selection = (SafeMigrationReportSelection)value;
 
-        var serializeException = Assert.Throws<ArgumentOutOfRangeException>(() =>
+        // Act
+        var serializeFailure = Record.Exception(() =>
             SafeMigrationReportJson.SerializeToUtf8Bytes(report, selection));
 
-        var writeException = Assert.Throws<ArgumentOutOfRangeException>(() =>
+        var writeFailure = Record.Exception(() =>
             SafeMigrationReportJson.Write(writer, report, selection));
+
+        // Assert
+        var serializeException = Assert.IsType<ArgumentOutOfRangeException>(serializeFailure);
+        var writeException = Assert.IsType<ArgumentOutOfRangeException>(writeFailure);
 
         Assert.Equal("selection", serializeException.ParamName);
         Assert.Equal("selection", writeException.ParamName);
@@ -481,9 +556,19 @@ public sealed class SafeMigrationReportSelectionTests
         Assert.Equal(0, writer.BytesPending);
     }
 
-    [Fact]
-    public void ReportView_RejectsNullInputsBeforeWriting()
+    /// <summary>Rejects each missing input before writing any partial report bytes.</summary>
+    /// <param name="input">The missing serializer report, writer or writer report input.</param>
+    /// <param name="expectedParameter">The exact rejected argument name.</param>
+    [Theory]
+    [InlineData(0, "report")]
+    [InlineData(1, "writer")]
+    [InlineData(2, "report")]
+    public void ReportView_RejectsNullInputsBeforeWriting(
+        int input,
+        string expectedParameter
+    )
     {
+        // Arrange
         var report = CreateReport(
             SafeMigrationReportMode.Preflight,
             SafeMigrationReportStatus.Ready,
@@ -492,18 +577,22 @@ public sealed class SafeMigrationReportSelectionTests
         using var stream = new MemoryStream();
         using var writer = new Utf8JsonWriter(stream);
 
-        var serializeException = Assert.Throws<ArgumentNullException>(() =>
-            SafeMigrationReportJson.SerializeToUtf8Bytes(null!, SafeMigrationReportSelection.Complete));
+        Action render = input switch
+        {
+            0 => () => SafeMigrationReportJson.SerializeToUtf8Bytes(null!, SafeMigrationReportSelection.Complete),
+            1 => () => SafeMigrationReportJson.Write(null!, report, SafeMigrationReportSelection.Complete),
+            2 => () => SafeMigrationReportJson.Write(writer, null!, SafeMigrationReportSelection.Complete),
+            _ => throw new ArgumentOutOfRangeException(nameof(input)),
+        };
 
-        var writerException = Assert.Throws<ArgumentNullException>(() =>
-            SafeMigrationReportJson.Write(null!, report, SafeMigrationReportSelection.Complete));
+        // Act
+        var failure = Record.Exception(render);
 
-        var reportException = Assert.Throws<ArgumentNullException>(() =>
-            SafeMigrationReportJson.Write(writer, null!, SafeMigrationReportSelection.Complete));
+        // Assert
+        Assert.Equal(expectedParameter,
+            Assert.IsType<ArgumentNullException>(failure)
+                .ParamName);
 
-        Assert.Equal("report", serializeException.ParamName);
-        Assert.Equal("writer", writerException.ParamName);
-        Assert.Equal("report", reportException.ParamName);
         Assert.Equal(0, stream.Length);
         Assert.Equal(0, writer.BytesPending);
     }

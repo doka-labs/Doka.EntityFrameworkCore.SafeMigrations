@@ -9,9 +9,11 @@ public sealed class PostgreSqlConstraintsIntegrationTests : PostgreSqlSafeMigrat
         PostgreSqlContainerFixture fixture
     ) : base(fixture) { }
 
+    /// <summary>Constraint Lifecycle Is Idempotent Across Every Constraint Family.</summary>
     [Fact]
     public async Task ConstraintLifecycle_IsIdempotentAcrossEveryConstraintFamily()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -42,35 +44,41 @@ public sealed class PostgreSqlConstraintsIntegrationTests : PostgreSqlSafeMigrat
             ["id"],
             onDelete: ReferentialAction.SetNull);
 
+        var drop = new MigrationBuilder(context.Database.ProviderName!);
+        drop.DropForeignKeyIfExists("fk_children_parents", "children");
+        drop.DropCheckConstraintIfExists("ck_children_quantity", "children");
+        drop.DropUniqueConstraintIfExists("uq_children_code", "children");
+        drop.DropPrimaryKeyIfExists("pk_children", "children");
+
+        // Act
+        // WHY: Apply and replay each family before advancing to its dependent lifecycle operation.
+        // ReSharper disable once LoopCanBeConvertedToQuery
         foreach (var operation in add.Operations)
         {
             await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
             await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
         }
 
-        Assert.Equal(
-            4,
-            await ScalarIntAsync(
-                connectionString,
-                """
-                SELECT COUNT(*) FROM pg_catalog.pg_constraint co
-                JOIN pg_catalog.pg_class c ON c.oid = co.conrelid
-                WHERE c.relname = 'children' AND co.conname IN ('pk_children', 'uq_children_code',
-                'ck_children_quantity', 'fk_children_parents');
-                """,
-                cancellationToken: CancellationToken.None));
+        var addedConstraintCount = await ScalarIntAsync(
+            connectionString,
+            """
+            SELECT COUNT(*) FROM pg_catalog.pg_constraint co
+            JOIN pg_catalog.pg_class c ON c.oid = co.conrelid
+            WHERE c.relname = 'children' AND co.conname IN ('pk_children', 'uq_children_code',
+            'ck_children_quantity', 'fk_children_parents');
+            """,
+            cancellationToken: CancellationToken.None);
 
-        var drop = new MigrationBuilder(context.Database.ProviderName!);
-        drop.DropForeignKeyIfExists("fk_children_parents", "children");
-        drop.DropCheckConstraintIfExists("ck_children_quantity", "children");
-        drop.DropUniqueConstraintIfExists("uq_children_code", "children");
-        drop.DropPrimaryKeyIfExists("pk_children", "children");
+        // WHY: Preserve the explicit foreign-key-to-primary-key dependency removal order.
+        // ReSharper disable once LoopCanBeConvertedToQuery
         foreach (var operation in drop.Operations)
         {
             await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
             await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
         }
 
+        // Assert
+        Assert.Equal(4, addedConstraintCount);
         Assert.Equal(
             0,
             await ScalarIntAsync(
@@ -84,9 +92,18 @@ public sealed class PostgreSqlConstraintsIntegrationTests : PostgreSqlSafeMigrat
                 cancellationToken: CancellationToken.None));
     }
 
-    [Fact]
-    public async Task ExistingConstraintDefinitionDrift_IsRejectedForEveryConstraintFamily()
+    /// <summary>Existing Constraint Definition Drift Is Rejected For Every Constraint Family.</summary>
+    /// <param name="operationIndex">The independently executed member of the full preflight stream.</param>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    public async Task ExistingConstraintDefinitionDrift_IsRejectedForEveryConstraintFamily(
+        int operationIndex
+    )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -120,6 +137,8 @@ public sealed class PostgreSqlConstraintsIntegrationTests : PostgreSqlSafeMigrat
             "constraint_parents",
             ["id"]);
 
+        // Act
+        // WHY: Preserve the complete preflight stream; each native rejection owns an isolated test case.
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -128,7 +147,12 @@ public sealed class PostgreSqlConstraintsIntegrationTests : PostgreSqlSafeMigrat
                 new SafeMigrationRunOptions("test-instance"),
                 CancellationToken.None);
 
+        var failure = await Record.ExceptionAsync(() =>
+            ExecuteOperationsAsync(context, [builder.Operations[operationIndex]], CancellationToken.None));
+
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
+        Assert.Equal(4, report.Assessments.Count);
         Assert.All(
             report.Assessments,
             assessment =>
@@ -137,21 +161,23 @@ public sealed class PostgreSqlConstraintsIntegrationTests : PostgreSqlSafeMigrat
                 Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
             });
 
-        foreach (var operation in builder.Operations)
-        {
-            var exception =
-                await Assert.ThrowsAsync<PostgresException>(() => ExecuteOperationsAsync(
-                    context,
-                    [operation],
-                    CancellationToken.None));
-
-            Assert.Equal("P1001", exception.SqlState);
-        }
+        var exception = Assert.IsType<PostgresException>(failure);
+        Assert.Equal("P1001", exception.SqlState);
     }
 
-    [Fact]
-    public async Task ConstraintAndUniqueIndexDataBlockers_StopBeforeTargetDdl()
+    /// <summary>Constraint And Unique Index Data Blockers Stop Before Target Ddl.</summary>
+    /// <param name="operationIndex">The independently executed member of the full preflight stream.</param>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    public async Task ConstraintAndUniqueIndexDataBlockers_StopBeforeTargetDdl(
+        int operationIndex
+    )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -184,6 +210,8 @@ public sealed class PostgreSqlConstraintsIntegrationTests : PostgreSqlSafeMigrat
 
         builder.CreateIndexIfNotExists("ux_blocker_children_code", "blocker_children", ["code"], unique: true);
 
+        // Act
+        // WHY: Preserve the complete preflight stream; each native rejection owns an isolated test case.
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -192,21 +220,18 @@ public sealed class PostgreSqlConstraintsIntegrationTests : PostgreSqlSafeMigrat
                 new SafeMigrationRunOptions("test-instance"),
                 CancellationToken.None);
 
+        var failure = await Record.ExceptionAsync(() =>
+            ExecuteOperationsAsync(context, [builder.Operations[operationIndex]], CancellationToken.None));
+
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
+        Assert.Equal(5, report.Assessments.Count);
         Assert.All(
             report.Assessments,
             assessment => Assert.Equal(SafeMigrationObservedState.DataBlocked, assessment.ObservedState));
 
-        foreach (var operation in builder.Operations)
-        {
-            var exception =
-                await Assert.ThrowsAsync<PostgresException>(() => ExecuteOperationsAsync(
-                    context,
-                    [operation],
-                    CancellationToken.None));
-
-            Assert.Equal("P1003", exception.SqlState);
-        }
+        var exception = Assert.IsType<PostgresException>(failure);
+        Assert.Equal("P1003", exception.SqlState);
 
         Assert.Equal(
             0,

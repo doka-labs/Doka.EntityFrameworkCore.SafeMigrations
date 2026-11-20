@@ -200,7 +200,7 @@ public sealed class MySqlForeignKeySupportingIndexSqlTests
             MySqlSafeMigrationCatalogSqlBuilder.BuildNativeCaseInsensitiveIdentifierMatches(catalog!, expected!));
 
         // Assert
-        Assert.IsAssignableFrom<ArgumentException>(exception);
+        Assert.IsType<ArgumentException>(exception, exactMatch: false);
     }
 
     /// <summary>Canonical native array-cast wrappers qualify an integrity risk without application-row reads.</summary>
@@ -664,7 +664,7 @@ public sealed class MySqlForeignKeySupportingIndexSqlTests
             MySqlSafeMigrationCatalogSqlBuilder.BuildMultiValuedIndexBoundForeignKeysQuery(table!, index!, mariaDb));
 
         // Assert
-        Assert.IsAssignableFrom<ArgumentException>(exception);
+        Assert.IsType<ArgumentException>(exception, exactMatch: false);
     }
 
     /// <summary>Requires the complete ordered unprefixed FK prefix while permitting trailing index parts.</summary>
@@ -686,6 +686,9 @@ public sealed class MySqlForeignKeySupportingIndexSqlTests
         var columns = Enumerable
             .Range(0, columnCount)
             .Select(static ordinal => "@column_" + ordinal.ToString(CultureInfo.InvariantCulture))
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         // Act
@@ -873,7 +876,7 @@ public sealed class MySqlForeignKeySupportingIndexSqlTests
                 isMariaDb: false));
 
         // Assert
-        Assert.IsAssignableFrom<ArgumentException>(exception);
+        Assert.IsType<ArgumentException>(exception, exactMatch: false);
     }
 
     /// <summary>Missing name or ownership tokens never qualify an unrelated automatic-index namespace.</summary>
@@ -903,7 +906,7 @@ public sealed class MySqlForeignKeySupportingIndexSqlTests
             MySqlSafeMigrationCatalogSqlBuilder.IsSupportingIndexNameOccupied(table!, symbol!));
 
         // Assert
-        Assert.IsAssignableFrom<ArgumentException>(exception);
+        Assert.IsType<ArgumentException>(exception, exactMatch: false);
     }
 
     /// <summary>Creates a provider context without opening a connection.</summary>

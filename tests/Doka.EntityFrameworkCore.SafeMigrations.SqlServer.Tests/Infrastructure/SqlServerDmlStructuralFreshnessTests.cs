@@ -5,7 +5,9 @@ public sealed class SqlServerDmlStructuralFreshnessTests
 {
     private const string ConnectionString = "Server=localhost;Database=dml_structure;Integrated Security=true;";
 
-    /// <summary>Every executable typed DML form invalidates unrelated matching metadata only when a trigger exists.</summary>
+    /// <summary>
+    /// Every executable typed DML form invalidates unrelated matching metadata only when a trigger exists.
+    /// </summary>
     /// <param name="writeKind">The typed EF data operation.</param>
     /// <param name="enabled">Whether the database snapshot contains an enabled SQL or CLR DML trigger.</param>
     /// <param name="hasRows">Whether EF emits any data commands.</param>
@@ -86,7 +88,9 @@ public sealed class SqlServerDmlStructuralFreshnessTests
     }
 
     /// <summary>Safe model-managed writes invalidate structure only when the accepted decision executes.</summary>
-    /// <param name="executes">Whether the accepted seed operation physically writes rather than matching as NoOp.</param>
+    /// <param name="executes">
+    /// Whether the accepted seed operation physically writes rather than matching as NoOp.
+    /// </param>
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
@@ -239,7 +243,9 @@ public sealed class SqlServerDmlStructuralFreshnessTests
         }
     }
 
-    /// <summary>EF's implicit dbo schema ensure emits no DDL and must not replace the actual freshness origin.</summary>
+    /// <summary>
+    /// EF's implicit dbo schema ensure emits no DDL and must not replace the actual freshness origin.
+    /// </summary>
     /// <param name="schema">The spelling EF explicitly treats as the existing default schema.</param>
     /// <param name="earlierDrop">Whether an actual earlier DDL operation already invalidated the snapshot.</param>
     [Theory]

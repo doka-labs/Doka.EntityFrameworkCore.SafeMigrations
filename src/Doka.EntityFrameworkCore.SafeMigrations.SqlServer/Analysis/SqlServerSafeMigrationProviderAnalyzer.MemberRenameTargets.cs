@@ -1,5 +1,3 @@
-using System.Data;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer;
 
 internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
@@ -114,7 +112,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                     return parameter.ParameterName;
                 }
             },
-            async (reader, offset, count, token) =>
+            async (reader, offset, count, callbackCancellationToken) =>
             {
                 if (reader.FieldCount != 3)
                 {
@@ -122,7 +120,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                 }
 
                 var row = 0;
-                while (await reader.ReadAsync(token))
+                while (await reader.ReadAsync(callbackCancellationToken))
                 {
                     var hasSourceSupported = row < count
                         && operations[candidates[offset + row]].Intent is RenameIndexIntent;
@@ -148,9 +146,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                     throw InvalidMemberRenameTargetResult();
                 }
             },
-            cancellationToken,
             transaction,
-            SqlServerCatalogParameterBindings.MaximumParameters);
+            SqlServerCatalogParameterBindings.MaximumParameters,
+            cancellationToken);
 
         // WHY: A later malformed result or cancellation must not expose
         // partial destination facts to ordered projection.

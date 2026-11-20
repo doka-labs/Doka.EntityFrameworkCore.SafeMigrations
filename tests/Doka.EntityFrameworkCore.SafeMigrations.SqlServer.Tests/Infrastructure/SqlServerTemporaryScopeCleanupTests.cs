@@ -13,7 +13,7 @@ public sealed class SqlServerTemporaryScopeCleanupTests
     private const string TemporarySuffix = "00000000000000000000000000000001";
 
     /// <summary>
-    /// Uses a fresh cleanup token, a bounded timeout, and the borrowed transaction despite caller cancellation.
+    /// Uses protected cleanup, the native command timeout, and the borrowed transaction despite caller cancellation.
     /// </summary>
     [Theory]
     [InlineData("identifiers", null, 30)]
@@ -27,12 +27,12 @@ public sealed class SqlServerTemporaryScopeCleanupTests
     )
     {
         // Arrange
-        using var context = new SafeMigrationDbContext(CleanupConnectionString);
+        await using var context = new SafeMigrationDbContext(CleanupConnectionString);
         var analyzer = CreateAnalyzer(context);
         await using var connection = new CleanupConnection();
         await using var transaction = new CleanupTransaction(connection);
         using var callerCancellation = new CancellationTokenSource();
-        callerCancellation.Cancel();
+        await callerCancellation.CancelAsync();
         var original = new OperationCanceledException(callerCancellation.Token);
         var temporaryTable = "#doka_sm_" + scope + "_" + TemporarySuffix;
 
@@ -45,7 +45,7 @@ public sealed class SqlServerTemporaryScopeCleanupTests
         Assert.Contains("DROP TABLE " + temporaryTable + ";", command.Sql, StringComparison.Ordinal);
         Assert.Same(transaction, command.Transaction);
         Assert.Equal(expectedTimeout, command.Timeout);
-        Assert.True(command.CancellationToken.CanBeCanceled);
+        Assert.Equal(CancellationToken.None, command.CancellationToken);
         Assert.False(command.CancellationWasRequested);
         Assert.NotEqual(callerCancellation.Token, command.CancellationToken);
         Assert.Equal(0, transaction.RollbackCount);
@@ -74,7 +74,7 @@ public sealed class SqlServerTemporaryScopeCleanupTests
     )
     {
         // Arrange
-        using var context = new SafeMigrationDbContext(CleanupConnectionString);
+        await using var context = new SafeMigrationDbContext(CleanupConnectionString);
         var analyzer = CreateAnalyzer(context);
         await using var connection = new CleanupConnection
         {
@@ -146,7 +146,7 @@ public sealed class SqlServerTemporaryScopeCleanupTests
     )
     {
         // Arrange
-        using var context = new SafeMigrationDbContext(CleanupConnectionString);
+        await using var context = new SafeMigrationDbContext(CleanupConnectionString);
         var analyzer = CreateAnalyzer(context);
         var cleanupFailure = new InvalidOperationException("Sensitive SQL and identifier sentinel.");
         await using var connection = new CleanupConnection
@@ -201,7 +201,7 @@ public sealed class SqlServerTemporaryScopeCleanupTests
     )
     {
         // Arrange
-        using var context = new SafeMigrationDbContext(CleanupConnectionString);
+        await using var context = new SafeMigrationDbContext(CleanupConnectionString);
         var analyzer = CreateAnalyzer(context);
         await using var connection = new CleanupConnection();
 
@@ -230,8 +230,8 @@ public sealed class SqlServerTemporaryScopeCleanupTests
     public async Task QuarantinedAnalyzer_RejectsEveryCatalogEntryPointAndRequiresReplacement()
     {
         // Arrange
-        using var context = new SafeMigrationDbContext(CleanupConnectionString);
-        using var replacementContext = new SafeMigrationDbContext(CleanupConnectionString);
+        await using var context = new SafeMigrationDbContext(CleanupConnectionString);
+        await using var replacementContext = new SafeMigrationDbContext(CleanupConnectionString);
         var analyzer = CreateAnalyzer(context);
         var replacement = CreateAnalyzer(replacementContext);
         await using var connection = new CleanupConnection
@@ -318,7 +318,7 @@ public sealed class SqlServerTemporaryScopeCleanupTests
         await using var context = new SafeMigrationDbContext(options.Options);
         if (callerOwnsTransaction)
         {
-            await context.Database.UseTransactionAsync(transaction);
+            await context.Database.UseTransactionAsync(transaction, CancellationToken.None);
         }
 
         var analyzer = CreateAnalyzer(context);

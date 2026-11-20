@@ -97,7 +97,10 @@ public sealed class CatalogStatementCaptureModeTests
     public void ObservationCapture_IsEnabledByDefault()
     {
         // Arrange
-        using var connection = new CatalogStatementTestConnection(false, static (_, _) => new DataTable());
+        Func<string, IReadOnlyList<DbParameter>, DataTable> results = static (_, _) => new DataTable();
+
+        // Act
+        using var connection = new CatalogStatementTestConnection(false, results);
 
         // Assert
         Assert.True(connection.CaptureObservations);

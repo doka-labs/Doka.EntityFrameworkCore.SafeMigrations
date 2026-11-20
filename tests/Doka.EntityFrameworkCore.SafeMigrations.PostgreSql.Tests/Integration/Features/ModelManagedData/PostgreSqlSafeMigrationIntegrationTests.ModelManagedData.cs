@@ -9,6 +9,7 @@ public sealed class PostgreSqlModelManagedDataIntegrationTests : PostgreSqlSafeM
         PostgreSqlContainerFixture fixture
     ) : base(fixture) { }
 
+    /// <summary>Newly Created Table And Model Managed Data Converge In One Initial Deployment.</summary>
     [Theory]
     [InlineData(SafeMigrationScaffoldingMode.Strict)]
     [InlineData(SafeMigrationScaffoldingMode.LegacyConvergence)]
@@ -16,6 +17,7 @@ public sealed class PostgreSqlModelManagedDataIntegrationTests : PostgreSqlSafeM
         SafeMigrationScaffoldingMode mode
     )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -52,6 +54,8 @@ public sealed class PostgreSqlModelManagedDataIntegrationTests : PostgreSqlSafeM
             new object?[,] { { 1, "administrator" } });
 
         var runner = context.GetService<ISafeMigrationRunner>();
+
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
@@ -68,6 +72,7 @@ public sealed class PostgreSqlModelManagedDataIntegrationTests : PostgreSqlSafeM
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
+        // Assert
         var tableAssessment = Assert.Single(
             preflight.Assessments,
             static assessment => assessment.OperationKind == SafeMigrationOperationKind.EnsureTable);
@@ -93,9 +98,19 @@ public sealed class PostgreSqlModelManagedDataIntegrationTests : PostgreSqlSafeM
                 cancellationToken: CancellationToken.None));
     }
 
-    [Fact]
-    public async Task ModelManagedDataBlocksUniquePrerequisiteAndUnmodeledDependencyEdges()
+    /// <summary>Model Managed Data Blocks Unique Prerequisite And Unmodeled Dependency Edges.</summary>
+    /// <param name="caseIndex">The unique, missing-prerequisite, or unmodeled-dependency boundary.</param>
+    /// <param name="expectedState">The precise native classification for the selected boundary.</param>
+    [Theory]
+    [InlineData(0, SafeMigrationObservedState.DataBlocked)]
+    [InlineData(1, SafeMigrationObservedState.PrerequisiteMissing)]
+    [InlineData(2, SafeMigrationObservedState.Unsupported)]
+    public async Task ModelManagedDataBlocksUniquePrerequisiteAndUnmodeledDependencyEdges(
+        int caseIndex,
+        SafeMigrationObservedState expectedState
+    )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -140,40 +155,34 @@ public sealed class PostgreSqlModelManagedDataIntegrationTests : PostgreSqlSafeM
             ["integer", "character varying(64)", "character varying(64)"],
             new object?[,] { { 1, "administrator", null } });
 
-        var uniqueReport = await runner.AnalyzeAsync(
+        var operations = caseIndex switch
+        {
+            0 => uniqueCollision.Operations,
+            1 => missingPrerequisite.Operations,
+            2 => unmodeledDependency.Operations,
+            _ => throw new ArgumentOutOfRangeException(nameof(caseIndex)),
+        };
+
+        // Act
+        var report = await runner.AnalyzeAsync(
             context,
-            uniqueCollision.Operations,
-            new SafeMigrationRunOptions("model-data-unique-collision"),
+            operations,
+            new SafeMigrationRunOptions($"model-data-edge-{caseIndex}"),
             CancellationToken.None);
 
-        var missingReport = await runner.AnalyzeAsync(
-            context,
-            missingPrerequisite.Operations,
-            new SafeMigrationRunOptions("model-data-missing-prerequisite"),
-            CancellationToken.None);
+        var failure = caseIndex == 2
+            ? await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, operations, CancellationToken.None))
+            : null;
 
-        var dependencyReport = await runner.AnalyzeAsync(
-            context,
-            unmodeledDependency.Operations,
-            new SafeMigrationRunOptions("model-data-unmodeled-dependency"),
-            CancellationToken.None);
-
-        _ = await Assert.ThrowsAsync<PostgresException>(() =>
-            ExecuteOperationsAsync(context, unmodeledDependency.Operations, CancellationToken.None));
-
-        Assert.Equal(SafeMigrationObservedState.DataBlocked,
-            Assert.Single(uniqueReport.Assessments)
+        // Assert
+        Assert.Equal(expectedState,
+            Assert.Single(report.Assessments)
                 .ObservedState);
 
-        Assert.Equal(
-            SafeMigrationObservedState.PrerequisiteMissing,
-            Assert.Single(missingReport.Assessments)
-                .ObservedState);
-
-        Assert.Equal(
-            SafeMigrationObservedState.Unsupported,
-            Assert.Single(dependencyReport.Assessments)
-                .ObservedState);
+        if (caseIndex == 2)
+        {
+            Assert.IsType<PostgresException>(failure);
+        }
 
         Assert.Equal(
             1,
@@ -190,9 +199,11 @@ public sealed class PostgreSqlModelManagedDataIntegrationTests : PostgreSqlSafeM
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Model Managed Update Handles Null Source And Mixed Target Rows Atomically.</summary>
     [Fact]
     public async Task ModelManagedUpdateHandlesNullSourceAndMixedTargetRowsAtomically()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -216,6 +227,8 @@ public sealed class PostgreSqlModelManagedDataIntegrationTests : PostgreSqlSafeM
             new object?[,] { { "Owner" }, { "Owner" } });
 
         var runner = context.GetService<ISafeMigrationRunner>();
+
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             update.Operations,
@@ -225,6 +238,7 @@ public sealed class PostgreSqlModelManagedDataIntegrationTests : PostgreSqlSafeM
         await ExecuteOperationsAsync(context, update.Operations, CancellationToken.None);
         await ExecuteOperationsAsync(context, update.Operations, CancellationToken.None);
 
+        // Assert
         Assert.Equal(
             SafeMigrationObservedState.TransitionReady,
             Assert.Single(preflight.Assessments)
@@ -238,9 +252,16 @@ public sealed class PostgreSqlModelManagedDataIntegrationTests : PostgreSqlSafeM
                 cancellationToken: CancellationToken.None));
     }
 
-    [Fact]
-    public async Task OrderedChildDeleteDefersStaleParentDependencyEvidence()
+    /// <summary>Ordered child deletion defers parent proof and preserves unmatched dependency rows.</summary>
+    /// <param name="hasUnmatchedChild">Whether another dependent row must prevent executing the parent delete.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task OrderedChildDeleteDefersStaleParentDependencyEvidence(
+        bool hasUnmatchedChild
+    )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -255,61 +276,62 @@ public sealed class PostgreSqlModelManagedDataIntegrationTests : PostgreSqlSafeM
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
-        var exact = ModelManagedDependencyDeletion(context.Database.ProviderName!, roleId: 1, userRoleId: 11);
+        var roleId = hasUnmatchedChild
+            ? 2
+            : 1;
+
+        var childId = hasUnmatchedChild
+            ? 21
+            : 11;
+
+        var builder = ModelManagedDependencyDeletion(context.Database.ProviderName!, roleId, childId);
         var runner = context.GetService<ISafeMigrationRunner>();
-        var exactPreflight = await runner.AnalyzeAsync(
+
+        // Act
+        var preflight = await runner.AnalyzeAsync(
             context,
-            exact.Operations,
-            new SafeMigrationRunOptions("model-data-exact-dependency"),
+            builder.Operations,
+            new SafeMigrationRunOptions("model-data-ordered-dependency"),
             CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, exact.Operations, CancellationToken.None);
+        if (!hasUnmatchedChild)
+        {
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        }
 
-        var unmatched = ModelManagedDependencyDeletion(context.Database.ProviderName!, roleId: 2, userRoleId: 21);
-        var unmatchedPreflight = await runner.AnalyzeAsync(
-            context,
-            unmatched.Operations,
-            new SafeMigrationRunOptions("model-data-unmatched-dependency"),
-            CancellationToken.None);
+        // Assert
+        Assert.Equal(2, preflight.Assessments.Count);
+        Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, preflight.Status);
+        Assert.Equal(SafeMigrationAction.ValidateAtRuntime, preflight.Assessments[1].Action);
 
-        Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, exactPreflight.Status);
-        Assert.Equal(SafeMigrationObservedState.TransitionReady, exactPreflight.Assessments[0].ObservedState);
-        Assert.Equal(SafeMigrationAction.ValidateAtRuntime, exactPreflight.Assessments[1].Action);
-        Assert.Equal("projected_model_managed_data_state_unknown", exactPreflight.Assessments[1].AnalysisCode);
-        Assert.Equal(
-            0,
+        if (!hasUnmatchedChild)
+        {
+            Assert.Equal(SafeMigrationObservedState.TransitionReady, preflight.Assessments[0].ObservedState);
+            Assert.Equal("projected_model_managed_data_state_unknown", preflight.Assessments[1].AnalysisCode);
+        }
+
+        Assert.Equal(hasUnmatchedChild
+                ? 1
+                : 0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM model_roles WHERE id = 1;",
+                $"SELECT COUNT(*) FROM model_roles WHERE id = {roleId};",
                 cancellationToken: CancellationToken.None));
 
-        Assert.Equal(
-            0,
+        Assert.Equal(hasUnmatchedChild
+                ? 2
+                : 0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM model_user_roles WHERE role_id = 1;",
-                cancellationToken: CancellationToken.None));
-
-        Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, unmatchedPreflight.Status);
-        Assert.Equal(SafeMigrationAction.ValidateAtRuntime, unmatchedPreflight.Assessments[1].Action);
-        Assert.Equal(
-            1,
-            await ScalarIntAsync(
-                connectionString,
-                "SELECT COUNT(*) FROM model_roles WHERE id = 2;",
-                cancellationToken: CancellationToken.None));
-
-        Assert.Equal(
-            2,
-            await ScalarIntAsync(
-                connectionString,
-                "SELECT COUNT(*) FROM model_user_roles WHERE role_id = 2;",
+                $"SELECT COUNT(*) FROM model_user_roles WHERE role_id = {roleId};",
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Model Managed Data Transitions Are Idempotent And Reject Drift.</summary>
     [Fact]
     public async Task ModelManagedDataTransitionsAreIdempotentAndRejectDrift()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -333,6 +355,37 @@ public sealed class PostgreSqlModelManagedDataIntegrationTests : PostgreSqlSafeM
             uniqueKeys: [new ExpectedModelManagedDataUniqueKeyDefinition(["code"])]);
 
         var runner = context.GetService<ISafeMigrationRunner>();
+        var update = new MigrationBuilder(context.Database.ProviderName!);
+        _ = update.UpdateModelManagedDataFromModel(
+            "model_roles",
+            ["id"],
+            ["integer"],
+            new object?[,] { { 1 }, { 2 } },
+            ["name"],
+            ["character varying(64)"],
+            new object?[,] { { "Administrator" }, { "Member" } },
+            new object?[,] { { "Owner" }, { "Member" } });
+
+        var delete = new MigrationBuilder(context.Database.ProviderName!);
+        _ = delete.DeleteModelManagedDataFromModel(
+            "model_roles",
+            ["id"],
+            ["integer"],
+            new object?[,] { { 1 }, { 99 } },
+            ["id", "code", "name"],
+            ["integer", "character varying(64)", "character varying(64)"],
+            new object?[,] { { 1, "administrator", "Owner" }, { 99, "absent", "Absent" } });
+
+        var drift = new MigrationBuilder(context.Database.ProviderName!);
+        _ = drift.EnsureModelManagedDataFromModel(
+            "model_roles",
+            ["id"],
+            ["integer"],
+            ["id", "code", "name"],
+            ["integer", "character varying(64)", "character varying(64)"],
+            new object?[,] { { 3, "drift", "Source-controlled value" } });
+
+        // Act
         var ensurePreflight = await runner.AnalyzeAsync(
             context,
             ensure.Operations,
@@ -346,17 +399,6 @@ public sealed class PostgreSqlModelManagedDataIntegrationTests : PostgreSqlSafeM
             new SafeMigrationRunOptions("model-data-ensure-replay"),
             CancellationToken.None);
 
-        var update = new MigrationBuilder(context.Database.ProviderName!);
-        _ = update.UpdateModelManagedDataFromModel(
-            "model_roles",
-            ["id"],
-            ["integer"],
-            new object?[,] { { 1 }, { 2 } },
-            ["name"],
-            ["character varying(64)"],
-            new object?[,] { { "Administrator" }, { "Member" } },
-            new object?[,] { { "Owner" }, { "Member" } });
-
         var updatePreflight = await runner.AnalyzeAsync(
             context,
             update.Operations,
@@ -364,16 +406,6 @@ public sealed class PostgreSqlModelManagedDataIntegrationTests : PostgreSqlSafeM
             CancellationToken.None);
 
         await ExecuteOperationsAsync(context, update.Operations, CancellationToken.None);
-
-        var delete = new MigrationBuilder(context.Database.ProviderName!);
-        _ = delete.DeleteModelManagedDataFromModel(
-            "model_roles",
-            ["id"],
-            ["integer"],
-            new object?[,] { { 1 }, { 99 } },
-            ["id", "code", "name"],
-            ["integer", "character varying(64)", "character varying(64)"],
-            new object?[,] { { 1, "administrator", "Owner" }, { 99, "absent", "Absent" } });
 
         var deletePreflight = await runner.AnalyzeAsync(
             context,
@@ -384,26 +416,19 @@ public sealed class PostgreSqlModelManagedDataIntegrationTests : PostgreSqlSafeM
         await ExecuteOperationsAsync(context, delete.Operations, CancellationToken.None);
         await ExecuteOperationsAsync(context, delete.Operations, CancellationToken.None);
 
-        var drift = new MigrationBuilder(context.Database.ProviderName!);
-        _ = drift.EnsureModelManagedDataFromModel(
-            "model_roles",
-            ["id"],
-            ["integer"],
-            ["id", "code", "name"],
-            ["integer", "character varying(64)", "character varying(64)"],
-            new object?[,] { { 3, "drift", "Source-controlled value" } });
-
         var driftPreflight = await runner.AnalyzeAsync(
             context,
             drift.Operations,
             new SafeMigrationRunOptions("model-data-drift"),
             CancellationToken.None);
 
-        _ = await Assert.ThrowsAsync<PostgresException>(() => ExecuteOperationsAsync(
+        var driftFailure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
             context,
             drift.Operations,
             CancellationToken.None));
 
+        // Assert
+        Assert.IsType<PostgresException>(driftFailure);
         Assert.Equal(SafeMigrationReportStatus.Ready, ensurePreflight.Status);
         Assert.Equal(SafeMigrationObservedState.Missing,
             Assert.Single(ensurePreflight.Assessments)
@@ -428,9 +453,7 @@ public sealed class PostgreSqlModelManagedDataIntegrationTests : PostgreSqlSafeM
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, driftPreflight.Status);
         Assert.Equal(SafeMigrationObservedState.Different, driftAssessment.ObservedState);
-        Assert.Collection(
-            driftAssessment.Differences,
-            difference => Assert.Equal("model_managed_row_content", difference.Facet));
+        Assert.Equal("model_managed_row_content", Assert.Single(driftAssessment.Differences).Facet);
 
         Assert.Equal(
             0,

@@ -26,8 +26,14 @@ public sealed partial class SafeMigrationRunner
         if (managedProbes is not null)
         {
             managedIntents = new Dictionary<int, ModelManagedDataIntent>(managedProbes.Count);
-            foreach (var probe in managedProbes)
+
+            // WHY: The completed probe list retains original ordinals while only the lookup dictionary grows.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var probeIndex = 0; probeIndex < managedProbes.Count; probeIndex++)
             {
+                var probe = managedProbes[probeIndex];
+
                 managedIntents.Add(probe.OperationOrdinal, (ModelManagedDataIntent)probe.Operation.Intent);
             }
 
@@ -53,6 +59,9 @@ public sealed partial class SafeMigrationRunner
         // probes may replace mutable provider qualification for unrelated owners.
         var probeOperations = probes
             .Select(static probe => probe.Operation)
+
+            // WHY: Keep the compact revalidation batch as one explicit ordered array snapshot.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         IReadOnlyList<SafeMigrationProviderAnalysis> final;
@@ -66,6 +75,9 @@ public sealed partial class SafeMigrationRunner
                         ? null
                         : probes
                             .Select(probe => targetModels[probe.OperationOrdinal])
+
+                            // WHY: Preserve the mutable List representation required by the provider contract.
+                            // ReSharper disable once UseCollectionExpression
                             .ToList(),
                     cancellationToken)
                 : await _providerAnalyzer.AnalyzeAsync(context, probeOperations, cancellationToken);
@@ -77,6 +89,8 @@ public sealed partial class SafeMigrationRunner
                 "The SafeMigrations table analyzer returned an inconsistent result count.");
         }
 
+        // WHY: Rewrite compact result slots only in this new snapshot, never in provider-owned evidence.
+        // ReSharper disable once UseCollectionExpression
         var updated = analyses.ToArray();
 
         // WHY: Map each compact probe result back to its original safe-operation ordinal.

@@ -71,23 +71,32 @@ if [[ "$pinned_ubuntu_runner_count" == "0" ]]; then
 fi
 
 expected_lockfiles="$(
-  for project in src/*/*.csproj; do
-    if grep -Fq '<IsPackable>true</IsPackable>' "$project"; then
-      printf '%s/packages.lock.json\n' "$(dirname "$project")"
-    fi
-  done \
-    | LC_ALL=C sort
+  # WHY: Every solution role owns a reviewed default-profile lock. Let the SDK
+  # interpret the solution instead of coupling coverage to project XML layout.
+  DOTNET_CLI_UI_LANGUAGE=en dotnet sln Doka.EntityFrameworkCore.SafeMigrations.slnx list \
+    | awk '{ sub(/\r$/, "") } /\.csproj$/ { print }' \
+    | while IFS= read -r project; do
+        printf '%s/packages.lock.json\n' "$(dirname "$project")"
+      done \
+    | LC_ALL=C sort -u
 )"
+
+if [[ -z "$expected_lockfiles" ]]; then
+  echo "The solution project inventory is empty; default lock coverage cannot be verified." >&2
+  exit 1
+fi
+
 actual_lockfiles="$(
   find . \
-    \( -name .git -o -name artifacts -o -name bin -o -name obj \) -prune -o \
+    -type d \( -name .git -o -name artifacts -o -name bin -o -name obj \
+      -o -name BenchmarkDotNet.Artifacts \) -prune -o \
     -type f -name packages.lock.json -print \
     | sed 's#^\./##' \
     | LC_ALL=C sort
 )"
 
 if [[ "$actual_lockfiles" != "$expected_lockfiles" ]]; then
-  echo "Committed lock files must belong exactly to publishable package projects." >&2
+  echo "Default-profile lock files must match the solution project inventory exactly." >&2
   diff \
     <(printf '%s\n' "$expected_lockfiles") \
     <(printf '%s\n' "$actual_lockfiles") >&2 || true

@@ -158,14 +158,26 @@ internal sealed partial class SafeMigrationExpectedTableConstraints
 
             var uniqueConstraintSnapshot = uniqueConstraints
                 .Select(Normalize)
+
+                // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based
+                // materialization.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray();
 
             var checkConstraintSnapshot = checkConstraints
                 .Select(Normalize)
+
+                // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based
+                // materialization.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray();
 
             var foreignKeySnapshot = foreignKeys
                 .Select(Normalize)
+
+                // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based
+                // materialization.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray();
 
             PrimaryKey = primaryKey is null
@@ -204,11 +216,11 @@ internal sealed partial class SafeMigrationExpectedTableConstraints
 
         public ExpectedPrimaryKeyDefinition? PrimaryKey { get; private set; }
 
-        public Dictionary<string, ExpectedUniqueConstraintDefinition> UniqueConstraints { get; }
+        private Dictionary<string, ExpectedUniqueConstraintDefinition> UniqueConstraints { get; }
 
-        public Dictionary<string, ExpectedCheckConstraintDefinition> CheckConstraints { get; }
+        private Dictionary<string, ExpectedCheckConstraintDefinition> CheckConstraints { get; }
 
-        public Dictionary<string, ExpectedForeignKeyDefinition> ForeignKeys { get; }
+        private Dictionary<string, ExpectedForeignKeyDefinition> ForeignKeys { get; }
 
         public static MutableConstraints From(
             ExpectedTableDefinition definition,
@@ -231,15 +243,30 @@ internal sealed partial class SafeMigrationExpectedTableConstraints
             UniqueConstraints
                 .Values
                 .OrderBy(static value => value.Name, StringComparer.Ordinal)
+
+                // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based
+                // materialization.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray(),
             CheckConstraints
                 .Values
                 .OrderBy(static value => value.Name, StringComparer.Ordinal)
+
+                // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based
+                // materialization.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray(),
             ForeignKeys
                 .Values
                 .OrderBy(static value => value.Name, StringComparer.Ordinal)
+
+                // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based
+                // materialization.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray(),
+
+            // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+            // ReSharper disable once UseCollectionExpression
             _allowedPrimaryKeys.ToArray(),
             _primaryKeyMayBeAbsent,
             Order(_allowedUniqueConstraints),
@@ -602,6 +629,8 @@ internal sealed partial class SafeMigrationExpectedTableConstraints
         )
             where T : class
         {
+            // WHY: Snapshot before changing the source collection; retain the existing materialization contract.
+            // ReSharper disable once UseCollectionExpression
             foreach (var pair in values.ToArray())
             {
                 var replacement = replace(pair.Value);
@@ -652,7 +681,7 @@ internal sealed partial class SafeMigrationExpectedTableConstraints
             Func<T, T, bool> equivalent
         )
         {
-            if (!allowed.Any(value => equivalent(value, definition)))
+            if (allowed.All(value => !equivalent(value, definition)))
             {
                 allowed.Add(definition);
             }
@@ -673,6 +702,9 @@ internal sealed partial class SafeMigrationExpectedTableConstraints
             IEnumerable<T> values
         ) => values
             .OrderBy(GetName, StringComparer.Ordinal)
+
+            // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         private static string[] RenameColumns(
@@ -683,6 +715,9 @@ internal sealed partial class SafeMigrationExpectedTableConstraints
             .Select(value => StringComparer.Ordinal.Equals(value, column)
                 ? newColumn
                 : value)
+
+            // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         private static bool ContainsColumn(

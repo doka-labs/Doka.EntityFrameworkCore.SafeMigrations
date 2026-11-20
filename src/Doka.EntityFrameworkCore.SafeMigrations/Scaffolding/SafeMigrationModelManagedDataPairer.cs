@@ -62,7 +62,7 @@ internal static partial class SafeMigrationModelManagedDataPairer
         IReadOnlyList<MigrationOperation> operations
     )
     {
-        var result = new List<DataRow>();
+        List<DataRow> result = [];
         foreach (var operation in operations)
         {
             switch (operation)
@@ -511,6 +511,9 @@ internal static partial class SafeMigrationModelManagedDataPairer
 
     private static string[] RequiredTypes(
         string[]? types,
+
+        // WHY: Every authored column must have one exact source type before inverse rows can be paired.
+        // ReSharper disable once ParameterOnlyUsedForPreconditionCheck.Local
         int expectedCount,
         string context
     )
@@ -523,6 +526,8 @@ internal static partial class SafeMigrationModelManagedDataPairer
                 $"The {context} operation does not contain one exact store type per column.");
         }
 
+        // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+        // ReSharper disable once UseCollectionExpression
         return types.ToArray();
     }
 
@@ -543,6 +548,8 @@ internal static partial class SafeMigrationModelManagedDataPairer
                 $"The {context} metadata does not contain a non-empty, unique identifier vector.");
         }
 
+        // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+        // ReSharper disable once UseCollectionExpression
         return values.ToArray();
     }
 
@@ -587,14 +594,23 @@ internal static partial class SafeMigrationModelManagedDataPairer
     ) => StringComparer.Ordinal.Equals(leftTable, rightTable)
         && StringComparer.Ordinal.Equals(leftSchema, rightSchema);
 
-    private sealed class DataRow(
-        MigrationOperation operation,
-        int row
-    )
+    private sealed class DataRow
     {
-        public MigrationOperation Operation { get; } = operation;
+        /// <summary>Initializes an authored row without copying the migration's rectangular payload.</summary>
+        /// <param name="operation">The migration operation owning the row.</param>
+        /// <param name="row">The row's ordinal in that operation.</param>
+        public DataRow(
+            MigrationOperation operation,
+            int row
+        )
+        {
+            Operation = operation;
+            Row = row;
+        }
 
-        public int Row { get; } = row;
+        public MigrationOperation Operation { get; }
+
+        public int Row { get; }
 
         public bool Consumed { get; set; }
     }

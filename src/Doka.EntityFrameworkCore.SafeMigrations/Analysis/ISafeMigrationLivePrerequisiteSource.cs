@@ -36,7 +36,6 @@ internal interface ISafeMigrationLivePrerequisiteSource
     /// </summary>
     /// <param name="intent">The exact FK contract whose native prerequisite changed.</param>
     /// <param name="liveAnalysis">The dynamic unsupported observation, not a static capability rejection.</param>
-    /// <param name="columns">The currently accepted ordered physical definitions.</param>
     /// <returns>Whether the original blocker is independently discharged in the current physical lifetime.</returns>
     /// <remarks>
     /// This permits only prerequisite re-evaluation, never Matching or Ready.
@@ -45,8 +44,7 @@ internal interface ISafeMigrationLivePrerequisiteSource
     /// </remarks>
     bool CanRequalifyLiveForeignKeyPrerequisites(
         EnsureForeignKeyIntent intent,
-        SafeMigrationProviderAnalysis liveAnalysis,
-        ISafeMigrationProjectedColumnSource columns
+        SafeMigrationProviderAnalysis liveAnalysis
     ) => false;
 
     /// <summary>
@@ -54,7 +52,6 @@ internal interface ISafeMigrationLivePrerequisiteSource
     /// </summary>
     /// <param name="intent">The exact physical index to remove.</param>
     /// <param name="liveAnalysis">The original dynamic unsupported observation.</param>
-    /// <param name="columns">The currently accepted ordered physical definitions and lifetimes.</param>
     /// <returns>Whether native index presence and removal of every affected dependency are proven.</returns>
     /// <remarks>
     /// This certifies metadata-only removal, not constraint validity or application rows.
@@ -63,8 +60,7 @@ internal interface ISafeMigrationLivePrerequisiteSource
     /// </remarks>
     bool CanRequalifyLiveDropIndexPrerequisites(
         DropIndexIntent intent,
-        SafeMigrationProviderAnalysis liveAnalysis,
-        ISafeMigrationProjectedColumnSource columns
+        SafeMigrationProviderAnalysis liveAnalysis
     ) => false;
 
     /// <summary>Qualifies mixed live/projected FK endpoints and returns actual live candidate-key identities.</summary>

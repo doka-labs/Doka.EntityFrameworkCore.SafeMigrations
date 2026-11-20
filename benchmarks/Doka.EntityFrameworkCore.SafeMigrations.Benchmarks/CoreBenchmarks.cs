@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Benchmarks;
 
 /// <summary>Measures column intent construction, planning and report serialization.</summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public class CoreColumnBenchmarks
 {
     private SafeMigrationRunReport _report = null!;
@@ -32,6 +33,7 @@ public class CoreColumnBenchmarks
 }
 
 /// <summary>Measures the blocking-only view of the retained 50000-assessment report.</summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public class CoreReportViewBenchmarks
 {
     private SafeMigrationRunReport _report = null!;
@@ -52,8 +54,11 @@ public class CoreReportViewBenchmarks
 }
 
 /// <summary>Measures construction and fingerprinting of 384 model-managed-data transitions.</summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public class CoreModelManagedDataBenchmarks
 {
+    // WHY: This fixture value keeps BenchmarkDotNet's measured method instance-bound.
+    // ReSharper disable once ConvertToConstant.Local
     private readonly string _providerName = "benchmark";
     private IReadOnlyList<MigrationOperation> _operations = null!;
 

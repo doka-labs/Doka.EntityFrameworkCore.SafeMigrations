@@ -495,6 +495,8 @@ public sealed class SqlServerDefaultValueRepresentabilityTests
             Enumerable
                 .Range(0, count)
                 .Select(static value => SafeMigrationSql.Literal(value))
+                // WHY: Fluent terminal materialization preserves the existing snapshot and enumeration contract.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray());
 
         // Act

@@ -170,6 +170,7 @@ mkdir -p "$work_dir/.config" "$work_dir/eng/package-consumer"
 cp "$script_dir/../.config/dotnet-tools.json" "$work_dir/.config/dotnet-tools.json"
 cp "$script_dir/../.editorconfig" "$work_dir/.editorconfig"
 cp "$script_dir/../Directory.Build.props" "$work_dir/Directory.Build.props"
+cp "$script_dir/../NuGet.config" "$work_dir/NuGet.config"
 cp "$script_dir/../global.json" "$work_dir/global.json"
 cp "$script_dir/Directory.Build.props" "$work_dir/eng/Directory.Build.props"
 cp "$script_dir/package-consumer/Directory.Build.props" \
@@ -348,7 +349,7 @@ verify_consumer() {
 
             # This consumer has no repository central pin; the package itself
             # must select the patched dependency in every tooling profile.
-            jq -e '.libraries["System.Security.Cryptography.Pkcs/9.0.22"].type == "package"' \
+            jq -e '.libraries["System.Security.Cryptography.Pkcs/10.0.15"].type == "package"' \
                 "$assets_file" >/dev/null
             jq -e '.libraries["Microsoft.Data.SqlClient/6.1.8"].type == "package"' \
                 "$assets_file" >/dev/null

@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations;
 
 /// <summary>Represents ensuring a schema exists.</summary>
+[PublicAPI]
 public sealed class EnsureSchemaIntent : SafeMigrationIntent
 {
     /// <summary>Initializes the intent.</summary>
@@ -20,6 +21,7 @@ public sealed class EnsureSchemaIntent : SafeMigrationIntent
 }
 
 /// <summary>Represents dropping a schema when it exists.</summary>
+[PublicAPI]
 public sealed class DropSchemaIntent : SafeMigrationIntent
 {
     /// <summary>Initializes the intent.</summary>

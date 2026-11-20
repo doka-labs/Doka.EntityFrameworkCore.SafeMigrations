@@ -1,15 +1,15 @@
 ---
 id: D-004
 status: implemented
-date: 2026-08-26
-decision-makers: [Dominic Kalkbrenner]
+date: 2026-11-19
+decision-makers: ["Dominic Kalkbrenner"]
 consulted: []
 informed: ["@doka-labs/core-maintainers"]
 scope: "Preflight, runtime, postflight, connection ownership, and failure recovery"
 supersedes: []
 superseded-by: []
 amends: []
-amended-by: [D-009]
+amended-by: [D-009, D-011, D-012, D-013]
 madr-version: "4.0.0"
 doka-profile-version: "1.0"
 ---
@@ -158,6 +158,14 @@ cleanup after success, failure, and cancellation using its independent cleanup
 token. Cleanup failure closes the connection and evicts the affected physical
 session from reuse.
 
+Owned asynchronous scope disposal, recovery and connection close await their
+actual native completion before enclosing owners are released. Observer-only
+wait deadlines cannot abandon that work. Native command timeouts and session
+quarantine remain distinct. Primary work exceptions and cancellation retain
+identity when cleanup also fails; cleanup-only failures remain observable. The
+[cleanup ownership procedure](../runbooks/deployment-and-recovery.md#cleanup-ownership)
+owns operational sequencing.
+
 EF records success history only after the migration completes. Earlier
 MySQL/MariaDB DDL may nevertheless be committed if a later command fails.
 PostgreSQL tests verify rollback for the supported transactional path, not a
@@ -302,6 +310,10 @@ installations.
   runtime validation. Related case-qualified owner catalogs and PostgreSQL
   index-input fences preserve the same lifecycle; qualification evidence is
   provider-specific, and ARM skips do not establish native SQL Server support.
+- 2026-11-19: Aligned last-update metadata, reciprocal amendments, option titles
+  and source/navigation format with the current documentation profile. Retained
+  the recorded status and historical approval evidence; this migration grants no
+  new architectural acceptance or publication authority.
 
 ### Implementation References
 
@@ -311,7 +323,7 @@ installations.
 - [Native prerequisite design](../implementation-design.md#sparse-live-constraint-prerequisites)
 - [MySQL/MariaDB analyzer and analysis lock](../../src/Doka.EntityFrameworkCore.SafeMigrations.MySql/Analysis/MySqlSafeMigrationProviderAnalyzer.cs)
 - [PostgreSQL analyzer and snapshot scope](../../src/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql/Analysis/PostgreSqlSafeMigrationProviderAnalyzer.cs)
-- [MySQL/MariaDB lifecycle tests](../../tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Integration/Features/Lifecycle/MySqlSafeMigrationIntegrationTests.Lifecycle.cs)
+- [MySQL/MariaDB lifecycle tests](../../tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Integration/Features/Lifecycle/MySqlLifecycleIntegrationTests.cs)
 - [MySQL/MariaDB edge cases](../../tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Integration/Features/Lifecycle/MySqlSafeMigrationIntegrationTests.Lifecycle.EdgeCases.cs)
 - [PostgreSQL lifecycle tests](../../tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Integration/Features/Lifecycle/PostgreSqlSafeMigrationIntegrationTests.Lifecycle.cs)
 - [PostgreSQL edge cases](../../tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Integration/Features/Lifecycle/PostgreSqlSafeMigrationIntegrationTests.Lifecycle.EdgeCases.cs)
@@ -321,10 +333,12 @@ installations.
 - [MySQL/MariaDB DDL behavior](../mysql-mariadb-ddl-behavior.md)
 - [Deployment and recovery](../runbooks/deployment-and-recovery.md)
 
+- [Primary-failure-preserving analysis cleanup](../../src/Doka.EntityFrameworkCore.SafeMigrations/Analysis/SafeMigrationAnalysisCleanup.cs)
+- [Runner ownership adversarial controls](../../tests/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests/Infrastructure/SqliteRunnerCleanupOwnershipTests.cs)
+
 ### Sources
 
-- [EF Core 10.0.11 ordered migration SQL generation][ef-core-ordered-generation]
-  (primary source; retrieved 2026-09-12)
+- [EF Core 10.0.11 ordered migration SQL generation](https://github.com/dotnet/efcore/blob/v10.0.11/src/EFCore.Relational/Migrations/MigrationsSqlGenerator.cs) (primary source; retrieved 2026-09-12)
 - [EF Core migration execution and script-locking boundary](https://learn.microsoft.com/en-us/ef/core/managing-schemas/migrations/applying) (primary source; retrieved 2026-08-26)
 - [MySQL 8.4 implicit-commit statements](https://dev.mysql.com/doc/refman/8.4/en/implicit-commit.html) (primary source; retrieved 2026-08-26)
 - [MySQL 8.4 CREATE TABLE index and constraint semantics](https://dev.mysql.com/doc/refman/8.4/en/create-table.html) (primary source; retrieved 2026-09-12)

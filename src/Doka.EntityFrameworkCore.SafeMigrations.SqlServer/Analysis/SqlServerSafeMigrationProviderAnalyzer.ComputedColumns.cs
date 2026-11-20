@@ -78,21 +78,31 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             return;
         }
 
-        var authored = new Dictionary<(string Schema, string Table), Dictionary<string, ExpectedColumnDefinition>>();
+        Dictionary<(string Schema, string Table), Dictionary<string, ExpectedColumnDefinition>> authored = [];
         HashSet<ExpectedColumnDefinition>? renamedDefinitions = null;
-        var candidates = new List<(string Table, string? Schema, ExpectedColumnDefinition Definition,
-            ExpectedTableDefinition? AuthoredTable, int ReferenceCount)>();
+        List<(string Table, string? Schema, ExpectedColumnDefinition Definition,
+            ExpectedTableDefinition? AuthoredTable, int ReferenceCount)> candidates = [];
 
-        foreach (var operation in operations)
+        // WHY: The stable indexed snapshot preserves operation and declaration order.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var operationIndex0 = 0; operationIndex0 < operations.Count; operationIndex0++)
         {
+            var operation = operations[operationIndex0];
+
             switch (operation.Intent)
             {
                 case EnsureTableIntent table:
                     authored[(table.Definition.Schema ?? "dbo", table.Definition.Table)]
                         = table.Definition.Columns.ToDictionary(static column => column.Name, StringComparer.Ordinal);
 
-                    foreach (var column in table.Definition.Columns)
+                    // WHY: The stable indexed snapshot preserves operation and declaration order.
+                    // ReSharper disable once ForCanBeConvertedToForeach
+                    // ReSharper disable once LoopCanBeConvertedToQuery
+                    for (var columnIndex0 = 0; columnIndex0 < table.Definition.Columns.Count; columnIndex0++)
                     {
+                        var column = table.Definition.Columns[columnIndex0];
+
                         AddCandidate(table.Definition.Table, table.Definition.Schema, column);
                     }
 
@@ -128,7 +138,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             }
         }
 
-        var captured = new Dictionary<ExpectedColumnDefinition, List<SqlServerProjectedComputedKeyProof>>();
+        Dictionary<ExpectedColumnDefinition, List<SqlServerProjectedComputedKeyProof>> captured = [];
 
         await SafeMigrationCatalogProbeBatch.ReadAsync(
             connection,
@@ -147,10 +157,10 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
 
                 return new SafeMigrationCatalogProbeStatement(1, 0, ordinal);
             },
-            async (reader, ordinal, _, token) =>
+            async (reader, ordinal, _, callbackCancellationToken) =>
             {
                 if (reader.FieldCount != 3
-                    || !await reader.ReadAsync(token)
+                    || !await reader.ReadAsync(callbackCancellationToken)
                     || reader.IsDBNull(0)
                     || reader.GetInt32(0) != ordinal
                     || reader.IsDBNull(1))
@@ -164,7 +174,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                     : reader.GetString(2);
 
                 if (proof is < 0 or > 6
-                    || await reader.ReadAsync(token))
+                    || await reader.ReadAsync(callbackCancellationToken))
                 {
                     throw new InvalidOperationException("SQL Server returned an invalid computed-column index proof.");
                 }
@@ -174,15 +184,16 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                 if (shape is not null)
                 {
                     var candidate = candidates[ordinal];
-                    var bindings = proof == 0
-                        ? new Dictionary<string, ExpectedColumnDefinition?>(StringComparer.Ordinal)
-                        : encodedBindings is null
-                            ? throw new InvalidOperationException(
-                                "SQL Server omitted its computed-column source bindings.")
-                            : SqlServerComputedColumnBindings.Read(
-                                encodedBindings,
-                                candidate.ReferenceCount,
-                                candidate.AuthoredTable);
+                    var bindings = proof switch
+                    {
+                        0 => new Dictionary<string, ExpectedColumnDefinition?>(StringComparer.Ordinal),
+                        _ when encodedBindings is null => throw new InvalidOperationException(
+                            "SQL Server omitted its computed-column source bindings."),
+                        _ => SqlServerComputedColumnBindings.Read(
+                            encodedBindings,
+                            candidate.ReferenceCount,
+                            candidate.AuthoredTable),
+                    };
 
                     if (!captured.TryGetValue(definition, out var proofs))
                     {
@@ -221,13 +232,15 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                         });
                 }
             },
-            cancellationToken,
             transaction,
-            SqlServerCatalogParameterBindings.MaximumParameters);
+            SqlServerCatalogParameterBindings.MaximumParameters,
+            cancellationToken);
 
         // WHY: Only the completed invocation may publish these reference-bound
         // proofs. A cancellation or malformed result cannot lend partial success.
         _projectedComputedKeys = captured;
+
+        return;
 
         void AddCandidate(
             string table,
@@ -328,8 +341,13 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             return analysis;
         }
 
-        foreach (var proof in proofs)
+        // WHY: The stable indexed snapshot preserves declaration order without mutating the source.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var proofIndex0 = 0; proofIndex0 < proofs.Count; proofIndex0++)
         {
+            var proof = proofs[proofIndex0];
+
             if (!proof.ColumnSupported
                 || !proof.Matches(columns, column.Table, column.Schema))
             {
@@ -430,8 +448,14 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         }
 
         var hasNewComputed = false;
-        foreach (var key in index.Definition.Keys)
+
+        // WHY: The stable indexed snapshot preserves operation and declaration order.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var keyIndex0 = 0; keyIndex0 < index.Definition.Keys.Count; keyIndex0++)
         {
+            var key = index.Definition.Keys[keyIndex0];
+
             if (key.Column is null
                 || !ProvesColumn(key.Column))
             {
@@ -439,8 +463,13 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             }
         }
 
-        foreach (var name in index.Definition.IncludedColumns)
+        // WHY: The stable indexed snapshot preserves operation and declaration order.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var includedIndex0 = 0; includedIndex0 < index.Definition.IncludedColumns.Count; includedIndex0++)
         {
+            var name = index.Definition.IncludedColumns[includedIndex0];
+
             if (!ProvesColumn(name))
             {
                 return null;
@@ -484,8 +513,8 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                 }
 
                 if (!_projectedComputedKeys.TryGetValue(column, out var proofs)
-                    || !proofs.Any(proof => proof.ColumnSupported
-                        && proof.Matches(columns, index.Definition.Table, index.Definition.Schema)))
+                    || proofs.All(proof => !proof.ColumnSupported
+                        || !proof.Matches(columns, index.Definition.Table, index.Definition.Schema)))
                 {
                     return false;
                 }

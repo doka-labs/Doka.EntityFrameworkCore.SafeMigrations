@@ -15,8 +15,13 @@ public sealed class SafeMigrationGeneratedExpressionBridgeTests
         string sql
     )
     {
+        // Arrange
+        // The theory case supplies the complete provider-generated expression.
+
+        // Act
         var parsed = SafeMigrationSqlExpressionParser.TryParse(sql, out var expression, out var failureCode);
 
+        // Assert
         Assert.True(parsed, failureCode);
         Assert.NotNull(expression);
         Assert.True(SafeMigrationSqlExpressionInspector.IsStructurallyComparable(expression));
@@ -26,6 +31,7 @@ public sealed class SafeMigrationGeneratedExpressionBridgeTests
     [Fact]
     public void ComputedMetadataPreservesStructuredSearchedCase()
     {
+        // Arrange
         var operation = new AddColumnOperation
         {
             Name = "has_children",
@@ -37,8 +43,10 @@ public sealed class SafeMigrationGeneratedExpressionBridgeTests
             IsStored = true,
         };
 
+        // Act
         var definition = SafeMigrationExpectedDefinitionFactory.From(operation);
 
+        // Assert
         Assert.NotNull(definition.ComputedExpression);
         Assert.Null(definition.ComputedColumnSql);
         Assert.True(SafeMigrationSqlExpressionInspector.IsStructurallyComparable(definition.ComputedExpression));
@@ -50,10 +58,13 @@ public sealed class SafeMigrationGeneratedExpressionBridgeTests
     [Fact]
     public void ScaffoldedCheckHelperPreservesStructuredPredicate()
     {
+        // Arrange
         var builder = new MigrationBuilder("test");
 
+        // Act
         builder.AddCheckConstraintIfNotExists("ck_nodes_bounds", "nodes", "`right_bound` > `left_bound`");
 
+        // Assert
         var operation = Assert.IsType<SafeMigrationOperation>(Assert.Single(builder.Operations));
         var definition = Assert.IsType<EnsureCheckConstraintIntent>(operation.Intent)
             .Definition;
@@ -66,6 +77,7 @@ public sealed class SafeMigrationGeneratedExpressionBridgeTests
     [Fact]
     public void ExplicitRawCheckRemainsDistinctFromCapturedStructuredCheck()
     {
+        // Arrange
         const string sql = "`right_bound` > `left_bound`";
         var raw = new ExpectedCheckConstraintDefinition("ck_nodes_bounds", "nodes", sql);
         var captured = SafeMigrationExpectedDefinitionFactory.CheckConstraint(
@@ -74,8 +86,10 @@ public sealed class SafeMigrationGeneratedExpressionBridgeTests
             sql,
             schema: null);
 
+        // Act
         var equivalent = SafeMigrationSemanticDefinitionComparers.CheckConstraint.Equals(raw, captured);
 
+        // Assert
         Assert.False(equivalent);
         Assert.Null(raw.Expression);
         Assert.Equal(sql, raw.Sql);
@@ -86,6 +100,7 @@ public sealed class SafeMigrationGeneratedExpressionBridgeTests
     [Fact]
     public void UnknownGeneratedSyntaxRemainsOpaque()
     {
+        // Arrange
         const string sql = "value + INTERVAL 1 DAY";
         var operation = new AddColumnOperation
         {
@@ -96,8 +111,10 @@ public sealed class SafeMigrationGeneratedExpressionBridgeTests
             ComputedColumnSql = sql,
         };
 
+        // Act
         var captured = SafeMigrationExpectedDefinitionFactory.From(operation);
 
+        // Assert
         Assert.Null(captured.ComputedExpression);
         Assert.Equal(sql, captured.ComputedColumnSql);
     }

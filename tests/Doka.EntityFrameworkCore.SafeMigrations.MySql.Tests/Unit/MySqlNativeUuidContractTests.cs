@@ -35,10 +35,13 @@ public sealed class MySqlNativeUuidContractTests : IDisposable
         string? storeType
     )
     {
+        // Arrange
         var operation = CreateColumn(clrType, storeType, DokaMySqlGuidFormat.Uuid);
 
+        // Act
         var metadata = operation.GetMySqlMigrationMetadata();
 
+        // Assert
         Assert.Equal(DokaMySqlGuidFormat.Uuid, metadata.GuidFormat);
     }
 
@@ -63,12 +66,15 @@ public sealed class MySqlNativeUuidContractTests : IDisposable
         object annotation
     )
     {
+        // Arrange
         var operation = CreateColumn(clrType, storeType, annotation);
         var definition = SafeMigrationExpectedDefinitionFactory.From(operation);
 
+        // Act
         var exception = Record.Exception(() => operation.GetMySqlMigrationMetadata());
         var supported = MySqlSafeMigrationColumnMetadata.TryCreate(definition, out _);
 
+        // Assert
         Assert.IsType<InvalidOperationException>(exception);
         Assert.False(supported);
     }
@@ -82,22 +88,32 @@ public sealed class MySqlNativeUuidContractTests : IDisposable
         bool nullable
     )
     {
+        // Arrange
         var operation = CreateColumn(typeof(Guid), "uuid", DokaMySqlGuidFormat.Uuid);
         operation.IsNullable = nullable;
+
+        // Act
         var definition = SafeMigrationExpectedDefinitionFactory.From(operation);
 
         var supported = MySqlSafeMigrationColumnMetadata.TryCreate(definition, out var metadata);
 
+        var hasUnsupportedAnnotation =
+            MySqlSafeMigrationCatalogSqlBuilder.HasUnsupportedProviderColumnAnnotation(definition);
+
+        var canConverge = MySqlSafeMigrationColumnMetadata.CanSafelyConverge(definition);
+
+        // Assert
         Assert.True(supported);
         Assert.Equal(DokaMySqlGuidFormat.Uuid, metadata.GuidFormat);
-        Assert.False(MySqlSafeMigrationCatalogSqlBuilder.HasUnsupportedProviderColumnAnnotation(definition));
-        Assert.True(MySqlSafeMigrationColumnMetadata.CanSafelyConverge(definition));
+        Assert.False(hasUnsupportedAnnotation);
+        Assert.True(canConverge);
     }
 
     /// <summary>An annotation alone retains the ordinary provider's default CLR-to-store inference.</summary>
     [Fact]
     public void NativeAnnotationWithoutStoreTypeMatchesOrdinaryProviderInference()
     {
+        // Arrange
         using var nativeContext = new PlainContext(CreateOptions<PlainContext>(registerSafeMigrations: false));
         using var safeContext = new PlainContext(CreateOptions<PlainContext>());
         var original = CreateColumn(typeof(Guid), storeType: null, DokaMySqlGuidFormat.Uuid);
@@ -113,6 +129,7 @@ public sealed class MySqlNativeUuidContractTests : IDisposable
         // Real property opt-in supplies an explicit uuid type through the model.
         const string inferredColumn = "`native_id` binary(16)";
 
+        // Act
         var nativeSql = string.Concat(
             nativeContext
                 .GetService<IMigrationsSqlGenerator>()
@@ -125,6 +142,7 @@ public sealed class MySqlNativeUuidContractTests : IDisposable
                 .Generate(builder.Operations, safeContext.Model)
                 .Select(static command => command.CommandText));
 
+        // Assert
         Assert.Equal(DokaMySqlGuidFormat.Uuid,
             original.GetMySqlMigrationMetadata()
                 .GuidFormat);
@@ -146,6 +164,7 @@ public sealed class MySqlNativeUuidContractTests : IDisposable
         bool nullable
     )
     {
+        // Arrange
         using var context = new NativeGuidContext(CreateOptions<NativeGuidContext>());
         var property = context.Model.FindEntityType(typeof(NativeGuidRecord))!
             .FindProperty(
@@ -156,9 +175,11 @@ public sealed class MySqlNativeUuidContractTests : IDisposable
         using var command = new MySqlCommand();
         var mapping = property.GetRelationalTypeMapping();
 
+        // Act
         var parameter = mapping.CreateParameter(command, "id", s_value, nullable);
         var literal = mapping.GenerateSqlLiteral(s_value);
 
+        // Assert
         Assert.Equal("uuid", mapping.StoreType);
         Assert.Null(property.GetMaxLength());
         Assert.Null(property.IsFixedLength());
@@ -176,13 +197,16 @@ public sealed class MySqlNativeUuidContractTests : IDisposable
     [Fact]
     public void NativePropertyOptInPreservesBinaryDefaultAndExplicitChar36()
     {
+        // Arrange
         using var context = new NativeGuidContext(CreateOptions<NativeGuidContext>());
 
+        // Act
         var entity = context.Model.FindEntityType(typeof(NativeGuidRecord))!;
         var implicitProperty = entity.FindProperty(nameof(NativeGuidRecord.UnconfiguredId))!;
         var binaryProperty = entity.FindProperty(nameof(NativeGuidRecord.BinaryId))!;
         var characterProperty = entity.FindProperty(nameof(NativeGuidRecord.CharacterId))!;
 
+        // Assert
         Assert.Equal("binary(16)", implicitProperty.GetColumnType());
         Assert.Equal(DokaMySqlGuidFormat.Binary16,
             implicitProperty.FindAnnotation("Doka:MySql:GuidFormat")
@@ -203,13 +227,16 @@ public sealed class MySqlNativeUuidContractTests : IDisposable
     [Fact]
     public void NativeDefaultPreservesExplicitBinary16AndChar36()
     {
+        // Arrange
         using var context = new NativeGuidContext(CreateOptions<NativeGuidContext>(DokaMySqlGuidFormat.Uuid));
 
+        // Act
         var entity = context.Model.FindEntityType(typeof(NativeGuidRecord))!;
         var implicitProperty = entity.FindProperty(nameof(NativeGuidRecord.UnconfiguredId))!;
         var binaryProperty = entity.FindProperty(nameof(NativeGuidRecord.BinaryId))!;
         var characterProperty = entity.FindProperty(nameof(NativeGuidRecord.CharacterId))!;
 
+        // Assert
         Assert.Equal("uuid", implicitProperty.GetColumnType());
         Assert.Equal(DokaMySqlGuidFormat.Uuid,
             implicitProperty.FindAnnotation("Doka:MySql:GuidFormat")
@@ -236,11 +263,14 @@ public sealed class MySqlNativeUuidContractTests : IDisposable
         DokaMySqlGuidFormat defaultFormat
     )
     {
+        // Arrange
         using var context = new ConvertedGuidContext(CreateOptions<ConvertedGuidContext>(defaultFormat));
 
+        // Act
         var property = context.Model.FindEntityType(typeof(ConvertedGuidRecord))!
             .FindProperty(nameof(ConvertedGuidRecord.ConvertedId))!;
 
+        // Assert
         Assert.Equal(typeof(byte[]), property.GetProviderClrType());
         Assert.Equal("varbinary(17)", property.GetColumnType());
         Assert.Null(property.FindAnnotation("Doka:MySql:GuidFormat"));
@@ -255,13 +285,16 @@ public sealed class MySqlNativeUuidContractTests : IDisposable
         bool useMariaDb
     )
     {
+        // Arrange
         using var context = new PlainContext(
             CreateOptions<PlainContext>(serverVersion: UnsupportedVersion(useMariaDb)));
 
         var mappingSource = context.GetService<IRelationalTypeMappingSource>();
 
+        // Act
         var exception = Record.Exception(() => mappingSource.FindMapping(typeof(Guid), "uuid"));
 
+        // Assert
         Assert.Contains(
             "MariaDB 10.7",
             Assert.IsType<NotSupportedException>(exception)
@@ -282,6 +315,7 @@ public sealed class MySqlNativeUuidContractTests : IDisposable
         bool annotateFormat
     )
     {
+        // Arrange
         using var context = new PlainContext(
             CreateOptions<PlainContext>(serverVersion: UnsupportedVersion(useMariaDb)));
 
@@ -301,12 +335,14 @@ public sealed class MySqlNativeUuidContractTests : IDisposable
                 }
             });
 
+        // Act
         var commands = context
             .GetService<IMigrationsSqlGenerator>()
             .Generate(builder.Operations, context.Model);
 
         var sql = string.Concat(commands.Select(static command => command.CommandText));
 
+        // Assert
         Assert.NotEmpty(commands);
         Assert.Contains("doka_sm_unsupported", sql, StringComparison.Ordinal);
         Assert.Contains("'unsupported'", sql, StringComparison.Ordinal);
@@ -326,18 +362,21 @@ public sealed class MySqlNativeUuidContractTests : IDisposable
         bool globalDefault
     )
     {
+        // Arrange
         var version = UnsupportedVersion(useMariaDb);
 
+        // Act
         var exception = Record.Exception(() =>
         {
-            using var context = globalDefault
-                ? (DbContext)new DefaultGuidContext(
+            using DbContext context = globalDefault
+                ? new DefaultGuidContext(
                     CreateOptions<DefaultGuidContext>(DokaMySqlGuidFormat.Uuid, version))
                 : new NativeGuidContext(CreateOptions<NativeGuidContext>(serverVersion: version));
 
             _ = context.Model;
         });
 
+        // Assert
         Assert.Contains(
             "MariaDB 10.7",
             Assert.IsType<NotSupportedException>(exception)
@@ -359,9 +398,8 @@ public sealed class MySqlNativeUuidContractTests : IDisposable
             ClrType = clrType,
             ColumnType = storeType,
             IsNullable = Nullable.GetUnderlyingType(clrType) is not null,
+            ["Doka:MySql:GuidFormat"] = annotation,
         };
-
-        operation["Doka:MySql:GuidFormat"] = annotation;
 
         return operation;
     }
@@ -403,8 +441,14 @@ public sealed class MySqlNativeUuidContractTests : IDisposable
         : MySqlServerVersion.MySql(new Version(8, 4, 0));
 
     /// <summary>Exposes native, legacy, and implicit mappings in the same finalized model.</summary>
-    private sealed class NativeGuidContext(DbContextOptions<NativeGuidContext> options) : DbContext(options)
+    private sealed class NativeGuidContext : DbContext
     {
+        /// <summary>Initializes the explicit dependencies of this isolated test helper.</summary>
+        /// <param name="options">The isolated model and provider options.</param>
+        public NativeGuidContext(
+            DbContextOptions<NativeGuidContext> options
+        ) : base(options) { }
+
         /// <inheritdoc />
         protected override void OnModelCreating(
             ModelBuilder modelBuilder
@@ -430,8 +474,14 @@ public sealed class MySqlNativeUuidContractTests : IDisposable
     }
 
     /// <summary>Exercises only the context-wide GUID default.</summary>
-    private sealed class DefaultGuidContext(DbContextOptions<DefaultGuidContext> options) : DbContext(options)
+    private sealed class DefaultGuidContext : DbContext
     {
+        /// <summary>Initializes the explicit dependencies of this isolated test helper.</summary>
+        /// <param name="options">The isolated model and provider options.</param>
+        public DefaultGuidContext(
+            DbContextOptions<DefaultGuidContext> options
+        ) : base(options) { }
+
         /// <inheritdoc />
         protected override void OnModelCreating(
             ModelBuilder modelBuilder
@@ -439,8 +489,14 @@ public sealed class MySqlNativeUuidContractTests : IDisposable
     }
 
     /// <summary>Separates an application converter from provider-owned GUID mappings.</summary>
-    private sealed class ConvertedGuidContext(DbContextOptions<ConvertedGuidContext> options) : DbContext(options)
+    private sealed class ConvertedGuidContext : DbContext
     {
+        /// <summary>Initializes the explicit dependencies of this isolated test helper.</summary>
+        /// <param name="options">The isolated model and provider options.</param>
+        public ConvertedGuidContext(
+            DbContextOptions<ConvertedGuidContext> options
+        ) : base(options) { }
+
         /// <inheritdoc />
         protected override void OnModelCreating(
             ModelBuilder modelBuilder
@@ -451,8 +507,14 @@ public sealed class MySqlNativeUuidContractTests : IDisposable
     }
 
     /// <summary>Supplies a valid model for direct public type-mapping capability probes.</summary>
-    private sealed class PlainContext(DbContextOptions<PlainContext> options) : DbContext(options)
+    private sealed class PlainContext : DbContext
     {
+        /// <summary>Initializes the explicit dependencies of this isolated test helper.</summary>
+        /// <param name="options">The isolated model and provider options.</param>
+        public PlainContext(
+            DbContextOptions<PlainContext> options
+        ) : base(options) { }
+
         /// <inheritdoc />
         protected override void OnModelCreating(
             ModelBuilder modelBuilder
@@ -460,6 +522,7 @@ public sealed class MySqlNativeUuidContractTests : IDisposable
     }
 
     /// <summary>Stores the independently configured GUID properties.</summary>
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class NativeGuidRecord
     {
         /// <summary>Gets or sets the primary native UUID.</summary>
@@ -479,6 +542,7 @@ public sealed class MySqlNativeUuidContractTests : IDisposable
     }
 
     /// <summary>Stores an application-owned GUID-to-bytes conversion.</summary>
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class ConvertedGuidRecord
     {
         /// <summary>Gets or sets the independent entity key.</summary>
@@ -489,6 +553,7 @@ public sealed class MySqlNativeUuidContractTests : IDisposable
     }
 
     /// <summary>A capability probe must not require a native UUID model to initialize.</summary>
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class PlainRecord
     {
         /// <summary>Gets or sets the ordinary integer key.</summary>

@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations;
 
 /// <summary>Specifies which report entries are written to an operator-facing report view.</summary>
+[PublicAPI]
 public enum SafeMigrationReportSelection
 {
     /// <summary>Includes every assessment and unexpected object from the source report.</summary>

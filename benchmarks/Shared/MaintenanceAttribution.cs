@@ -1,3 +1,7 @@
+// WHY: Provider attribution workloads use all controls; linked Core tests exercise evidence persistence independently.
+// ReSharper disable UnusedType.Global
+// ReSharper disable UnusedMember.Global
+
 namespace Doka.EntityFrameworkCore.SafeMigrations.Benchmarks;
 
 /// <summary>Retains functional attribution controls separately from BenchmarkDotNet measurement reports.</summary>
@@ -11,16 +15,18 @@ internal static class MaintenanceAttribution
     /// <param name="outputPath">The caller-owned functional evidence destination.</param>
     /// <param name="provider">The actual native or client-only profile being exercised.</param>
     /// <param name="results">The verified functional results and structural controls.</param>
-    /// <returns>Zero after the complete evidence file has been persisted.</returns>
-    internal static int Write(
+    /// <param name="cancellationToken">The token controlling evidence persistence.</param>
+    /// <returns>The asynchronous evidence persistence.</returns>
+    internal static async Task WriteAsync(
         string outputPath,
         string provider,
-        IReadOnlyList<object> results
+        IReadOnlyList<object> results,
+        CancellationToken cancellationToken
     )
     {
         var path = Path.GetFullPath(outputPath);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        File.WriteAllText(
+        await File.WriteAllTextAsync(
             path,
             JsonSerializer.Serialize(
                 new
@@ -34,9 +40,8 @@ internal static class MaintenanceAttribution
                         ?? "unlabelled",
                     Results = results,
                 },
-                s_jsonOptions));
-
-        return 0;
+                s_jsonOptions),
+            cancellationToken);
     }
 
     /// <summary>

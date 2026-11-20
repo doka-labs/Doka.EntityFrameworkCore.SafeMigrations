@@ -54,6 +54,9 @@ internal sealed class SafeMigrationProviderAnnotation
             .GetAnnotations()
             .OrderBy(static annotation => annotation.Name, StringComparer.Ordinal)
             .Select(static annotation => new SafeMigrationProviderAnnotation(annotation.Name, annotation.Value))
+
+            // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
     }
 
@@ -85,6 +88,9 @@ internal sealed class SafeMigrationProviderAnnotation
             or Guid
             or Type
             or Enum => value,
+
+        // WHY: Keep the defensive array clone so caller mutations cannot change captured binary values.
+        // ReSharper disable once UseCollectionExpression
         byte[] bytes => bytes.ToArray(),
         Array array => SnapshotArray(array, context),
         _ => throw new NotSupportedException(

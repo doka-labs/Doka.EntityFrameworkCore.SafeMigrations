@@ -58,8 +58,13 @@ internal static class MySqlExpressionCatalogComparison
                 .Append(literal(candidate.Text))
                 .Append(" USING utf8mb4)) AS BINARY)");
 
-            foreach (var token in candidate.Literals)
+            // WHY: Index this stable list while preserving its order and ownership.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var tokenIndex = 0; tokenIndex < candidate.Literals.Count; tokenIndex++)
             {
+                var token = candidate.Literals[tokenIndex];
+
                 // WHY: Byte positions were captured before native encoding;
                 // supplementary values and escaped delimiters cannot shift a
                 // following guard or be mistaken for new quoted SQL tokens.

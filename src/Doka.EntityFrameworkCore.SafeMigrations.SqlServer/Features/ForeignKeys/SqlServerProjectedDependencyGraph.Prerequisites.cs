@@ -51,8 +51,13 @@ internal sealed partial class SqlServerProjectedDependencyGraph
         // WHY: A captured future child contract is not an accepted empty-table
         // proof. Core supplies ordered creation/data/structure facts; every FK
         // operand must still be the exact captured dependent definition.
-        foreach (var name in foreignKey.Columns)
+        // WHY: Immutable indexed slots retain their authored order without mutating the source.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var columnIndex = 0; columnIndex < foreignKey.Columns.Count; columnIndex++)
         {
+            var name = foreignKey.Columns[columnIndex];
+
             var captured = capturedTable.Columns.FirstOrDefault(column => column.Name == name);
             if (captured is null
                 || !columns.TryGetProjectedColumn(foreignKey.Table, foreignKey.Schema, name, out var current)
@@ -117,8 +122,13 @@ internal sealed partial class SqlServerProjectedDependencyGraph
         // avoids allocating requested id vectors for every inline assessment.
         Span<int> columnIds = stackalloc int[32];
 
-        foreach (var foreignKey in foreignKeys)
+        // WHY: Immutable indexed slots retain their authored order without mutating the source.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var foreignKeyIndex = 0; foreignKeyIndex < foreignKeys.Count; foreignKeyIndex++)
         {
+            var foreignKey = foreignKeys[foreignKeyIndex];
+
             var principalId = GetTable(foreignKey.PrincipalTable, foreignKey.PrincipalSchema);
             if (foreignKey.PrincipalColumns.Count > columnIds.Length
                 || !_inlinePhysicalWidthSupported(table, foreignKey))
@@ -250,8 +260,14 @@ internal sealed partial class SqlServerProjectedDependencyGraph
     );
 
     /// <summary>Binds a captured FK certificate to the authored dependent table that supplied its operands.</summary>
+
+    // WHY: Both immutable references participate in generated equality/hash, preventing cross-owner proof reuse.
     private readonly record struct InlineProofKey(
+
+        // ReSharper disable once NotAccessedPositionalProperty.Local
         ExpectedForeignKeyDefinition ForeignKey,
+
+        // ReSharper disable once NotAccessedPositionalProperty.Local
         ExpectedTableDefinition Table
     );
 

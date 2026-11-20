@@ -1,5 +1,8 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 
+/// <summary>
+/// Provides isolated SQLite coverage for safe migration SQL expression renderer.
+/// </summary>
 public sealed partial class SqliteSafeMigrationSqlExpressionRendererTests
 {
     /// <summary>
@@ -14,13 +17,20 @@ public sealed partial class SqliteSafeMigrationSqlExpressionRendererTests
         string sql
     )
     {
+        // Arrange
         using var connection = new SqliteConnection("Data Source=:memory:");
         using var context = new SqliteSafeMigrationTestContext(connection, registerSafeMigrations: false);
         var renderer = CreateRenderer(context);
-        Assert.True(SafeMigrationSqlExpressionParser.TryParseCapturedSource(sql, out var expression));
+        if (!SafeMigrationSqlExpressionParser.TryParseCapturedSource(sql, out var expression))
+        {
+            throw new InvalidOperationException(
+                "The captured numeric fixture must parse before rendering is exercised.");
+        }
 
+        // Act
         var rendered = renderer.Render(expression);
 
+        // Assert
         Assert.Equal(sql, rendered);
     }
 
@@ -28,21 +38,30 @@ public sealed partial class SqliteSafeMigrationSqlExpressionRendererTests
     [Fact]
     public void ParsedConvertRequiresItsSourceDialect()
     {
+        // Arrange
         using var connection = new SqliteConnection("Data Source=:memory:");
         using var context = new SqliteSafeMigrationTestContext(connection, registerSafeMigrations: false);
         var renderer = CreateRenderer(context);
-        Assert.True(SafeMigrationSqlExpressionParser.TryParse("CONVERT(integer, value)", out var expression));
+        if (!SafeMigrationSqlExpressionParser.TryParse("CONVERT(integer, value)", out var expression))
+        {
+            throw new InvalidOperationException(
+                "The CONVERT fixture must parse before dialect validation is exercised.");
+        }
 
+        // Act
         var feature = renderer.GetUnsupportedFeature(expression);
+        var exception = Record.Exception(() => renderer.Render(expression));
 
+        // Assert
         Assert.Equal("structured_convert_dialect", feature);
-        Assert.Throws<NotSupportedException>(() => renderer.Render(expression));
+        Assert.IsType<NotSupportedException>(exception);
     }
 
     /// <summary>Rendering retains ordered branches and the implicit SQL NULL when ELSE is omitted.</summary>
     [Fact]
     public void CaseRenderingPreservesOrderedClausesAndOmittedElse()
     {
+        // Arrange
         using var connection = new SqliteConnection("Data Source=:memory:");
         using var context = new SqliteSafeMigrationTestContext(connection, registerSafeMigrations: false);
         var renderer = CreateRenderer(context);
@@ -56,10 +75,13 @@ public sealed partial class SqliteSafeMigrationSqlExpressionRendererTests
                 SafeMigrationSql.Literal(1)),
         ]);
 
+        // Act
         var sql = renderer.Render(expression);
+        var feature = renderer.GetUnsupportedFeature(expression);
 
+        // Assert
         Assert.Equal("CASE WHEN (\"value\" IS NULL) THEN 0 WHEN (\"other\" IS NOT NULL) THEN 1 END", sql);
-        Assert.Null(renderer.GetUnsupportedFeature(expression));
+        Assert.Null(feature);
     }
 
     /// <summary>Unsupported nested leaves cannot bypass validation through CASE.</summary>
@@ -72,6 +94,7 @@ public sealed partial class SqliteSafeMigrationSqlExpressionRendererTests
         int role
     )
     {
+        // Arrange
         using var connection = new SqliteConnection("Data Source=:memory:");
         using var context = new SqliteSafeMigrationTestContext(connection, registerSafeMigrations: false);
         var renderer = CreateRenderer(context);
@@ -90,8 +113,10 @@ public sealed partial class SqliteSafeMigrationSqlExpressionRendererTests
                 ? unsupported
                 : SafeMigrationSql.Literal(0));
 
+        // Act
         var feature = renderer.GetUnsupportedFeature(expression);
 
+        // Assert
         Assert.Equal("provider_fragment_mismatch", feature);
     }
 }

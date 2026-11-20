@@ -132,8 +132,7 @@ internal sealed record SqliteIndexSnapshot(
     string Origin,
     bool Partial,
     IReadOnlyList<SqliteIndexKeySnapshot> Keys,
-    string? Filter,
-    string Sql
+    string? Filter
 );
 
 /// <summary>Represents one ordered physical SQLite index key.</summary>

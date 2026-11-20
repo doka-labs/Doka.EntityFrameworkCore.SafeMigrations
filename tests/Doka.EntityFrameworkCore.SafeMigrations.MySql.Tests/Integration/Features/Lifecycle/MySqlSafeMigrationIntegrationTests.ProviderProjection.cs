@@ -9,9 +9,13 @@ public sealed class MySqlProviderProjectionIntegrationTests : MySqlSafeMigration
         MySqlEngineContainerFixture fixture
     ) : base(fixture) { }
 
+    /// <summary>
+    /// Combines accepted projected columns and keys with live table prerequisites for a following foreign key.
+    /// </summary>
     [Fact]
     public async Task ExistingTablesProjectAcceptedColumnsAndKeysIntoForeignKeyPreflight()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -27,6 +31,7 @@ public sealed class MySqlProviderProjectionIntegrationTests : MySqlSafeMigration
         var builder = ExistingTableForeignKeyConvergence(context, defaultValue: null);
         var runner = context.GetService<ISafeMigrationRunner>();
 
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
@@ -47,6 +52,7 @@ public sealed class MySqlProviderProjectionIntegrationTests : MySqlSafeMigration
             new SafeMigrationRunOptions("existing-table-foreign-key-replay"),
             CancellationToken.None);
 
+        // Assert
         var foreignKey = Assert.Single(
             preflight.Assessments,
             static assessment => assessment.OperationKind == SafeMigrationOperationKind.EnsureForeignKey);
@@ -77,9 +83,11 @@ public sealed class MySqlProviderProjectionIntegrationTests : MySqlSafeMigration
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Does not invent referential data evidence for a newly defaulted dependent column.</summary>
     [Fact]
     public async Task ForeignKeyPreflightRejectsUnprovenRowsFromNewDefaultedColumn()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -94,6 +102,7 @@ public sealed class MySqlProviderProjectionIntegrationTests : MySqlSafeMigration
         await using var context = CreateContext(connectionString);
         var builder = ExistingTableForeignKeyConvergence(context, defaultValue: 999);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -102,6 +111,7 @@ public sealed class MySqlProviderProjectionIntegrationTests : MySqlSafeMigration
                 new SafeMigrationRunOptions("existing-table-foreign-key-default"),
                 CancellationToken.None);
 
+        // Assert
         var foreignKey = Assert.Single(
             report.Assessments,
             static assessment => assessment.OperationKind == SafeMigrationOperationKind.EnsureForeignKey);
@@ -122,9 +132,11 @@ public sealed class MySqlProviderProjectionIntegrationTests : MySqlSafeMigration
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Ends the lifetime of an equivalent unique alias when its physical index is dropped.</summary>
     [Fact]
     public async Task SemanticUniqueNoOpDoesNotSurvivePhysicalDropInForeignKeyProjection()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -139,6 +151,7 @@ public sealed class MySqlProviderProjectionIntegrationTests : MySqlSafeMigration
         await using var context = CreateContext(connectionString);
         var builder = SemanticUniqueDropProjection(context);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -147,6 +160,7 @@ public sealed class MySqlProviderProjectionIntegrationTests : MySqlSafeMigration
                 new SafeMigrationRunOptions("semantic-unique-drop-projection"),
                 CancellationToken.None);
 
+        // Assert
         var alias = Assert.Single(
             report.Assessments,
             static assessment => StringComparer.Ordinal.Equals(
@@ -168,9 +182,11 @@ public sealed class MySqlProviderProjectionIntegrationTests : MySqlSafeMigration
         Assert.Equal(SafeMigrationAction.RejectPrerequisiteMissing, foreignKey.Action);
     }
 
+    /// <summary>Binds semantic matches to the independently verified physical object names.</summary>
     [Fact]
     public async Task ProviderAnalysisResolvesPhysicalIdentitiesForSemanticAliases()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -191,8 +207,12 @@ public sealed class MySqlProviderProjectionIntegrationTests : MySqlSafeMigration
         var operations = builder
             .Operations
             .Cast<SafeMigrationOperation>()
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
+        // Act
         var analyses = await context
             .GetService<ISafeMigrationProviderAnalyzer>()
             .AnalyzeAsync(context, operations, CancellationToken.None);
@@ -205,6 +225,7 @@ public sealed class MySqlProviderProjectionIntegrationTests : MySqlSafeMigration
             "ix_identity_quantity",
         ];
 
+        // Assert
         Assert.Equal(physicalNames.Length, analyses.Count);
         for (var index = 0; index < analyses.Count; index++)
         {
@@ -213,9 +234,13 @@ public sealed class MySqlProviderProjectionIntegrationTests : MySqlSafeMigration
         }
     }
 
+    /// <summary>
+    /// Does not choose one physical alias when several native objects satisfy the same semantic definition.
+    /// </summary>
     [Fact]
     public async Task ProviderAnalysisDoesNotResolveAmbiguousSemanticAliases()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -242,12 +267,17 @@ public sealed class MySqlProviderProjectionIntegrationTests : MySqlSafeMigration
         var operations = builder
             .Operations
             .Cast<SafeMigrationOperation>()
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
+        // Act
         var analyses = await context
             .GetService<ISafeMigrationProviderAnalyzer>()
             .AnalyzeAsync(context, operations, CancellationToken.None);
 
+        // Assert
         Assert.Equal(4, analyses.Count);
         Assert.All(
             analyses,
@@ -258,9 +288,13 @@ public sealed class MySqlProviderProjectionIntegrationTests : MySqlSafeMigration
             });
     }
 
+    /// <summary>
+    /// Uses an empty existing table's accepted column contracts for following key and check prerequisites.
+    /// </summary>
     [Fact]
     public async Task EmptyExistingTableProjectsPrimaryUniqueAndCheckConstraintPrerequisites()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -271,6 +305,7 @@ public sealed class MySqlProviderProjectionIntegrationTests : MySqlSafeMigration
         var builder = EmptyExistingTableConstraintConvergence(context);
         var runner = context.GetService<ISafeMigrationRunner>();
 
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
@@ -297,8 +332,12 @@ public sealed class MySqlProviderProjectionIntegrationTests : MySqlSafeMigration
                 SafeMigrationOperationKind.EnsurePrimaryKey
                 or SafeMigrationOperationKind.EnsureUniqueConstraint
                 or SafeMigrationOperationKind.EnsureCheckConstraint)
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
         Assert.Equal(3, constraints.Length);
         Assert.All(
@@ -314,6 +353,8 @@ public sealed class MySqlProviderProjectionIntegrationTests : MySqlSafeMigration
         Assert.All(replay.Assessments, static assessment => Assert.Equal(SafeMigrationAction.NoOp, assessment.Action));
     }
 
+    /// <summary>Preserves known table and index prerequisites across supported database metadata changes.</summary>
+    /// <param name="mode">The explicitly selected strict or legacy-convergence scaffolding mode.</param>
     [Theory]
     [InlineData(SafeMigrationScaffoldingMode.Strict)]
     [InlineData(SafeMigrationScaffoldingMode.LegacyConvergence)]
@@ -321,6 +362,7 @@ public sealed class MySqlProviderProjectionIntegrationTests : MySqlSafeMigration
         SafeMigrationScaffoldingMode mode
     )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -346,6 +388,8 @@ public sealed class MySqlProviderProjectionIntegrationTests : MySqlSafeMigration
             unique: true);
 
         var runner = context.GetService<ISafeMigrationRunner>();
+
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
@@ -366,6 +410,7 @@ public sealed class MySqlProviderProjectionIntegrationTests : MySqlSafeMigration
             new SafeMigrationRunOptions($"provider-artifact-replay-{mode}"),
             CancellationToken.None);
 
+        // Assert
         var providerAssessment = Assert.Single(
             preflight.Assessments,
             static assessment => !assessment.IsSafeOperation);
@@ -407,6 +452,10 @@ public sealed class MySqlProviderProjectionIntegrationTests : MySqlSafeMigration
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>
+    /// Tracks removal and recreation in order instead of borrowing stale native state across object families.
+    /// </summary>
+    /// <param name="useSemanticAliases">Whether matching uses independently verified native alias identities.</param>
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -414,6 +463,7 @@ public sealed class MySqlProviderProjectionIntegrationTests : MySqlSafeMigration
         bool useSemanticAliases
     )
     {
+        // Arrange
         var suffix = useSemanticAliases
             ? "alias"
             : "exact";
@@ -461,12 +511,22 @@ public sealed class MySqlProviderProjectionIntegrationTests : MySqlSafeMigration
 
         var runner = context.GetService<ISafeMigrationRunner>();
 
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
             new SafeMigrationRunOptions($"ordered-drop-ensure-{suffix}"),
             CancellationToken.None);
 
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+
+        var postflight = await runner.VerifyAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions($"ordered-drop-ensure-{suffix}-postflight"),
+            CancellationToken.None);
+
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
         AssertProjectedReplacement(
             preflight,
@@ -508,21 +568,15 @@ public sealed class MySqlProviderProjectionIntegrationTests : MySqlSafeMigration
                     or SafeMigrationOperationKind.DropIndex
                 && assessment.Action == SafeMigrationAction.Apply));
 
-        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-
-        var postflight = await runner.VerifyAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions($"ordered-drop-ensure-{suffix}-postflight"),
-            CancellationToken.None);
-
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
         Assert.All(postflight.Assessments, static assessment => Assert.True(assessment.PostconditionSatisfied));
     }
 
+    /// <summary>Does not reuse pre-mutation uniqueness evidence after data changes between drop and ensure.</summary>
     [Fact]
     public async Task DataMutationBetweenDropAndUniqueEnsureFailsClosedBeforeDdl()
     {
+        // Arrange
         const string table = "ordered_data_mutation";
         const string constraint = "uq_ordered_data_mutation_code";
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
@@ -547,12 +601,14 @@ public sealed class MySqlProviderProjectionIntegrationTests : MySqlSafeMigration
         builder.AddUniqueConstraintIfNotExists(constraint, table, ["code"]);
         var runner = context.GetService<ISafeMigrationRunner>();
 
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
             new SafeMigrationRunOptions("ordered-drop-data-ensure"),
             CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, preflight.Status);
         var replacement = Assert.Single(
             preflight.Assessments,
@@ -619,6 +675,9 @@ public sealed class MySqlProviderProjectionIntegrationTests : MySqlSafeMigration
             .Assessments
             .Where(assessment => assessment.OperationKind == kind
                 && StringComparer.Ordinal.Equals(assessment.ObjectName, objectName))
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         Assert.Equal(

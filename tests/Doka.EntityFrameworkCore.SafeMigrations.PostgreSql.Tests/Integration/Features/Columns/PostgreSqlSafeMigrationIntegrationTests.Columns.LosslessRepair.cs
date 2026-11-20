@@ -9,9 +9,11 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
         PostgreSqlContainerFixture fixture
     ) : base(fixture) { }
 
+    /// <summary>Varchar Widening Repairs Without Data Loss And Replays As No Op.</summary>
     [Fact]
     public async Task VarcharWidening_RepairsWithoutDataLossAndReplaysAsNoOp()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -39,6 +41,8 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
             SafeMigrationPolicy.RepairIfSafe);
 
         var runner = context.GetService<ISafeMigrationRunner>();
+
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
@@ -55,17 +59,6 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
                     .ToArray(),
                 CancellationToken.None);
 
-        var assessment = Assert.Single(preflight.Assessments);
-        var providerAssessment = Assert.Single(providerAnalysis);
-
-        Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
-        Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
-        Assert.Equal(SafeMigrationAction.Repair, assessment.Action);
-        Assert.Equal(SafeMigrationOperationalImpact.TableRewritePossible, assessment.OperationalImpact);
-        Assert.Contains(assessment.Differences, difference => difference.Facet == "column_max_length");
-        Assert.Contains(assessment.Differences, difference => difference.Facet == "column_comment_digest");
-        Assert.False(providerAssessment.RequiresLiveDataProof);
-
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         var postflight = await runner.VerifyAsync(
@@ -79,6 +72,18 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
             builder.Operations,
             new SafeMigrationRunOptions("varchar-widening-replay"),
             CancellationToken.None);
+
+        // Assert
+        var assessment = Assert.Single(preflight.Assessments);
+        var providerAssessment = Assert.Single(providerAnalysis);
+
+        Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
+        Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
+        Assert.Equal(SafeMigrationAction.Repair, assessment.Action);
+        Assert.Equal(SafeMigrationOperationalImpact.TableRewritePossible, assessment.OperationalImpact);
+        Assert.Contains(assessment.Differences, difference => difference.Facet == "column_max_length");
+        Assert.Contains(assessment.Differences, difference => difference.Facet == "column_comment_digest");
+        Assert.False(providerAssessment.RequiresLiveDataProof);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
         Assert.True(Assert.Single(postflight.Assessments)
@@ -107,6 +112,7 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Varchar Repair Preserves Compatible Foreign Key Dependencies.</summary>
     [Theory]
     [InlineData(5)]
     [InlineData(20)]
@@ -114,6 +120,7 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
         int targetLength
     )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -150,20 +157,13 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
             SafeMigrationPolicy.RepairIfSafe);
 
         var runner = context.GetService<ISafeMigrationRunner>();
+
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
             new SafeMigrationRunOptions("varchar-foreign-key-compatible"),
             CancellationToken.None);
-
-        Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
-        Assert.All(
-            preflight.Assessments,
-            static assessment =>
-            {
-                Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
-                Assert.Equal(SafeMigrationAction.Repair, assessment.Action);
-            });
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
@@ -173,7 +173,19 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
             new SafeMigrationRunOptions("varchar-foreign-key-compatible"),
             CancellationToken.None);
 
+        // Assert
+        Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
+        Assert.Equal(2, preflight.Assessments.Count);
+        Assert.All(
+            preflight.Assessments,
+            static assessment =>
+            {
+                Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
+                Assert.Equal(SafeMigrationAction.Repair, assessment.Action);
+            });
+
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
+        Assert.Equal(2, postflight.Assessments.Count);
         Assert.All(postflight.Assessments, static assessment => Assert.True(assessment.PostconditionSatisfied));
         Assert.Equal(
             2,
@@ -208,9 +220,11 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Varchar Widening Treats Explicit None Value Generation As Ordinary Metadata.</summary>
     [Fact]
     public async Task VarcharWidening_TreatsExplicitNoneValueGenerationAsOrdinaryMetadata()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -238,12 +252,23 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
             SafeMigrationPolicy.RepairIfSafe);
 
         var runner = context.GetService<ISafeMigrationRunner>();
+
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
             new SafeMigrationRunOptions("varchar-none-generation"),
             CancellationToken.None);
 
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+
+        var replay = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("varchar-none-generation-replay"),
+            CancellationToken.None);
+
+        // Assert
         var assessment = Assert.Single(preflight.Assessments);
 
         Assert.True(
@@ -261,22 +286,16 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
             assessment.Differences,
             static difference => difference.Facet is "column_default_kind" or "column_value_generation");
 
-        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-
-        var replay = await runner.AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("varchar-none-generation-replay"),
-            CancellationToken.None);
-
         Assert.Equal(SafeMigrationObservedState.Matching,
             Assert.Single(replay.Assessments)
                 .ObservedState);
     }
 
+    /// <summary>Varchar Narrowing Uses Character Semantics And Preserves Trailing Spaces.</summary>
     [Fact]
     public async Task VarcharNarrowing_UsesCharacterSemanticsAndPreservesTrailingSpaces()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -328,6 +347,9 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
                 maxLength: 5),
             SafeMigrationPolicy.RepairIfSafe);
 
+        var runner = context.GetService<ISafeMigrationRunner>();
+
+        // Act
         var singleCommandCount = await CountProviderAnalysisCommandsAsync(
             connectionString,
             singleBuilder.Operations,
@@ -338,7 +360,6 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
             builder.Operations,
             cancellationToken: CancellationToken.None);
 
-        var runner = context.GetService<ISafeMigrationRunner>();
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
@@ -355,23 +376,6 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
                     .ToArray(),
                 CancellationToken.None);
 
-        Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
-        Assert.All(
-            preflight.Assessments,
-            static assessment =>
-            {
-                Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
-                Assert.Equal(SafeMigrationAction.Repair, assessment.Action);
-                Assert.Equal(SafeMigrationOperationalImpact.TableRewritePossible, assessment.OperationalImpact);
-            });
-
-        Assert.All(providerAnalysis, static analysis => Assert.True(analysis.RequiresLiveDataProof));
-
-        // WHY: All catalog statements are batched identically, so equal
-        // command counts prove that four columns add only one table scan.
-        Assert.Equal(singleCommandCount, groupedCommandCount);
-        Assert.InRange(groupedCommandCount, 1, 8);
-
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         var postflight = await runner.VerifyAsync(
@@ -386,8 +390,30 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
             new SafeMigrationRunOptions("varchar-narrowing-replay"),
             CancellationToken.None);
 
+        // Assert
+        Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
+        Assert.Equal(columns.Length, preflight.Assessments.Count);
+        Assert.All(
+            preflight.Assessments,
+            static assessment =>
+            {
+                Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
+                Assert.Equal(SafeMigrationAction.Repair, assessment.Action);
+                Assert.Equal(SafeMigrationOperationalImpact.TableRewritePossible, assessment.OperationalImpact);
+            });
+
+        Assert.Equal(columns.Length, providerAnalysis.Count);
+        Assert.All(providerAnalysis, static analysis => Assert.True(analysis.RequiresLiveDataProof));
+
+        // WHY: All catalog statements are batched identically, so equal
+        // command counts prove that four columns add only one table scan.
+        Assert.Equal(singleCommandCount, groupedCommandCount);
+        Assert.InRange(groupedCommandCount, 1, 8);
+
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
+        Assert.Equal(columns.Length, postflight.Assessments.Count);
         Assert.All(postflight.Assessments, static assessment => Assert.True(assessment.PostconditionSatisfied));
+        Assert.Equal(columns.Length, replay.Assessments.Count);
         Assert.All(replay.Assessments, static assessment => Assert.Equal(SafeMigrationAction.NoOp, assessment.Action));
         Assert.Equal(
             5,
@@ -411,9 +437,11 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Varchar Narrowing From Unbounded Source Repairs When Data Fits.</summary>
     [Fact]
     public async Task VarcharNarrowing_FromUnboundedSource_RepairsWhenDataFits()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -430,6 +458,8 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
             "varchar_unbounded_repair");
 
         var runner = context.GetService<ISafeMigrationRunner>();
+
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
@@ -446,19 +476,6 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
                     .ToArray(),
                 CancellationToken.None);
 
-        var assessment = Assert.Single(preflight.Assessments);
-        var lengthDifference = Assert.Single(
-            assessment.Differences,
-            static difference => difference.Facet == "column_max_length");
-
-        Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
-        Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
-        Assert.Equal(SafeMigrationAction.Repair, assessment.Action);
-        Assert.Equal("5", lengthDifference.Expected);
-        Assert.Equal("unbounded", lengthDifference.Actual);
-        Assert.True(Assert.Single(providerAnalysis)
-            .RequiresLiveDataProof);
-
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         var postflight = await runner.VerifyAsync(
@@ -472,6 +489,20 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
             builder.Operations,
             new SafeMigrationRunOptions("varchar-unbounded-repair-replay"),
             CancellationToken.None);
+
+        // Assert
+        var assessment = Assert.Single(preflight.Assessments);
+        var lengthDifference = Assert.Single(
+            assessment.Differences,
+            static difference => difference.Facet == "column_max_length");
+
+        Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
+        Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
+        Assert.Equal(SafeMigrationAction.Repair, assessment.Action);
+        Assert.Equal("5", lengthDifference.Expected);
+        Assert.Equal("unbounded", lengthDifference.Actual);
+        Assert.True(Assert.Single(providerAnalysis)
+            .RequiresLiveDataProof);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
         Assert.True(Assert.Single(postflight.Assessments)
@@ -502,9 +533,11 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Varchar Narrowing From Unbounded Source Rejects Overlength Data Before Ddl.</summary>
     [Fact]
     public async Task VarcharNarrowing_FromUnboundedSource_RejectsOverlengthDataBeforeDdl()
     {
+        // Arrange
         const string privateValue = "private-overlength-value";
 
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
@@ -522,6 +555,7 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
             context.Database.ProviderName!,
             "varchar_unbounded_blocked");
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -530,8 +564,11 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
                 new SafeMigrationRunOptions("varchar-unbounded-blocked"),
                 CancellationToken.None);
 
+        var failure = Record.Exception(report.ThrowIfBlocked);
+
+        // Assert
         var assessment = Assert.Single(report.Assessments);
-        var exception = Assert.Throws<SafeMigrationPreflightException>(report.ThrowIfBlocked);
+        var exception = Assert.IsType<SafeMigrationPreflightException>(failure);
         var lengthDifference = Assert.Single(
             assessment.Differences,
             static difference => difference.Facet == "column_max_length");
@@ -557,9 +594,11 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Varchar Narrowing Rejects Overlength Data Without Disclosing The Value.</summary>
     [Fact]
     public async Task VarcharNarrowing_RejectsOverlengthDataWithoutDisclosingTheValue()
     {
+        // Arrange
         const string privateValue = "private-overlength-value";
 
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
@@ -585,6 +624,7 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
                 maxLength: 5),
             SafeMigrationPolicy.RepairIfSafe);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -593,6 +633,7 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
                 new SafeMigrationRunOptions("varchar-narrowing-blocked"),
                 CancellationToken.None);
 
+        // Assert
         var assessment = Assert.Single(report.Assessments);
         var exception = Assert.Throws<SafeMigrationPreflightException>(report.ThrowIfBlocked);
 
@@ -621,9 +662,11 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Varchar Narrowing Rechecks Data Immediately Before Mutation.</summary>
     [Fact]
     public async Task VarcharNarrowing_RechecksDataImmediatelyBeforeMutation()
     {
+        // Arrange
         const string concurrentValue = "arrived-after-preflight";
 
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
@@ -648,6 +691,7 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
                 maxLength: 5),
             SafeMigrationPolicy.RepairIfSafe);
 
+        // Act
         var preflight = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -656,15 +700,17 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
                 new SafeMigrationRunOptions("varchar-narrowing-race"),
                 CancellationToken.None);
 
-        Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
-
         await ExecuteSqlAsync(
             connectionString,
             $"INSERT INTO varchar_narrowing_race (id, value) VALUES (2, '{concurrentValue}');",
             cancellationToken: CancellationToken.None);
 
-        var exception = await Assert.ThrowsAsync<PostgresException>(() =>
+        var failure = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
+
+        // Assert
+        Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
+        var exception = Assert.IsType<PostgresException>(failure);
 
         Assert.Equal("P1003", exception.SqlState);
         Assert.StartsWith("doka_sm_data_blocked:", exception.MessageText, StringComparison.Ordinal);
@@ -689,6 +735,7 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Varchar Narrowing Locks Out Concurrent Writers Before The Final Proof.</summary>
     [Fact]
     public async Task VarcharNarrowing_LocksOutConcurrentWritersBeforeTheFinalProof()
     {
@@ -743,7 +790,7 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
                 "varchar_narrowing_locked_recheck",
                 pending,
                 cancellationToken),
-            cancellationToken => transaction.CommitAsync(cancellationToken),
+            transaction.CommitAsync,
             () => transaction.RollbackAsync(CancellationToken.None),
             testCancellation,
             testCancellation.Token);
@@ -775,9 +822,11 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
                 cancellationToken: testCancellation.Token));
     }
 
+    /// <summary>Varchar Narrowing Propagates Probe Command Timeout Without Mutation.</summary>
     [Fact]
     public async Task VarcharNarrowing_PropagatesProbeCommandTimeoutWithoutMutation()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -806,7 +855,8 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
             context.Database.ProviderName!,
             "varchar_narrowing_timeout");
 
-        _ = await Assert.ThrowsAsync<NpgsqlException>(() => context
+        // Act
+        var failure = await Record.ExceptionAsync(() => context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
                 context,
@@ -814,6 +864,8 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
                 new SafeMigrationRunOptions("varchar-narrowing-timeout"),
                 CancellationToken.None));
 
+        // Assert
+        PostgreSqlCommandTimeoutAssertions.AssertTimeout(failure);
         Assert.Equal(
             40,
             await ScalarIntAsync(
@@ -898,9 +950,11 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>My Sql Boolean Representation Transition Is Explicitly Not Applicable.</summary>
     [Fact]
     public async Task MySqlBooleanRepresentationTransition_IsExplicitlyNotApplicable()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -918,6 +972,7 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
                 storeType: "boolean"),
             SafeMigrationPolicy.RepairIfSafe);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -926,6 +981,7 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
                 new SafeMigrationRunOptions("boolean-transition"),
                 CancellationToken.None);
 
+        // Assert
         var assessment = Assert.Single(report.Assessments);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);

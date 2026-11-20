@@ -98,6 +98,7 @@ public class BenchmarkProgramOutcomeProbe
 {
     /// <summary>Gets or sets the native parameter that makes case identities distinct.</summary>
     [Params(1, 2)]
+    [UsedImplicitly]
     public int OperationCount { get; set; }
 
     /// <summary>Provides a discoverable native benchmark method without external state.</summary>

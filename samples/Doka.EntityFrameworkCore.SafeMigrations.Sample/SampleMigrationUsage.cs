@@ -1,7 +1,35 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Sample;
 
+/// <summary>Builds the actual source-frozen operations shared by the executable and in-process tests.</summary>
 internal static class SampleMigrationUsage
 {
+    /// <summary>Constructs both independent example streams and writes their observed operation counts.</summary>
+    /// <param name="output">The destination for the sample's source-construction summary.</param>
+    /// <returns>The exact streams used to produce the summary, without executing database commands.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="output" /> is null.</exception>
+    internal static Scenario Run(
+        TextWriter output
+    )
+    {
+        ArgumentNullException.ThrowIfNull(output);
+
+        var initial = new MigrationBuilder("Doka.Sample.Provider");
+        BuildUpOperations(initial);
+        var maintenance = new MigrationBuilder("Npgsql.EntityFrameworkCore.PostgreSQL");
+        BuildPostgreSqlMaintenanceOperations(maintenance);
+
+        output.WriteLine("Doka.EntityFrameworkCore.SafeMigrations sample");
+        output.WriteLine("Generated sample migration operations without executing SQL.");
+        output.WriteLine($"Initial-migration example operation count: {initial.Operations.Count}");
+        output.WriteLine($"Maintenance example operation count: {maintenance.Operations.Count}");
+        output.WriteLine(
+            "See SampleMigrationUsage, InitialSafeMigrationExample, and MaintenanceSafeMigrationExample "
+            + "for the recommended migration patterns.");
+
+        // WHY: Only these local builders own the lists; callers receive ordered read-only views of the actual output.
+        return new Scenario(initial.Operations.AsReadOnly(), maintenance.Operations.AsReadOnly());
+    }
+
     /// <summary>
     /// Builds an initial legacy-convergence migration that can repair incomplete
     /// table shapes across existing application instances.
@@ -94,4 +122,12 @@ internal static class SampleMigrationUsage
 
         migrationBuilder.AlterColumnIfDifferent("users", targetColumn, oldColumn, SafeMigrationPolicy.RepairIfSafe);
     }
+
+    /// <summary>Retains the two independent operation streams actually constructed by the sample.</summary>
+    /// <param name="InitialOperations">The forward-only granular convergence baseline.</param>
+    /// <param name="MaintenanceOperations">The separate PostgreSQL maintenance example.</param>
+    internal sealed record Scenario(
+        IReadOnlyList<MigrationOperation> InitialOperations,
+        IReadOnlyList<MigrationOperation> MaintenanceOperations
+    );
 }

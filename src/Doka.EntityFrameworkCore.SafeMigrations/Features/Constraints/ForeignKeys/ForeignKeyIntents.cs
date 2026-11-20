@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations;
 
 /// <summary>Represents ensuring a foreign key exists.</summary>
+[PublicAPI]
 public sealed class EnsureForeignKeyIntent : SafeMigrationIntent
 {
     /// <summary>Initializes the intent.</summary>
@@ -22,6 +23,7 @@ public sealed class EnsureForeignKeyIntent : SafeMigrationIntent
 }
 
 /// <summary>Represents dropping a foreign key when it exists.</summary>
+[PublicAPI]
 public sealed class DropForeignKeyIntent : SafeMigrationIntent
 {
     /// <summary>Initializes the intent.</summary>

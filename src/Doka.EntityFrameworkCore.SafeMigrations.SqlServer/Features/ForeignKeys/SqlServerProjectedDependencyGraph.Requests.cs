@@ -19,9 +19,15 @@ internal sealed partial class SqlServerProjectedDependencyGraph
         IReadOnlyList<SafeMigrationOperation> operations
     )
     {
-        var result = new HashSet<BindingRequest>();
-        foreach (var operation in operations)
+        HashSet<BindingRequest> result = [];
+
+        // WHY: The stable indexed snapshot preserves operation and declaration order.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var operationIndex0 = 0; operationIndex0 < operations.Count; operationIndex0++)
         {
+            var operation = operations[operationIndex0];
+
             switch (operation.Intent)
             {
                 case EnsureSchemaIntent schema:
@@ -34,8 +40,15 @@ internal sealed partial class SqlServerProjectedDependencyGraph
                     result.Add(
                         new BindingRequest(table.Definition.Schema ?? "dbo", table.Definition.Table, null, null));
 
-                    foreach (var foreignKey in table.Definition.ForeignKeys)
+                    // WHY: Immutable indexed slots retain their authored order without mutating the source.
+                    // ReSharper disable once ForCanBeConvertedToForeach
+                    // ReSharper disable once LoopCanBeConvertedToQuery
+                    for (var foreignKeyIndex = 0;
+                        foreignKeyIndex < table.Definition.ForeignKeys.Count;
+                        foreignKeyIndex++)
                     {
+                        var foreignKey = table.Definition.ForeignKeys[foreignKeyIndex];
+
                         AddForeignKey(foreignKey);
                     }
 
@@ -121,14 +134,19 @@ internal sealed partial class SqlServerProjectedDependencyGraph
         IReadOnlyList<SafeMigrationOperation> operations
     )
     {
-        var result = new List<InlineRequest>();
-        var renames = new List<SafeMigrationIntent>();
-        var authoredTables = new Dictionary<TableKey, ExpectedTableDefinition>();
-        var authoredColumns = new Dictionary<TableKey, Dictionary<string, List<ExpectedColumnDefinition>>>();
-        var requestedColumns = new Dictionary<TableKey, HashSet<string>>();
+        List<InlineRequest> result = [];
+        List<SafeMigrationIntent> renames = [];
+        Dictionary<TableKey, ExpectedTableDefinition> authoredTables = [];
+        Dictionary<TableKey, Dictionary<string, List<ExpectedColumnDefinition>>> authoredColumns = [];
+        Dictionary<TableKey, HashSet<string>> requestedColumns = [];
 
-        foreach (var operation in operations)
+        // WHY: The stable indexed snapshot preserves operation and declaration order.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var operationIndex1 = 0; operationIndex1 < operations.Count; operationIndex1++)
         {
+            var operation = operations[operationIndex1];
+
             if (operation.Intent is not EnsureForeignKeyIntent foreign)
             {
                 continue;
@@ -144,8 +162,13 @@ internal sealed partial class SqlServerProjectedDependencyGraph
             requested.UnionWith(foreign.Definition.Columns);
         }
 
-        foreach (var operation in operations)
+        // WHY: The stable indexed snapshot preserves operation and declaration order.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var operationIndex2 = 0; operationIndex2 < operations.Count; operationIndex2++)
         {
+            var operation = operations[operationIndex2];
+
             if (operation.Intent is RenameTableIntent or RenameColumnIntent)
             {
                 renames.Add(operation.Intent);
@@ -161,8 +184,14 @@ internal sealed partial class SqlServerProjectedDependencyGraph
                 case EnsureTableIntent ensure:
                     table = ensure.Definition;
                     authoredTables[new TableKey(table.Schema ?? "dbo", table.Table)] = table;
-                    foreach (var definition in table.Columns)
+
+                    // WHY: Immutable indexed slots retain their authored order without mutating the source.
+                    // ReSharper disable once ForCanBeConvertedToForeach
+                    // ReSharper disable once LoopCanBeConvertedToQuery
+                    for (var definitionIndex = 0; definitionIndex < table.Columns.Count; definitionIndex++)
                     {
+                        var definition = table.Columns[definitionIndex];
+
                         CaptureColumn(new TableKey(table.Schema ?? "dbo", table.Table), definition);
                     }
 
@@ -216,8 +245,13 @@ internal sealed partial class SqlServerProjectedDependencyGraph
                     continue;
             }
 
-            foreach (var foreignKey in foreignKeys)
+            // WHY: The stable indexed snapshot preserves operation and declaration order.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var foreignKeyIndex0 = 0; foreignKeyIndex0 < foreignKeys.Count; foreignKeyIndex0++)
             {
+                var foreignKey = foreignKeys[foreignKeyIndex0];
+
                 var principalTable = foreignKey.PrincipalTable;
                 var principalSchema = foreignKey.PrincipalSchema ?? "dbo";
                 var principalColumns = foreignKey.PrincipalColumns.ToArray();
@@ -281,9 +315,13 @@ internal sealed partial class SqlServerProjectedDependencyGraph
                             continue;
                         }
 
-                        // ReSharper disable once ForeachCanBeConvertedToQueryUsingAnotherGetEnumerator
-                        foreach (var definition in definitions)
+                        // WHY: Immutable indexed slots retain their authored order without mutating the source.
+                        // ReSharper disable once ForCanBeConvertedToForeach
+                        // ReSharper disable once LoopCanBeConvertedToQuery
+                        for (var definitionIndex = 0; definitionIndex < definitions.Count; definitionIndex++)
                         {
+                            var definition = definitions[definitionIndex];
+
                             var operand = new ExpectedTableDefinition(
                                 foreignKey.Table,
                                 [definition],
@@ -300,7 +338,11 @@ internal sealed partial class SqlServerProjectedDependencyGraph
             }
         }
 
-        return result.ToArray();
+        return result
+
+            // WHY: Preserve fluent snapshot materialization rather than a collection-spread rewrite.
+            // ReSharper disable once UseCollectionExpression
+            .ToArray();
 
         void CaptureColumn(
             TableKey owner,
@@ -328,7 +370,7 @@ internal sealed partial class SqlServerProjectedDependencyGraph
                 added.Add(definition.Name, definitions);
             }
 
-            if (!definitions.Any(candidate => SafeMigrationDefinitionEquivalence.Column(candidate, definition)))
+            if (definitions.All(candidate => !SafeMigrationDefinitionEquivalence.Column(candidate, definition)))
             {
                 definitions.Add(definition);
             }

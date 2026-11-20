@@ -9,9 +9,13 @@ public sealed class MySqlIndexesProjectionIntegrationTests : MySqlSafeMigrationI
         MySqlEngineContainerFixture fixture
     ) : base(fixture) { }
 
+    /// <summary>
+    /// Uses an accepted widened column for prefix validation and recognizes the installed index on replay.
+    /// </summary>
     [Fact]
     public async Task ProjectedVarcharWideningAuthorizesTheTargetPrefixAndReplaysAsNoOp()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -40,6 +44,8 @@ public sealed class MySqlIndexesProjectionIntegrationTests : MySqlSafeMigrationI
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var runner = context.GetService<ISafeMigrationRunner>();
+
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
@@ -60,6 +66,7 @@ public sealed class MySqlIndexesProjectionIntegrationTests : MySqlSafeMigrationI
             new SafeMigrationRunOptions("projected-index-width-replay"),
             CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationAction.Repair, preflight.Assessments[0].Action);
         Assert.Equal("projected_missing", preflight.Assessments[1].Code);
         Assert.Equal(SafeMigrationObservedState.Missing, preflight.Assessments[1].ObservedState);
@@ -103,9 +110,11 @@ public sealed class MySqlIndexesProjectionIntegrationTests : MySqlSafeMigrationI
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Does not borrow a rejected column widening to authorize the following index prefix.</summary>
     [Fact]
     public async Task RejectedVarcharWideningCannotAuthorizeTheTargetPrefix()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -131,6 +140,7 @@ public sealed class MySqlIndexesProjectionIntegrationTests : MySqlSafeMigrationI
                 new ExpectedIndexKeyDefinition(column: "property", prefixLength: 768)),
             SafeMigrationPolicy.ThrowIfDifferent);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -139,6 +149,7 @@ public sealed class MySqlIndexesProjectionIntegrationTests : MySqlSafeMigrationI
                 new SafeMigrationRunOptions("rejected-projected-width"),
                 CancellationToken.None);
 
+        // Assert
         var columnAssessment = report.Assessments[0];
         var indexAssessment = report.Assessments[1];
 
@@ -161,9 +172,13 @@ public sealed class MySqlIndexesProjectionIntegrationTests : MySqlSafeMigrationI
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>
+    /// Combines accepted projected widths with independently captured live widths for composite keys.
+    /// </summary>
     [Fact]
     public async Task ProjectedCompositeIndexCombinesTargetAndLiveColumnWidths()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -193,6 +208,8 @@ public sealed class MySqlIndexesProjectionIntegrationTests : MySqlSafeMigrationI
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var runner = context.GetService<ISafeMigrationRunner>();
+
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
@@ -213,6 +230,7 @@ public sealed class MySqlIndexesProjectionIntegrationTests : MySqlSafeMigrationI
             new SafeMigrationRunOptions("projected-composite-width-replay"),
             CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationAction.Repair, preflight.Assessments[0].Action);
         Assert.Equal(SafeMigrationObservedState.Missing, preflight.Assessments[1].ObservedState);
         Assert.Equal(SafeMigrationAction.Apply, preflight.Assessments[1].Action);
@@ -223,9 +241,11 @@ public sealed class MySqlIndexesProjectionIntegrationTests : MySqlSafeMigrationI
         Assert.All(replay.Assessments, static assessment => Assert.Equal(SafeMigrationAction.NoOp, assessment.Action));
     }
 
+    /// <summary>Requires fresh duplicate evidence before authorizing a unique index over projected columns.</summary>
     [Fact]
     public async Task ProjectedUniqueIndexUsesLiveDuplicateEvidenceBeforePhysicalRevalidation()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -255,6 +275,8 @@ public sealed class MySqlIndexesProjectionIntegrationTests : MySqlSafeMigrationI
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var runner = context.GetService<ISafeMigrationRunner>();
+
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
@@ -269,6 +291,7 @@ public sealed class MySqlIndexesProjectionIntegrationTests : MySqlSafeMigrationI
             new SafeMigrationRunOptions("projected-unique-width-replay"),
             CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
         Assert.Equal(SafeMigrationObservedState.Missing, preflight.Assessments[1].ObservedState);
         Assert.Equal(SafeMigrationAction.Apply, preflight.Assessments[1].Action);
@@ -276,9 +299,11 @@ public sealed class MySqlIndexesProjectionIntegrationTests : MySqlSafeMigrationI
         Assert.All(replay.Assessments, static assessment => Assert.Equal(SafeMigrationAction.NoOp, assessment.Action));
     }
 
+    /// <summary>Reports duplicate live values as data-blocked even when the target column shape is projected.</summary>
     [Fact]
     public async Task ProjectedUniqueIndexWithDuplicateRowsRemainsDataBlocked()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -307,6 +332,7 @@ public sealed class MySqlIndexesProjectionIntegrationTests : MySqlSafeMigrationI
                 new ExpectedIndexKeyDefinition(column: "property", prefixLength: 768)),
             SafeMigrationPolicy.ThrowIfDifferent);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -315,6 +341,7 @@ public sealed class MySqlIndexesProjectionIntegrationTests : MySqlSafeMigrationI
                 new SafeMigrationRunOptions("projected-unique-blocked"),
                 CancellationToken.None);
 
+        // Assert
         var indexAssessment = report.Assessments[1];
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -335,9 +362,11 @@ public sealed class MySqlIndexesProjectionIntegrationTests : MySqlSafeMigrationI
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Does not replace a proven duplicate-row blocker with a later physical-width rejection.</summary>
     [Fact]
     public async Task ProjectedUniqueIndexRetainsDuplicateEvidenceBeforePhysicalFailure()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -366,6 +395,7 @@ public sealed class MySqlIndexesProjectionIntegrationTests : MySqlSafeMigrationI
                 new ExpectedIndexKeyDefinition(column: "property", prefixLength: 769)),
             SafeMigrationPolicy.ThrowIfDifferent);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -374,6 +404,7 @@ public sealed class MySqlIndexesProjectionIntegrationTests : MySqlSafeMigrationI
                 new SafeMigrationRunOptions("projected-unique-physical-blocked"),
                 CancellationToken.None);
 
+        // Assert
         var indexAssessment = report.Assessments[1];
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -394,9 +425,11 @@ public sealed class MySqlIndexesProjectionIntegrationTests : MySqlSafeMigrationI
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Uses an ordinary provider alteration to establish the following guarded index's target width.</summary>
     [Fact]
     public async Task ProviderAlterColumnAuthorizesTheFollowingTargetPrefix()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -429,6 +462,8 @@ public sealed class MySqlIndexesProjectionIntegrationTests : MySqlSafeMigrationI
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var runner = context.GetService<ISafeMigrationRunner>();
+
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
@@ -449,6 +484,7 @@ public sealed class MySqlIndexesProjectionIntegrationTests : MySqlSafeMigrationI
             new SafeMigrationRunOptions("provider-projected-index-replay"),
             CancellationToken.None);
 
+        // Assert
         var providerAssessment = preflight.Assessments[0];
         var indexAssessment = preflight.Assessments[1];
 
@@ -462,9 +498,11 @@ public sealed class MySqlIndexesProjectionIntegrationTests : MySqlSafeMigrationI
         Assert.Equal(SafeMigrationAction.NoOp, replay.Assessments[1].Action);
     }
 
+    /// <summary>Rejects an oversized projected key before changing either its column or index.</summary>
     [Fact]
     public async Task ProjectedIndexBeyondTheTargetLimitRemainsBlockedBeforeMutation()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -491,6 +529,7 @@ public sealed class MySqlIndexesProjectionIntegrationTests : MySqlSafeMigrationI
                 new ExpectedIndexKeyDefinition(column: "right_value", prefixLength: 1)),
             SafeMigrationPolicy.ThrowIfDifferent);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -499,6 +538,7 @@ public sealed class MySqlIndexesProjectionIntegrationTests : MySqlSafeMigrationI
                 new SafeMigrationRunOptions("projected-index-blocked"),
                 CancellationToken.None);
 
+        // Assert
         var indexAssessment = report.Assessments[1];
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -531,9 +571,11 @@ public sealed class MySqlIndexesProjectionIntegrationTests : MySqlSafeMigrationI
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Rejects an invalid index prefix even when the target table is not yet installed.</summary>
     [Fact]
     public async Task MissingTableWithAnInvalidTargetPrefixRemainsBlocked()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -553,6 +595,7 @@ public sealed class MySqlIndexesProjectionIntegrationTests : MySqlSafeMigrationI
                 new ExpectedIndexKeyDefinition(column: "property", prefixLength: 768)),
             SafeMigrationPolicy.ThrowIfDifferent);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -561,6 +604,7 @@ public sealed class MySqlIndexesProjectionIntegrationTests : MySqlSafeMigrationI
                 new SafeMigrationRunOptions("missing-projected-index"),
                 CancellationToken.None);
 
+        // Assert
         var indexAssessment = Assert.Single(
             report.Assessments,
             static assessment => assessment.OperationKind == SafeMigrationOperationKind.EnsureIndex);
@@ -581,9 +625,11 @@ public sealed class MySqlIndexesProjectionIntegrationTests : MySqlSafeMigrationI
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Invalidates an accepted index after a provider drop and permits its guarded recreation.</summary>
     [Fact]
     public async Task AcceptedIndexThenProviderDropThenEnsureRecreatesTheIndex()
     {
+        // Arrange
         const string table = "accepted_index_drop";
         const string indexName = "ix_accepted_index_drop_property";
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
@@ -608,6 +654,8 @@ public sealed class MySqlIndexesProjectionIntegrationTests : MySqlSafeMigrationI
         builder.EnsureIndex(definition, SafeMigrationPolicy.ThrowIfDifferent);
 
         var runner = context.GetService<ISafeMigrationRunner>();
+
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
@@ -622,6 +670,7 @@ public sealed class MySqlIndexesProjectionIntegrationTests : MySqlSafeMigrationI
             new SafeMigrationRunOptions("accepted-index-provider-drop-postflight"),
             CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.ReadyWithProviderOperations, preflight.Status);
         Assert.Equal(SafeMigrationAction.NoOp, preflight.Assessments[0].Action);
         Assert.False(preflight.Assessments[1].IsSafeOperation);
@@ -642,9 +691,11 @@ public sealed class MySqlIndexesProjectionIntegrationTests : MySqlSafeMigrationI
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Invalidates an accepted index's source-column prerequisites after an ordinary column drop.</summary>
     [Fact]
     public async Task AcceptedIndexThenProviderColumnDropBlocksTheFollowingEnsure()
     {
+        // Arrange
         const string table = "accepted_index_column_drop";
         const string indexName = "ix_accepted_index_column_drop_property";
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
@@ -668,6 +719,7 @@ public sealed class MySqlIndexesProjectionIntegrationTests : MySqlSafeMigrationI
         _ = builder.DropColumn("property", table);
         builder.EnsureIndex(definition, SafeMigrationPolicy.ThrowIfDifferent);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -676,6 +728,7 @@ public sealed class MySqlIndexesProjectionIntegrationTests : MySqlSafeMigrationI
                 new SafeMigrationRunOptions("accepted-index-column-drop"),
                 CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationAction.NoOp, report.Assessments[0].Action);
         Assert.False(report.Assessments[1].IsSafeOperation);
@@ -720,12 +773,21 @@ public sealed class MySqlIndexesProjectionIntegrationTests : MySqlSafeMigrationI
 
 public abstract partial class MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Creates a guarded index operation while retaining key order and declared uniqueness.</summary>
+    /// <param name="name">The authored object, function, or identifier name.</param>
+    /// <param name="table">The exact owner table identity.</param>
+    /// <param name="keys">The ordered physical index key-part definitions.</param>
     protected static ExpectedIndexDefinition Index(
         string name,
         string table,
         params ExpectedIndexKeyDefinition[] keys
     ) => Index(name, table, unique: false, keys);
 
+    /// <summary>Creates a guarded index operation while retaining key order and declared uniqueness.</summary>
+    /// <param name="name">The authored object, function, or identifier name.</param>
+    /// <param name="table">The exact owner table identity.</param>
+    /// <param name="unique">Whether the authored index requires duplicate-free values.</param>
+    /// <param name="keys">The ordered physical index key-part definitions.</param>
     protected static ExpectedIndexDefinition Index(
         string name,
         string table,

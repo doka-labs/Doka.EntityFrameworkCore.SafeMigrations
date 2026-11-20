@@ -1,3 +1,6 @@
+// WHY: Linked Core tests call project discovery directly; executable copies also use it through the native generator.
+// ReSharper disable MemberCanBePrivate.Global
+
 namespace Doka.EntityFrameworkCore.SafeMigrations.Benchmarks;
 
 /// <summary>Binds native expanded jobs without overriding CLI jobs, runtimes, filters or artifact settings.</summary>

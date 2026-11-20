@@ -136,7 +136,9 @@ public sealed class SqlServerSafeMigrationDmlStructuralDeferralIntegrationTests 
         }
     }
 
-    /// <summary>Global trigger presence covers a cascade child even when the typed write's own table has no trigger.</summary>
+    /// <summary>
+    /// Global trigger presence covers a cascade child even when the typed write's own table has no trigger.
+    /// </summary>
     /// <param name="disabled">Whether the cascade child's trigger emits no side effects.</param>
     [SqlServerLiveTheory]
     [InlineData(false)]
@@ -270,7 +272,9 @@ public sealed class SqlServerSafeMigrationDmlStructuralDeferralIntegrationTests 
     };
 
     /// <summary>Typed ALTER's EF-generated UPDATE can invoke a DML trigger before the structural DDL.</summary>
-    /// <param name="disabled">Whether the trigger is disabled and the baseline only changes its authored column.</param>
+    /// <param name="disabled">
+    /// Whether the trigger is disabled and the baseline only changes its authored column.
+    /// </param>
     [SqlServerLiveTheory]
     [InlineData(false)]
     [InlineData(true)]

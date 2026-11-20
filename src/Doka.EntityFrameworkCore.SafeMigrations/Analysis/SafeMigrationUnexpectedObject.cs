@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations;
 
 /// <summary>Identifies a database-object family in an unexpected-object report.</summary>
+[PublicAPI]
 public enum SafeMigrationDatabaseObjectKind
 {
     /// <summary>A base table.</summary>
@@ -30,6 +31,7 @@ public enum SafeMigrationDatabaseObjectKind
 /// definitions after provider-verified semantic aliases have been reconciled.
 /// Unexpected objects are reported but are never deleted automatically.
 /// </summary>
+[PublicAPI]
 public sealed class SafeMigrationUnexpectedObject
 {
     /// <summary>Initializes an immutable unexpected-object result.</summary>

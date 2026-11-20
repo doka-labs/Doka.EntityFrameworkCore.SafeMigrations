@@ -130,11 +130,9 @@ internal sealed class SqlServerSafeMigrationSqlExpressionRenderer
             SafeMigrationSqlCastExpression value => IsSupportedStoreType(value.StoreType)
                 ? null
                 : "structured_cast_type",
-            SafeMigrationSqlCollateExpression value => value.Schema is not null
-                ? "structured_collation_schema"
-                : IsSqlServerCollationName(value.Name)
-                    ? null
-                    : "structured_collation_name",
+            SafeMigrationSqlCollateExpression { Schema: not null } => "structured_collation_schema",
+            SafeMigrationSqlCollateExpression value when IsSqlServerCollationName(value.Name) => null,
+            SafeMigrationSqlCollateExpression => "structured_collation_name",
             SafeMigrationSqlCurrentValueExpression => null,
             SafeMigrationSqlProviderFragmentExpression value =>
                 StringComparer.Ordinal.Equals(value.ProviderId, ProviderId)
@@ -425,6 +423,8 @@ internal sealed class SqlServerSafeMigrationSqlExpressionRenderer
         {
             do
             {
+                // WHY: Emit a pending text continuation before dispatching its expression role and resuming the stack.
+                // ReSharper disable once ConvertIfStatementToSwitchStatement
                 if (current.Text is { } text)
                 {
                     builder.Append(text);
@@ -471,6 +471,8 @@ internal sealed class SqlServerSafeMigrationSqlExpressionRenderer
                 }
                 else if (current.Role == RenderRole.Predicate)
                 {
+                    // WHY: Each predicate guard publishes its continuation before advancing the one owned work stack.
+                    // ReSharper disable once ConvertIfStatementToSwitchStatement
                     if (current.Expression is SafeMigrationSqlUnaryExpression
                         {
                             Operator: SafeMigrationSqlUnaryOperator.Not,

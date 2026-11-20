@@ -3,7 +3,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer;
 internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 {
     /// <summary>Preserves the effective indexed-computed SET contract and SqlClient's implicit ARITHABORT.</summary>
-    internal const string ComputedIndexSessionPredicate = """
+    private const string ComputedIndexSessionPredicate = """
         SESSIONPROPERTY(N'ANSI_NULLS')=1 AND SESSIONPROPERTY(N'ANSI_PADDING')=1
         AND SESSIONPROPERTY(N'ANSI_WARNINGS')=1 AND SESSIONPROPERTY(N'CONCAT_NULL_YIELDS_NULL')=1
         AND SESSIONPROPERTY(N'QUOTED_IDENTIFIER')=1 AND SESSIONPROPERTY(N'NUMERIC_ROUNDABORT')=0
@@ -25,6 +25,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             definition
                 .Keys
                 .Select(static key => key.Column!)
+
+                // WHY: Retain this explicit fluent snapshot instead of a collection-spread rewrite.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray(),
             1700,
             allowComputed: true);

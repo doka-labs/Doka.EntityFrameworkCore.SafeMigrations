@@ -2,6 +2,13 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
 public sealed partial class SafeMigrationPreflightProjectionTests
 {
+    /// <summary>
+    /// Rejects a foreign database identity before consulting sequence or opacity proofs, even for invariant
+    /// failures.
+    /// </summary>
+    /// <param name="invariantUnsupported">
+    /// Whether the native identity rejection is also marked intrinsically unsupported.
+    /// </param>
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -9,6 +16,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         bool invariantUnsupported
     )
     {
+        // Arrange
         var probe = new ProjectionPrecedenceProbe(sequenceAware: true);
         var projection = new SafeMigrationPreflightProjection(probe, objectIdentityNormalizer: probe);
         var operation = new SafeMigrationOperation(
@@ -28,14 +36,21 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
         projection.ObserveProviderPostcondition(new SqlOperation { Sql = "SELECT 1;" });
 
+        // Act
         var analysis = projection.Project(operation, live);
 
+        // Assert
         Assert.Same(live, analysis);
         Assert.Equal(1, probe.IdentityChecks);
         Assert.Equal(0, probe.SequenceChecks);
         Assert.False(analysis.IsOpaqueProjectionUnknown);
     }
 
+    /// <summary>
+    /// Retains an intrinsic provider rejection ahead of newly projected table facts and either opacity boundary.
+    /// </summary>
+    /// <param name="opaqueSql">Whether unstructured SQL invalidates the ordered structure proof.</param>
+    /// <param name="opaqueProvider">Whether an unclassified provider operation invalidates the structure proof.</param>
     [Theory]
     [InlineData(false, false)]
     [InlineData(false, true)]
@@ -46,6 +61,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         bool opaqueProvider
     )
     {
+        // Arrange
         var probe = new ProjectionPrecedenceProbe(sequenceAware: true);
         var projection = new SafeMigrationPreflightProjection(probe, objectIdentityNormalizer: probe);
         var table = new CreateTableOperation { Name = "items" };
@@ -78,6 +94,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             IsInvariantUnsupported = true,
         };
 
+        // Act
         var analysis = projection.Project(operation, live);
         var decision = SafeMigrationDecisionPlanner.Plan(
             operation.Intent.Kind,
@@ -85,6 +102,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             operation.Policy,
             analysis.RepairCapability);
 
+        // Assert
         Assert.Same(live, analysis);
         Assert.Equal(SafeMigrationAction.RejectUnsupported, decision.Action);
         Assert.Equal(1, probe.IdentityChecks);
@@ -92,6 +110,11 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         Assert.False(analysis.IsOpaqueProjectionUnknown);
     }
 
+    /// <summary>
+    /// Reclassifies catalog-dependent unsupported evidence only through ordered, nonopaque projected facts.
+    /// </summary>
+    /// <param name="opaqueSql">Whether unstructured SQL invalidates the ordered structure proof.</param>
+    /// <param name="expectedState">The independently declared exact projected catalog state.</param>
     [Theory]
     [InlineData(false, SafeMigrationObservedState.Matching)]
     [InlineData(true, SafeMigrationObservedState.PrerequisiteMissing)]
@@ -100,6 +123,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         SafeMigrationObservedState expectedState
     )
     {
+        // Arrange
         var probe = new ProjectionPrecedenceProbe(sequenceAware: false);
         var projection = new SafeMigrationPreflightProjection(probe, objectIdentityNormalizer: probe);
         var table = new CreateTableOperation { Name = "items" };
@@ -120,8 +144,10 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
         var live = Live(SafeMigrationObservedState.Unsupported);
 
+        // Act
         var analysis = projection.Project(operation, live);
 
+        // Assert
         Assert.NotSame(live, analysis);
         Assert.Equal(expectedState, analysis.ObservedState);
         Assert.Equal(opaqueSql, analysis.IsOpaqueProjectionUnknown);
@@ -133,9 +159,13 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             probe.SequenceChecks);
     }
 
+    /// <summary>
+    /// Rejects opaque SQL lineage before allowing the sequence-aware provider to reuse any catalog evidence.
+    /// </summary>
     [Fact]
     public void OpaqueSqlPrecedesSequenceAwareProviderAnalysis()
     {
+        // Arrange
         var probe = new ProjectionPrecedenceProbe(sequenceAware: true);
         var projection = new SafeMigrationPreflightProjection(probe, objectIdentityNormalizer: probe);
         var operation = new SafeMigrationOperation(
@@ -146,8 +176,10 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
         projection.ObserveProviderPostcondition(new SqlOperation { Sql = "SELECT 1;" });
 
+        // Act
         var analysis = projection.Project(operation, live);
 
+        // Assert
         Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, analysis.ObservedState);
         Assert.Equal("projected_structure_state_unknown", analysis.Code);
         Assert.True(analysis.IsOpaqueProjectionUnknown);
@@ -155,9 +187,13 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         Assert.Equal(0, probe.SequenceChecks);
     }
 
+    /// <summary>
+    /// Allows a provider-certified ordered operation to preserve native evidence despite generic opacity.
+    /// </summary>
     [Fact]
     public void SequenceAwareProviderAnalysisPrecedesGenericOpacity()
     {
+        // Arrange
         var probe = new ProjectionPrecedenceProbe(sequenceAware: true);
         var projection = new SafeMigrationPreflightProjection(probe, objectIdentityNormalizer: probe);
         var operation = new SafeMigrationOperation(
@@ -168,17 +204,23 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
         projection.ObserveProviderPostcondition(new AlterDatabaseOperation());
 
+        // Act
         var analysis = projection.Project(operation, live);
 
+        // Assert
         Assert.Same(live, analysis);
         Assert.False(analysis.IsOpaqueProjectionUnknown);
         Assert.Equal(1, probe.IdentityChecks);
         Assert.Equal(1, probe.SequenceChecks);
     }
 
+    /// <summary>
+    /// Requires an explicit ordered-provider proof before accepting catalog evidence across an opaque operation.
+    /// </summary>
     [Fact]
     public void GenericOpacityInvalidatesAnalysisWithoutOrderedProviderProof()
     {
+        // Arrange
         var probe = new ProjectionPrecedenceProbe(sequenceAware: false);
         var projection = new SafeMigrationPreflightProjection(probe, objectIdentityNormalizer: probe);
         var operation = new SafeMigrationOperation(
@@ -189,31 +231,43 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
         projection.ObserveProviderPostcondition(new AlterDatabaseOperation());
 
+        // Act
         var analysis = projection.Project(operation, live);
 
+        // Assert
         Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, analysis.ObservedState);
         Assert.True(analysis.IsOpaqueProjectionUnknown);
         Assert.Equal(1, probe.IdentityChecks);
         Assert.Equal(1, probe.SequenceChecks);
     }
 
+    /// <summary>
+    /// Carries an ordinary ADD column into the following nonunique-index prerequisite without inventing row proofs.
+    /// </summary>
     [Fact]
     public void ProviderAddColumnProjectsFollowingNonUniqueIndexPrerequisite()
     {
+        // Arrange
         var projection = new SafeMigrationPreflightProjection();
         var addColumn = ProviderColumn("customer_id", "shipments", isNullable: false, defaultValue: 0);
 
         projection.ObserveProviderPostcondition(addColumn);
 
+        // Act
         var analysis = ProjectIndex(projection, "shipments", "customer_id", unique: false);
 
+        // Assert
         Assert.Equal(SafeMigrationObservedState.Missing, analysis.ObservedState);
         Assert.Equal("projected_missing", analysis.Code);
     }
 
+    /// <summary>
+    /// Recognizes the exact captured ADD shape as matching instead of reusing the historical missing result.
+    /// </summary>
     [Fact]
     public void ProviderAddColumnProjectsItsExactDefinitionForFollowingEnsureColumn()
     {
+        // Arrange
         var projection = new SafeMigrationPreflightProjection();
         var providerColumn = ProviderColumn(
             "customer_id",
@@ -223,23 +277,30 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
         projection.ObserveProviderPostcondition(providerColumn);
 
+        // Act
         var analysis = ProjectColumn(
             projection,
             "shipments",
             SafeMigrationExpectedDefinitionFactory.From(providerColumn),
             Live(SafeMigrationObservedState.Missing));
 
+        // Assert
         Assert.Equal(SafeMigrationObservedState.Matching, analysis.ObservedState);
         Assert.Equal("projected_matching", analysis.Code);
     }
 
+    /// <summary>
+    /// Rejects stale missing-column evidence when the accepted ordinary ADD has a different required shape.
+    /// </summary>
     [Fact]
     public void ProviderAddColumnDoesNotReuseHistoricalMissingEvidenceForDifferentDefinition()
     {
+        // Arrange
         var projection = new SafeMigrationPreflightProjection();
         projection.ObserveProviderPostcondition(
             ProviderColumn("customer_id", "shipments", isNullable: false, defaultValue: 0));
 
+        // Act
         var analysis = ProjectColumn(
             projection,
             "shipments",
@@ -250,14 +311,19 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                 storeType: "int"),
             Live(SafeMigrationObservedState.Missing));
 
+        // Assert
         Assert.Equal(SafeMigrationObservedState.Different, analysis.ObservedState);
         Assert.Equal(SafeMigrationRepairCapability.None, analysis.RepairCapability);
         Assert.Equal("projected_different", analysis.Code);
     }
 
+    /// <summary>
+    /// Keeps the accepted ALTER target matching while denying historical repair approval for a different target.
+    /// </summary>
     [Fact]
     public void ProviderAlterColumnDoesNotReuseHistoricalRepairEvidence()
     {
+        // Arrange
         var projection = new SafeMigrationPreflightProjection();
         var providerColumn = new AlterColumnOperation
         {
@@ -271,6 +337,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
         projection.ObserveProviderPostcondition(providerColumn);
 
+        // Act
         var matching = ProjectColumn(
             projection,
             "items",
@@ -288,14 +355,19 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                 maxLength: 200),
             RepairableVarcharAnalysis());
 
+        // Assert
         Assert.Equal(SafeMigrationObservedState.Matching, matching.ObservedState);
         Assert.Equal(SafeMigrationObservedState.Different, different.ObservedState);
         Assert.Equal(SafeMigrationRepairCapability.None, different.RepairCapability);
     }
 
+    /// <summary>
+    /// Makes an ordinary exact-member DROP authoritative over an earlier native matching-column classification.
+    /// </summary>
     [Fact]
     public void ProviderDropColumnProjectsFollowingEnsureColumnAsMissing()
     {
+        // Arrange
         var projection = new SafeMigrationPreflightProjection();
         projection.ObserveProviderPostcondition(
             new DropColumnOperation
@@ -304,6 +376,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                 Table = "shipments",
             });
 
+        // Act
         var analysis = ProjectColumn(
             projection,
             "shipments",
@@ -314,13 +387,18 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                 storeType: "int"),
             Live(SafeMigrationObservedState.Matching));
 
+        // Assert
         Assert.Equal(SafeMigrationObservedState.Missing, analysis.ObservedState);
         Assert.Equal("projected_missing", analysis.Code);
     }
 
+    /// <summary>
+    /// Invalidates both old and target member snapshots after an uncertified rename on an existing table.
+    /// </summary>
     [Fact]
     public void ProviderRenameColumnOnExistingTableInvalidatesHistoricalStructure()
     {
+        // Arrange
         var projection = new SafeMigrationPreflightProjection();
         var providerColumn = ProviderColumn("customer_id", "shipments", isNullable: true);
 
@@ -340,6 +418,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             target.IsNullable,
             target.StoreType);
 
+        // Act
         var targetAnalysis = ProjectColumn(
             projection,
             "shipments",
@@ -352,19 +431,26 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             SafeMigrationExpectedDefinitionFactory.From(providerColumn),
             Live(SafeMigrationObservedState.Matching));
 
+        // Assert
         Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, targetAnalysis.ObservedState);
         Assert.Equal("projected_structure_state_unknown", targetAnalysis.Code);
         Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, sourceAnalysis.ObservedState);
         Assert.Equal("projected_structure_state_unknown", sourceAnalysis.Code);
     }
 
+    /// <summary>
+    /// Records unsupported annotation opacity without throwing from observation, then rejects the following safe
+    /// query.
+    /// </summary>
     [Fact]
     public void UnsupportedProviderColumnAnnotationBlocksOnlyTheFollowingSafeOperation()
     {
+        // Arrange
         var projection = new SafeMigrationPreflightProjection();
         var providerColumn = ProviderColumn("customer_id", "shipments", isNullable: true);
         providerColumn.AddAnnotation("provider:opaque", new object());
 
+        // Act
         var exception = Record.Exception(() => projection.ObserveProviderPostcondition(providerColumn));
         var analysis = ProjectColumn(
             projection,
@@ -376,38 +462,50 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                 storeType: "int"),
             Live(SafeMigrationObservedState.Matching));
 
+        // Assert
         Assert.Null(exception);
         Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, analysis.ObservedState);
         Assert.Equal("projected_structure_state_unknown", analysis.Code);
     }
 
+    /// <summary>
+    /// Retains ordinary table removal as a missing owner instead of trusting stale native table presence.
+    /// </summary>
     [Fact]
     public void ProviderDropTableProjectsFollowingEnsureTableAsMissing()
     {
+        // Arrange
         var projection = new SafeMigrationPreflightProjection();
         var definition = new ExpectedTableDefinition("items", [Column("id")]);
 
         projection.ObserveProviderPostcondition(new DropTableOperation { Name = "items" });
 
+        // Act
         var analysis = projection.Project(
             new SafeMigrationOperation(
                 new EnsureTableIntent(definition, SafeMigrationTableMode.StrictDefinition),
                 SafeMigrationPolicy.ThrowIfDifferent),
             Live(SafeMigrationObservedState.Matching));
 
+        // Assert
         Assert.Equal(SafeMigrationObservedState.Missing, analysis.ObservedState);
         Assert.Equal("projected_missing", analysis.Code);
     }
 
+    /// <summary>
+    /// Uses the complete accepted ordinary CREATE shape to satisfy the following strict table contract.
+    /// </summary>
     [Fact]
     public void ProviderCreateTableProjectsItsExactDefinitionForFollowingStrictEnsureTable()
     {
+        // Arrange
         var projection = new SafeMigrationPreflightProjection();
         var createTable = new CreateTableOperation { Name = "items" };
         createTable.Columns.Add(ProviderColumn("id", "items", isNullable: false, defaultValue: 0));
 
         projection.ObserveProviderPostcondition(createTable);
 
+        // Act
         var analysis = projection.Project(
             new SafeMigrationOperation(
                 new EnsureTableIntent(
@@ -416,13 +514,18 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                 SafeMigrationPolicy.ThrowIfDifferent),
             Live(SafeMigrationObservedState.Missing));
 
+        // Assert
         Assert.Equal(SafeMigrationObservedState.Matching, analysis.ObservedState);
         Assert.Equal("projected_matching", analysis.Code);
     }
 
+    /// <summary>
+    /// Separates provable table existence from strict-shape evidence invalidated by an ordinary table alteration.
+    /// </summary>
     [Fact]
     public void ProviderAlterTableRetainsExistenceButInvalidatesHistoricalStrictShape()
     {
+        // Arrange
         var projection = new SafeMigrationPreflightProjection();
         var definition = new ExpectedTableDefinition("items", [Column("id")]);
 
@@ -433,6 +536,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                 Comment = "updated",
             });
 
+        // Act
         var strict = projection.Project(
             new SafeMigrationOperation(
                 new EnsureTableIntent(definition, SafeMigrationTableMode.StrictDefinition),
@@ -445,15 +549,20 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                 SafeMigrationPolicy.ThrowIfDifferent),
             Live(SafeMigrationObservedState.Different));
 
+        // Assert
         Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, strict.ObservedState);
         Assert.Equal("projected_structure_state_unknown", strict.Code);
         Assert.Equal(SafeMigrationObservedState.Matching, convergence.ObservedState);
         Assert.Equal("projected_matching", convergence.Code);
     }
 
+    /// <summary>
+    /// Keeps a separately owned complete table proof when ordinary DDL removes a member from another table.
+    /// </summary>
     [Fact]
     public void ProviderDropColumnDoesNotInvalidateAnIndependentProjectedTable()
     {
+        // Arrange
         var projection = new SafeMigrationPreflightProjection();
         var independent = new ExpectedTableDefinition("audit_entries", [Column("id")]);
 
@@ -468,16 +577,27 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                 Table = "shipments",
             });
 
+        // Act
         var analysis = projection.Project(
             new SafeMigrationOperation(
                 new EnsureTableIntent(independent, SafeMigrationTableMode.StrictDefinition),
                 SafeMigrationPolicy.ThrowIfDifferent),
             Live(SafeMigrationObservedState.Different));
 
+        // Assert
         Assert.Equal(SafeMigrationObservedState.Matching, analysis.ObservedState);
         Assert.Equal("projected_matching", analysis.Code);
     }
 
+    /// <summary>
+    /// Allows only row-independent nullable additions through a column-removal boundary with unknown table
+    /// contents.
+    /// </summary>
+    /// <param name="isNullable">
+    /// Whether the newly added member is nullable and therefore independent from row contents.
+    /// </param>
+    /// <param name="expectedState">The independently declared exact projected catalog state.</param>
+    /// <param name="expectedAction">The independently declared exact planner action for the projected state.</param>
     [Theory]
     [InlineData(true, SafeMigrationObservedState.Missing, SafeMigrationAction.Apply)]
     [InlineData(false, SafeMigrationObservedState.PrerequisiteMissing, SafeMigrationAction.RejectPrerequisiteMissing)]
@@ -519,6 +639,14 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         Assert.Equal(expectedAction, decision.Action);
     }
 
+    /// <summary>
+    /// Carries only nullable unrelated-column absence through the provider-certified rename lifetime.
+    /// </summary>
+    /// <param name="isNullable">
+    /// Whether the newly added member is nullable and therefore independent from row contents.
+    /// </param>
+    /// <param name="expectedState">The independently declared exact projected catalog state.</param>
+    /// <param name="expectedAction">The independently declared exact planner action for the projected state.</param>
     [Theory]
     [InlineData(true, SafeMigrationObservedState.Missing, SafeMigrationAction.Apply)]
     [InlineData(false, SafeMigrationObservedState.PrerequisiteMissing, SafeMigrationAction.RejectPrerequisiteMissing)]
@@ -570,22 +698,32 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         Assert.Equal(expectedAction, columnDecision.Action);
     }
 
+    /// <summary>
+    /// Does not mutate an earlier immutable classification when a later ordinary ADD supplies its prerequisite.
+    /// </summary>
     [Fact]
     public void ProviderAddColumnDoesNotProjectBackwardsInOperationOrder()
     {
+        // Arrange
         var projection = new SafeMigrationPreflightProjection();
         var live = Live(SafeMigrationObservedState.PrerequisiteMissing);
 
+        // Act
         var analysis = ProjectIndex(projection, "shipments", "customer_id", unique: false, live);
         projection.ObserveProviderPostcondition(
             ProviderColumn("customer_id", "shipments", isNullable: false, defaultValue: 0));
 
+        // Assert
         Assert.Same(live, analysis);
     }
 
+    /// <summary>
+    /// Invalidates an incomplete full-table snapshot while retaining the newly added member for nonunique indexing.
+    /// </summary>
     [Fact]
     public void ProviderAddColumnInvalidatesCompleteShapeButRetainsExactPrerequisite()
     {
+        // Arrange
         var projection = new SafeMigrationPreflightProjection();
         var originalTable = new ExpectedTableDefinition("shipments", [Column("id")]);
 
@@ -597,6 +735,8 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             ProviderColumn("customer_id", "shipments", isNullable: false, defaultValue: 0));
 
         var liveTable = Live(SafeMigrationObservedState.Different);
+
+        // Act
         var tableAnalysis = projection.Project(
             new SafeMigrationOperation(
                 new EnsureTableIntent(originalTable, SafeMigrationTableMode.StrictDefinition),
@@ -605,15 +745,20 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
         var indexAnalysis = ProjectIndex(projection, "shipments", "customer_id", unique: false);
 
+        // Assert
         Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, tableAnalysis.ObservedState);
         Assert.Equal("projected_structure_state_unknown", tableAnalysis.Code);
         Assert.Equal(SafeMigrationObservedState.Missing, indexAnalysis.ObservedState);
         Assert.Equal("projected_missing", indexAnalysis.Code);
     }
 
+    /// <summary>
+    /// Retains table-scoped facts only when the active provider certifies the database alteration boundary.
+    /// </summary>
     [Fact]
     public void ProviderAlterDatabasePreservesExistingTableScopedEvidence()
     {
+        // Arrange
         var projection = new SafeMigrationPreflightProjection(new AlterDatabaseProjection());
         var definition = new ExpectedTableDefinition("items", [Column("id")]);
 
@@ -623,19 +768,25 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
         projection.ObserveProviderPostcondition(new AlterDatabaseOperation());
 
+        // Act
         var analysis = projection.Project(
             new SafeMigrationOperation(
                 new EnsureTableIntent(definition, SafeMigrationTableMode.StrictDefinition),
                 SafeMigrationPolicy.ThrowIfDifferent),
             Live(SafeMigrationObservedState.Different));
 
+        // Assert
         Assert.Equal(SafeMigrationObservedState.Matching, analysis.ObservedState);
         Assert.Equal("projected_matching", analysis.Code);
     }
 
+    /// <summary>
+    /// Allows fresh table and nonunique-index projection after a provider-certified database alteration.
+    /// </summary>
     [Fact]
     public void ProviderAlterDatabaseAllowsFollowingSafeTableAndIndexProjection()
     {
+        // Arrange
         var projection = new SafeMigrationPreflightProjection(new AlterDatabaseProjection());
         var definition = new ExpectedTableDefinition("artifacts", [Column("id")]);
 
@@ -645,19 +796,26 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             projection,
             new EnsureTableIntent(definition, SafeMigrationTableMode.StrictDefinition));
 
+        // Act
         var analysis = ProjectIndex(projection, "artifacts", "id", unique: false);
 
+        // Assert
         Assert.Equal(SafeMigrationObservedState.Missing, analysis.ObservedState);
         Assert.Equal("projected_missing", analysis.Code);
     }
 
+    /// <summary>
+    /// Rejects speculative prerequisite facts after an unclassified database-wide operation.
+    /// </summary>
     [Fact]
     public void AlterDatabaseWithoutProviderProofInvalidatesAllPrerequisiteFacts()
     {
+        // Arrange
         var projection = new SafeMigrationPreflightProjection();
 
         projection.ObserveProviderPostcondition(new AlterDatabaseOperation());
 
+        // Act
         var analysis = ProjectIndex(
             projection,
             "artifacts",
@@ -665,13 +823,18 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             unique: false,
             Live(SafeMigrationObservedState.Missing));
 
+        // Assert
         Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, analysis.ObservedState);
         Assert.Equal("projected_structure_state_unknown", analysis.Code);
     }
 
+    /// <summary>
+    /// Prevents earlier accepted column facts from crossing a later unstructured SQL boundary.
+    /// </summary>
     [Fact]
     public void OpaqueProviderOperationInvalidatesAllPrerequisiteFacts()
     {
+        // Arrange
         var projection = new SafeMigrationPreflightProjection();
         projection.ObserveProviderPostcondition(
             ProviderColumn("customer_id", "shipments", isNullable: false, defaultValue: 0));
@@ -683,15 +846,22 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             });
 
         var live = Live(SafeMigrationObservedState.PrerequisiteMissing);
+
+        // Act
         var analysis = ProjectIndex(projection, "shipments", "customer_id", unique: false, live);
 
+        // Assert
         Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, analysis.ObservedState);
         Assert.Equal("projected_structure_state_unknown", analysis.Code);
     }
 
+    /// <summary>
+    /// Does not infer unique-row safety from a native snapshot preceding opaque provider SQL.
+    /// </summary>
     [Fact]
     public void OpaqueProviderOperationInvalidatesLiveDataSafety()
     {
+        // Arrange
         var projection = new SafeMigrationPreflightProjection();
         projection.ObserveProviderPostcondition(
             new SqlOperation
@@ -699,6 +869,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                 Sql = "INSERT INTO shipments (customer_id) VALUES (7), (7);",
             });
 
+        // Act
         var analysis = ProjectIndex(
             projection,
             "shipments",
@@ -706,13 +877,22 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             unique: true,
             Live(SafeMigrationObservedState.Missing));
 
+        // Assert
         Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, analysis.ObservedState);
         Assert.Equal("projected_structure_state_unknown", analysis.Code);
     }
 
-    [Fact]
-    public void ProviderDataOperationsPreserveStructuralFactsForNonUniqueIndex()
+    /// <summary>Retains structural nonunique-index proof independently across INSERT, UPDATE and DELETE.</summary>
+    /// <param name="operationOrdinal">The independent ordinary DML operation ordinal.</param>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void ProviderDataOperationsPreserveStructuralFactsForNonUniqueIndex(
+        int operationOrdinal
+    )
     {
+        // Arrange
         MigrationOperation[] dataOperations =
         [
             new InsertDataOperation
@@ -737,29 +917,32 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             },
         ];
 
-        foreach (var dataOperation in dataOperations)
-        {
-            var projection = new SafeMigrationPreflightProjection();
-            Apply(
-                projection,
-                new EnsureTableIntent(
-                    new ExpectedTableDefinition(
-                        "shipments",
-                        [Column("id"), Column("customer_id")]),
-                    SafeMigrationTableMode.StrictDefinition));
+        var projection = new SafeMigrationPreflightProjection();
+        Apply(
+            projection,
+            new EnsureTableIntent(
+                new ExpectedTableDefinition(
+                    "shipments",
+                    [Column("id"), Column("customer_id")]),
+                SafeMigrationTableMode.StrictDefinition));
 
-            projection.ObserveProviderPostcondition(dataOperation);
+        projection.ObserveProviderPostcondition(dataOperations[operationOrdinal]);
 
-            var analysis = ProjectIndex(projection, "shipments", "customer_id", unique: false);
+        // Act
+        var analysis = ProjectIndex(projection, "shipments", "customer_id", unique: false);
 
-            Assert.Equal(SafeMigrationObservedState.Missing, analysis.ObservedState);
-            Assert.Equal("projected_missing", analysis.Code);
-        }
+        // Assert
+        Assert.Equal(SafeMigrationObservedState.Missing, analysis.ObservedState);
+        Assert.Equal("projected_missing", analysis.Code);
     }
 
+    /// <summary>
+    /// Consumes the projected empty-row proof when ordinary DML can introduce duplicate indexed values.
+    /// </summary>
     [Fact]
     public void ProviderDataOperationInvalidatesProjectedUniqueIndexSafety()
     {
+        // Arrange
         var projection = new SafeMigrationPreflightProjection();
         Apply(
             projection,
@@ -778,15 +961,28 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             });
 
         var live = Live(SafeMigrationObservedState.PrerequisiteMissing);
+
+        // Act
         var analysis = ProjectIndex(projection, "shipments", "customer_id", unique: true, live);
 
+        // Assert
         Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, analysis.ObservedState);
         Assert.Equal("projected_data_state_unknown", analysis.Code);
     }
 
-    [Fact]
-    public void ProviderDataOperationInvalidatesEveryAdditiveDataSafetyProof()
+    /// <summary>Invalidates each row-dependent additive proof after an intervening ordinary data write.</summary>
+    /// <param name="intentOrdinal">The independently evaluated primary, unique, CHECK, FK or column contract.</param>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    public void ProviderDataOperationInvalidatesEveryAdditiveDataSafetyProof(
+        int intentOrdinal
+    )
     {
+        // Arrange
         var projection = new SafeMigrationPreflightProjection();
         Apply(
             projection,
@@ -843,25 +1039,29 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                     storeType: "int")),
         ];
 
-        foreach (var intent in dataDependentOperations)
-        {
-            var operation = new SafeMigrationOperation(intent, SafeMigrationPolicy.ThrowIfDifferent);
-            var live = Live(SafeMigrationObservedState.PrerequisiteMissing);
+        var intent = dataDependentOperations[intentOrdinal];
+        var operation = new SafeMigrationOperation(intent, SafeMigrationPolicy.ThrowIfDifferent);
+        var live = Live(SafeMigrationObservedState.PrerequisiteMissing);
 
-            var analysis = projection.Project(operation, live);
+        // Act
+        var analysis = projection.Project(operation, live);
 
-            Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, analysis.ObservedState);
-            Assert.Equal(
-                intent is EnsureForeignKeyIntent
-                    ? "projected_structure_state_unknown"
-                    : "projected_data_state_unknown",
-                analysis.Code);
-        }
+        // Assert
+        Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, analysis.ObservedState);
+        Assert.Equal(
+            intent is EnsureForeignKeyIntent
+                ? "projected_structure_state_unknown"
+                : "projected_data_state_unknown",
+            analysis.Code);
     }
 
+    /// <summary>
+    /// Invalidates historical native unique-index approval after ordinary provider-owned row insertion.
+    /// </summary>
     [Fact]
     public void ProviderDataOperationInvalidatesLiveUniqueIndexSafety()
     {
+        // Arrange
         var projection = new SafeMigrationPreflightProjection();
         projection.ObserveProviderPostcondition(
             new InsertDataOperation
@@ -871,6 +1071,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                 Values = new object[,] { { 7 } },
             });
 
+        // Act
         var analysis = ProjectIndex(
             projection,
             "shipments",
@@ -878,13 +1079,18 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             unique: true,
             Live(SafeMigrationObservedState.Missing));
 
+        // Assert
         Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, analysis.ObservedState);
         Assert.Equal("projected_data_state_unknown", analysis.Code);
     }
 
+    /// <summary>
+    /// Keeps the earlier DML invalidation active when a later nullable ADD supplies unrelated structural evidence.
+    /// </summary>
     [Fact]
     public void LaterProviderDdlDoesNotEraseEarlierDataUncertainty()
     {
+        // Arrange
         var projection = new SafeMigrationPreflightProjection();
         projection.ObserveProviderPostcondition(
             new InsertDataOperation
@@ -897,6 +1103,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         projection.ObserveProviderPostcondition(
             ProviderColumn("tracking_id", "shipments", isNullable: true));
 
+        // Act
         var analysis = ProjectIndex(
             projection,
             "shipments",
@@ -904,13 +1111,19 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             unique: true,
             Live(SafeMigrationObservedState.Missing));
 
+        // Assert
         Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, analysis.ObservedState);
         Assert.Equal("projected_data_state_unknown", analysis.Code);
     }
 
+    /// <summary>
+    /// Preserves the original native nonunique-index classification because ordinary DML changes no structural
+    /// proof.
+    /// </summary>
     [Fact]
     public void ProviderDataOperationPreservesLiveNonUniqueIndexAnalysis()
     {
+        // Arrange
         var projection = new SafeMigrationPreflightProjection();
         projection.ObserveProviderPostcondition(
             new InsertDataOperation
@@ -922,14 +1135,20 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
         var live = Live(SafeMigrationObservedState.Missing);
 
+        // Act
         var analysis = ProjectIndex(projection, "shipments", "customer_id", unique: false, live);
 
+        // Assert
         Assert.Same(live, analysis);
     }
 
+    /// <summary>
+    /// Rejects required-column addition when ordinary DML invalidates the earlier native empty-table proof.
+    /// </summary>
     [Fact]
     public void ProviderDataOperationInvalidatesLiveRequiredColumnSafety()
     {
+        // Arrange
         var projection = new SafeMigrationPreflightProjection();
         projection.ObserveProviderPostcondition(
             new InsertDataOperation
@@ -949,15 +1168,21 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                     storeType: "int")),
             SafeMigrationPolicy.ThrowIfDifferent);
 
+        // Act
         var analysis = projection.Project(operation, Live(SafeMigrationObservedState.Missing));
 
+        // Assert
         Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, analysis.ObservedState);
         Assert.Equal("projected_data_state_unknown", analysis.Code);
     }
 
+    /// <summary>
+    /// Rejects stale nullability-tightening approval after ordinary UPDATE may have introduced NULL values.
+    /// </summary>
     [Fact]
     public void ProviderDataOperationInvalidatesLiveNullabilityTighteningSafety()
     {
+        // Arrange
         var projection = new SafeMigrationPreflightProjection();
         projection.ObserveProviderPostcondition(
             new UpdateDataOperation
@@ -985,15 +1210,21 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             new AlterColumnIntent("shipments", requiredColumn, oldColumn),
             SafeMigrationPolicy.RepairIfSafe);
 
+        // Act
         var analysis = projection.Project(operation, Live(SafeMigrationObservedState.Different));
 
+        // Assert
         Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, analysis.ObservedState);
         Assert.Equal("projected_data_state_unknown", analysis.Code);
     }
 
+    /// <summary>
+    /// Preserves a row-independent nullable-column addition even after ordinary writes consume row-safety proofs.
+    /// </summary>
     [Fact]
     public void ProviderDataOperationRetainsSafeNullableColumnAddition()
     {
+        // Arrange
         var projection = new SafeMigrationPreflightProjection();
         Apply(
             projection,
@@ -1019,15 +1250,21 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                     storeType: "int")),
             SafeMigrationPolicy.ThrowIfDifferent);
 
+        // Act
         var analysis = projection.Project(operation, Live(SafeMigrationObservedState.PrerequisiteMissing));
 
+        // Assert
         Assert.Equal(SafeMigrationObservedState.Missing, analysis.ObservedState);
         Assert.Equal("projected_missing", analysis.Code);
     }
 
+    /// <summary>
+    /// Keeps a later table-creation lifetime independent from writes against an earlier existing owner.
+    /// </summary>
     [Fact]
     public void ProviderDataOperationDoesNotTaintLaterCreatedTable()
     {
+        // Arrange
         var projection = new SafeMigrationPreflightProjection();
         projection.ObserveProviderPostcondition(
             new InsertDataOperation
@@ -1045,12 +1282,20 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                     [Column("id"), Column("customer_id")]),
                 SafeMigrationTableMode.StrictDefinition));
 
+        // Act
         var analysis = ProjectIndex(projection, "shipments", "customer_id", unique: true);
 
+        // Assert
         Assert.Equal(SafeMigrationObservedState.Missing, analysis.ObservedState);
         Assert.Equal("projected_missing", analysis.Code);
     }
 
+    /// <summary>
+    /// Does not bind accepted member facts across a different table, schema or column identifier.
+    /// </summary>
+    /// <param name="providerTable">The physical owner named by the ordinary ADD operation.</param>
+    /// <param name="providerSchema">The optional ordinary-operation schema identity.</param>
+    /// <param name="providerColumn">The ordinary ADD member identity compared with the following index member.</param>
     [Theory]
     [InlineData("other_shipments", null, "customer_id")]
     [InlineData("shipments", "tenant", "customer_id")]
@@ -1061,6 +1306,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         string providerColumn
     )
     {
+        // Arrange
         var projection = new SafeMigrationPreflightProjection();
         projection.ObserveProviderPostcondition(
             ProviderColumn(
@@ -1071,14 +1317,21 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                 providerSchema));
 
         var live = Live(SafeMigrationObservedState.PrerequisiteMissing);
+
+        // Act
         var analysis = ProjectIndex(projection, "shipments", "customer_id", unique: false, live);
 
+        // Assert
         Assert.Same(live, analysis);
     }
 
+    /// <summary>
+    /// Discards the earlier accepted member prerequisite when a following ordinary DROP removes that member.
+    /// </summary>
     [Fact]
     public void ProviderDropColumnInvalidatesEarlierProjectedPrerequisite()
     {
+        // Arrange
         var projection = new SafeMigrationPreflightProjection();
         projection.ObserveProviderPostcondition(
             ProviderColumn("customer_id", "shipments", isNullable: false, defaultValue: 0));
@@ -1091,15 +1344,23 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             });
 
         var live = Live(SafeMigrationObservedState.PrerequisiteMissing);
+
+        // Act
         var analysis = ProjectIndex(projection, "shipments", "customer_id", unique: false, live);
 
+        // Assert
         Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, analysis.ObservedState);
         Assert.Equal("projected_structure_state_unknown", analysis.Code);
     }
 
+    /// <summary>
+    /// Keeps both historical and renamed index prerequisites unproven after an uncertified owner/member rename
+    /// chain.
+    /// </summary>
     [Fact]
     public void ProviderRenameSequenceDoesNotReuseHistoricalPrerequisites()
     {
+        // Arrange
         var projection = new SafeMigrationPreflightProjection();
         projection.ObserveProviderPostcondition(
             ProviderColumn("customer_id", "shipments", isNullable: false, defaultValue: 0));
@@ -1119,22 +1380,30 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                 NewName = "deliveries",
             });
 
+        // Act
         var projected = ProjectIndex(projection, "deliveries", "account_id", unique: false);
         var stale = ProjectIndex(projection, "shipments", "customer_id", unique: false);
 
+        // Assert
         Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, projected.ObservedState);
         Assert.Equal("projected_structure_state_unknown", projected.Code);
         Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, stale.ObservedState);
         Assert.Equal("projected_structure_state_unknown", stale.Code);
     }
 
+    /// <summary>
+    /// Consumes the all-NULL unique-index proof when ordinary ALTER can replace nullable values with a required
+    /// default.
+    /// </summary>
     [Fact]
     public void ProviderAlterColumnDoesNotInventUniqueSafetyForExistingRows()
     {
+        // Arrange
         var projection = new SafeMigrationPreflightProjection();
         projection.ObserveProviderPostcondition(
             ProviderColumn("external_id", "items", isNullable: true));
 
+        // Act
         var initiallySafe = ProjectIndex(projection, "items", "external_id", unique: true);
 
         projection.ObserveProviderPostcondition(
@@ -1151,6 +1420,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         var live = Live(SafeMigrationObservedState.PrerequisiteMissing);
         var afterAlter = ProjectIndex(projection, "items", "external_id", unique: true, live);
 
+        // Assert
         Assert.Equal(SafeMigrationObservedState.Missing, initiallySafe.ObservedState);
         Assert.Same(live, afterAlter);
     }
@@ -1184,9 +1454,13 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         Assert.Equal("projected_prerequisite_missing", afterDrop.Code);
     }
 
+    /// <summary>
+    /// Projects an exact ordinary index removal as missing for its following nonunique replacement.
+    /// </summary>
     [Fact]
     public void ProviderDropIndexProjectsExactOrdinaryReplacementAsMissing()
     {
+        // Arrange
         var projection = new SafeMigrationPreflightProjection();
         projection.ObserveProviderPostcondition(
             new DropIndexOperation
@@ -1195,6 +1469,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                 Table = "shipments",
             });
 
+        // Act
         var analysis = ProjectIndex(
             projection,
             "shipments",
@@ -1202,13 +1477,18 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             unique: false,
             Live(SafeMigrationObservedState.Different));
 
+        // Assert
         Assert.Equal(SafeMigrationObservedState.Missing, analysis.ObservedState);
         Assert.Equal("projected_missing", analysis.Code);
     }
 
+    /// <summary>
+    /// Makes ordinary index removal override an earlier accepted matching lifetime of the same physical name.
+    /// </summary>
     [Fact]
     public void ProviderDropIndexInvalidatesAnEarlierAcceptedIndex()
     {
+        // Arrange
         const string indexName = "ix_shipments_customer_id";
         var projection = new SafeMigrationPreflightProjection();
         projection.ObserveProviderPostcondition(
@@ -1230,6 +1510,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                 Table = "shipments",
             });
 
+        // Act
         var analysis = ProjectIndex(
             projection,
             "shipments",
@@ -1237,13 +1518,18 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             unique: false,
             Live(SafeMigrationObservedState.Matching));
 
+        // Assert
         Assert.Equal(SafeMigrationObservedState.Missing, analysis.ObservedState);
         Assert.Equal("projected_missing", analysis.Code);
     }
 
+    /// <summary>
+    /// Rejects stale index evidence after ordinary DDL removes one of its accepted key members.
+    /// </summary>
     [Fact]
     public void ProviderColumnDropInvalidatesAnEarlierAcceptedIndex()
     {
+        // Arrange
         var projection = new SafeMigrationPreflightProjection();
         projection.ObserveProviderPostcondition(
             ProviderColumn("customer_id", "shipments", isNullable: false));
@@ -1264,6 +1550,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                 Table = "shipments",
             });
 
+        // Act
         var analysis = ProjectIndex(
             projection,
             "shipments",
@@ -1271,13 +1558,18 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             unique: false,
             Live(SafeMigrationObservedState.Matching));
 
+        // Assert
         Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, analysis.ObservedState);
         Assert.Equal("projected_structure_state_unknown", analysis.Code);
     }
 
+    /// <summary>
+    /// Retains a proven physical index removal across metadata-only table and column alterations.
+    /// </summary>
     [Fact]
     public void SafeDropIndexSurvivesOrderedTableAndColumnMetadataAlterations()
     {
+        // Arrange
         const string indexName = "ix_records_tenant_id_code";
         var projection = new SafeMigrationPreflightProjection();
 
@@ -1332,17 +1624,23 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                     ])),
             SafeMigrationPolicy.ThrowIfDifferent);
 
+        // Act
         var analysis = projection.Project(
             replacement,
             Live(SafeMigrationObservedState.Different));
 
+        // Assert
         Assert.Equal(SafeMigrationObservedState.Missing, analysis.ObservedState);
         Assert.Equal("projected_missing", analysis.Code);
     }
 
+    /// <summary>
+    /// Invalidates the earlier exact index removal when later opaque SQL can change the physical namespace.
+    /// </summary>
     [Fact]
     public void SafeDropIndexDoesNotSurviveAnOpaqueProviderOperation()
     {
+        // Arrange
         const string indexName = "ix_shipments_customer_id";
         var projection = new SafeMigrationPreflightProjection();
 
@@ -1359,12 +1657,19 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
         var live = Live(SafeMigrationObservedState.Different);
 
+        // Act
         var analysis = ProjectIndex(projection, "shipments", "customer_id", unique: false, live);
 
+        // Assert
         Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, analysis.ObservedState);
         Assert.Equal("projected_structure_state_unknown", analysis.Code);
     }
 
+    /// <summary>
+    /// Retains unsupported, data-blocked and missing-prerequisite native rejections despite an earlier index
+    /// removal.
+    /// </summary>
+    /// <param name="state">The unsafe native result that an index-removal proof must never override.</param>
     [Theory]
     [InlineData(SafeMigrationObservedState.DataBlocked)]
     [InlineData(SafeMigrationObservedState.PrerequisiteMissing)]
@@ -1373,6 +1678,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         SafeMigrationObservedState state
     )
     {
+        // Arrange
         var projection = new SafeMigrationPreflightProjection();
         projection.ObserveProviderPostcondition(
             new DropIndexOperation
@@ -1383,14 +1689,20 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
         var live = Live(state);
 
+        // Act
         var analysis = ProjectIndex(projection, "shipments", "customer_id", unique: true, live);
 
+        // Assert
         Assert.Same(live, analysis);
     }
 
+    /// <summary>
+    /// Uses exact physical removal to replace only its own authored index identity after native semantic matching.
+    /// </summary>
     [Fact]
     public void ProviderDropIndexProjectsAnExactNameReplacementAfterSemanticAliasAnalysis()
     {
+        // Arrange
         var projection = new SafeMigrationPreflightProjection();
         projection.ObserveProviderPostcondition(
             new DropIndexOperation
@@ -1401,15 +1713,21 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
         var live = Live(SafeMigrationObservedState.Different);
 
+        // Act
         var analysis = ProjectIndex(projection, "shipments", "customer_id", unique: false, live);
 
+        // Assert
         Assert.Equal(SafeMigrationObservedState.Missing, analysis.ObservedState);
         Assert.Equal("projected_missing", analysis.Code);
     }
 
+    /// <summary>
+    /// Retains the native duplicate-row rejection instead of turning physical index removal into unique-row proof.
+    /// </summary>
     [Fact]
     public void ProviderDropIndexPreservesDuplicateRowEvidenceForUniqueReplacement()
     {
+        // Arrange
         var projection = new SafeMigrationPreflightProjection();
         projection.ObserveProviderPostcondition(
             new DropIndexOperation
@@ -1424,15 +1742,21 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             postconditionSatisfied: false,
             "index_replacement_data_blocked");
 
+        // Act
         var analysis = ProjectIndex(projection, "shipments", "customer_id", unique: true, live);
 
+        // Assert
         Assert.Equal(SafeMigrationObservedState.DataBlocked, analysis.ObservedState);
         Assert.Equal("index_replacement_data_blocked", analysis.Code);
     }
 
+    /// <summary>
+    /// Leaves the native result unchanged when an ordinary DROP removes another physical index name.
+    /// </summary>
     [Fact]
     public void ProviderDropIndexDoesNotProjectASeparateIndexIdentity()
     {
+        // Arrange
         var projection = new SafeMigrationPreflightProjection();
         projection.ObserveProviderPostcondition(
             new DropIndexOperation
@@ -1443,14 +1767,20 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
         var live = Live(SafeMigrationObservedState.Different);
 
+        // Act
         var analysis = ProjectIndex(projection, "shipments", "customer_id", unique: false, live);
 
+        // Assert
         Assert.Same(live, analysis);
     }
 
+    /// <summary>
+    /// Invalidates exact-owner index removal proof after a tableless provider DROP has unknown namespace effects.
+    /// </summary>
     [Fact]
     public void TablelessProviderDropIndexFailsClosedWithoutAnOwnershipProjection()
     {
+        // Arrange
         var projection = new SafeMigrationPreflightProjection();
         projection.ObserveProviderPostcondition(
             new DropIndexOperation
@@ -1468,8 +1798,10 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
         var live = Live(SafeMigrationObservedState.Different);
 
+        // Act
         var analysis = ProjectIndex(projection, "shipments", "customer_id", unique: false, live);
 
+        // Assert
         Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, analysis.ObservedState);
         Assert.Equal("projected_structure_state_unknown", analysis.Code);
     }
@@ -1525,10 +1857,20 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         return projection.Project(operation, live);
     }
 
-    private sealed class ProjectionPrecedenceProbe(
-        bool sequenceAware
-    ) : ISafeMigrationProviderOperationProjection, ISafeMigrationProviderObjectIdentityNormalizer
+    private sealed class ProjectionPrecedenceProbe : ISafeMigrationProviderOperationProjection,
+        ISafeMigrationProviderObjectIdentityNormalizer
     {
+        private readonly bool _sequenceAware;
+
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="sequenceAware">The supplied sequence aware for this fixture.</param>
+        public ProjectionPrecedenceProbe(
+            bool sequenceAware
+        )
+        {
+            _sequenceAware = sequenceAware;
+        }
+
         /// <summary>Gets how often physical identity was checked before projection.</summary>
         public int IdentityChecks { get; private set; }
 
@@ -1571,7 +1913,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         {
             SequenceChecks++;
 
-            return sequenceAware;
+            return _sequenceAware;
         }
     }
 

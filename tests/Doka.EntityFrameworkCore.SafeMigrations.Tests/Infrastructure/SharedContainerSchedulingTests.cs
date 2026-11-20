@@ -48,19 +48,25 @@ public sealed class SharedContainerSchedulingTests
             async token =>
             {
                 admitted.SetResult();
+
+                // WHY: Only cancellation releases this admitted work; no clock expiration can make the test pass.
                 await Task.Delay(Timeout.Infinite, token);
 
                 return 0;
             },
             cancellation.Token);
 
-        await admitted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        var actionWasAdmitted = admitted.Task.IsCompleted;
+
+        // WHY: Keep cancellation before the pending-action observation in the same synchronous sequence.
+        // ReSharper disable once MethodHasAsyncOverload
         cancellation.Cancel();
         var failure = await Record.ExceptionAsync(() => pending);
         var next = await scheduler.RunAsync(_ => Task.FromResult(42), CancellationToken.None);
 
         // Assert
-        var canceled = Assert.IsAssignableFrom<OperationCanceledException>(failure);
+        var canceled = Assert.IsType<OperationCanceledException>(failure, exactMatch: false);
+        Assert.True(actionWasAdmitted);
         Assert.Equal(cancellation.Token, canceled.CancellationToken);
         Assert.Equal(42, next);
     }
@@ -114,7 +120,6 @@ public sealed class SharedContainerSchedulingTests
         // Arrange
         using var scheduler = new SharedContainerCollectionScheduler(new SharedContainerExecutionPolicy(2, false));
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var firstTwoStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var active = 0;
         var started = 0;
         var maximumActive = 0;
@@ -129,10 +134,7 @@ public sealed class SharedContainerSchedulingTests
 
             RecordMaximum(ref maximumActive, nowActive);
 
-            if (Interlocked.Increment(ref started) == 2)
-            {
-                firstTwoStarted.TrySetResult();
-            }
+            Interlocked.Increment(ref started);
 
             try
             {
@@ -154,8 +156,8 @@ public sealed class SharedContainerSchedulingTests
 
         try
         {
-            await firstTwoStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
-
+            // WHY: Uncontended admission invokes the callback synchronously before RunAsync yields.
+            // Observe after every call is issued; waiting for an expected count could deadlock on a regression.
             activeBeforeRelease = Volatile.Read(ref active);
             startedBeforeRelease = Volatile.Read(ref started);
         }
@@ -164,9 +166,7 @@ public sealed class SharedContainerSchedulingTests
             release.TrySetResult();
         }
 
-        await Task
-            .WhenAll(collections)
-            .WaitAsync(TimeSpan.FromSeconds(10));
+        await Task.WhenAll(collections);
 
         // Assert
         Assert.Equal(2, activeBeforeRelease);
@@ -189,9 +189,7 @@ public sealed class SharedContainerSchedulingTests
             _ => Task.FromException<int>(failure),
             CancellationToken.None));
 
-        var nextResult = await scheduler
-            .RunAsync(_ => Task.FromResult(42), CancellationToken.None)
-            .WaitAsync(TimeSpan.FromSeconds(10));
+        var nextResult = await scheduler.RunAsync(_ => Task.FromResult(42), CancellationToken.None);
 
         // Assert
         Assert.Same(failure, observedFailure);
@@ -229,23 +227,25 @@ public sealed class SharedContainerSchedulingTests
             },
             CancellationToken.None);
 
+        // WHY: Complete cancellation before the admission snapshot and before releasing the first collection.
+        // ReSharper disable once MethodHasAsyncOverload
         cancellation.Cancel();
 
-        var cancellationFailure = await Record.ExceptionAsync(() => canceled);
         var nextExecutedBeforeRelease = nextCollectionExecuted;
 
         release.SetResult(1);
 
-        await Task
-            .WhenAll(first, next)
-            .WaitAsync(TimeSpan.FromSeconds(10));
+        var cancellationFailure = await Record.ExceptionAsync(() => canceled);
+        await Task.WhenAll(first, next);
+        var nextResult = await next;
 
         // Assert
-        Assert.IsAssignableFrom<OperationCanceledException>(cancellationFailure);
+        var canceledOperation = Assert.IsType<OperationCanceledException>(cancellationFailure, exactMatch: false);
+        Assert.Equal(cancellation.Token, canceledOperation.CancellationToken);
         Assert.False(canceledCollectionExecuted);
         Assert.False(nextExecutedBeforeRelease);
         Assert.True(nextCollectionExecuted);
-        Assert.Equal(3, await next);
+        Assert.Equal(3, nextResult);
     }
 
     /// <summary>Unlimited execution still honors cancellation before starting a collection.</summary>
@@ -257,7 +257,7 @@ public sealed class SharedContainerSchedulingTests
         using var cancellation = new CancellationTokenSource();
         var executed = false;
 
-        cancellation.Cancel();
+        await cancellation.CancelAsync();
 
         // Act
         var failure = await Record.ExceptionAsync(() => scheduler.RunAsync(
@@ -270,7 +270,7 @@ public sealed class SharedContainerSchedulingTests
             cancellation.Token));
 
         // Assert
-        Assert.IsAssignableFrom<OperationCanceledException>(failure);
+        Assert.IsType<OperationCanceledException>(failure, exactMatch: false);
         Assert.False(executed);
     }
 

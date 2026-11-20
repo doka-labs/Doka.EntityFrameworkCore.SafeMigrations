@@ -44,6 +44,9 @@ public sealed class MySqlProvider106ContractTests
                 out var normalized)
                 ? normalized
                 : null)
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         // Assert
@@ -307,8 +310,9 @@ public sealed class MySqlProvider106ContractTests
     }
 
     /// <summary>Enumerates both remainder positions, every key kind and both metadata origins.</summary>
-    public static IEnumerable<object[]> DecimalBoundaryCases()
+    public static TheoryData<int, int, int, int, bool, bool> DecimalBoundaryCases()
     {
+        var cases = new TheoryData<int, int, int, int, bool, bool>();
         foreach (var (precision, scale, width) in new[] { (18, 2, 9), (9, 7, 5) })
         {
             foreach (var kind in new[] { 0, 1, 2 })
@@ -317,11 +321,13 @@ public sealed class MySqlProvider106ContractTests
                 {
                     foreach (var projected in new[] { false, true })
                     {
-                        yield return [precision, scale, width, kind, overLimit, projected];
+                        cases.Add(precision, scale, width, kind, overLimit, projected);
                     }
                 }
             }
         }
+
+        return cases;
     }
 
     /// <summary>
@@ -394,14 +400,20 @@ public sealed class MySqlProvider106ContractTests
     }
 
     /// <summary>Combines implicit, explicit, fixed, overlapping and principal-derived facets.</summary>
-    /// <param name="options">The complete profile, including its explicit root before EF construction.</param>
-    /// <param name="services">The root whose lifetime transfers to this context.</param>
-    private sealed class BudgetContext(
-        DbContextOptions<BudgetContext> options,
-        ServiceProvider services
-    ) : DbContext(options)
+    private sealed class BudgetContext : DbContext
     {
-        private ServiceProvider? _ownedServices = services;
+        private ServiceProvider? _ownedServices;
+
+        /// <summary>Initializes the explicit dependencies of this isolated test helper.</summary>
+        /// <param name="options">The complete profile, including its explicit root before EF construction.</param>
+        /// <param name="services">The root whose lifetime transfers to this context.</param>
+        public BudgetContext(
+            DbContextOptions<BudgetContext> options,
+            ServiceProvider services
+        ) : base(options)
+        {
+            _ownedServices = services;
+        }
 
         /// <inheritdoc />
         public override void Dispose()
@@ -577,8 +589,14 @@ public sealed class MySqlProvider106ContractTests
     }
 
     /// <summary>Provides an independent explicit overflow that no convention may repair.</summary>
-    private sealed class ImpossibleBudgetContext(DbContextOptions<ImpossibleBudgetContext> options) : DbContext(options)
+    private sealed class ImpossibleBudgetContext : DbContext
     {
+        /// <summary>Initializes the explicit dependencies of this isolated test helper.</summary>
+        /// <param name="options">The isolated model and provider options.</param>
+        public ImpossibleBudgetContext(
+            DbContextOptions<ImpossibleBudgetContext> options
+        ) : base(options) { }
+
         /// <inheritdoc />
         protected override void OnModelCreating(
             ModelBuilder modelBuilder
@@ -596,8 +614,19 @@ public sealed class MySqlProvider106ContractTests
     }
 
     /// <summary>Separates accepted projected definitions from independently captured native metadata.</summary>
-    private sealed class ProjectedColumns(ExpectedColumnDefinition[] definitions) : ISafeMigrationProjectedColumnSource
+    private sealed class ProjectedColumns : ISafeMigrationProjectedColumnSource
     {
+        private readonly ExpectedColumnDefinition[] _definitions;
+
+        /// <summary>Initializes the explicit dependencies of this isolated test helper.</summary>
+        /// <param name="definitions">The accepted projected definitions, indexed by column identity.</param>
+        public ProjectedColumns(
+            ExpectedColumnDefinition[] definitions
+        )
+        {
+            _definitions = definitions;
+        }
+
         /// <inheritdoc />
         public bool TryGetProjectedColumn(
             string table,
@@ -606,7 +635,7 @@ public sealed class MySqlProvider106ContractTests
             [NotNullWhen(true)] out ExpectedColumnDefinition? definition
         )
         {
-            definition = definitions.FirstOrDefault(value => value.Name == column);
+            definition = _definitions.FirstOrDefault(value => value.Name == column);
 
             return definition is not null;
         }

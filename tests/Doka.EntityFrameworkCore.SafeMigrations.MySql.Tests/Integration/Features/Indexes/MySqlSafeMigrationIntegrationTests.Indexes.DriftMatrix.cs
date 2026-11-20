@@ -9,9 +9,13 @@ public sealed class MySqlIndexesDriftMatrixIntegrationTests : MySqlSafeMigration
         MySqlEngineContainerFixture fixture
     ) : base(fixture) { }
 
+    /// <summary>
+    /// Accepts an independently equivalent index alias as matching rather than creating a duplicate index.
+    /// </summary>
     [Fact]
     public async Task EquivalentIndexWithDifferentName_IsAnIdempotentNoOp()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -41,6 +45,7 @@ public sealed class MySqlIndexesDriftMatrixIntegrationTests : MySqlSafeMigration
             "index_identity",
             ["code", "tenant_id"]);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -52,6 +57,7 @@ public sealed class MySqlIndexesDriftMatrixIntegrationTests : MySqlSafeMigration
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
         Assert.All(
             report.Assessments,
@@ -77,9 +83,11 @@ public sealed class MySqlIndexesDriftMatrixIntegrationTests : MySqlSafeMigration
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Does not confuse a differently shaped alias with an existing target index.</summary>
     [Fact]
     public async Task DifferentlyNamedIndexWithDifferentShape_RemainsApplicable()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -97,6 +105,7 @@ public sealed class MySqlIndexesDriftMatrixIntegrationTests : MySqlSafeMigration
             "index_nonidentity",
             ["alternate_code"]);
 
+        // Act
         var preflight = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -116,6 +125,7 @@ public sealed class MySqlIndexesDriftMatrixIntegrationTests : MySqlSafeMigration
                 new SafeMigrationRunOptions("index-nonidentity-post"),
                 CancellationToken.None);
 
+        // Assert
         var assessment = Assert.Single(preflight.Assessments);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -127,9 +137,11 @@ public sealed class MySqlIndexesDriftMatrixIntegrationTests : MySqlSafeMigration
                 .Action);
     }
 
+    /// <summary>Rejects visibility drift on the exact expected index before native DDL.</summary>
     [Fact]
     public async Task InvisibleOrIgnoredIndexWithExpectedName_IsRejectedBeforeDdl()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var visibility = Fixture.IsMariaDb
             ? "IGNORED"
@@ -150,6 +162,7 @@ public sealed class MySqlIndexesDriftMatrixIntegrationTests : MySqlSafeMigration
             "index_visibility_drift",
             ["code"]);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -163,6 +176,7 @@ public sealed class MySqlIndexesDriftMatrixIntegrationTests : MySqlSafeMigration
                 ExecuteOperationsAsync(context, builder.Operations, operationToken),
             cancellationToken: CancellationToken.None);
 
+        // Assert
         var assessment = Assert.Single(report.Assessments);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -171,9 +185,11 @@ public sealed class MySqlIndexesDriftMatrixIntegrationTests : MySqlSafeMigration
         Assert.Contains("doka_sm_different", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>Does not allow an invisible or ignored alias to satisfy a required visible index.</summary>
     [Fact]
     public async Task DifferentlyNamedInvisibleOrIgnoredIndex_DoesNotBlockVisibleIndex()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var visibility = Fixture.IsMariaDb
             ? "IGNORED"
@@ -194,6 +210,7 @@ public sealed class MySqlIndexesDriftMatrixIntegrationTests : MySqlSafeMigration
             "index_visibility_identity",
             ["code"]);
 
+        // Act
         var preflight = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -213,6 +230,7 @@ public sealed class MySqlIndexesDriftMatrixIntegrationTests : MySqlSafeMigration
                 new SafeMigrationRunOptions("index-visibility-post"),
                 CancellationToken.None);
 
+        // Assert
         var preflightAssessment = Assert.Single(preflight.Assessments);
         var postflightAssessment = Assert.Single(postflight.Assessments);
 
@@ -224,9 +242,11 @@ public sealed class MySqlIndexesDriftMatrixIntegrationTests : MySqlSafeMigration
         Assert.Equal(SafeMigrationAction.NoOp, postflightAssessment.Action);
     }
 
+    /// <summary>Rejects a full-width key whose declared domain exceeds the native index budget.</summary>
     [Fact]
     public async Task OverlongUnprefixedIndex_IsRejectedBeforeDdl()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -241,6 +261,7 @@ public sealed class MySqlIndexesDriftMatrixIntegrationTests : MySqlSafeMigration
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateIndexIfNotExists("ix_overlong_property", "overlong_index", ["property"]);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -254,6 +275,7 @@ public sealed class MySqlIndexesDriftMatrixIntegrationTests : MySqlSafeMigration
                 ExecuteOperationsAsync(context, builder.Operations, operationToken),
             cancellationToken: CancellationToken.None);
 
+        // Assert
         var assessment = Assert.Single(report.Assessments);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -281,9 +303,11 @@ public sealed class MySqlIndexesDriftMatrixIntegrationTests : MySqlSafeMigration
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Rejects a key one character beyond the physical limit with the stable prefix-required reason.</summary>
     [Fact]
     public async Task OneCharacterOverFullKeyLimit_IsRejectedBeforeDdl()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -295,6 +319,7 @@ public sealed class MySqlIndexesDriftMatrixIntegrationTests : MySqlSafeMigration
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateIndexIfNotExists("ix_one_over_value", "one_over_index", ["value"]);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -308,6 +333,7 @@ public sealed class MySqlIndexesDriftMatrixIntegrationTests : MySqlSafeMigration
                 ExecuteOperationsAsync(context, builder.Operations, operationToken),
             cancellationToken: CancellationToken.None);
 
+        // Assert
         var assessment = Assert.Single(report.Assessments);
 
         Assert.Equal(SafeMigrationObservedState.Unsupported, assessment.ObservedState);
@@ -326,9 +352,11 @@ public sealed class MySqlIndexesDriftMatrixIntegrationTests : MySqlSafeMigration
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Preserves composite prefix and single-byte key values at the exact native budget boundary.</summary>
     [Fact]
     public async Task CompositePrefixesAndSingleByteFullKey_ConvergeAtTheExactLimit()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -357,6 +385,7 @@ public sealed class MySqlIndexesDriftMatrixIntegrationTests : MySqlSafeMigration
                 ]),
             SafeMigrationPolicy.ThrowIfDifferent);
 
+        // Act
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
@@ -368,6 +397,7 @@ public sealed class MySqlIndexesDriftMatrixIntegrationTests : MySqlSafeMigration
                 new SafeMigrationRunOptions("encoded-width-indexes"),
                 CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
         Assert.All(report.Assessments, static assessment => Assert.Equal(SafeMigrationAction.NoOp, assessment.Action));
         Assert.Equal(
@@ -383,9 +413,16 @@ public sealed class MySqlIndexesDriftMatrixIntegrationTests : MySqlSafeMigration
                 cancellationToken: CancellationToken.None));
     }
 
-    [Fact]
-    public async Task CompositeOverLimitAndScalarPrefix_AreRejectedBeforeDdl()
+    /// <summary>Rejects composite overflow and invalid scalar prefixes before creating target indexes.</summary>
+    /// <param name="variantIndex">The independently exercised invalid key shape.</param>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public async Task CompositeOverLimitAndScalarPrefix_AreRejectedBeforeDdl(
+        int variantIndex
+    )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -413,30 +450,30 @@ public sealed class MySqlIndexesDriftMatrixIntegrationTests : MySqlSafeMigration
                 [new ExpectedIndexKeyDefinition(column: "numeric_value", prefixLength: 1)]),
         };
 
-        foreach (var definition in definitions)
-        {
-            var builder = new MigrationBuilder(context.Database.ProviderName!);
-            builder.EnsureIndex(definition, SafeMigrationPolicy.ThrowIfDifferent);
+        var definition = definitions[variantIndex];
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.EnsureIndex(definition, SafeMigrationPolicy.ThrowIfDifferent);
 
-            var report = await context
-                .GetService<ISafeMigrationRunner>()
-                .AnalyzeAsync(
-                    context,
-                    builder.Operations,
-                    new SafeMigrationRunOptions("invalid-index-shape"),
-                    CancellationToken.None);
+        // Act
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("invalid-index-shape"),
+                CancellationToken.None);
 
-            var exception = await AssertOwnedGuardFailureAsync(
-                operationToken =>
-                    ExecuteOperationsAsync(context, builder.Operations, operationToken),
-                cancellationToken: CancellationToken.None);
+        var exception = await AssertOwnedGuardFailureAsync(
+            operationToken =>
+                ExecuteOperationsAsync(context, builder.Operations, operationToken),
+            cancellationToken: CancellationToken.None);
 
-            var assessment = Assert.Single(report.Assessments);
+        // Assert
+        var assessment = Assert.Single(report.Assessments);
 
-            Assert.Equal(SafeMigrationObservedState.Unsupported, assessment.ObservedState);
-            Assert.Equal("index_prefix_required_for_key_limit", assessment.Code);
-            Assert.Contains("doka_sm_unsupported", exception.Message, StringComparison.OrdinalIgnoreCase);
-        }
+        Assert.Equal(SafeMigrationObservedState.Unsupported, assessment.ObservedState);
+        Assert.Equal("index_prefix_required_for_key_limit", assessment.Code);
+        Assert.Contains("doka_sm_unsupported", exception.Message, StringComparison.OrdinalIgnoreCase);
 
         Assert.Equal(
             0,
@@ -450,9 +487,11 @@ public sealed class MySqlIndexesDriftMatrixIntegrationTests : MySqlSafeMigration
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Installs exact-limit and explicitly prefixed indexes once and treats replay as matching.</summary>
     [Fact]
     public async Task ExactLimitAndExplicitPrefixIndexes_AreAppliedAndIdempotent()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -473,6 +512,7 @@ public sealed class MySqlIndexesDriftMatrixIntegrationTests : MySqlSafeMigration
                 [new ExpectedIndexKeyDefinition(column: "wide_value", prefixLength: 768)]),
             SafeMigrationPolicy.ThrowIfDifferent);
 
+        // Act
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
@@ -484,6 +524,7 @@ public sealed class MySqlIndexesDriftMatrixIntegrationTests : MySqlSafeMigration
                 new SafeMigrationRunOptions("bounded-indexes"),
                 CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
         Assert.All(report.Assessments, static assessment => Assert.Equal(SafeMigrationAction.NoOp, assessment.Action));
         Assert.Equal(
@@ -499,9 +540,11 @@ public sealed class MySqlIndexesDriftMatrixIntegrationTests : MySqlSafeMigration
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Uses the smaller compact-row budget instead of authorizing a key with the dynamic-row limit.</summary>
     [Fact]
     public async Task CompactRowFormat_UsesItsSmallerLimitAndAcceptsExplicitPrefix()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -513,6 +556,7 @@ public sealed class MySqlIndexesDriftMatrixIntegrationTests : MySqlSafeMigration
         var fullKey = new MigrationBuilder(context.Database.ProviderName!);
         fullKey.CreateIndexIfNotExists("ix_compact_full", "compact_index_limit", ["value"]);
 
+        // Act
         var blocked = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -525,13 +569,6 @@ public sealed class MySqlIndexesDriftMatrixIntegrationTests : MySqlSafeMigration
             operationToken =>
                 ExecuteOperationsAsync(context, fullKey.Operations, operationToken),
             cancellationToken: CancellationToken.None);
-
-        Assert.Equal(
-            "index_prefix_required_for_key_limit",
-            Assert.Single(blocked.Assessments)
-                .Code);
-
-        Assert.Contains("doka_sm_unsupported", exception.Message, StringComparison.OrdinalIgnoreCase);
 
         var prefix = new MigrationBuilder(context.Database.ProviderName!);
         prefix.EnsureIndex(
@@ -552,27 +589,39 @@ public sealed class MySqlIndexesDriftMatrixIntegrationTests : MySqlSafeMigration
                 new SafeMigrationRunOptions("compact-prefix"),
                 CancellationToken.None);
 
+        var storedPrefixLength = await ScalarIntAsync(
+            connectionString,
+            """
+            SELECT SUB_PART FROM INFORMATION_SCHEMA.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'compact_index_limit'
+            AND INDEX_NAME = 'ix_compact_prefix';
+            """,
+            cancellationToken: CancellationToken.None);
+
+        // Assert
+        Assert.Equal(
+            "index_prefix_required_for_key_limit",
+            Assert.Single(blocked.Assessments)
+                .Code);
+
+        Assert.Contains("doka_sm_unsupported", exception.Message, StringComparison.OrdinalIgnoreCase);
+
         Assert.Equal(SafeMigrationReportStatus.Ready, ready.Status);
         Assert.Equal(SafeMigrationAction.NoOp,
             Assert.Single(ready.Assessments)
                 .Action);
 
-        Assert.Equal(
-            191,
-            await ScalarIntAsync(
-                connectionString,
-                """
-                SELECT SUB_PART FROM INFORMATION_SCHEMA.STATISTICS
-                WHERE TABLE_SCHEMA = DATABASE()
-                AND TABLE_NAME = 'compact_index_limit'
-                AND INDEX_NAME = 'ix_compact_prefix';
-                """,
-                cancellationToken: CancellationToken.None));
+        Assert.Equal(191, storedPrefixLength);
     }
 
+    /// <summary>
+    /// Rejects a prefix longer than its declared column rather than letting native DDL choose a different shape.
+    /// </summary>
     [Fact]
     public async Task PrefixBeyondColumnLength_IsRejectedBeforeDdl()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -588,6 +637,7 @@ public sealed class MySqlIndexesDriftMatrixIntegrationTests : MySqlSafeMigration
                 [new ExpectedIndexKeyDefinition(column: "value", prefixLength: 81)]),
             SafeMigrationPolicy.ThrowIfDifferent);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -596,6 +646,7 @@ public sealed class MySqlIndexesDriftMatrixIntegrationTests : MySqlSafeMigration
                 new SafeMigrationRunOptions("invalid-prefix"),
                 CancellationToken.None);
 
+        // Assert
         var assessment = Assert.Single(report.Assessments);
 
         Assert.Equal(SafeMigrationObservedState.Unsupported, assessment.ObservedState);
@@ -613,9 +664,23 @@ public sealed class MySqlIndexesDriftMatrixIntegrationTests : MySqlSafeMigration
                 cancellationToken: CancellationToken.None));
     }
 
-    [Fact]
-    public async Task ObservableIndexFacetDrift_IsRejectedOneFieldAtATime()
+    /// <summary>
+    /// Identifies each independently observable index-facet difference without accepting neighboring matches.
+    /// </summary>
+    /// <param name="variantIndex">The independently changed expected index facet.</param>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    [InlineData(5)]
+    [InlineData(6)]
+    public async Task ObservableIndexFacetDrift_IsRejectedOneFieldAtATime(
+        int variantIndex
+    )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -639,6 +704,7 @@ public sealed class MySqlIndexesDriftMatrixIntegrationTests : MySqlSafeMigration
         var create = new MigrationBuilder(context.Database.ProviderName!);
         create.EnsureIndex(canonical, SafeMigrationPolicy.ThrowIfDifferent);
 
+        // Act
         await ExecuteOperationsAsync(context, create.Operations, CancellationToken.None);
         await ExecuteOperationsAsync(context, create.Operations, CancellationToken.None);
 
@@ -711,30 +777,39 @@ public sealed class MySqlIndexesDriftMatrixIntegrationTests : MySqlSafeMigration
                 method: "BTREE"),
         };
 
-        foreach (var variant in variants)
-        {
-            var drift = new MigrationBuilder(context.Database.ProviderName!);
-            drift.EnsureIndex(variant, SafeMigrationPolicy.ThrowIfDifferent);
+        var variant = variants[variantIndex];
+        var drift = new MigrationBuilder(context.Database.ProviderName!);
+        drift.EnsureIndex(variant, SafeMigrationPolicy.ThrowIfDifferent);
 
-            var report = await context
-                .GetService<ISafeMigrationRunner>()
-                .AnalyzeAsync(
-                    context,
-                    drift.Operations,
-                    new SafeMigrationRunOptions("index-facet-drift"),
-                    CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                drift.Operations,
+                new SafeMigrationRunOptions("index-facet-drift"),
+                CancellationToken.None);
 
-            var assessment = Assert.Single(report.Assessments);
+        // Assert
+        var assessment = Assert.Single(report.Assessments);
 
-            Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-            Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
-            Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
-        }
+        Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
+        Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
+        Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
     }
 
-    [Fact]
-    public async Task UnsupportedIndexFacetMatrix_FailsClosedBeforeTargetDdl()
+    /// <summary>Rejects unsupported index facets before selecting target DDL.</summary>
+    /// <param name="variantIndex">The independently exercised unsupported index facet.</param>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    public async Task UnsupportedIndexFacetMatrix_FailsClosedBeforeTargetDdl(
+        int variantIndex
+    )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -774,41 +849,43 @@ public sealed class MySqlIndexesDriftMatrixIntegrationTests : MySqlSafeMigration
                 [new ExpectedIndexKeyDefinition(column: "value", operatorClass: "text_pattern_ops")]),
         };
 
-        foreach (var definition in definitions)
-        {
-            var builder = new MigrationBuilder(context.Database.ProviderName!);
-            builder.EnsureIndex(definition, SafeMigrationPolicy.ThrowIfDifferent);
+        var definition = definitions[variantIndex];
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.EnsureIndex(definition, SafeMigrationPolicy.ThrowIfDifferent);
 
-            var report = await context
-                .GetService<ISafeMigrationRunner>()
-                .AnalyzeAsync(
-                    context,
-                    builder.Operations,
-                    new SafeMigrationRunOptions("unsupported-index-facets"),
-                    CancellationToken.None);
+        // Act
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("unsupported-index-facets"),
+                CancellationToken.None);
 
-            var assessment = Assert.Single(report.Assessments);
+        // Assert
+        var assessment = Assert.Single(report.Assessments);
 
-            Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-            Assert.Equal(SafeMigrationObservedState.Unsupported, assessment.ObservedState);
-            Assert.Equal(SafeMigrationAction.RejectUnsupported, assessment.Action);
-            Assert.Equal(
-                0,
-                await ScalarIntAsync(
-                    connectionString,
-                    $"""
-                    SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
-                    WHERE TABLE_SCHEMA = DATABASE()
-                    AND TABLE_NAME = 'unsupported_index_facets'
-                    AND INDEX_NAME = '{definition.Name}';
-                    """,
-                    cancellationToken: CancellationToken.None));
-        }
+        Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
+        Assert.Equal(SafeMigrationObservedState.Unsupported, assessment.ObservedState);
+        Assert.Equal(SafeMigrationAction.RejectUnsupported, assessment.Action);
+        Assert.Equal(
+            0,
+            await ScalarIntAsync(
+                connectionString,
+                $"""
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'unsupported_index_facets'
+                AND INDEX_NAME = '{definition.Name}';
+                """,
+                cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Does not silently accept a changed functional expression as the existing index contract.</summary>
     [Fact]
     public async Task ExistingFunctionalIndex_IsMatchedAndExpressionDriftIsRejected()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -824,6 +901,10 @@ public sealed class MySqlIndexesDriftMatrixIntegrationTests : MySqlSafeMigration
         var create = new MigrationBuilder(context.Database.ProviderName!);
         create.EnsureIndex(canonical, SafeMigrationPolicy.ThrowIfDifferent);
 
+        SafeMigrationRunReport? matching = null;
+        SafeMigrationRunReport? different = null;
+
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -832,6 +913,39 @@ public sealed class MySqlIndexesDriftMatrixIntegrationTests : MySqlSafeMigration
                 new SafeMigrationRunOptions("functional-drift"),
                 CancellationToken.None);
 
+        if (!Fixture.IsMariaDb)
+        {
+            await ExecuteSqlAsync(
+                connectionString,
+                "CREATE INDEX `ix_functional_drift` ON `functional_drift` ((lower(`value`)));",
+                cancellationToken: CancellationToken.None);
+
+            matching = await context
+                .GetService<ISafeMigrationRunner>()
+                .AnalyzeAsync(
+                    context,
+                    create.Operations,
+                    new SafeMigrationRunOptions("functional-drift"),
+                    CancellationToken.None);
+
+            var drift = new MigrationBuilder(context.Database.ProviderName!);
+            drift.EnsureIndex(
+                new ExpectedIndexDefinition(
+                    canonical.Name,
+                    canonical.Table,
+                    [new ExpectedIndexKeyDefinition(structuredExpression: SqlFunction("upper", "value"))]),
+                SafeMigrationPolicy.ThrowIfDifferent);
+
+            different = await context
+                .GetService<ISafeMigrationRunner>()
+                .AnalyzeAsync(
+                    context,
+                    drift.Operations,
+                    new SafeMigrationRunOptions("functional-drift"),
+                    CancellationToken.None);
+        }
+
+        // Assert
         if (Fixture.IsMariaDb)
         {
             Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -842,35 +956,8 @@ public sealed class MySqlIndexesDriftMatrixIntegrationTests : MySqlSafeMigration
             return;
         }
 
-        await ExecuteSqlAsync(
-            connectionString,
-            "CREATE INDEX `ix_functional_drift` ON `functional_drift` ((lower(`value`)));",
-            cancellationToken: CancellationToken.None);
-
-        var matching = await context
-            .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(
-                context,
-                create.Operations,
-                new SafeMigrationRunOptions("functional-drift"),
-                CancellationToken.None);
-
-        var drift = new MigrationBuilder(context.Database.ProviderName!);
-        drift.EnsureIndex(
-            new ExpectedIndexDefinition(
-                canonical.Name,
-                canonical.Table,
-                [new ExpectedIndexKeyDefinition(structuredExpression: SqlFunction("upper", "value"))]),
-            SafeMigrationPolicy.ThrowIfDifferent);
-
-        var different = await context
-            .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(
-                context,
-                drift.Operations,
-                new SafeMigrationRunOptions("functional-drift"),
-                CancellationToken.None);
-
+        Assert.NotNull(matching);
+        Assert.NotNull(different);
         Assert.Equal(SafeMigrationReportStatus.Ready, matching.Status);
         Assert.Equal(SafeMigrationObservedState.Matching,
             Assert.Single(matching.Assessments)

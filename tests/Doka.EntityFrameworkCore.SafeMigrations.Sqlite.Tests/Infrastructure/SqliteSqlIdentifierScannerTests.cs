@@ -1,5 +1,8 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 
+/// <summary>
+/// Provides isolated SQLite coverage for SQL identifier scanner.
+/// </summary>
 public sealed class SqliteSqlIdentifierScannerTests
 {
     /// <summary>
@@ -114,6 +117,11 @@ public sealed class SqliteSqlIdentifierScannerTests
         Assert.Equal(expected, incompatible);
     }
 
+    /// <summary>
+    /// References identifier decodes every SQLite identifier form.
+    /// </summary>
+    /// <param name="sql">The native SQL fixture exercised by this independent case.</param>
+    /// <param name="identifier">The identifier defining this isolated fixture case.</param>
     [Theory]
     [InlineData("SELECT * FROM \"order\"\"items\";", "order\"items")]
     [InlineData("SELECT * FROM `order``items`;", "order`items")]
@@ -124,11 +132,19 @@ public sealed class SqliteSqlIdentifierScannerTests
         string identifier
     )
     {
+        // Arrange: The fixed or theory-supplied SQL/value is the complete input.
+
+        // Act
         var referencesIdentifier = SqliteSqlIdentifierScanner.ReferencesIdentifier(sql, identifier);
 
+        // Assert
         Assert.True(referencesIdentifier);
     }
 
+    /// <summary>
+    /// References identifier ignores literal and comment text.
+    /// </summary>
+    /// <param name="sql">The native SQL fixture exercised by this independent case.</param>
     [Theory]
     [InlineData("SELECT 'order\"items';")]
     [InlineData("SELECT 1 /* order\"items */;")]
@@ -137,42 +153,64 @@ public sealed class SqliteSqlIdentifierScannerTests
         string sql
     )
     {
+        // Arrange: The fixed or theory-supplied SQL/value is the complete input.
+
+        // Act
         var referencesIdentifier = SqliteSqlIdentifierScanner.ReferencesIdentifier(sql, "order\"items");
 
+        // Assert
         Assert.False(referencesIdentifier);
     }
 
+    /// <summary>
+    /// References identifier folds ascii without collapsing non ascii case.
+    /// </summary>
     [Fact]
     public void ReferencesIdentifier_FoldsAsciiWithoutCollapsingNonAsciiCase()
     {
+        // Arrange
         const string uppercase = "\u00C9";
         const string lowercase = "\u00E9";
 
+        // Act
         var asciiMatch = SqliteSqlIdentifierScanner.ReferencesIdentifier("SELECT value FROM Items;", "items");
         var unicodeMismatch = SqliteSqlIdentifierScanner.ReferencesIdentifier(
             $"SELECT value FROM \"{uppercase}\";",
             lowercase);
 
+        var unicodeEqual = SqliteIdentifierComparer.Instance.Equals(uppercase, lowercase);
+        var normalizedUppercase = SqliteIdentifierComparer.Normalize(uppercase);
+        var normalizedLowercase = SqliteIdentifierComparer.Normalize(lowercase);
+
+        // Assert
         Assert.True(asciiMatch);
         Assert.False(unicodeMismatch);
-        Assert.False(SqliteIdentifierComparer.Instance.Equals(uppercase, lowercase));
-        Assert.NotEqual(
-            SqliteIdentifierComparer.Normalize(uppercase),
-            SqliteIdentifierComparer.Normalize(lowercase));
+        Assert.False(unicodeEqual);
+        Assert.NotEqual(normalizedUppercase, normalizedLowercase);
     }
 
+    /// <summary>
+    /// References identifier accepts every high byte identifier start.
+    /// </summary>
     [Fact]
     public void ReferencesIdentifier_AcceptsEveryHighByteIdentifierStart()
     {
+        // Arrange
         const string identifier = "\u20AC";
 
+        // Act
         var referencesIdentifier = SqliteSqlIdentifierScanner.ReferencesIdentifier(
             $"SELECT Id FROM {identifier};",
             identifier);
 
+        // Assert
         Assert.True(referencesIdentifier);
     }
 
+    /// <summary>
+    /// Contains keyword sequence treats comments as whitespace.
+    /// </summary>
+    /// <param name="sql">The native SQL fixture exercised by this independent case.</param>
     [Theory]
     [InlineData("WITHOUT ROWID")]
     [InlineData("WITHOUT /*gap*/ ROWID")]
@@ -181,14 +219,22 @@ public sealed class SqliteSqlIdentifierScannerTests
         string sql
     )
     {
+        // Arrange: The fixed or theory-supplied SQL/value is the complete input.
+
+        // Act
         var containsSequence = SqliteSqlIdentifierScanner.ContainsKeywordSequence(
             sql,
             "WITHOUT",
             "ROWID");
 
+        // Assert
         Assert.True(containsSequence);
     }
 
+    /// <summary>
+    /// Contains keyword sequence ignores literals and incomplete comments.
+    /// </summary>
+    /// <param name="sql">The native SQL fixture exercised by this independent case.</param>
     [Theory]
     [InlineData("WITHOUT 'ROWID'")]
     [InlineData("'WITHOUT' ROWID")]
@@ -199,41 +245,65 @@ public sealed class SqliteSqlIdentifierScannerTests
         string sql
     )
     {
+        // Arrange: The fixed or theory-supplied SQL/value is the complete input.
+
+        // Act
         var containsSequence = SqliteSqlIdentifierScanner.ContainsKeywordSequence(
             sql,
             "WITHOUT",
             "ROWID");
 
+        // Assert
         Assert.False(containsSequence);
     }
 
+    /// <summary>
+    /// Read identifier following keyword ignores string literals.
+    /// </summary>
     [Fact]
     public void ReadIdentifierFollowingKeyword_IgnoresStringLiterals()
     {
+        // Arrange: The fixed or theory-supplied SQL/value is the complete input.
+
+        // Act
         var identifier = SqliteSqlIdentifierScanner.ReadIdentifierFollowingKeyword(
             "Value TEXT DEFAULT 'COLLATE RTRIM' COLLATE NOCASE",
             "COLLATE");
 
+        // Assert
         Assert.Equal("NOCASE", identifier);
     }
 
+    /// <summary>
+    /// Read last identifier following keyword returns the latest constraint name.
+    /// </summary>
     [Fact]
     public void ReadLastIdentifierFollowingKeyword_ReturnsTheLatestConstraintName()
     {
+        // Arrange: The fixed or theory-supplied SQL/value is the complete input.
+
+        // Act
         var identifier = SqliteSqlIdentifierScanner.ReadLastIdentifierFollowingKeyword(
             "Status TEXT CONSTRAINT nn NOT NULL CONSTRAINT ck ",
             "CONSTRAINT");
 
+        // Assert
         Assert.Equal("ck", identifier);
     }
 
+    /// <summary>
+    /// Index of character following keyword ignores literal and comment text.
+    /// </summary>
     [Fact]
     public void IndexOfCharacterFollowingKeyword_IgnoresLiteralAndCommentText()
     {
+        // Arrange
         const string sql = "Value TEXT DEFAULT 'AS (phantom)' GENERATED ALWAYS AS /* gap */ (Id + 1)";
 
+        // Act
         var openParenthesis = SqliteSqlIdentifierScanner.IndexOfCharacterFollowingKeyword(sql, "AS", '(');
 
+        // Assert
         Assert.Equal(sql.LastIndexOf('('), openParenthesis);
     }
 }

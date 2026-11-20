@@ -4,8 +4,6 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite;
 internal sealed class SqliteSafeMigrationsOptionsExtension : IDbContextOptionsExtension,
     ISafeMigrationScaffoldingOptions
 {
-    private DbContextOptionsExtensionInfo? _info;
-
     /// <summary>Gets the baseline generator type registered for ordinary SQLite migration operations.</summary>
     public Type BaselineGeneratorType { get; private init; } = typeof(SqliteMigrationsSqlGenerator);
 
@@ -15,7 +13,7 @@ internal sealed class SqliteSafeMigrationsOptionsExtension : IDbContextOptionsEx
     public Type? CanonicalContextType { get; private init; }
 
     /// <inheritdoc />
-    public DbContextOptionsExtensionInfo Info => _info ??= new ExtensionInfo(this);
+    public DbContextOptionsExtensionInfo Info => field ??= new ExtensionInfo(this);
 
     /// <inheritdoc />
     public void ApplyServices(
@@ -30,10 +28,10 @@ internal sealed class SqliteSafeMigrationsOptionsExtension : IDbContextOptionsEx
         ArgumentNullException.ThrowIfNull(options);
 
         var sqliteAssembly = typeof(SqliteDbContextOptionsBuilderExtensions).Assembly;
-        if (!options.Extensions.Any(extension => extension.Info.IsDatabaseProvider
-            && extension.GetType()
+        if (options.Extensions.All(extension => !extension.Info.IsDatabaseProvider
+            || extension.GetType()
                 .Assembly
-            == sqliteAssembly))
+            != sqliteAssembly))
         {
             throw new InvalidOperationException(
                 "SQLite safe migrations require the Microsoft EF Core SQLite provider.");

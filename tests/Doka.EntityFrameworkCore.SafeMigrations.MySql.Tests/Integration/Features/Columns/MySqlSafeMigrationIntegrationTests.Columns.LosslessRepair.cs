@@ -9,9 +9,11 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
         MySqlEngineContainerFixture fixture
     ) : base(fixture) { }
 
+    /// <summary>Widens a varchar domain without changing stored values and recognizes replay as matching.</summary>
     [Fact]
     public async Task VarcharWidening_RepairsWithoutDataLossAndReplaysAsNoOp()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -41,6 +43,8 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             SafeMigrationPolicy.RepairIfSafe);
 
         var runner = context.GetService<ISafeMigrationRunner>();
+
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
@@ -54,19 +58,11 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 builder
                     .Operations
                     .Cast<SafeMigrationOperation>()
+
+                    // WHY: Retain this explicit materialization/copy path and its collection lowering.
+                    // ReSharper disable once UseCollectionExpression
                     .ToArray(),
                 CancellationToken.None);
-
-        var assessment = Assert.Single(preflight.Assessments);
-        var providerAssessment = Assert.Single(providerAnalysis);
-
-        Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
-        Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
-        Assert.Equal(SafeMigrationAction.Repair, assessment.Action);
-        Assert.Equal(SafeMigrationOperationalImpact.TableRewritePossible, assessment.OperationalImpact);
-        Assert.Contains(assessment.Differences, difference => difference.Facet == "column_max_length");
-        Assert.Contains(assessment.Differences, difference => difference.Facet == "column_comment_digest");
-        Assert.False(providerAssessment.RequiresLiveDataProof);
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
@@ -82,6 +78,35 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             new SafeMigrationRunOptions("varchar-widening-replay"),
             CancellationToken.None);
 
+        var preservedRowCount = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM `varchar_widening` "
+            + "WHERE `id` = 1 AND `value` = 'preserved';",
+            cancellationToken: CancellationToken.None);
+
+        var preservedIndexCount = await ScalarIntAsync(
+            connectionString,
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'varchar_widening'
+            AND INDEX_NAME IN ('ix_varchar_widening_value', 'ix_varchar_widening_value_id')
+            AND SEQ_IN_INDEX = 1 AND COLUMN_NAME = 'value';
+            """,
+            cancellationToken: CancellationToken.None);
+
+        // Assert
+        var assessment = Assert.Single(preflight.Assessments);
+        var providerAssessment = Assert.Single(providerAnalysis);
+
+        Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
+        Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
+        Assert.Equal(SafeMigrationAction.Repair, assessment.Action);
+        Assert.Equal(SafeMigrationOperationalImpact.TableRewritePossible, assessment.OperationalImpact);
+        Assert.Contains(assessment.Differences, difference => difference.Facet == "column_max_length");
+        Assert.Contains(assessment.Differences, difference => difference.Facet == "column_comment_digest");
+        Assert.False(providerAssessment.RequiresLiveDataProof);
+
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
         Assert.True(Assert.Single(postflight.Assessments)
             .PostconditionSatisfied);
@@ -90,28 +115,17 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             Assert.Single(replay.Assessments)
                 .ObservedState);
 
-        Assert.Equal(
-            1,
-            await ScalarIntAsync(
-                connectionString,
-                "SELECT COUNT(*) FROM `varchar_widening` "
-                + "WHERE `id` = 1 AND `value` = 'preserved';",
-                cancellationToken: CancellationToken.None));
+        Assert.Equal(1, preservedRowCount);
 
-        Assert.Equal(
-            2,
-            await ScalarIntAsync(
-                connectionString,
-                """
-                SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
-                WHERE TABLE_SCHEMA = DATABASE()
-                AND TABLE_NAME = 'varchar_widening'
-                AND INDEX_NAME IN ('ix_varchar_widening_value', 'ix_varchar_widening_value_id')
-                AND SEQ_IN_INDEX = 1 AND COLUMN_NAME = 'value';
-                """,
-                cancellationToken: CancellationToken.None));
+        Assert.Equal(2, preservedIndexCount);
     }
 
+    /// <summary>Widens the supported text family without changing stored values or replay semantics.</summary>
+    /// <param name="liveStoreType">The independently observed source store type.</param>
+    /// <param name="targetStoreType">The authored physical store type after the accepted transition.</param>
+    /// <param name="isNullable">The authored target column nullability.</param>
+    /// <param name="collation">The authored native collation identity.</param>
+    /// <param name="containsData">Whether incompatible preexisting rows must be considered.</param>
     [Theory]
     [InlineData("varchar(10)", "tinytext", true, "utf8mb4_unicode_ci", true)]
     [InlineData("varchar(10)", "tinytext", false, "utf8mb4_bin", false)]
@@ -129,6 +143,7 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
         bool containsData
     )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var nullability = isNullable
             ? "NULL"
@@ -162,18 +177,13 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             SafeMigrationPolicy.RepairIfSafe);
 
         var runner = context.GetService<ISafeMigrationRunner>();
+
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
             new SafeMigrationRunOptions("text-family-widening"),
             CancellationToken.None);
-
-        var assessment = Assert.Single(preflight.Assessments);
-
-        Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
-        Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
-        Assert.Equal(SafeMigrationAction.Repair, assessment.Action);
-        Assert.Equal(SafeMigrationOperationalImpact.TableRewritePossible, assessment.OperationalImpact);
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
@@ -189,6 +199,36 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             new SafeMigrationRunOptions("text-family-widening-replay"),
             CancellationToken.None);
 
+        var storedType = await ScalarStringAsync(
+            connectionString,
+            """
+            SELECT LOWER(DATA_TYPE) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'text_family_widening'
+            AND COLUMN_NAME = 'value';
+            """,
+            cancellationToken: CancellationToken.None);
+
+        var storedRowCount = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM `text_family_widening`;",
+            cancellationToken: CancellationToken.None);
+
+        var storedHex = containsData
+            ? await ScalarStringAsync(
+                connectionString,
+                "SELECT HEX(`value`) FROM `text_family_widening` WHERE `id` = 1;",
+                cancellationToken: CancellationToken.None)
+            : null;
+
+        // Assert
+        var assessment = Assert.Single(preflight.Assessments);
+
+        Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
+        Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
+        Assert.Equal(SafeMigrationAction.Repair, assessment.Action);
+        Assert.Equal(SafeMigrationOperationalImpact.TableRewritePossible, assessment.OperationalImpact);
+
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
         Assert.True(Assert.Single(postflight.Assessments)
             .PostconditionSatisfied);
@@ -197,41 +237,25 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             Assert.Single(replay.Assessments)
                 .Action);
 
-        Assert.Equal(
-            targetStoreType,
-            await ScalarStringAsync(
-                connectionString,
-                """
-                SELECT LOWER(DATA_TYPE) FROM INFORMATION_SCHEMA.COLUMNS
-                WHERE TABLE_SCHEMA = DATABASE()
-                AND TABLE_NAME = 'text_family_widening'
-                AND COLUMN_NAME = 'value';
-                """,
-                cancellationToken: CancellationToken.None));
+        Assert.Equal(targetStoreType, storedType);
 
         Assert.Equal(
             containsData
                 ? 1
                 : 0,
-            await ScalarIntAsync(
-                connectionString,
-                "SELECT COUNT(*) FROM `text_family_widening`;",
-                cancellationToken: CancellationToken.None));
+            storedRowCount);
 
         if (containsData)
         {
-            Assert.Equal(
-                "6F6B2DF09F9880",
-                await ScalarStringAsync(
-                    connectionString,
-                    "SELECT HEX(`value`) FROM `text_family_widening` WHERE `id` = 1;",
-                    cancellationToken: CancellationToken.None));
+            Assert.Equal("6F6B2DF09F9880", storedHex);
         }
     }
 
+    /// <summary>Requires fresh live character evidence before narrowing a text family to bounded varchar.</summary>
     [Fact]
     public async Task TextToVarchar_RepairsOnlyAfterTheLiveCharacterProof()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -256,6 +280,7 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 maxLength: 5),
             SafeMigrationPolicy.RepairIfSafe);
 
+        // Act
         var providerAnalysis = await context
             .GetService<ISafeMigrationProviderAnalyzer>()
             .AnalyzeAsync(
@@ -263,6 +288,9 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 builder
                     .Operations
                     .Cast<SafeMigrationOperation>()
+
+                    // WHY: Retain this explicit materialization/copy path and its collection lowering.
+                    // ReSharper disable once UseCollectionExpression
                     .ToArray(),
                 CancellationToken.None);
 
@@ -273,6 +301,25 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             new SafeMigrationRunOptions("text-to-varchar"),
             CancellationToken.None);
 
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+
+        var repairedMaximumLength = await ScalarIntAsync(
+            connectionString,
+            """
+            SELECT CHARACTER_MAXIMUM_LENGTH
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'text_to_varchar'
+            AND COLUMN_NAME = 'value';
+            """,
+            cancellationToken: CancellationToken.None);
+
+        var preservedValueLength = await ScalarIntAsync(
+            connectionString,
+            "SELECT CHAR_LENGTH(`value`) FROM `text_to_varchar` WHERE `id` = 2;",
+            cancellationToken: CancellationToken.None);
+
+        // Assert
         Assert.True(Assert.Single(providerAnalysis)
             .RequiresLiveDataProof);
 
@@ -281,32 +328,16 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             Assert.Single(preflight.Assessments)
                 .Action);
 
-        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        Assert.Equal(5, repairedMaximumLength);
 
-        Assert.Equal(
-            5,
-            await ScalarIntAsync(
-                connectionString,
-                """
-                SELECT CHARACTER_MAXIMUM_LENGTH
-                FROM INFORMATION_SCHEMA.COLUMNS
-                WHERE TABLE_SCHEMA = DATABASE()
-                AND TABLE_NAME = 'text_to_varchar'
-                AND COLUMN_NAME = 'value';
-                """,
-                cancellationToken: CancellationToken.None));
-
-        Assert.Equal(
-            4,
-            await ScalarIntAsync(
-                connectionString,
-                "SELECT CHAR_LENGTH(`value`) FROM `text_to_varchar` WHERE `id` = 2;",
-                cancellationToken: CancellationToken.None));
+        Assert.Equal(4, preservedValueLength);
     }
 
+    /// <summary>Rejects a text-to-varchar target when a live value exceeds the target character domain.</summary>
     [Fact]
     public async Task TextToVarchar_RejectsOverlengthLiveValues()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -331,6 +362,7 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 maxLength: 5),
             SafeMigrationPolicy.RepairIfSafe);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -339,6 +371,7 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 new SafeMigrationRunOptions("text-to-varchar-blocked"),
                 CancellationToken.None);
 
+        // Assert
         var assessment = Assert.Single(report.Assessments);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -358,9 +391,11 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Includes trailing spaces in the live text-to-varchar length proof.</summary>
     [Fact]
     public async Task TextToVarchar_RejectsOverlengthTrailingSpaces()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -384,6 +419,7 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 maxLength: 4),
             SafeMigrationPolicy.RepairIfSafe);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -392,6 +428,7 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 new SafeMigrationRunOptions("text-to-varchar-trailing-spaces"),
                 CancellationToken.None);
 
+        // Assert
         var assessment = Assert.Single(report.Assessments);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -418,6 +455,10 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Requires the entire declared varchar domain to fit the target tinytext byte budget.</summary>
+    /// <param name="sourceLength">The declared source character or byte domain.</param>
+    /// <param name="expectedStatus">The expected aggregate preflight status for this physical boundary.</param>
+    /// <param name="expectedAction">The exact planner action required by the case.</param>
     [Theory]
     [InlineData(10, SafeMigrationReportStatus.Ready, SafeMigrationAction.Repair)]
     [InlineData(100, SafeMigrationReportStatus.Blocked, SafeMigrationAction.RejectDifferent)]
@@ -427,6 +468,7 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
         SafeMigrationAction expectedAction
     )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -450,6 +492,7 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 storeType: "tinytext"),
             SafeMigrationPolicy.RepairIfSafe);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -458,31 +501,38 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 new SafeMigrationRunOptions("varchar-to-tinytext"),
                 CancellationToken.None);
 
-        var assessment = Assert.Single(report.Assessments);
-
-        Assert.Equal(expectedStatus, report.Status);
-        Assert.Equal(expectedAction, assessment.Action);
-
         if (expectedStatus == SafeMigrationReportStatus.Ready)
         {
             await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         }
 
+        var storedType = await ScalarStringAsync(
+            connectionString,
+            """
+            SELECT LOWER(DATA_TYPE) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'varchar_to_tinytext'
+            AND COLUMN_NAME = 'value';
+            """,
+            cancellationToken: CancellationToken.None);
+
+        // Assert
+        var assessment = Assert.Single(report.Assessments);
+
+        Assert.Equal(expectedStatus, report.Status);
+        Assert.Equal(expectedAction, assessment.Action);
+
         Assert.Equal(
             expectedStatus == SafeMigrationReportStatus.Ready
                 ? "tinytext"
                 : "varchar",
-            await ScalarStringAsync(
-                connectionString,
-                """
-                SELECT LOWER(DATA_TYPE) FROM INFORMATION_SCHEMA.COLUMNS
-                WHERE TABLE_SCHEMA = DATABASE()
-                AND TABLE_NAME = 'varchar_to_tinytext'
-                AND COLUMN_NAME = 'value';
-                """,
-                cancellationToken: CancellationToken.None));
+            storedType);
     }
 
+    /// <summary>Requires dependent indexes to remain physically representable when changing varchar to text.</summary>
+    /// <param name="indexDefinition">The independently authored expected ordered index contract.</param>
+    /// <param name="repairExpected">Whether the authored transition is eligible for safe repair.</param>
+    /// <param name="expectedPrefixLength">The exact projected native key-part prefix length.</param>
     [Theory]
     [InlineData("INDEX `ix_text_transition_value` (`value`)", false, 0)]
     [InlineData("INDEX `ix_text_transition_value` (`value`(20))", true, 20)]
@@ -493,6 +543,7 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
         int expectedPrefixLength
     )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -517,6 +568,7 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 storeType: "text"),
             SafeMigrationPolicy.RepairIfSafe);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -525,6 +577,33 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 new SafeMigrationRunOptions("varchar-to-text-index"),
                 CancellationToken.None);
 
+        if (repairExpected)
+        {
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        }
+
+        var storedType = await ScalarStringAsync(
+            connectionString,
+            """
+            SELECT LOWER(DATA_TYPE) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'text_transition_index'
+            AND COLUMN_NAME = 'value';
+            """,
+            cancellationToken: CancellationToken.None);
+
+        var storedPrefixLength = await ScalarIntAsync(
+            connectionString,
+            """
+            SELECT COALESCE(MAX(SUB_PART), 0)
+            FROM INFORMATION_SCHEMA.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'text_transition_index'
+            AND INDEX_NAME = 'ix_text_transition_value';
+            """,
+            cancellationToken: CancellationToken.None);
+
+        // Assert
         var assessment = Assert.Single(report.Assessments);
 
         Assert.Equal(
@@ -539,39 +618,17 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 : SafeMigrationAction.RejectDifferent,
             assessment.Action);
 
-        if (repairExpected)
-        {
-            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        }
-
         Assert.Equal(
             repairExpected
                 ? "text"
                 : "varchar",
-            await ScalarStringAsync(
-                connectionString,
-                """
-                SELECT LOWER(DATA_TYPE) FROM INFORMATION_SCHEMA.COLUMNS
-                WHERE TABLE_SCHEMA = DATABASE()
-                AND TABLE_NAME = 'text_transition_index'
-                AND COLUMN_NAME = 'value';
-                """,
-                cancellationToken: CancellationToken.None));
+            storedType);
 
-        Assert.Equal(
-            expectedPrefixLength,
-            await ScalarIntAsync(
-                connectionString,
-                """
-                SELECT COALESCE(MAX(SUB_PART), 0)
-                FROM INFORMATION_SCHEMA.STATISTICS
-                WHERE TABLE_SCHEMA = DATABASE()
-                AND TABLE_NAME = 'text_transition_index'
-                AND INDEX_NAME = 'ix_text_transition_value';
-                """,
-                cancellationToken: CancellationToken.None));
+        Assert.Equal(expectedPrefixLength, storedPrefixLength);
     }
 
+    /// <summary>Rejects varchar repair while an unsupported foreign-key dependency remains live.</summary>
+    /// <param name="targetLength">The bounded target character or byte domain.</param>
     [Theory]
     [InlineData(5)]
     [InlineData(20)]
@@ -579,6 +636,7 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
         int targetLength
     )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -616,6 +674,7 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 maxLength: targetLength),
             SafeMigrationPolicy.RepairIfSafe);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -624,6 +683,7 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 new SafeMigrationRunOptions("varchar-foreign-key-blocked"),
                 CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.All(
             report.Assessments,
@@ -659,6 +719,7 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Groups character proofs without losing UTF-8 values or trailing spaces during narrowing.</summary>
     [Fact]
     public async Task VarcharNarrowing_GroupsCharacterProofsAndPreservesUtf8AndTrailingSpaces()
     {
@@ -726,6 +787,9 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             {
                 Intent: EnsureColumnIntent { Definition.IsNullable: true },
             })
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var requiredOperations = builder
@@ -734,6 +798,9 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             {
                 Intent: EnsureColumnIntent { Definition.IsNullable: false },
             })
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var runner = context.GetService<ISafeMigrationRunner>();
@@ -793,6 +860,9 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 builder
                     .Operations
                     .Cast<SafeMigrationOperation>()
+
+                    // WHY: Retain this explicit materialization/copy path and its collection lowering.
+                    // ReSharper disable once UseCollectionExpression
                     .ToArray(),
                 CancellationToken.None);
 
@@ -877,9 +947,11 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
         Assert.Equal(1, retainedNull);
     }
 
+    /// <summary>Reports overlength narrowing as data-blocked without disclosing the offending value.</summary>
     [Fact]
     public async Task VarcharNarrowing_RejectsOverlengthDataWithoutDisclosingTheValue()
     {
+        // Arrange
         const string privateValue = "private-overlength-value";
 
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
@@ -906,6 +978,7 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 maxLength: 5),
             SafeMigrationPolicy.RepairIfSafe);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -914,8 +987,11 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 new SafeMigrationRunOptions("varchar-narrowing-blocked"),
                 CancellationToken.None);
 
+        var failure = Record.Exception(report.ThrowIfBlocked);
+
+        // Assert
         var assessment = Assert.Single(report.Assessments);
-        var exception = Assert.Throws<SafeMigrationPreflightException>(report.ThrowIfBlocked);
+        var exception = Assert.IsType<SafeMigrationPreflightException>(failure);
 
         Assert.Equal(SafeMigrationObservedState.DataBlocked, assessment.ObservedState);
         Assert.Equal(SafeMigrationAction.RejectDataBlocked, assessment.Action);
@@ -942,9 +1018,11 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Rechecks narrowing data after preflight and before target mutation.</summary>
     [Fact]
     public async Task VarcharNarrowing_RechecksDataImmediatelyBeforeMutation()
     {
+        // Arrange
         const string concurrentValue = "arrived-after-preflight";
 
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
@@ -971,6 +1049,7 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 maxLength: 5),
             SafeMigrationPolicy.RepairIfSafe);
 
+        // Act
         var preflight = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -978,8 +1057,6 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 builder.Operations,
                 new SafeMigrationRunOptions("varchar-narrowing-race"),
                 CancellationToken.None);
-
-        Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
 
         await ExecuteSqlAsync(
             connectionString,
@@ -991,31 +1068,38 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 ExecuteOperationsAsync(context, builder.Operations, operationToken),
             cancellationToken: CancellationToken.None);
 
-        Assert.Contains("doka_sm_data_blocked", exception.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal(
-            40,
-            await ScalarIntAsync(
-                connectionString,
-                """
-                SELECT CHARACTER_MAXIMUM_LENGTH
-                FROM INFORMATION_SCHEMA.COLUMNS
-                WHERE TABLE_SCHEMA = DATABASE()
-                AND TABLE_NAME = 'varchar_narrowing_race'
-                AND COLUMN_NAME = 'value';
-                """,
-                cancellationToken: CancellationToken.None));
+        var preservedMaximumLength = await ScalarIntAsync(
+            connectionString,
+            """
+            SELECT CHARACTER_MAXIMUM_LENGTH
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'varchar_narrowing_race'
+            AND COLUMN_NAME = 'value';
+            """,
+            cancellationToken: CancellationToken.None);
 
-        Assert.Equal(
-            1,
-            await ScalarIntAsync(
-                connectionString,
-                $"SELECT COUNT(*) FROM `varchar_narrowing_race` WHERE `value` = '{concurrentValue}';",
-                cancellationToken: CancellationToken.None));
+        var preservedConcurrentRows = await ScalarIntAsync(
+            connectionString,
+            $"SELECT COUNT(*) FROM `varchar_narrowing_race` WHERE `value` = '{concurrentValue}';",
+            cancellationToken: CancellationToken.None);
+
+        // Assert
+        Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
+
+        Assert.Contains("doka_sm_data_blocked", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(40, preservedMaximumLength);
+
+        Assert.Equal(1, preservedConcurrentRows);
     }
 
+    /// <summary>
+    /// Preserves the native command-timeout identity and the original column width after an interrupted proof.
+    /// </summary>
     [Fact]
     public async Task VarcharNarrowing_PropagatesProbeCommandTimeoutWithoutMutation()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -1043,7 +1127,8 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             context.Database.ProviderName!,
             "varchar_narrowing_timeout");
 
-        _ = await Assert.ThrowsAsync<MySqlException>(() => context
+        // Act
+        var exception = await Record.ExceptionAsync(() => context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
                 context,
@@ -1051,6 +1136,8 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 new SafeMigrationRunOptions("varchar-narrowing-timeout"),
                 CancellationToken.None));
 
+        // Assert
+        MySqlCommandTimeoutAssertions.AssertCommandTimeout(exception);
         Assert.Equal(
             40,
             await ScalarIntAsync(
@@ -1065,9 +1152,11 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Cancels a natively dispatched narrowing proof and leaves the original column width unchanged.</summary>
     [Fact]
     public async Task VarcharNarrowing_PropagatesProbeCancellationWithoutMutation()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -1090,28 +1179,32 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
         }
 
         await using var context = CreateContext(connectionString);
+        await context.Database.OpenConnectionAsync(CancellationToken.None);
         var builder = BuildVarcharNarrowingOperation(
             context.Database.ProviderName!,
             "varchar_narrowing_cancellation");
 
         using var cancellation = new CancellationTokenSource();
-        var analysis = context
+
+        // Act
+        var analysis = Record.ExceptionAsync(() => context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
                 context,
                 builder.Operations,
                 new SafeMigrationRunOptions("varchar-narrowing-cancellation"),
-                cancellation.Token);
+                cancellation.Token));
 
-        await WaitForBlockedMySqlNarrowingProbeAsync(
+        var exception = await MySqlNativeCancellationCheckpoint.CancelWhenDispatchedAsync(
             connectionString,
-            "varchar_narrowing_cancellation",
+            ((MySqlConnection)context.Database.GetDbConnection()).ServerThread,
+            "FROM `varchar_narrowing_cancellation`",
+            cancellation,
+            analysis,
             CancellationToken.None);
 
-        await cancellation.CancelAsync();
-
-        _ = await Assert.ThrowsAnyAsync<OperationCanceledException>(() => analysis);
-
+        // Assert
+        Assert.IsType<OperationCanceledException>(exception, exactMatch: false);
         Assert.Equal(
             40,
             await ScalarIntAsync(
@@ -1126,9 +1219,11 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Rejects narrowing when the live session does not establish strict SQL-mode safety.</summary>
     [Fact]
     public async Task VarcharNarrowing_RejectsRepairWhenStrictSessionModeIsDisabled()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -1164,6 +1259,7 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 maxLength: 5),
             SafeMigrationPolicy.RepairIfSafe);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -1172,6 +1268,7 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 new SafeMigrationRunOptions("varchar-narrowing-non-strict"),
                 CancellationToken.None);
 
+        // Assert
         var assessment = Assert.Single(report.Assessments);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -1192,9 +1289,11 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Preserves the complete supported Boolean domain through bit-to-tinyint repair and replay.</summary>
     [Fact]
     public async Task BooleanBitToTinyInt_PreservesTheCompleteValueDomainAndReplaysAsNoOp()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -1242,21 +1341,13 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             SafeMigrationPolicy.RepairIfSafe);
 
         var runner = context.GetService<ISafeMigrationRunner>();
+
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
             new SafeMigrationRunOptions("boolean-repair"),
             CancellationToken.None);
-
-        Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
-        Assert.All(
-            preflight.Assessments,
-            static assessment => Assert.Equal(SafeMigrationAction.Repair, assessment.Action));
-
-        Assert.All(
-            preflight.Assessments,
-            static assessment =>
-                Assert.Equal(SafeMigrationOperationalImpact.TableRewritePossible, assessment.OperationalImpact));
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
@@ -1272,39 +1363,52 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             new SafeMigrationRunOptions("boolean-repair-replay"),
             CancellationToken.None);
 
+        var preservedDomainRows = await ScalarIntAsync(
+            connectionString,
+            """
+            SELECT COUNT(*) FROM `boolean_repairs`
+            WHERE (`id` = 1 AND `required_value` = 0
+            AND `true_value` = 1 AND `nullable_value` IS NULL)
+            OR (`id` = 2 AND `required_value` = 1
+            AND `true_value` = 1 AND `nullable_value` = 0)
+            OR (`id` = 3 AND `required_value` = 1
+            AND `true_value` = 1 AND `nullable_value` = 1);
+            """,
+            cancellationToken: CancellationToken.None);
+
+        var preservedIndexCount = await ScalarIntAsync(
+            connectionString,
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'boolean_repairs'
+            AND INDEX_NAME = 'ix_boolean_repairs_required';
+            """,
+            cancellationToken: CancellationToken.None);
+
+        // Assert
+        Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
+        Assert.All(
+            preflight.Assessments,
+            static assessment => Assert.Equal(SafeMigrationAction.Repair, assessment.Action));
+
+        Assert.All(
+            preflight.Assessments,
+            static assessment =>
+                Assert.Equal(SafeMigrationOperationalImpact.TableRewritePossible, assessment.OperationalImpact));
+
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
         Assert.All(replay.Assessments, static assessment => Assert.Equal(SafeMigrationAction.NoOp, assessment.Action));
-        Assert.Equal(
-            3,
-            await ScalarIntAsync(
-                connectionString,
-                """
-                SELECT COUNT(*) FROM `boolean_repairs`
-                WHERE (`id` = 1 AND `required_value` = 0
-                AND `true_value` = 1 AND `nullable_value` IS NULL)
-                OR (`id` = 2 AND `required_value` = 1
-                AND `true_value` = 1 AND `nullable_value` = 0)
-                OR (`id` = 3 AND `required_value` = 1
-                AND `true_value` = 1 AND `nullable_value` = 1);
-                """,
-                cancellationToken: CancellationToken.None));
+        Assert.Equal(3, preservedDomainRows);
 
-        Assert.Equal(
-            1,
-            await ScalarIntAsync(
-                connectionString,
-                """
-                SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
-                WHERE TABLE_SCHEMA = DATABASE()
-                AND TABLE_NAME = 'boolean_repairs'
-                AND INDEX_NAME = 'ix_boolean_repairs_required';
-                """,
-                cancellationToken: CancellationToken.None));
+        Assert.Equal(1, preservedIndexCount);
     }
 
+    /// <summary>Rejects Boolean repair with unsupported expression defaults or foreign-key dependencies.</summary>
     [Fact]
     public async Task BooleanRepair_RejectsExpressionDefaultsAndForeignKeyDependencies()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -1340,6 +1444,7 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 storeType: "tinyint(1)"),
             SafeMigrationPolicy.RepairIfSafe);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -1348,6 +1453,7 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 new SafeMigrationRunOptions("boolean-contract-blocked"),
                 CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.All(
             report.Assessments,
@@ -1383,6 +1489,10 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Keeps neighboring Boolean conversions outside the accepted lossless transition set.</summary>
+    /// <param name="liveStoreType">The independently observed source store type.</param>
+    /// <param name="targetClrType">The CLR domain required by the target physical column.</param>
+    /// <param name="targetStoreType">The authored physical store type after the accepted transition.</param>
     [Theory]
     [InlineData("bit(2)", typeof(bool), "tinyint(1)")]
     [InlineData("bit(8)", typeof(bool), "tinyint(1)")]
@@ -1395,6 +1505,7 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
         string targetStoreType
     )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -1422,6 +1533,7 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 storeType: targetStoreType),
             SafeMigrationPolicy.RepairIfSafe);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -1430,6 +1542,7 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 new SafeMigrationRunOptions("boolean-repair-blocked"),
                 CancellationToken.None);
 
+        // Assert
         var assessment = Assert.Single(report.Assessments);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -1449,6 +1562,9 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Keeps neighboring string-family conversions outside the accepted lossless transition set.</summary>
+    /// <param name="liveStoreType">The independently observed source store type.</param>
+    /// <param name="targetStoreType">The authored physical store type after the accepted transition.</param>
     [Theory]
     [InlineData("char(10)", "varchar(20)")]
     [InlineData("varbinary(10)", "varchar(20)")]
@@ -1466,6 +1582,7 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
         string targetStoreType
     )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -1499,6 +1616,7 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 isFixedLength: targetStoreType.StartsWith("char", StringComparison.Ordinal)),
             SafeMigrationPolicy.RepairIfSafe);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -1507,6 +1625,7 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 new SafeMigrationRunOptions("string-family-blocked"),
                 CancellationToken.None);
 
+        // Assert
         var assessment = Assert.Single(report.Assessments);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -1526,9 +1645,11 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Rejects varchar repair when storage-engine or collation evidence is unsupported or different.</summary>
     [Fact]
     public async Task VarcharRepair_RejectsUnknownStorageEngineAndCollationDrift()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -1563,6 +1684,7 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 collation: new SafeMigrationCollationIdentifier("utf8mb4_unicode_ci")),
             SafeMigrationPolicy.RepairIfSafe);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -1571,6 +1693,7 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 new SafeMigrationRunOptions("varchar-physical-contract"),
                 CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.All(
             report.Assessments,
@@ -1582,9 +1705,11 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             });
     }
 
+    /// <summary>Rejects widening whose declared target row exceeds the server row-size limit.</summary>
     [Fact]
     public async Task VarcharWidening_RejectsTargetDeclaredRowAboveServerLimit()
     {
+        // Arrange
         const int fillerColumnCount = 12;
 
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
@@ -1615,6 +1740,7 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 maxLength: 13000),
             SafeMigrationPolicy.RepairIfSafe);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -1623,6 +1749,7 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 new SafeMigrationRunOptions("varchar-row-size-blocked"),
                 CancellationToken.None);
 
+        // Assert
         var assessment = Assert.Single(report.Assessments);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -1643,9 +1770,11 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Rechecks Boolean catalog shape and nullability immediately before mutation.</summary>
     [Fact]
     public async Task BooleanRepair_RechecksCatalogShapeAndNullabilityBeforeMutation()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -1669,15 +1798,13 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             SafeMigrationPolicy.RepairIfSafe);
 
         var runner = context.GetService<ISafeMigrationRunner>();
+
+        // Act
         var blocked = await runner.AnalyzeAsync(
             context,
             tightening.Operations,
             new SafeMigrationRunOptions("boolean-null-blocked"),
             CancellationToken.None);
-
-        Assert.Equal(SafeMigrationObservedState.DataBlocked,
-            Assert.Single(blocked.Assessments)
-                .ObservedState);
 
         await ExecuteSqlAsync(
             connectionString,
@@ -1690,8 +1817,6 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             new SafeMigrationRunOptions("boolean-catalog-race"),
             CancellationToken.None);
 
-        Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
-
         await ExecuteSqlAsync(
             connectionString,
             "ALTER TABLE `boolean_repair_race` MODIFY COLUMN `value` bit(2) NULL;",
@@ -1702,18 +1827,25 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 ExecuteOperationsAsync(context, tightening.Operations, operationToken),
             cancellationToken: CancellationToken.None);
 
+        var preservedColumnType = await ScalarStringAsync(
+            connectionString,
+            """
+            SELECT LOWER(COLUMN_TYPE) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'boolean_repair_race'
+            AND COLUMN_NAME = 'value';
+            """,
+            cancellationToken: CancellationToken.None);
+
+        // Assert
+        Assert.Equal(SafeMigrationObservedState.DataBlocked,
+            Assert.Single(blocked.Assessments)
+                .ObservedState);
+
+        Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
+
         Assert.Contains("doka_sm_different", exception.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal(
-            "bit(2)",
-            await ScalarStringAsync(
-                connectionString,
-                """
-                SELECT LOWER(COLUMN_TYPE) FROM INFORMATION_SCHEMA.COLUMNS
-                WHERE TABLE_SCHEMA = DATABASE()
-                AND TABLE_NAME = 'boolean_repair_race'
-                AND COLUMN_NAME = 'value';
-                """,
-                cancellationToken: CancellationToken.None));
+        Assert.Equal("bit(2)", preservedColumnType);
     }
 
     /// <summary>Measures native server Questions and statement purposes on an isolated analysis connection.</summary>
@@ -1737,6 +1869,9 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
         context.Database.SetDbConnection(connection);
         var safeOperations = operations
             .Cast<SafeMigrationOperation>()
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var questionsBefore = await ReadSessionQuestionsAsync(context, cancellationToken: cancellationToken);
@@ -1820,37 +1955,5 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests
             SafeMigrationPolicy.RepairIfSafe);
 
         return builder;
-    }
-
-    private static async Task WaitForBlockedMySqlNarrowingProbeAsync(
-        string connectionString,
-        string table,
-        CancellationToken cancellationToken
-    )
-    {
-        await using var connection = new MySqlConnection(connectionString);
-        await connection.OpenAsync(cancellationToken);
-
-        for (var attempt = 0; attempt < 100; attempt++)
-        {
-            await using var command = connection.CreateCommand();
-            command.CommandText = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.PROCESSLIST "
-                + "WHERE ID <> CONNECTION_ID() AND INFO LIKE @probe;";
-
-            command.Parameters.AddWithValue("@probe", $"%{table}%CHAR_LENGTH%");
-
-            var count = Convert.ToInt32(
-                await command.ExecuteScalarAsync(cancellationToken),
-                CultureInfo.InvariantCulture);
-
-            if (count > 0)
-            {
-                return;
-            }
-
-            await Task.Delay(TimeSpan.FromMilliseconds(50), cancellationToken);
-        }
-
-        throw new TimeoutException("The MySQL narrowing proof did not reach its blocked data probe.");
     }
 }

@@ -240,10 +240,14 @@ public sealed class SqlServerScalarProofRegressionTests
 
     /// <summary>Runs every engine contract on an open connection to a caller-owned isolated database.</summary>
     /// <param name="connection">The unique owned connection, which this helper neither closes nor disposes.</param>
+    /// <param name="connectionString">
+    /// The same database's connection string for independent cancellation observation.
+    /// </param>
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     /// <returns>The asynchronous verification operation.</returns>
     internal static async Task VerifyLocalAsync(
         SqlConnection connection,
+        string connectionString,
         CancellationToken cancellationToken
     )
     {
@@ -251,7 +255,7 @@ public sealed class SqlServerScalarProofRegressionTests
 
         ArgumentNullException.ThrowIfNull(connection);
         Assert.Equal(ConnectionState.Open, connection.State);
-        using var context = new SafeMigrationDbContext(connection.ConnectionString);
+        await using var context = new SafeMigrationDbContext(connection.ConnectionString);
         var mappings = context.GetService<IRelationalTypeMappingSource>();
 
         await VerifyNameAndCollationGatesAsync(connection, cancellationToken: cancellationToken);
@@ -259,7 +263,7 @@ public sealed class SqlServerScalarProofRegressionTests
         await VerifyLayoutAndOuterFallbackAsync(connection, cancellationToken: cancellationToken);
         await VerifyFreshSourcesAndPrivateScopesAsync(connection, mappings, cancellationToken: cancellationToken);
         await VerifyMaximumSourcesAsync(connection, mappings, cancellationToken: cancellationToken);
-        await VerifyScalarCancellationAsync(connection, cancellationToken: cancellationToken);
+        await VerifyScalarCancellationAsync(connection, connectionString, cancellationToken);
     }
 
     /// <summary>Skipped classifier and default scopes must not bind missing objects or invalid collations.</summary>
@@ -537,69 +541,111 @@ public sealed class SqlServerScalarProofRegressionTests
             cancellationToken: cancellationToken);
     }
 
-    /// <summary>Cancels a running scalar metadata query with one owned session and no time-delay SQL.</summary>
-    /// <param name="connection">The caller-owned open session used to test native scalar-query cancellation.</param>
-    /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
+    /// <summary>Cancels an admitted scalar query held on an independently owned native table lock.</summary>
+    /// <param name="connection">The caller-owned open session used to test native scalar cancellation.</param>
+    /// <param name="connectionString">
+    /// The original fixture settings, retained before SqlClient masks credentials.
+    /// </param>
+    /// <param name="cancellationToken">Cancels forward observation and links to the capture operation.</param>
     private static async Task VerifyScalarCancellationAsync(
         SqlConnection connection,
+        string connectionString,
         CancellationToken cancellationToken
     )
     {
         cancellationToken.ThrowIfCancellationRequested();
+        await using var setup = connection.CreateCommand();
+        setup.CommandText = "CREATE TABLE dbo.scalar_cancellation_gate (id int NOT NULL);"
+            + " INSERT dbo.scalar_cancellation_gate VALUES (1);";
+
+        await setup.ExecuteNonQueryAsync(cancellationToken);
+        await using var observer = new SqlConnection(connectionString);
+        await observer.OpenAsync(cancellationToken);
+        await using var transaction = (SqlTransaction)await observer.BeginTransactionAsync(cancellationToken);
+        await using var lockCommand = observer.CreateCommand();
+        lockCommand.Transaction = transaction;
+        lockCommand.CommandText = "SELECT COUNT(*) FROM dbo.scalar_cancellation_gate WITH (TABLOCKX, HOLDLOCK);";
+        await lockCommand.ExecuteScalarAsync(cancellationToken);
 
         var plan = Plan() with
         {
-            PhysicalTableSupportExpression = """
-            (SELECT CASE WHEN SUM(CONVERT(bigint, CHECKSUM(a.object_id, b.object_id,
-            c.object_id, d.object_id, e.object_id))) = 0
-            THEN 1 ELSE 0 END FROM sys.all_objects a CROSS
-            JOIN sys.all_objects b CROSS JOIN sys.all_objects c CROSS
-            JOIN sys.all_objects d CROSS JOIN sys.all_objects e)
-            """,
+            // WHY: An explicit locking read cannot be optimized to a catalog-only constant or
+            // completed before the observer sees it, even with read-committed snapshot enabled.
+            PhysicalTableSupportExpression =
+            "(SELECT COUNT(*) FROM dbo.scalar_cancellation_gate WITH (READCOMMITTEDLOCK))",
         };
 
         using var cancellation = CreateScalarCancellationSource(cancellationToken);
-        cancellation.CancelAfter(TimeSpan.FromMilliseconds(250));
         var results = new SafeMigrationProviderAnalysis[1];
-        var stopwatch = Stopwatch.StartNew();
+        var execution = SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
+            connection,
+            null,
+            10,
+            [plan],
+            0,
+            results,
+            cancellation.Token);
 
-        // WHY: Exercise the actual native capture path. An informational prefix can make SqlClient
-        // return a reader before scalar execution; synchronously reading its metadata then loses the
-        // ExecuteReaderAsync cancellation scope and tests a different path from catalog capture.
-        var failure = await Record.ExceptionAsync(() =>
-            SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
-                connection,
-                null,
-                10,
-                [plan],
-                0,
-                results,
-                cancellation.Token));
-
-        Assert.True(cancellation.IsCancellationRequested);
-        if (failure is SqlException sqlFailure)
+        SqlServerAttentionObservation observation;
+        try
         {
-            // WHY: Native SqlBatch can surface acknowledged server cancellation as SqlException(0).
-            // Retain that driver behavior, but never accept timeout (-2), binding or other SQL errors.
+            observation = await SqlServerAttentionTestOperation.ObserveAsync(
+                execution,
+                async callbackCancellationToken =>
+                {
+                    await using var admission = observer.CreateCommand();
+                    admission.Transaction = transaction;
+                    admission.CommandText = """
+                    SELECT COUNT(*) FROM sys.dm_exec_requests
+                    WHERE session_id = @producer AND blocking_session_id = @holder
+                    AND wait_type LIKE N'LCK_M_%';
+                    """;
+
+                    admission.Parameters.AddWithValue("producer", connection.ServerProcessId);
+                    admission.Parameters.AddWithValue("holder", observer.ServerProcessId);
+                    while (!execution.IsCompleted)
+                    {
+                        if (await admission.ExecuteScalarAsync(callbackCancellationToken) is 1)
+                        {
+                            return;
+                        }
+
+                        // WHY: Poll cadence does not impose a machine-dependent qualification deadline.
+                        await Task.Delay(10, callbackCancellationToken);
+                    }
+
+                    await execution;
+
+                    throw new InvalidOperationException("The scalar proof completed before native lock admission.");
+                },
+                cancellation,
+                cancellationToken);
+        }
+        finally
+        {
+            // WHY: The attention helper drains execution before its borrowed session or lock holder is released.
+            await transaction.RollbackAsync(CancellationToken.None);
+        }
+
+        await using var probe = connection.CreateCommand();
+        probe.CommandText = "SELECT 1;";
+        var reused = await probe.ExecuteScalarAsync(cancellationToken);
+
+        Assert.Null(observation.ReadinessFailure);
+        Assert.Null(observation.CancellationFailure);
+        Assert.True(cancellation.IsCancellationRequested);
+        if (observation.ExecutionFailure is SqlException sqlFailure)
+        {
+            // WHY: Native SqlBatch can acknowledge attention as SqlException(0), never timeout(-2).
             Assert.Equal(0, sqlFailure.Number);
         }
         else
         {
-            Assert.IsAssignableFrom<OperationCanceledException>(failure);
+            Assert.IsType<OperationCanceledException>(observation.ExecutionFailure, exactMatch: false);
         }
 
         Assert.Null(results[0]);
-
-        // WHY: Scheduling and engine contention affect cancellation latency without changing
-        // its outcome. Keep elapsed time informational; timeout errors remain rejected above.
-        Console.WriteLine(
-            FormattableString.Invariant(
-                $"Scalar capture cancellation duration-ms={stopwatch.Elapsed.TotalMilliseconds:F3} (informational)."));
-
-        await using var probe = connection.CreateCommand();
-        probe.CommandText = "SELECT 1;";
-        probe.CommandTimeout = 5;
-        Assert.Equal(1, await probe.ExecuteScalarAsync(cancellationToken: cancellationToken));
+        Assert.Equal(1, reused);
     }
 
     /// <summary>Creates an independently cancelable capture scope that also observes caller cancellation.</summary>
@@ -609,7 +655,7 @@ public sealed class SqlServerScalarProofRegressionTests
             CancellationToken cancellationToken
         )
 
-        // WHY: Keep linking separate from the injected timer so offline controls do not depend on elapsed time.
+        // WHY: Preserve the independent capture scope without allowing its cancellation to cancel the caller.
         => CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
     /// <summary>Executes one complete classifier and checks its single owned raw result.</summary>

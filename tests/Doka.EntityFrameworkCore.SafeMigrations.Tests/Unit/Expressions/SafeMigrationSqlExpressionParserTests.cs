@@ -1,5 +1,6 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
+/// <summary>Verifies bounded SQL parsing and exact structured-versus-opaque definition capture.</summary>
 public sealed class SafeMigrationSqlExpressionParserTests
 {
     /// <summary>Parses the relational CHECK predicate without losing identifier or literal structure.</summary>

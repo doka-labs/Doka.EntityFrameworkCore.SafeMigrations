@@ -26,15 +26,13 @@ public sealed class PostgreSqlContainerFixture : IAsyncLifetime, IDisposable
             .GetEnvironmentVariable("SAFE_MIGRATIONS_POSTGRES_VERSION")
             ?.Trim() is { Length: > 0 } value
             ? value
-            : "18.6";
+            : DatabaseImageCatalog.DefaultPostgreSqlVersion;
 
         var configuredImage = Environment
             .GetEnvironmentVariable("SAFE_MIGRATIONS_POSTGRES_IMAGE")
             ?.Trim();
 
-        var image = string.IsNullOrWhiteSpace(configuredImage)
-            ? $"postgres:{_version}"
-            : configuredImage;
+        var image = DatabaseImageCatalog.Resolve("postgres", _version, configuredImage);
 
         _container = new PostgreSqlBuilder(image)
             .WithDatabase(BootstrapDatabase)
@@ -60,7 +58,7 @@ public sealed class PostgreSqlContainerFixture : IAsyncLifetime, IDisposable
         Func<Task>? disposeContainer = null
     )
     {
-        _version = "18.6";
+        _version = DatabaseImageCatalog.DefaultPostgreSqlVersion;
         _createDatabase = createDatabase;
         _dropDatabase = dropDatabase;
         _disposeContainer = disposeContainer ?? (static () => Task.CompletedTask);

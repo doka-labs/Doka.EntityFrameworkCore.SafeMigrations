@@ -1,11 +1,15 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite;
 
 /// <summary>Provides service-registration helpers for SQLite SafeMigrations.</summary>
+[PublicAPI]
 public static class SqliteServiceCollectionExtensions
 {
     /// <summary>Registers SQLite SafeMigrations with the provider's standard SQL generator.</summary>
     /// <param name="services">The service collection to configure.</param>
     /// <returns>The same service collection so additional registrations can be chained.</returns>
+
+    // WHY: PublicApiAnalyzers 5.6.0 treats extension blocks as new symbols, breaking the shipped inventory.
+    // ReSharper disable once ConvertToExtensionBlock
     public static IServiceCollection AddSqliteSafeMigrations(
         this IServiceCollection services
     ) => services.AddSqliteSafeMigrations(typeof(SqliteMigrationsSqlGenerator), canonicalContextType: null);
@@ -15,6 +19,9 @@ public static class SqliteServiceCollectionExtensions
     /// <typeparam name="TBaselineGenerator">The generator used for ordinary SQLite operations.</typeparam>
     /// <typeparam name="TCanonicalMigrationContext">The context that owns migration discovery and history.</typeparam>
     /// <returns>The same service collection so additional registrations can be chained.</returns>
+
+    // WHY: PublicApiAnalyzers 5.6.0 treats extension blocks as new symbols, breaking the shipped inventory.
+    // ReSharper disable once ConvertToExtensionBlock
     public static IServiceCollection AddSqliteSafeMigrations<TBaselineGenerator, TCanonicalMigrationContext>(
         this IServiceCollection services
     )
@@ -23,6 +30,8 @@ public static class SqliteServiceCollectionExtensions
         typeof(TBaselineGenerator),
         typeof(TCanonicalMigrationContext));
 
+    // WHY: PublicApiAnalyzers 5.6.0 treats extension blocks as new symbols, breaking the shipped inventory.
+    // ReSharper disable once ConvertToExtensionBlock
     internal static IServiceCollection AddSqliteSafeMigrations(
         this IServiceCollection services,
         Type baselineGeneratorType,

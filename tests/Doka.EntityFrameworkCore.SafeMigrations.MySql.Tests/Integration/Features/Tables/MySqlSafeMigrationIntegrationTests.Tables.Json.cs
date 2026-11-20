@@ -9,9 +9,11 @@ public sealed class MySqlTablesJsonIntegrationTests : MySqlSafeMigrationIntegrat
         MySqlEngineContainerFixture fixture
     ) : base(fixture) { }
 
+    /// <summary>Owns only the provider's JSON-validation check and verifies native JSON rejection.</summary>
     [Fact]
     public async Task JsonTable_ConvergesAndTreatsOnlyTheProviderValidationCheckAsOwned()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -26,13 +28,12 @@ public sealed class MySqlTablesJsonIntegrationTests : MySqlSafeMigrationIntegrat
 
         var runner = context.GetService<ISafeMigrationRunner>();
 
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
             new SafeMigrationRunOptions("json-table-preflight"),
             CancellationToken.None);
-
-        Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
@@ -48,10 +49,14 @@ public sealed class MySqlTablesJsonIntegrationTests : MySqlSafeMigrationIntegrat
             "INSERT INTO `json_documents` (`id`, `Payload`) VALUES (1, '{\"valid\":true}');",
             cancellationToken: CancellationToken.None);
 
-        var invalidJson = await Assert.ThrowsAsync<MySqlException>(() => ExecuteSqlAsync(
+        var capturedException = await Record.ExceptionAsync(() => ExecuteSqlAsync(
             connectionString,
             "INSERT INTO `json_documents` (`id`, `Payload`) VALUES (2, 'not-json');",
             cancellationToken: CancellationToken.None));
+
+        // Assert
+        var invalidJson = Assert.IsType<MySqlException>(capturedException);
+        Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
         Assert.True(Assert.Single(postflight.Assessments)
@@ -61,9 +66,11 @@ public sealed class MySqlTablesJsonIntegrationTests : MySqlSafeMigrationIntegrat
         Assert.NotEmpty(invalidJson.Message);
     }
 
+    /// <summary>Retains an independent user check in strict JSON-table drift detection.</summary>
     [Fact]
     public async Task JsonTable_DoesNotHideAnIndependentUserCheckConstraint()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -82,6 +89,7 @@ public sealed class MySqlTablesJsonIntegrationTests : MySqlSafeMigrationIntegrat
             "ALTER TABLE `json_check_drift` ADD CONSTRAINT `ck_json_check_drift_id` CHECK (`Id` > 0);",
             cancellationToken: CancellationToken.None);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -90,6 +98,7 @@ public sealed class MySqlTablesJsonIntegrationTests : MySqlSafeMigrationIntegrat
                 new SafeMigrationRunOptions("json-user-check-drift"),
                 CancellationToken.None);
 
+        // Assert
         var assessment = Assert.Single(report.Assessments);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);

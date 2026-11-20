@@ -83,7 +83,7 @@ public sealed class SharedContainerFixtureSelectionTests
         Assert.False(classMappings.ContainsKey(typeof(SelectionFixture)));
     }
 
-    private sealed class SelectionFixture { }
+    private sealed class SelectionFixture;
 
     private sealed class FixtureConsumer
     {
@@ -95,8 +95,10 @@ public sealed class SharedContainerFixtureSelectionTests
         }
     }
 
-    private sealed class UnitOnlyConsumer { }
+    private sealed class UnitOnlyConsumer;
 
+    // WHY: This deliberately unconstructible type is the negative public-constructor reflection fixture.
+    // ReSharper disable once ClassCannotBeInstantiated
     private sealed class PrivateConstructorConsumer
     {
         private PrivateConstructorConsumer(

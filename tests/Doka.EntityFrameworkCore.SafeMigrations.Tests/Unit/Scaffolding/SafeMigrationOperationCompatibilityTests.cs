@@ -1,7 +1,14 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
+/// <summary>
+/// Checks ordinary EF operations normalize to the exact closed safe intents while unsupported ownership remains
+/// rejected.
+/// </summary>
 public sealed class SafeMigrationOperationCompatibilityTests
 {
+    /// <summary>
+    /// Gets complete ordinary EF operations paired with their exact closed SafeMigrations intent type.
+    /// </summary>
     public static TheoryData<MigrationOperation, Type> SupportedOperations => new()
     {
         { new EnsureSchemaOperation { Name = "application" }, typeof(EnsureSchemaIntent) },
@@ -133,6 +140,9 @@ public sealed class SafeMigrationOperationCompatibilityTests
         },
     };
 
+    /// <summary>
+    /// Gets provider-owned operations lacking a complete lossless SafeMigrations reconstruction contract.
+    /// </summary>
     public static TheoryData<MigrationOperation> UnsupportedOperations => new()
     {
         new AlterDatabaseOperation(),
@@ -173,6 +183,9 @@ public sealed class SafeMigrationOperationCompatibilityTests
         },
     };
 
+    /// <summary>Normalizes each complete ordinary EF operation without losing its exact intent family.</summary>
+    /// <param name="operation">The ordinary EF operation carrying the complete structural contract.</param>
+    /// <param name="expectedIntentType">The exact safe intent type declared by the independent fixture.</param>
     [Theory]
     [MemberData(nameof(SupportedOperations))]
     public void Normalize_ConvertsEverySupportedStandardOperation(
@@ -193,6 +206,7 @@ public sealed class SafeMigrationOperationCompatibilityTests
         Assert.IsType(expectedIntentType, safeOperation.Intent);
     }
 
+    /// <summary>Retains target and old column metadata under the explicitly authorized repair policy.</summary>
     [Fact]
     public void Normalize_AlterColumnMatchesGeneratedRepairPolicy()
     {
@@ -212,6 +226,10 @@ public sealed class SafeMigrationOperationCompatibilityTests
         Assert.Equal("varchar(200)", intent.Definition.StoreType);
     }
 
+    /// <summary>
+    /// Leaves unsupported provider-owned operations intact rather than fabricating safe intent metadata.
+    /// </summary>
+    /// <param name="operation">The provider-owned operation with no complete safe reconstruction.</param>
     [Theory]
     [MemberData(nameof(UnsupportedOperations))]
     public void Normalize_RejectsOperationsWithoutCompleteContracts(
@@ -229,6 +247,9 @@ public sealed class SafeMigrationOperationCompatibilityTests
         Assert.Same(operation, result.Operation);
     }
 
+    /// <summary>
+    /// Rejects unknown provider annotations instead of discarding them during ordinary-operation capture.
+    /// </summary>
     [Fact]
     public void Normalize_RejectsLossyProviderAnnotations()
     {
@@ -237,9 +258,8 @@ public sealed class SafeMigrationOperationCompatibilityTests
         {
             Name = "caption",
             Table = "items",
+            ["Provider:Unknown"] = "unsafe",
         };
-
-        operation["Provider:Unknown"] = "unsafe";
 
         // Act
         var result = SafeMigrationOperationCompatibility.Normalize(operation, providerAdapter: null);

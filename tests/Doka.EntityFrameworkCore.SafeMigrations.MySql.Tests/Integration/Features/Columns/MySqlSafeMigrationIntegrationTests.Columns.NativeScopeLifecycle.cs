@@ -206,7 +206,7 @@ public sealed class MySqlColumnsNativeScopeLifecycleIntegrationTests : MySqlSafe
         // Assert
         if (failureMode == "cancellation")
         {
-            Assert.IsAssignableFrom<OperationCanceledException>(exception);
+            Assert.IsType<OperationCanceledException>(exception, exactMatch: false);
             Assert.True(cancellation.IsCancellationRequested);
         }
         else
@@ -450,16 +450,7 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
     );
 
     /// <summary>Interrupts the exact native acquisition boundaries without sleeps or product-only test hooks.</summary>
-    /// <param name="faultPoint">The before-capture or after-acquisition boundary to interrupt, when requested.</param>
-    /// <param name="failureMode">The native error or cancellation raised at the chosen boundary.</param>
-    /// <param name="cancellation">The caller's token source for deterministic cancellation probes.</param>
-    /// <param name="failRestore">Whether the actual native restoration must fail instead of setup.</param>
-    protected sealed class NativeScopeLifecycleObserver(
-        string? faultPoint = null,
-        string? failureMode = null,
-        CancellationTokenSource? cancellation = null,
-        bool failRestore = false
-    ) : DbCommandInterceptor
+    protected sealed class NativeScopeLifecycleObserver : DbCommandInterceptor
     {
         private const string CapturePrefix = "/*! SET @__doka_previous_sql_mode = @@SESSION.sql_mode";
 
@@ -468,6 +459,31 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
 
         private const string RestorePrefix = "/*! SET SESSION sql_mode = IF("
             + "COALESCE(@doka_sm_provider_setup_entered = 1";
+
+        private readonly CancellationTokenSource? _cancellation;
+        private readonly bool _failRestore;
+        private readonly string? _failureMode;
+        private readonly string? _faultPoint;
+
+        /// <summary>Initializes the explicit dependencies of this isolated test helper.</summary>
+        /// <param name="faultPoint">
+        /// The before-capture or after-acquisition boundary to interrupt, when requested.
+        /// </param>
+        /// <param name="failureMode">The native error or cancellation raised at the chosen boundary.</param>
+        /// <param name="cancellation">The caller's token source for deterministic cancellation probes.</param>
+        /// <param name="failRestore">Whether the actual native restoration must fail instead of setup.</param>
+        public NativeScopeLifecycleObserver(
+            string? faultPoint = null,
+            string? failureMode = null,
+            CancellationTokenSource? cancellation = null,
+            bool failRestore = false
+        )
+        {
+            _faultPoint = faultPoint;
+            _failureMode = failureMode;
+            _cancellation = cancellation;
+            _failRestore = failRestore;
+        }
 
         /// <summary>Gets the number of actual completed native snapshot statements.</summary>
         public int CompletedCaptures { get; private set; }
@@ -509,7 +525,7 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
                 ?? throw new InvalidOperationException("The native lifecycle command lost its connection.");
 
             if (text.StartsWith(CapturePrefix, StringComparison.Ordinal)
-                && faultPoint == "before-capture"
+                && _faultPoint == "before-capture"
                 && !FaultInjected)
             {
                 await using var checkpoint = connection.CreateCommand();
@@ -527,7 +543,7 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
                 StartedBodies++;
             }
 
-            if (failRestore
+            if (_failRestore
                 && !RestoreFailureInjected
                 && text.StartsWith(RestorePrefix, StringComparison.Ordinal))
             {
@@ -565,7 +581,7 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
             if (text.StartsWith(MutationPrefix, StringComparison.Ordinal))
             {
                 CompletedMutations++;
-                if (faultPoint == "after-acquisition"
+                if (_faultPoint == "after-acquisition"
                     && !FaultInjected)
                 {
                     await using var checkpoint = connection.CreateCommand();
@@ -611,9 +627,9 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
             cancellationToken.ThrowIfCancellationRequested();
 
             FaultInjected = true;
-            if (failureMode == "cancellation")
+            if (_failureMode == "cancellation")
             {
-                var source = cancellation
+                var source = _cancellation
                     ?? throw new InvalidOperationException("The cancellation probe has no caller token source.");
 
                 source.Cancel();

@@ -36,7 +36,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     /// <param name="intent">The immutable operation whose apply/repair branch will execute.</param>
     /// <param name="initialGuard">The existing guard reused for operations without consumed relation names.</param>
     /// <returns>The fresh operation-local native binding proof for execution postflight.</returns>
-    public string BuildPostExecutionObjectIdentityGuard(
+    private string BuildPostExecutionObjectIdentityGuard(
         SafeMigrationIntent intent,
         string initialGuard
     )
@@ -71,19 +71,19 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         string? optionalAbsentBinding = null
     )
     {
-        if (tables.Count == 0)
+        switch (tables.Count)
         {
-            return "TRUE";
-        }
+            case 0:
+                return "TRUE";
+            case 1:
+                // WHY: Most guarded operations have one owner. Avoid an ordered
+                // enumerable and join buffer for this common classification path.
+                foreach (var table in tables)
+                {
+                    return BuildSingleOwnerIdentityGuard(table, optionalAbsentBinding);
+                }
 
-        if (tables.Count == 1)
-        {
-            // WHY: Most guarded operations have one owner. Avoid an ordered
-            // enumerable and join buffer for this common classification path.
-            foreach (var table in tables)
-            {
-                return BuildSingleOwnerIdentityGuard(table, optionalAbsentBinding);
-            }
+                break;
         }
 
         var predicates = tables
@@ -143,8 +143,13 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
 
         var state = new StringBuilder("CASE");
         var postcondition = new StringBuilder("CASE");
-        foreach (var (schema, contract) in alternatives)
+
+        // WHY: This pass only reads the stable ordered collection by ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var alternativeIndex = 0; alternativeIndex < alternatives.Count; alternativeIndex++)
         {
+            var (schema, contract) = alternatives[alternativeIndex];
             var alternative = Build(
                 operation,
                 contract,

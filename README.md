@@ -30,7 +30,7 @@ equivalent.
 - `Doka.EntityFrameworkCore.SafeMigrations`: provider-neutral intent,
   definitions, planning, reports, and `MigrationBuilder` extensions
 - `Doka.EntityFrameworkCore.SafeMigrations.MySql`: MySQL and MariaDB adapter on
-  the public `Doka.EntityFrameworkCore.MySql` 10.6 operation-handler (minimum 10.6.5) and
+  the public `Doka.EntityFrameworkCore.MySql` 10.7 operation-handler (minimum 10.7.0) and
   typed migration-metadata SPI
 - `Doka.EntityFrameworkCore.SafeMigrations.PostgreSql`: PostgreSQL adapter on
   Npgsql 10
@@ -44,47 +44,47 @@ The declared release-qualification matrix is:
 | Provider package | Engines |
 | --- | --- |
 | `.MySql` | MySQL 8.4 and 9.7; MariaDB 10.11, 11.4, 11.8, and 12.3 |
-| `.PostgreSql` | PostgreSQL 14 through 18, with one release-gate cell per supported major |
+| `.PostgreSql` | PostgreSQL 14 through 18, with one release-gate cell per declared major; 14 is compatibility coverage after upstream EOL |
 | `.Sqlite` | SQLite 3.46.1 or later through locked `Microsoft.EntityFrameworkCore.Sqlite.Core`; applications select and reference their native SQLite bundle, while qualification covers the default bundle in-memory and against asserted file databases |
 | `.SqlServer` | SQL Server 2019, 2022, and 2025; three separately pinned Linux/x86-64 container cells in CI |
 
-The CI and release workflows pin the exact patch tags and image digests used
-when that matrix executes. The exact successful run, not this table, is release
+The canonical [database-image manifest](docker/database-images.Dockerfile) owns
+the exact patch tags and digests consumed by fixtures, benchmarks and qualification. The exact successful run, not this table, is release
 evidence. See [Support and qualification](docs/support-and-qualification.md).
 
 ## Installation
 
 Install one provider package. The core package is included transitively. The
-examples target version 10.7.2 and select that version exactly, so
+examples target version 10.7.3 and select that version exactly, so
 restore does not move to another version implicitly. Release changes and
-compatibility notes belong in the [10.7.2 changelog](CHANGELOG.md#1072---2026-11-11)
-and [upgrade notes](docs/support-and-qualification.md#upgrade-to-1072).
+compatibility notes belong in the [10.7.3 changelog](CHANGELOG.md#1073---2026-11-20)
+and [upgrade notes](docs/support-and-qualification.md#upgrade-to-1073).
 Applications upgrading from before 10.7.0 must also review its
 [explicit cancellation-token requirement](docs/support-and-qualification.md#upgrade-to-1070).
 
 ```bash
-package_version='10.7.2'
+package_version='10.7.3'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.MySql --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.7.2'
+package_version='10.7.3'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.PostgreSql --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.7.2'
+package_version='10.7.3'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.Sqlite --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.7.2'
+package_version='10.7.3'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.SqlServer --version "$package_version"
 ```
 
@@ -152,7 +152,7 @@ it after an attention or timeout; SQL Server `TRY/CATCH` does not catch those
 client interruptions.
 
 `UseMySqlSafeMigrations()` declares its user-variable requirement through the
-Doka 10.6 line. For a provider-owned connection string, Doka supplies
+Doka 10.7 line. For a provider-owned connection string, Doka supplies
 `AllowUserVariables=true` when it was omitted. An explicitly contradictory
 setting is rejected. Caller-owned `DbConnection` and `MySqlDataSource` inputs
 are never mutated and must already use `AllowUserVariables=true` and
@@ -1028,7 +1028,10 @@ See [Deployment and recovery](docs/runbooks/deployment-and-recovery.md) and
 
 ## Build and qualification
 
-The SDK is fixed by `global.json`.
+The SDK is fixed by `global.json`. The
+[engineering standards application](docs/engineering-standards-application.md)
+records project-specific compatibility and authoring decisions; the
+[contributor guide](CONTRIBUTING.md) owns the complete verification procedure.
 
 ```bash
 dotnet restore Doka.EntityFrameworkCore.SafeMigrations.slnx
@@ -1044,28 +1047,18 @@ Docker is required for server-provider tests. SQL Server live tests additionally
 require a supported x64 host; ARM64 runs skip them and cannot establish live
 qualification. CI additionally executes every supported
 engine profile, EF CLI/script/bundle paths, merged coverage thresholds,
-BenchmarkDotNet execution/export smoke, deterministic double-pack, isolated
+deterministic benchmark workload contracts, double-pack, isolated
 package-only consumers, and SPDX SBOM validation. FsCheck exercises generated
 Core and provider invariants with shrunk counterexamples, while the separate
 Dependency Review gate rejects newly introduced high-severity vulnerabilities
 and dependencies outside the approved license policy before merge.
 
-The five isolated benchmark suites use BenchmarkDotNet 0.15.8 and retain native
-full JSON evidence under `artifacts/performance`. CI uses `--job Dry` to exercise
-all default cases and validate export, not to establish statistically
-meaningful performance. Configuration, build, execution and missing/invalid
-evidence failures block qualification; numeric duration and managed allocation
-values do not. For measurement runs and the changed allocation methodology, see
-[Support and qualification](docs/support-and-qualification.md#performance-and-memory).
-
-Each provider matrix cell also persists a live full-runner latency artifact.
-It measures 20 full-runner invocations after a warmup against 100 expected
-tables before and after adding 1,000 foreign tables with child objects. Each
-invocation may execute multiple database roundtrips. Expected assessments
-must remain identical, and foreign child rows must stay outside the scoped child
-inventory. The unchanged `2 * clean p95 + 250 ms` comparison is informational:
-timing overruns retain a false JSON budget verdict without failing qualification.
-Invalid measurements, execution and artifact-write failures remain blocking.
+BenchmarkDotNet runs only when explicitly requested, including `Dry` execution.
+Normal build/test/cleanup and default CI do not start measurement processes.
+Deterministic workload, result, SQL/transport and ownership checks remain blocking;
+duration and managed-allocation values remain informational. See the canonical
+[measurement guide](docs/support-and-qualification.md#performance-and-memory)
+for commands, opt-in workflow inputs and evidence limits.
 
 Release candidates and stable releases use the same manually dispatched path.
 The workflow qualifies and attests exact bytes from the selected authorized line before it

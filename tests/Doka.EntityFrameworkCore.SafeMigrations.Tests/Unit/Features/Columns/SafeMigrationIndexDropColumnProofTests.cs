@@ -230,8 +230,19 @@ public sealed class SafeMigrationIndexDropColumnProofTests
     }
 
     /// <summary>Models an opted-in provider while keeping ordinary projected repairs conservative.</summary>
-    private sealed class IndexDropColumnProbe(bool optIn = true) : ISafeMigrationProjectedColumnAnalyzer
+    private sealed class IndexDropColumnProbe : ISafeMigrationProjectedColumnAnalyzer
     {
+        private readonly bool _optIn;
+
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="optIn">The supplied opt in for this fixture.</param>
+        public IndexDropColumnProbe(
+            bool optIn = true
+        )
+        {
+            _optIn = optIn;
+        }
+
         /// <summary>Gets the number of explicitly qualified index-drop source reuse requests.</summary>
         public int ReuseQueries { get; private set; }
 
@@ -246,7 +257,7 @@ public sealed class SafeMigrationIndexDropColumnProofTests
         {
             PreservationQueries++;
 
-            return optIn
+            return _optIn
                 && intent.Name is "IX_values" or "IX_values1" or "IX_values2"
                 && liveAnalysis.ObservedState == SafeMigrationObservedState.Matching;
         }
@@ -262,7 +273,7 @@ public sealed class SafeMigrationIndexDropColumnProofTests
         {
             ReuseQueries++;
 
-            return optIn
+            return _optIn
                 && intent.OldDefinition is not null
                 && liveAnalysis.RepairCapability == SafeMigrationRepairCapability.Safe;
         }

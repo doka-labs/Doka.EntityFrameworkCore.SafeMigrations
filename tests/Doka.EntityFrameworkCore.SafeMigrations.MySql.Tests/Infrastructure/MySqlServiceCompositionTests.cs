@@ -1,23 +1,30 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
+/// <summary>Protects service registration identity, strict defaults, and provider-owned SQL boundaries.</summary>
 public sealed class MySqlServiceCompositionTests
 {
     private const string CanonicalConfigurationTypeName =
         "Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationCanonicalContextConfiguration";
 
+    /// <summary>
+    /// Keeps strict scaffolding as the default and persists explicitly selected legacy convergence policy.
+    /// </summary>
     [Fact]
     public void ScaffoldingConfigurationDefaultsToStrictAndAcceptsLegacyConvergence()
     {
+        // Arrange
         var strict = new DbContextOptionsBuilder();
-        strict.UseMySqlSafeMigrations();
-
         var legacy = new DbContextOptionsBuilder();
+
+        // Act
+        strict.UseMySqlSafeMigrations();
         legacy.UseMySqlSafeMigrations(options =>
             options.UseScaffoldingMode(SafeMigrationScaffoldingMode.LegacyConvergence));
 
         var strictInfo = strict.Options.FindExtension<MySqlSafeMigrationsOptionsExtension>()!.Info;
         var legacyInfo = legacy.Options.FindExtension<MySqlSafeMigrationsOptionsExtension>()!.Info;
 
+        // Assert
         Assert.Equal(
             SafeMigrationScaffoldingMode.Strict,
             strict.Options.FindExtension<MySqlSafeMigrationsOptionsExtension>()!.ScaffoldingMode);
@@ -34,19 +41,23 @@ public sealed class MySqlServiceCompositionTests
         Assert.True(strictInfo.ShouldUseSameServiceProvider(legacyInfo));
     }
 
+    /// <summary>Separates service-provider caches when excluded-table seed ownership changes.</summary>
     [Fact]
     public void ExcludedTableDataOwnership_IsPersistedAndSeparatesServiceProviders()
     {
+        // Arrange
         var defaults = new DbContextOptionsBuilder();
-        defaults.UseMySqlSafeMigrations();
-
         var ownership = new DbContextOptionsBuilder();
+
+        // Act
+        defaults.UseMySqlSafeMigrations();
         ownership.UseMySqlSafeMigrations(options =>
             options.ExcludeModelManagedDataForExcludedTables());
 
         var defaultExtension = defaults.Options.FindExtension<MySqlSafeMigrationsOptionsExtension>()!;
         var ownershipExtension = ownership.Options.FindExtension<MySqlSafeMigrationsOptionsExtension>()!;
 
+        // Assert
         Assert.False(defaultExtension.ExcludeModelManagedDataForExcludedTablesEnabled);
         Assert.True(ownershipExtension.ExcludeModelManagedDataForExcludedTablesEnabled);
         Assert.False(defaultExtension.Info.ShouldUseSameServiceProvider(ownershipExtension.Info));
@@ -55,46 +66,62 @@ public sealed class MySqlServiceCompositionTests
             ownershipExtension.Info.GetServiceProviderHashCode());
     }
 
+    /// <summary>Rejects a repair policy outside legacy mode without partially mutating provider options.</summary>
     [Fact]
     public void RepairPolicyWithoutLegacyModeIsRejectedBeforeOptionsMutation()
     {
+        // Arrange
         var options = new DbContextOptionsBuilder();
 
-        var exception = Assert.Throws<InvalidOperationException>(() =>
+        // Act
+        var failure = Record.Exception(() =>
             options.UseMySqlSafeMigrations(configuration =>
                 configuration.UseLegacyConvergencePolicy(SafeMigrationPolicy.RepairIfSafe)));
+
+        // Assert
+        var exception = Assert.IsType<InvalidOperationException>(failure);
 
         Assert.Contains("requires LegacyConvergence", exception.Message, StringComparison.Ordinal);
         Assert.Null(options.Options.FindExtension<MySqlSafeMigrationsOptionsExtension>());
     }
 
+    /// <summary>Rejects a null scaffolding callback before registering a partially configured extension.</summary>
     [Fact]
     public void NullScaffoldingConfigurationIsRejectedBeforeOptionsMutation()
     {
+        // Arrange
         var options = new DbContextOptionsBuilder();
 
-        Assert.Throws<ArgumentNullException>(() =>
+        // Act
+        var failure = Record.Exception(() =>
             options.UseMySqlSafeMigrations(configure: null!));
 
+        // Assert
+        Assert.IsType<ArgumentNullException>(failure);
         Assert.Null(options.Options.FindExtension<MySqlSafeMigrationsOptionsExtension>());
     }
 
+    /// <summary>
+    /// Persists the canonical context and selected legacy policy through every configuration overload.
+    /// </summary>
     [Fact]
     public void ConfiguredOverloadFamiliesPersistLegacyModeAndCanonicalContext()
     {
+        // Arrange
         var canonical = new DbContextOptionsBuilder();
-        canonical.UseMySqlSafeMigrations<SafeMigrationDbContext>(ConfigureLegacy);
-
         var typed = new DbContextOptionsBuilder<SafeMigrationDbContext>();
-        typed.UseMySqlSafeMigrations(ConfigureLegacy);
-
         var typedCanonical = new DbContextOptionsBuilder<SafeMigrationDbContext>();
+
+        // Act
+        canonical.UseMySqlSafeMigrations<SafeMigrationDbContext>(ConfigureLegacy);
+        typed.UseMySqlSafeMigrations(ConfigureLegacy);
         typedCanonical.UseMySqlSafeMigrations<SafeMigrationDbContext, SafeMigrationDbContext>(ConfigureLegacy);
 
         var canonicalExtension = canonical.Options.FindExtension<MySqlSafeMigrationsOptionsExtension>()!;
         var typedExtension = typed.Options.FindExtension<MySqlSafeMigrationsOptionsExtension>()!;
         var typedCanonicalExtension = typedCanonical.Options.FindExtension<MySqlSafeMigrationsOptionsExtension>()!;
 
+        // Assert
         Assert.Equal(SafeMigrationScaffoldingMode.LegacyConvergence, canonicalExtension.ScaffoldingMode);
         Assert.Equal(SafeMigrationPolicy.RepairIfSafe, canonicalExtension.LegacyConvergencePolicy);
         Assert.Equal(typeof(SafeMigrationDbContext), canonicalExtension.CanonicalContextType);
@@ -104,18 +131,25 @@ public sealed class MySqlServiceCompositionTests
         Assert.Equal(SafeMigrationPolicy.RepairIfSafe, typedCanonicalExtension.LegacyConvergencePolicy);
     }
 
+    /// <summary>Does not register duplicate migration services for an equivalent repeated configuration.</summary>
     [Fact]
     public void RepeatedEquivalentRegistrationIsIdempotent()
     {
+        // Arrange
         var services = new ServiceCollection();
 
+        // Act
         services.AddEntityFrameworkDokaMySqlSafeMigrations<SafeMigrationDbContext>();
         services.AddEntityFrameworkDokaMySqlSafeMigrations<SafeMigrationDbContext>();
 
+        // Assert
         Assert.Single(CanonicalConfigurations(services));
         Assert.Single(services, static descriptor => descriptor.ServiceType == typeof(IMigrationsAssembly));
     }
 
+    /// <summary>
+    /// Consumes only the leading design-time guard while retaining neighboring provider-generated commands.
+    /// </summary>
     [Fact]
     public void RuntimeSqlGenerator_ConsumesLeadingDesignTimeServicesGuardWithoutChangingNeighborCommands()
     {
@@ -129,8 +163,11 @@ public sealed class MySqlServiceCompositionTests
 
         using var context = new DbContext(options.Options);
         var generator = context.GetService<IMigrationsSqlGenerator>();
-        var alterDatabase = new AlterDatabaseOperation { Collation = "utf8mb4_unicode_ci" };
-        alterDatabase["Doka:MySql:CharSet"] = "utf8mb4";
+        var alterDatabase = new AlterDatabaseOperation
+        {
+            Collation = "utf8mb4_unicode_ci",
+            ["Doka:MySql:CharSet"] = "utf8mb4",
+        };
 
         MigrationOperation[] operations =
         [
@@ -147,6 +184,7 @@ public sealed class MySqlServiceCompositionTests
         Assert.DoesNotContain("DO 0", command.CommandText, StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>Leaves ordinary column removal to Doka instead of adding an unexpected SafeMigrations guard.</summary>
     [Fact]
     public void RuntimeSqlGenerator_LeavesOrdinaryDropColumnProviderOwned()
     {
@@ -176,6 +214,7 @@ public sealed class MySqlServiceCompositionTests
         Assert.DoesNotContain("doka_sm", command.CommandText, StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>Rejects a misplaced design-time guard with the provider handler's precise failure contract.</summary>
     [Fact]
     public void RuntimeSqlGenerator_RejectsMisplacedDesignTimeServicesGuard()
     {
@@ -189,8 +228,11 @@ public sealed class MySqlServiceCompositionTests
 
         using var context = new DbContext(options.Options);
         var generator = context.GetService<IMigrationsSqlGenerator>();
-        var alterDatabase = new AlterDatabaseOperation { Collation = "utf8mb4_unicode_ci" };
-        alterDatabase["Doka:MySql:CharSet"] = "utf8mb4";
+        var alterDatabase = new AlterDatabaseOperation
+        {
+            Collation = "utf8mb4_unicode_ci",
+            ["Doka:MySql:CharSet"] = "utf8mb4",
+        };
 
         MigrationOperation[] operations =
         [
@@ -211,6 +253,7 @@ public sealed class MySqlServiceCompositionTests
             StringComparison.Ordinal);
     }
 
+    /// <summary>Allows EF's model-free history bootstrap without requiring an application model.</summary>
     [Fact]
     public void RuntimeSqlGenerator_PassesEfHistoryBootstrapSqlToTheProviderWithoutAModel()
     {
@@ -239,6 +282,9 @@ public sealed class MySqlServiceCompositionTests
         Assert.Equal(historySql.Trim(), command.CommandText.Trim());
     }
 
+    /// <summary>
+    /// Passes unrelated model-free SQL through unchanged rather than treating it as owned migration SQL.
+    /// </summary>
     [Fact]
     public void RuntimeSqlGenerator_PassesArbitraryModelLessSqlToTheProvider()
     {
@@ -264,15 +310,26 @@ public sealed class MySqlServiceCompositionTests
         Assert.Equal("SELECT 1;", command.CommandText.Trim());
     }
 
+    /// <summary>
+    /// Preserves the existing service collection when a conflicting provider registration is rejected.
+    /// </summary>
     [Fact]
     public void ConflictingRegistrationFailsBeforeChangingTheServiceCollection()
     {
+        // Arrange
         var services = new ServiceCollection();
         services.AddEntityFrameworkDokaMySqlSafeMigrations();
+
+        // WHY: Retain this explicit materialization/copy path and its collection lowering.
+        // ReSharper disable once UseCollectionExpression
         var originalDescriptors = services.ToArray();
 
-        var exception = Assert.Throws<InvalidOperationException>(
+        // Act
+        var failure = Record.Exception(
             services.AddEntityFrameworkDokaMySqlSafeMigrations<SafeMigrationDbContext>);
+
+        // Assert
+        var exception = Assert.IsType<InvalidOperationException>(failure);
 
         Assert.Contains("different provider", exception.Message, StringComparison.Ordinal);
         Assert.Equal(originalDescriptors, services);

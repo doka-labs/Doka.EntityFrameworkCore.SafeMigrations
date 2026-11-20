@@ -1,6 +1,3 @@
-using System.Collections.Frozen;
-using System.Text.RegularExpressions;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Verifies bounded complete dependency transport without application-row probes.</summary>
@@ -219,10 +216,10 @@ public sealed class MySqlColumnDependencyTransportTests
         Assert.True(facts[1].Primary);
         Assert.False(facts[3].Primary);
         Assert.Null(facts[2].Names);
-        var names = Assert.IsAssignableFrom<IReadOnlySet<string>>(facts[0].Names);
+        var names = Assert.IsType<IReadOnlySet<string>>(facts[0].Names, exactMatch: false);
         Assert.True(names.SetEquals(["fk_delete_0", "fk_update_0"]));
         Assert.True(names.Contains("FK_DELETE_0"));
-        Assert.IsAssignableFrom<FrozenSet<string>>(names);
+        Assert.IsType<FrozenSet<string>>(names, exactMatch: false);
         Assert.Equal(71, submission.Timeout);
         Assert.Equal(ConnectionState.Open, connection.State);
     }
@@ -246,7 +243,10 @@ public sealed class MySqlColumnDependencyTransportTests
             (_, _, names) => captured = names,
             CancellationToken.None);
 
-        var names = Assert.IsAssignableFrom<ISet<string>>(captured);
+        var names = Assert.IsType<ISet<string>>(captured, exactMatch: false);
+
+        // WHY: Retain this explicit materialization/copy path and its collection lowering.
+        // ReSharper disable once UseCollectionExpression
         var original = names.ToArray();
 
         // Act
@@ -254,7 +254,7 @@ public sealed class MySqlColumnDependencyTransportTests
 
         // Assert
         Assert.IsType<NotSupportedException>(exception);
-        Assert.True(Assert.IsAssignableFrom<ICollection<string>>(names)
+        Assert.True(Assert.IsType<ICollection<string>>(names, exactMatch: false)
             .IsReadOnly);
 
         Assert.True(names.SetEquals(original));
@@ -436,7 +436,7 @@ public sealed class MySqlColumnDependencyTransportTests
                 cancellation.Token));
 
         // Assert
-        Assert.IsAssignableFrom<OperationCanceledException>(exception);
+        Assert.IsType<OperationCanceledException>(exception, exactMatch: false);
         Assert.Equal(0, observed);
         Assert.Equal(1, connection.ReadersDisposed);
         Assert.Equal(
@@ -462,6 +462,9 @@ public sealed class MySqlColumnDependencyTransportTests
 
         var analyses = operations
             .Select(static _ => Safe())
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         // Act
@@ -474,8 +477,8 @@ public sealed class MySqlColumnDependencyTransportTests
         Assert.Equal(3, capture.Requests.Count);
         Assert.Same(original, capture.Requests[0].Operation);
         var consumers = Assert.Single(
-            Assert.IsAssignableFrom<IReadOnlyDictionary<int,
-                HashSet<SafeMigrationOperation>>>(capture.Aliases));
+            Assert.IsType<IReadOnlyDictionary<int,
+                HashSet<SafeMigrationOperation>>>(capture.Aliases, exactMatch: false));
 
         Assert.Equal(0, consumers.Key);
         Assert.Same(alias, Assert.Single(consumers.Value));
@@ -540,6 +543,9 @@ public sealed class MySqlColumnDependencyTransportTests
             "column_" + index.ToString(CultureInfo.InvariantCulture),
             index % 2 == 1,
             index))
+
+        // WHY: Retain this explicit materialization/copy path and its collection lowering.
+        // ReSharper disable once UseCollectionExpression
         .ToArray();
 
     /// <summary>Creates a reference-distinct repair envelope for a physical target.</summary>
@@ -580,6 +586,9 @@ public sealed class MySqlColumnDependencyTransportTests
         .Select(match => int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture))
         .Distinct()
         .Order()
+
+        // WHY: Retain this explicit materialization/copy path and its collection lowering.
+        // ReSharper disable once UseCollectionExpression
         .ToArray();
 
     /// <summary>Returns explicit statement-local dependency rows and adversarial protocol variants.</summary>

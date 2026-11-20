@@ -9,8 +9,15 @@ internal readonly struct MySqlSafeMigrationSetupFragment
         MySqlSafeMigrationSetupCommandCompactor.MaximumGroupedPayloadBytes;
 
     private readonly string? _text;
+
     private readonly Part[]? _parts;
+
+    // WHY: Explicit readonly storage keeps both constructors' zero-state representation beside the owned parts.
+    // ReSharper disable once ReplaceWithFieldKeyword
     private readonly int _length;
+
+    // WHY: Keep the paired immutable UTF-16/UTF-8 lengths explicit; materialized strings deliberately bypass them.
+    // ReSharper disable once ReplaceWithFieldKeyword
     private readonly int _utf8ByteCount;
 
     /// <summary>Retains an existing immutable fragment without copying its SQL.</summary>
@@ -45,11 +52,12 @@ internal readonly struct MySqlSafeMigrationSetupFragment
 
     // WHY: Materialized strings are counted only when grouping needs their exact size. Caching
     // would add eager work or mutable state to fragments already excluded by their UTF-16 length.
-    internal int Utf8ByteCount => _text is { } text
-        ? Encoding.UTF8.GetByteCount(text)
-        : _parts is not null
-            ? _utf8ByteCount
-            : throw new InvalidOperationException("The MySQL setup fragment is not initialized.");
+    internal int Utf8ByteCount => _text switch
+    {
+        { } text => Encoding.UTF8.GetByteCount(text),
+        _ when _parts is not null => _utf8ByteCount,
+        _ => throw new InvalidOperationException("The MySQL setup fragment is not initialized."),
+    };
 
     /// <summary>Gets whether owned SQL ends in a statement terminator without rendering deferred parts.</summary>
     internal bool EndsWithStatementTerminator
@@ -132,6 +140,8 @@ internal readonly struct MySqlSafeMigrationSetupFragment
             count++;
         }
 
+        // WHY: Empty and single-text ownership fast paths precede the independent materialization length boundary.
+        // ReSharper disable once ConvertIfStatementToSwitchStatement
         if (count == 0)
         {
             return new MySqlSafeMigrationSetupFragment(string.Empty);

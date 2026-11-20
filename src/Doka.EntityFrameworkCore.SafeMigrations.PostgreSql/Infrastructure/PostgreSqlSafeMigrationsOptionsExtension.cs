@@ -3,6 +3,8 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql;
 internal sealed class PostgreSqlSafeMigrationsOptionsExtension
     : IDbContextOptionsExtension, ISafeMigrationScaffoldingOptions
 {
+    // WHY: Nullable cache storage represents uninitialized state; EF's Info result remains nonnullable.
+    // ReSharper disable once ReplaceWithFieldKeyword
     private DbContextOptionsExtensionInfo? _info;
 
     public Type BaselineGeneratorType { get; private init; } = typeof(NpgsqlMigrationsSqlGenerator);
@@ -22,10 +24,10 @@ internal sealed class PostgreSqlSafeMigrationsOptionsExtension
         ArgumentNullException.ThrowIfNull(options);
 
         var npgsqlAssembly = typeof(NpgsqlDbContextOptionsBuilderExtensions).Assembly;
-        if (!options.Extensions.Any(extension => extension.Info.IsDatabaseProvider
-            && extension.GetType()
+        if (options.Extensions.All(extension => !extension.Info.IsDatabaseProvider
+            || extension.GetType()
                 .Assembly
-            == npgsqlAssembly))
+            != npgsqlAssembly))
         {
             throw new InvalidOperationException("PostgreSQL safe migrations require the Npgsql EF Core provider.");
         }

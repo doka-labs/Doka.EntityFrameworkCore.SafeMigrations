@@ -52,9 +52,13 @@ public sealed class SqliteSafeMigrationIndexesAndCatalogIntegrationTests : Sqlit
         Assert.True(index.Keys[1].Descending);
     }
 
+    /// <summary>
+    /// Catalog recovers named constraints generated columns and index facets.
+    /// </summary>
     [Fact]
     public async Task Catalog_RecoversNamedConstraintsGeneratedColumnsAndIndexFacets()
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
@@ -69,9 +73,12 @@ public sealed class SqliteSafeMigrationIndexesAndCatalogIntegrationTests : Sqlit
             """,
             cancellationToken: CancellationToken.None);
 
+        // Act
         var snapshot = SqliteSafeMigrationCatalog.Read(connection, transaction: null);
 
         var table = snapshot.Tables["catalog_shapes"];
+
+        // Assert
         var unique = Assert.Single(table.UniqueConstraints);
         var check = Assert.Single(table.Checks);
         var index = Assert.Single(table.Indexes, value => value.Origin == "c");
@@ -84,9 +91,13 @@ public sealed class SqliteSafeMigrationIndexesAndCatalogIntegrationTests : Sqlit
         Assert.True(index.Keys[1].Descending);
     }
 
+    /// <summary>
+    /// Catalog ignores structural keywords inside literals and comments.
+    /// </summary>
     [Fact]
     public async Task Catalog_IgnoresStructuralKeywordsInsideLiteralsAndComments()
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
@@ -100,9 +111,12 @@ public sealed class SqliteSafeMigrationIndexesAndCatalogIntegrationTests : Sqlit
             """,
             cancellationToken: CancellationToken.None);
 
+        // Act
         var snapshot = SqliteSafeMigrationCatalog.Read(connection, transaction: null);
 
         var table = snapshot.Tables["catalog_parser_shapes"];
+
+        // Assert
         var index = Assert.Single(table.Indexes, value => value.Origin == "c");
         Assert.Equal("pk_catalog_parser_shapes", table.PrimaryKeyName);
         Assert.Null(table.Columns["Value"].GeneratedSql);
@@ -110,9 +124,13 @@ public sealed class SqliteSafeMigrationIndexesAndCatalogIntegrationTests : Sqlit
         Assert.Null(index.Filter);
     }
 
+    /// <summary>
+    /// Catalog uses the latest column constraint name for following checks.
+    /// </summary>
     [Fact]
     public async Task Catalog_UsesTheLatestColumnConstraintNameForFollowingChecks()
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
@@ -125,9 +143,12 @@ public sealed class SqliteSafeMigrationIndexesAndCatalogIntegrationTests : Sqlit
             """,
             cancellationToken: CancellationToken.None);
 
+        // Act
         var snapshot = SqliteSafeMigrationCatalog.Read(connection, transaction: null);
 
         var checks = snapshot.Tables["catalog_column_checks"].Checks;
+
+        // Assert
         Assert.Collection(
             checks,
             value => Assert.Equal("ck_status", value.Name),
@@ -218,9 +239,13 @@ public sealed class SqliteSafeMigrationIndexesAndCatalogIntegrationTests : Sqlit
             });
     }
 
+    /// <summary>
+    /// Composite partial index preserves order collation filter and drop replay.
+    /// </summary>
     [Fact]
     public async Task CompositePartialIndex_PreservesOrderCollationFilterAndDropReplay()
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
@@ -245,6 +270,7 @@ public sealed class SqliteSafeMigrationIndexesAndCatalogIntegrationTests : Sqlit
                 structuredFilter: SafeMigrationSql.IsNotNull(SafeMigrationSql.Identifier("code"))),
             SafeMigrationPolicy.ThrowIfDifferent);
 
+        // Act
         await ExecuteOperationsAsync(context, create.Operations, cancellationToken: CancellationToken.None);
         await ExecuteOperationsAsync(context, create.Operations, cancellationToken: CancellationToken.None);
 
@@ -261,22 +287,29 @@ public sealed class SqliteSafeMigrationIndexesAndCatalogIntegrationTests : Sqlit
         await ExecuteOperationsAsync(context, drop.Operations, cancellationToken: CancellationToken.None);
         await ExecuteOperationsAsync(context, drop.Operations, cancellationToken: CancellationToken.None);
 
+        var observedScalar1 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM main.sqlite_schema "
+            + "WHERE type = 'index' AND name = 'ix_indexed_items_search';",
+            cancellationToken: CancellationToken.None);
+
+        // Assert
         Assert.Equal(SafeMigrationAction.NoOp,
             Assert.Single(matching.Assessments)
                 .Action);
 
         Assert.Equal(
             0,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM main.sqlite_schema "
-                + "WHERE type = 'index' AND name = 'ix_indexed_items_search';",
-                cancellationToken: CancellationToken.None));
+            observedScalar1);
     }
 
+    /// <summary>
+    /// Unique index with duplicate rows is data blocked before DDL.
+    /// </summary>
     [Fact]
     public async Task UniqueIndexWithDuplicateRows_IsDataBlockedBeforeDdl()
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
@@ -295,6 +328,7 @@ public sealed class SqliteSafeMigrationIndexesAndCatalogIntegrationTests : Sqlit
             ["code"],
             unique: true);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -303,21 +337,28 @@ public sealed class SqliteSafeMigrationIndexesAndCatalogIntegrationTests : Sqlit
                 new SafeMigrationRunOptions("sqlite-unique-index-duplicate"),
                 cancellationToken: CancellationToken.None);
 
+        var observedScalar1 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM main.sqlite_schema "
+            + "WHERE type = 'index' AND name = 'ux_duplicate_index_values_code';",
+            cancellationToken: CancellationToken.None);
+
+        // Assert
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal(SafeMigrationObservedState.DataBlocked, assessment.ObservedState);
         Assert.Equal("unique_index_duplicate_values", assessment.AnalysisCode);
         Assert.Equal(
             0,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM main.sqlite_schema "
-                + "WHERE type = 'index' AND name = 'ux_duplicate_index_values_code';",
-                cancellationToken: CancellationToken.None));
+            observedScalar1);
     }
 
+    /// <summary>
+    /// Unique index duplicate probe uses requested key collation.
+    /// </summary>
     [Fact]
     public async Task UniqueIndexDuplicateProbe_UsesRequestedKeyCollation()
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
@@ -342,6 +383,7 @@ public sealed class SqliteSafeMigrationIndexesAndCatalogIntegrationTests : Sqlit
                 unique: true),
             SafeMigrationPolicy.ThrowIfDifferent);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -350,21 +392,28 @@ public sealed class SqliteSafeMigrationIndexesAndCatalogIntegrationTests : Sqlit
                 new SafeMigrationRunOptions("sqlite-unique-index-collation"),
                 cancellationToken: CancellationToken.None);
 
+        var observedScalar1 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM main.sqlite_schema "
+            + "WHERE type = 'index' AND name = 'ux_duplicate_collation_values_code';",
+            cancellationToken: CancellationToken.None);
+
+        // Assert
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal(SafeMigrationObservedState.DataBlocked, assessment.ObservedState);
         Assert.Equal("unique_index_duplicate_values", assessment.AnalysisCode);
         Assert.Equal(
             0,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM main.sqlite_schema "
-                + "WHERE type = 'index' AND name = 'ux_duplicate_collation_values_code';",
-                cancellationToken: CancellationToken.None));
+            observedScalar1);
     }
 
+    /// <summary>
+    /// Unique expression index with semantic duplicates is data blocked before DDL.
+    /// </summary>
     [Fact]
     public async Task UniqueExpressionIndexWithSemanticDuplicates_IsDataBlockedBeforeDdl()
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
@@ -390,6 +439,7 @@ public sealed class SqliteSafeMigrationIndexesAndCatalogIntegrationTests : Sqlit
                 unique: true),
             SafeMigrationPolicy.ThrowIfDifferent);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -398,21 +448,28 @@ public sealed class SqliteSafeMigrationIndexesAndCatalogIntegrationTests : Sqlit
                 new SafeMigrationRunOptions("sqlite-unique-expression-index-duplicate"),
                 cancellationToken: CancellationToken.None);
 
+        var observedScalar1 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM main.sqlite_schema "
+            + "WHERE type = 'index' AND name = 'ux_duplicate_expression_values_code';",
+            cancellationToken: CancellationToken.None);
+
+        // Assert
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal(SafeMigrationObservedState.DataBlocked, assessment.ObservedState);
         Assert.Equal("unique_index_duplicate_values", assessment.AnalysisCode);
         Assert.Equal(
             0,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM main.sqlite_schema "
-                + "WHERE type = 'index' AND name = 'ux_duplicate_expression_values_code';",
-                cancellationToken: CancellationToken.None));
+            observedScalar1);
     }
 
+    /// <summary>
+    /// Unique expression index with distinct values applies and replays.
+    /// </summary>
     [Fact]
     public async Task UniqueExpressionIndexWithDistinctValues_AppliesAndReplays()
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
@@ -438,21 +495,29 @@ public sealed class SqliteSafeMigrationIndexesAndCatalogIntegrationTests : Sqlit
                 unique: true),
             SafeMigrationPolicy.ThrowIfDifferent);
 
+        // Act
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
 
+        var observedScalar1 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM main.sqlite_schema "
+            + "WHERE type = 'index' AND name = 'ux_distinct_expression_values_code';",
+            cancellationToken: CancellationToken.None);
+
+        // Assert
         Assert.Equal(
             1,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM main.sqlite_schema "
-                + "WHERE type = 'index' AND name = 'ux_distinct_expression_values_code';",
-                cancellationToken: CancellationToken.None));
+            observedScalar1);
     }
 
+    /// <summary>
+    /// Unsupported index provider options are rejected before DDL.
+    /// </summary>
     [Fact]
     public async Task UnsupportedIndexProviderOptions_AreRejectedBeforeDdl()
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
@@ -468,6 +533,7 @@ public sealed class SqliteSafeMigrationIndexesAndCatalogIntegrationTests : Sqlit
                 [new ExpectedIndexKeyDefinition(column: "code", prefixLength: 12)]),
             SafeMigrationPolicy.ThrowIfDifferent);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -476,15 +542,20 @@ public sealed class SqliteSafeMigrationIndexesAndCatalogIntegrationTests : Sqlit
                 new SafeMigrationRunOptions("sqlite-index-provider-option"),
                 cancellationToken: CancellationToken.None);
 
+        // Assert
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal(SafeMigrationObservedState.Unsupported, assessment.ObservedState);
         Assert.Equal("index_key_provider_option", assessment.AnalysisCode);
         Assert.Equal(SafeMigrationAction.RejectUnsupported, assessment.Action);
     }
 
+    /// <summary>
+    /// Expression index lifecycle applies matches and renames without definition loss.
+    /// </summary>
     [Fact]
     public async Task ExpressionIndexLifecycle_AppliesMatchesAndRenamesWithoutDefinitionLoss()
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
@@ -506,6 +577,7 @@ public sealed class SqliteSafeMigrationIndexesAndCatalogIntegrationTests : Sqlit
                 structuredFilter: SafeMigrationSql.IsNotNull(SafeMigrationSql.Identifier("value"))),
             SafeMigrationPolicy.ThrowIfDifferent);
 
+        // Act
         await ExecuteOperationsAsync(context, create.Operations, cancellationToken: CancellationToken.None);
         await ExecuteOperationsAsync(context, create.Operations, cancellationToken: CancellationToken.None);
 
@@ -518,30 +590,39 @@ public sealed class SqliteSafeMigrationIndexesAndCatalogIntegrationTests : Sqlit
         await ExecuteOperationsAsync(context, rename.Operations, cancellationToken: CancellationToken.None);
         await ExecuteOperationsAsync(context, rename.Operations, cancellationToken: CancellationToken.None);
 
+        var observedScalar1 = await ScalarIntAsync(
+            connection,
+            """
+            SELECT COUNT(*) FROM main.sqlite_schema
+            WHERE type = 'index' AND name = 'ix_expression_items_normalized_v2'
+            AND lower(sql) LIKE '%lower(%value%)%'
+            AND lower(sql) LIKE '%where%value%is not null%';
+            """,
+            cancellationToken: CancellationToken.None);
+
+        var observedScalar2 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM main.sqlite_schema "
+            + "WHERE type = 'index' AND name = 'ix_expression_items_normalized';",
+            cancellationToken: CancellationToken.None);
+
+        // Assert
         Assert.Equal(
             1,
-            await ScalarIntAsync(
-                connection,
-                """
-                SELECT COUNT(*) FROM main.sqlite_schema
-                WHERE type = 'index' AND name = 'ix_expression_items_normalized_v2'
-                AND lower(sql) LIKE '%lower(%value%)%'
-                AND lower(sql) LIKE '%where%value%is not null%';
-                """,
-                cancellationToken: CancellationToken.None));
+            observedScalar1);
 
         Assert.Equal(
             0,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM main.sqlite_schema "
-                + "WHERE type = 'index' AND name = 'ix_expression_items_normalized';",
-                cancellationToken: CancellationToken.None));
+            observedScalar2);
     }
 
+    /// <summary>
+    /// Constraint names are matched by definition instead of pragma order.
+    /// </summary>
     [Fact]
     public async Task ConstraintNames_AreMatchedByDefinitionInsteadOfPragmaOrder()
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
@@ -585,6 +666,7 @@ public sealed class SqliteSafeMigrationIndexesAndCatalogIntegrationTests : Sqlit
             "constraint_parents",
             ["id"]);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -593,6 +675,7 @@ public sealed class SqliteSafeMigrationIndexesAndCatalogIntegrationTests : Sqlit
                 new SafeMigrationRunOptions("sqlite-constraint-names"),
                 cancellationToken: CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
         Assert.All(
             report.Assessments,
@@ -603,9 +686,13 @@ public sealed class SqliteSafeMigrationIndexesAndCatalogIntegrationTests : Sqlit
             });
     }
 
+    /// <summary>
+    /// Rebuild with unmanaged artifacts is rejected fail closed.
+    /// </summary>
     [Fact]
     public async Task RebuildWithUnmanagedArtifacts_IsRejectedFailClosed()
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
@@ -626,6 +713,7 @@ public sealed class SqliteSafeMigrationIndexesAndCatalogIntegrationTests : Sqlit
             new ExpectedColumnDefinition("value", typeof(string), isNullable: true, storeType: "TEXT"),
             SafeMigrationPolicy.RepairIfSafe);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -634,15 +722,20 @@ public sealed class SqliteSafeMigrationIndexesAndCatalogIntegrationTests : Sqlit
                 new SafeMigrationRunOptions("sqlite-rebuild-artifacts"),
                 cancellationToken: CancellationToken.None);
 
+        // Assert
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal(SafeMigrationObservedState.Unsupported, assessment.ObservedState);
         Assert.Equal("table_rebuild_trigger", assessment.AnalysisCode);
         Assert.Equal(SafeMigrationAction.RejectUnsupported, assessment.Action);
     }
 
+    /// <summary>
+    /// Constraint rebuild batch preflights every change and preserves rows.
+    /// </summary>
     [Fact]
     public async Task ConstraintRebuildBatch_PreflightsEveryChangeAndPreservesRows()
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
@@ -668,6 +761,7 @@ public sealed class SqliteSafeMigrationIndexesAndCatalogIntegrationTests : Sqlit
 
         var runner = context.GetService<ISafeMigrationRunner>();
 
+        // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
@@ -683,36 +777,47 @@ public sealed class SqliteSafeMigrationIndexesAndCatalogIntegrationTests : Sqlit
             new SafeMigrationRunOptions("sqlite-rebuild-batch-replay"),
             cancellationToken: CancellationToken.None);
 
+        var observedScalar1 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM rebuild_entities WHERE Id = 1 AND Code = 'existing';",
+            cancellationToken: CancellationToken.None);
+
+        var observedScalar2 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM pragma_index_list('rebuild_entities') WHERE origin = 'u';",
+            cancellationToken: CancellationToken.None);
+
+        var observedScalar3 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM sqlite_schema WHERE name = 'rebuild_entities' "
+            + "AND lower(sql) LIKE '%check%length(%code%) > 0%';",
+            cancellationToken: CancellationToken.None);
+
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
         Assert.All(preflight.Assessments, assessment => Assert.Equal(SafeMigrationAction.Apply, assessment.Action));
         Assert.Equal(SafeMigrationReportStatus.Ready, replay.Status);
         Assert.All(replay.Assessments, assessment => Assert.Equal(SafeMigrationAction.NoOp, assessment.Action));
         Assert.Equal(
             1,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM rebuild_entities WHERE Id = 1 AND Code = 'existing';",
-                cancellationToken: CancellationToken.None));
+            observedScalar1);
 
         Assert.Equal(
             1,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM pragma_index_list('rebuild_entities') WHERE origin = 'u';",
-                cancellationToken: CancellationToken.None));
+            observedScalar2);
 
         Assert.Equal(
             1,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM sqlite_schema WHERE name = 'rebuild_entities' "
-                + "AND lower(sql) LIKE '%check%length(%code%) > 0%';",
-                cancellationToken: CancellationToken.None));
+            observedScalar3);
     }
 
+    /// <summary>
+    /// Rebuild with unmanaged column is rejected before any constraint mutation.
+    /// </summary>
     [Fact]
     public async Task RebuildWithUnmanagedColumn_IsRejectedBeforeAnyConstraintMutation()
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
@@ -729,6 +834,7 @@ public sealed class SqliteSafeMigrationIndexesAndCatalogIntegrationTests : Sqlit
             "rebuild_entities",
             "length(\"Code\") > 0");
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -737,21 +843,28 @@ public sealed class SqliteSafeMigrationIndexesAndCatalogIntegrationTests : Sqlit
                 new SafeMigrationRunOptions("sqlite-rebuild-unmanaged-column"),
                 cancellationToken: CancellationToken.None);
 
+        var observedScalar1 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM pragma_table_xinfo('rebuild_entities') WHERE name = 'Legacy';",
+            cancellationToken: CancellationToken.None);
+
+        // Assert
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationObservedState.Unsupported, assessment.ObservedState);
         Assert.Equal("table_rebuild_unmanaged_column", assessment.AnalysisCode);
         Assert.Equal(
             1,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM pragma_table_xinfo('rebuild_entities') WHERE name = 'Legacy';",
-                cancellationToken: CancellationToken.None));
+            observedScalar1);
     }
 
+    /// <summary>
+    /// Rebuild batch with later data block does not apply earlier constraint.
+    /// </summary>
     [Fact]
     public async Task RebuildBatch_WithLaterDataBlockDoesNotApplyEarlierConstraint()
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
@@ -777,6 +890,7 @@ public sealed class SqliteSafeMigrationIndexesAndCatalogIntegrationTests : Sqlit
 
         var runner = context.GetService<ISafeMigrationRunner>();
 
+        // Act
         var report = await runner.AnalyzeAsync(
             context,
             builder.Operations,
@@ -786,27 +900,36 @@ public sealed class SqliteSafeMigrationIndexesAndCatalogIntegrationTests : Sqlit
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None));
 
+        var observedScalar1 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM pragma_index_list('rebuild_entities') WHERE origin = 'u';",
+            cancellationToken: CancellationToken.None);
+
+        var observedScalar2 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM rebuild_entities WHERE Id = 1 AND Code = '';",
+            cancellationToken: CancellationToken.None);
+
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationObservedState.DataBlocked, report.Assessments[1].ObservedState);
         Assert.Contains("check_constraint_violated", exception.Message, StringComparison.Ordinal);
         Assert.Equal(
             0,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM pragma_index_list('rebuild_entities') WHERE origin = 'u';",
-                cancellationToken: CancellationToken.None));
+            observedScalar1);
 
         Assert.Equal(
             1,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM rebuild_entities WHERE Id = 1 AND Code = '';",
-                cancellationToken: CancellationToken.None));
+            observedScalar2);
     }
 
+    /// <summary>
+    /// Strict table rebuild is rejected.
+    /// </summary>
     [Fact]
     public async Task StrictTableRebuild_IsRejected()
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
@@ -817,6 +940,7 @@ public sealed class SqliteSafeMigrationIndexesAndCatalogIntegrationTests : Sqlit
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropColumnIfExists("value", "strict_items");
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -825,14 +949,19 @@ public sealed class SqliteSafeMigrationIndexesAndCatalogIntegrationTests : Sqlit
                 new SafeMigrationRunOptions("sqlite-table-options"),
                 cancellationToken: CancellationToken.None);
 
+        // Assert
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal(SafeMigrationObservedState.Unsupported, assessment.ObservedState);
         Assert.Equal("strict_table_rebuild", assessment.AnalysisCode);
     }
 
+    /// <summary>
+    /// Without row id table rebuild is rejected.
+    /// </summary>
     [Fact]
     public async Task WithoutRowIdTableRebuild_IsRejected()
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
@@ -843,6 +972,7 @@ public sealed class SqliteSafeMigrationIndexesAndCatalogIntegrationTests : Sqlit
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropColumnIfExists("value", "without_rowid_items");
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -851,14 +981,19 @@ public sealed class SqliteSafeMigrationIndexesAndCatalogIntegrationTests : Sqlit
                 new SafeMigrationRunOptions("sqlite-without-rowid"),
                 cancellationToken: CancellationToken.None);
 
+        // Assert
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal(SafeMigrationObservedState.Unsupported, assessment.ObservedState);
         Assert.Equal("without_rowid_table_rebuild", assessment.AnalysisCode);
     }
 
+    /// <summary>
+    /// Rebuild with dependent view is rejected.
+    /// </summary>
     [Fact]
     public async Task RebuildWithDependentView_IsRejected()
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
@@ -877,6 +1012,7 @@ public sealed class SqliteSafeMigrationIndexesAndCatalogIntegrationTests : Sqlit
             "rebuild_entities",
             "length(\"Code\") > 0");
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -885,20 +1021,27 @@ public sealed class SqliteSafeMigrationIndexesAndCatalogIntegrationTests : Sqlit
                 new SafeMigrationRunOptions("sqlite-view-rebuild"),
                 cancellationToken: CancellationToken.None);
 
+        var observedScalar1 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM sqlite_schema WHERE type = 'view' AND name = 'rebuild_entities_view';",
+            cancellationToken: CancellationToken.None);
+
+        // Assert
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal(SafeMigrationObservedState.Unsupported, assessment.ObservedState);
         Assert.Equal("table_rebuild_view", assessment.AnalysisCode);
         Assert.Equal(
             1,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM sqlite_schema WHERE type = 'view' AND name = 'rebuild_entities_view';",
-                cancellationToken: CancellationToken.None));
+            observedScalar1);
     }
 
+    /// <summary>
+    /// Rebuild without target model table is rejected.
+    /// </summary>
     [Fact]
     public async Task RebuildWithoutTargetModelTable_IsRejected()
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
@@ -909,6 +1052,7 @@ public sealed class SqliteSafeMigrationIndexesAndCatalogIntegrationTests : Sqlit
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropColumnIfExists("value", "unmodeled_items");
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -917,6 +1061,7 @@ public sealed class SqliteSafeMigrationIndexesAndCatalogIntegrationTests : Sqlit
                 new SafeMigrationRunOptions("sqlite-model-missing"),
                 cancellationToken: CancellationToken.None);
 
+        // Assert
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal(SafeMigrationObservedState.Unsupported, assessment.ObservedState);
         Assert.Equal("table_rebuild_model_missing", assessment.AnalysisCode);

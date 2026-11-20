@@ -2,6 +2,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Benchmarks;
 
 /// <summary>Measures exact event-aware topology shapes independently of native server or network latency.</summary>
 [MemoryDiagnoser]
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public class SqlServerMaintenanceAttribution
 {
     private bool _expected;
@@ -25,8 +26,9 @@ public class SqlServerMaintenanceAttribution
     public string Shape { get; set; } = "chain";
 
     /// <summary>Constructs immutable graph snapshots and verifies all topology oracles before timing.</summary>
+    /// <returns>The setup and optional asynchronous structural evidence persistence.</returns>
     [GlobalSetup]
-    public void Setup()
+    public async Task Setup()
     {
         _graph = Create(EdgeCount, Action, Delete, Shape);
         _expected = Shape is "chain" or "star";
@@ -36,9 +38,15 @@ public class SqlServerMaintenanceAttribution
         [
             _graph
                 .Take(EdgeCount - 2)
+
+                // WHY: Retain fluent materialization and the resulting snapshot ownership.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray(),
             _graph, _graph
                 .Take(EdgeCount - 2)
+
+                // WHY: Retain fluent materialization and the resulting snapshot ownership.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray(),
             _graph,
         ];
@@ -65,7 +73,7 @@ public class SqlServerMaintenanceAttribution
             var name = $"sqlserver-topology-{count}-{Action}-{eventName}-{Shape}.json";
 
             // WHY: Structural acceptance evidence remains source-labeled and separate from BDN measurements.
-            _ = MaintenanceAttribution.Write(
+            await MaintenanceAttribution.WriteAsync(
                 Path.Combine(output, name),
                 "SQL Server client topology only",
                 [
@@ -80,9 +88,13 @@ public class SqlServerMaintenanceAttribution
                         Expected = _expected,
                         MutationResults = _prefixes
                             .Select(SqlServerProjectedDependencyGraph.HasValidTopology)
+
+                            // WHY: Retain fluent materialization and the resulting snapshot ownership.
+                            // ReSharper disable once UseCollectionExpression
                             .ToArray(),
                     },
-                ]);
+                ],
+                CancellationToken.None);
         }
     }
 

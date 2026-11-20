@@ -3,16 +3,14 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer;
 internal sealed class SqlServerSafeMigrationsOptionsExtension
     : IDbContextOptionsExtension, ISafeMigrationScaffoldingOptions
 {
-    private DbContextOptionsExtensionInfo? _info;
-
     /// <summary>Gets the ordinary EF generator preserved beneath guarded SQL generation.</summary>
-    public Type BaselineGeneratorType { get; private init; } = typeof(SqlServerMigrationsSqlGenerator);
+    private Type BaselineGeneratorType { get; init; } = typeof(SqlServerMigrationsSqlGenerator);
 
     /// <summary>Gets the canonical context used to validate the migration model, when explicitly configured.</summary>
-    public Type? CanonicalContextType { get; private init; }
+    private Type? CanonicalContextType { get; init; }
 
     /// <inheritdoc />
-    public DbContextOptionsExtensionInfo Info => _info ??= new ExtensionInfo(this);
+    public DbContextOptionsExtensionInfo Info => field ??= new ExtensionInfo(this);
 
     /// <inheritdoc />
     public void ApplyServices(
@@ -27,10 +25,10 @@ internal sealed class SqlServerSafeMigrationsOptionsExtension
         ArgumentNullException.ThrowIfNull(options);
 
         var sqlServerAssembly = typeof(SqlServerDbContextOptionsExtensions).Assembly;
-        if (!options.Extensions.Any(extension => extension.Info.IsDatabaseProvider
-            && extension.GetType()
+        if (options.Extensions.All(extension => !extension.Info.IsDatabaseProvider
+            || extension.GetType()
                 .Assembly
-            == sqlServerAssembly))
+            != sqlServerAssembly))
         {
             throw new InvalidOperationException("SQL Server safe migrations require the EF Core SQL Server provider.");
         }

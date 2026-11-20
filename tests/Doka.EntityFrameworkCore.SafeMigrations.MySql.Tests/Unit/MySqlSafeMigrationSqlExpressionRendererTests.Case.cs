@@ -12,13 +12,16 @@ public sealed partial class MySqlSafeMigrationSqlExpressionRendererTests
         string sql
     )
     {
+        // Arrange
         using var context = CreateContext();
         var renderer = CreateRenderer(context);
         Assert.True(SafeMigrationSqlExpressionParser.TryParseCapturedSource(sql, out var expression));
 
+        // Act
         var ordinary = renderer.Render(expression);
         var defaultSql = renderer.RenderDefault(expression);
 
+        // Assert
         Assert.Equal(sql, ordinary);
         Assert.Equal(sql, defaultSql);
     }
@@ -54,6 +57,7 @@ public sealed partial class MySqlSafeMigrationSqlExpressionRendererTests
     [Fact]
     public void CaseRenderingRetainsBranchRolesInOrdinaryAndDefaultModes()
     {
+        // Arrange
         using var context = CreateContext();
         var renderer = CreateRenderer(context);
         var expression = SafeMigrationSql.Case(
@@ -63,14 +67,18 @@ public sealed partial class MySqlSafeMigrationSqlExpressionRendererTests
                 SafeMigrationSql.Literal("a\\b")),
         ]);
 
+        // Act
         var ordinary = renderer.Render(expression);
         var defaultSql = renderer.RenderDefault(expression);
 
+        var unsupportedFeature = renderer.GetUnsupportedFeature(expression);
+
+        // Assert
         Assert.StartsWith("CASE WHEN (`value` IS NULL) THEN ", ordinary, StringComparison.Ordinal);
         Assert.EndsWith(" END", ordinary, StringComparison.Ordinal);
         Assert.DoesNotContain(" ELSE ", ordinary, StringComparison.Ordinal);
         Assert.Equal("CASE WHEN (`value` IS NULL) THEN convert(0x615c62 using utf8mb4) END", defaultSql);
-        Assert.Null(renderer.GetUnsupportedFeature(expression));
+        Assert.Null(unsupportedFeature);
     }
 
     /// <summary>Unsupported nested leaves remain visible in every CASE role.</summary>
@@ -83,6 +91,7 @@ public sealed partial class MySqlSafeMigrationSqlExpressionRendererTests
         int role
     )
     {
+        // Arrange
         using var context = CreateContext();
         var renderer = CreateRenderer(context);
         var unsupported = SafeMigrationSql.ProviderFragment("foreign", "x");
@@ -100,8 +109,10 @@ public sealed partial class MySqlSafeMigrationSqlExpressionRendererTests
                 ? unsupported
                 : SafeMigrationSql.Literal(0));
 
+        // Act
         var feature = renderer.GetUnsupportedFeature(expression);
 
+        // Assert
         Assert.Equal("provider_fragment_mismatch", feature);
     }
 }

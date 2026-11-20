@@ -1,15 +1,15 @@
 ---
 id: D-003
 status: implemented
-date: 2026-08-26
-decision-makers: [Dominic Kalkbrenner]
+date: 2026-11-19
+decision-makers: ["Dominic Kalkbrenner"]
 consulted: []
 informed: ["@doka-labs/core-maintainers"]
 scope: "EF provider extension boundaries and exact ownership of safe operations"
 supersedes: []
 superseded-by: []
 amends: []
-amended-by: []
+amended-by: [D-013]
 madr-version: "4.0.0"
 doka-profile-version: "1.0"
 ---
@@ -103,7 +103,7 @@ Its first release requires independent x64 Linux qualification on all three
 declared SQL Server majors; local ARM64 test skips are not qualification.
 
 The current MySQL/MariaDB adapter consumes Doka through the bounded
-`[10.6.5,10.7.0)` NuGet dependency range. Doka 10.3.0 introduced typed
+`[10.7.0,10.8.0)` NuGet dependency range. Doka 10.3.0 introduced typed
 read-only migration metadata for Guid storage, value generation, and index
 prefixes. Doka 10.4.0 adds an explicit commandless consumed result, which the
 internal design-time-services guard uses without emitting synthetic SQL.
@@ -114,8 +114,8 @@ while development overlaps, but it cannot satisfy the release gate.
 
 The upper bound is the next Doka minor rather than the next major because the
 operation-handler SPI is both a binary and behavioral dependency. Patch
-releases within the reviewed 10.6 line remain consumable without creating a
-diamond conflict through an exact transitive pin. A Doka 10.7 or later line
+releases within the reviewed 10.7 line remain consumable without creating a
+diamond conflict through an exact transitive pin. A Doka 10.8 or later line
 requires a reviewed range change and fresh SafeMigrations qualification.
 
 Doka 10.5.0 adds opt-in native MariaDB `uuid` without changing its default
@@ -208,6 +208,12 @@ SQL. Provider catalog decompilation is version-sensitive, particularly for
 PostgreSQL expressions. An unrecognized form must remain unproven rather than
 being accepted through broad string normalization.
 
+### 2026-09-22 Compatibility Amendment
+
+Provider rendering remains authoritative for every ordinary EF operation. Core
+guards only its own safe operations; scaffolding prevents unmodellable source
+where it is created instead of rejecting published migrations later.
+
 ### Re-evaluation Triggers
 
 - A provider changes exact dispatch, baseline rendering, command fragments,
@@ -295,12 +301,15 @@ being accepted through broad string normalization.
   published maintenance package. NuGet repository metadata identifies source
   commit `10a1f19c63633881f99b8a81b12a5a82fc5fb7f7`. Retain the same dependency
   ranges, public migration SPI, transport floors and historical migrations.
-
-### 2026-09-22 Compatibility Amendment
-
-Provider rendering remains authoritative for every ordinary EF operation. Core
-guards only its own safe operations; scaffolding prevents unmodellable source
-where it is created instead of rejecting published migrations later.
+- 2026-11-19: Aligned last-update metadata, reciprocal amendments, option titles
+  and source/navigation format with the current documentation profile. Retained
+  the recorded status and historical approval evidence; this migration grants no
+  new architectural acceptance or publication authority.
+- 2026-11-19: Advance the Doka floor to `[10.7.0,10.8.0)` using the public
+  .NET/EF Core 10 package. NuGet repository metadata identifies source commit
+  `0bafbb1d3a0facd6ab67e26e98e83477f69ee1b7`. Preserve the migration SPI,
+  explicit connector floor, provider isolation and application-owned opt-in
+  configuration; retain next-minor exclusion and strict release qualification.
 
 ### Implementation References
 
@@ -332,50 +341,47 @@ where it is created instead of rejecting published migrations later.
 
 ### Sources
 
+- [Doka 10.7.0 package metadata](https://api.nuget.org/v3-flatcontainer/doka.entityframeworkcore.mysql/10.7.0/doka.entityframeworkcore.mysql.nuspec) (primary source; retrieved 2026-11-19)
+
 - [Doka 10.0.0 migration-operation handler contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.0.0/docs/migration-operation-handlers.md) (primary source; retrieved 2026-08-26)
 - [Doka 10.1.0 migration-operation handler contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.1.0/docs/migration-operation-handlers.md) (primary source; retrieved 2026-08-28)
-- [Doka.EntityFrameworkCore.MySql 10.1.0 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.1.0) (primary package metadata; retrieved 2026-08-28)
+- [Doka.EntityFrameworkCore.MySql 10.1.0 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.1.0) (primary source; retrieved 2026-08-28)
 - [Doka 10.1.1 migration-operation handler contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.1.1/docs/migration-operation-handlers.md) (primary source; retrieved 2026-08-29)
-- [Doka.EntityFrameworkCore.MySql 10.1.1 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.1.1) (primary package metadata; retrieved 2026-08-29)
+- [Doka.EntityFrameworkCore.MySql 10.1.1 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.1.1) (primary source; retrieved 2026-08-29)
 - [Doka 10.1.2 migration-operation handler contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.1.2/docs/migration-operation-handlers.md) (primary source; retrieved 2026-08-30)
 - [Doka 10.1.2 release notes](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.1.2/CHANGELOG.md) (primary source; retrieved 2026-08-30)
-- [Doka.EntityFrameworkCore.MySql 10.1.2 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.1.2) (primary package metadata; retrieved 2026-08-30)
+- [Doka.EntityFrameworkCore.MySql 10.1.2 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.1.2) (primary source; retrieved 2026-08-30)
 - [Doka 10.2.0 migration-operation handler contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.2.0/docs/migration-operation-handlers.md) (primary source; retrieved 2026-08-31)
 - [Doka 10.2.0 provider configuration](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.2.0/docs/provider-configuration.md) (primary source; retrieved 2026-08-31)
 - [Doka D-029 ownership-aware connection invariants](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.2.0/docs/decisions/D-029-ownership-aware-connection-invariants.md) (primary source; retrieved 2026-08-31)
-- [Doka.EntityFrameworkCore.MySql 10.2.0 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.2.0) (primary package metadata; retrieved 2026-08-31)
-- [Doka.EntityFrameworkCore.MySql 10.3.0 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.3.0) (primary package metadata; retrieved 2026-09-01)
-- [Doka 10.3.0 signed release](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/releases/tag/v10.3.0) (primary release identity; retrieved 2026-09-01)
+- [Doka.EntityFrameworkCore.MySql 10.2.0 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.2.0) (primary source; retrieved 2026-08-31)
+- [Doka.EntityFrameworkCore.MySql 10.3.0 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.3.0) (primary source; retrieved 2026-09-01)
+- [Doka 10.3.0 signed release](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/releases/tag/v10.3.0) (primary source; retrieved 2026-09-01)
 - [Doka 10.3.0 migration-operation metadata](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.3.0/src/Doka.EntityFrameworkCore.MySql/Migrations/MySqlMigrationOperationMetadata.cs) (primary source; retrieved 2026-09-01)
-- [Doka.EntityFrameworkCore.MySql 10.4.0 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.4.0) (primary package metadata; retrieved 2026-09-10)
-- [Doka 10.4.0 signed release](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/releases/tag/v10.4.0) (primary release identity; retrieved 2026-09-10)
+- [Doka.EntityFrameworkCore.MySql 10.4.0 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.4.0) (primary source; retrieved 2026-09-10)
+- [Doka 10.4.0 signed release](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/releases/tag/v10.4.0) (primary source; retrieved 2026-09-10)
 - [Doka 10.4.0 migration-operation handler contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.4.0/docs/migration-operation-handlers.md) (primary source; retrieved 2026-09-10)
-- [Doka.EntityFrameworkCore.MySql 10.4.1 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.4.1) (primary package metadata; retrieved 2026-09-21)
-- [Doka 10.4.1 signed release](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/releases/tag/v10.4.1) (primary release identity; retrieved 2026-09-21)
-- [Doka.EntityFrameworkCore.MySql 10.4.2 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.4.2) (primary package metadata; retrieved 2026-09-21)
-- [Doka 10.4.2 signed release](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/releases/tag/v10.4.2) (primary release identity; retrieved 2026-09-21)
-- [Doka 10.5.0 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.5.0),
-  [verified signed release](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/releases/tag/v10.5.0),
-  and [typed UUID contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/27a8d3cce3ce2bc64f6efd1e9034b1cd66eb1ff0/src/Doka.EntityFrameworkCore.MySql/Migrations/MySqlMigrationOperationMetadata.cs)
-  (primary sources; retrieved 2026-10-15)
+- [Doka.EntityFrameworkCore.MySql 10.4.1 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.4.1) (primary source; retrieved 2026-09-21)
+- [Doka 10.4.1 signed release](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/releases/tag/v10.4.1) (primary source; retrieved 2026-09-21)
+- [Doka.EntityFrameworkCore.MySql 10.4.2 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.4.2) (primary source; retrieved 2026-09-21)
+- [Doka 10.4.2 signed release](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/releases/tag/v10.4.2) (primary source; retrieved 2026-09-21)
+- [Doka 10.5.0 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.5.0) (primary source; retrieved 2026-10-15)
+- [verified signed release](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/releases/tag/v10.5.0) (primary source; retrieved 2026-10-15)
+- [typed UUID contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/27a8d3cce3ce2bc64f6efd1e9034b1cd66eb1ff0/src/Doka.EntityFrameworkCore.MySql/Migrations/MySqlMigrationOperationMetadata.cs) (primary source; retrieved 2026-10-15)
 - [Npgsql EF Core provider and configuration](https://www.npgsql.org/efcore/) (primary source; retrieved 2026-08-26)
-- [Doka 10.6.0 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.6.0),
-  [NuGet catalog provenance](https://api.nuget.org/v3/catalog0/data/2026.10.20.06.45.24/doka.entityframeworkcore.mysql.10.6.0.json),
-  [verified signed release](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/releases/tag/v10.6.0),
-  and [physical index-budget contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/d1e40a7b211c10b354e5aa6df80d9fea710d8f58/docs/provider-configuration.md#index-key-byte-fidelity)
-  (primary sources; retrieved 2026-10-20)
-- [Doka 10.6.1 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.6.1),
-  [NuGet catalog provenance](https://api.nuget.org/v3/catalog0/data/2026.10.22.06.05.55/doka.entityframeworkcore.mysql.10.6.1.json),
-  [verified signed release](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/releases/tag/v10.6.1),
-  and [GUID SQL-default contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/53c8fbd7ae8987b5c376250fe4d6296d729669cf/docs/operations/migrations.md#guid-sql-defaults)
-  (primary sources; retrieved 2026-10-22)
-- [Doka 10.6.2 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.6.2),
-  [NuGet catalog provenance](https://api.nuget.org/v3/catalog0/data/2026.10.25.00.38.58/doka.entityframeworkcore.mysql.10.6.2.json),
-  [verified signed release](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/releases/tag/v10.6.2),
-  and [GUID SQL-default contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/6e2618140d821bd6befdf46181fcb82dca323c4f/docs/operations/migrations.md#guid-sql-defaults)
-  (primary sources; retrieved 2026-10-25)
-- [Doka 10.6.3 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.6.3),
-  [NuGet catalog provenance](https://api.nuget.org/v3/catalog0/data/2026.10.29.13.59.01/doka.entityframeworkcore.mysql.10.6.3.json),
-  [verified signed release](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/releases/tag/v10.6.3),
-  and [connector security upgrade](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/0372df8dd0c77b6f04e72fa94adae837e4deba7a/docs/security/dependency-audits.md#mysqlconnector-security-floor)
-  (primary sources; retrieved 2026-10-29)
+- [Doka 10.6.0 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.6.0) (primary source; retrieved 2026-10-20)
+- [NuGet catalog provenance](https://api.nuget.org/v3/catalog0/data/2026.10.20.06.45.24/doka.entityframeworkcore.mysql.10.6.0.json) (primary source; retrieved 2026-10-20)
+- [verified signed release](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/releases/tag/v10.6.0) (primary source; retrieved 2026-10-20)
+- [physical index-budget contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/d1e40a7b211c10b354e5aa6df80d9fea710d8f58/docs/provider-configuration.md#index-key-byte-fidelity) (primary source; retrieved 2026-10-20)
+- [Doka 10.6.1 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.6.1) (primary source; retrieved 2026-10-22)
+- [NuGet catalog provenance](https://api.nuget.org/v3/catalog0/data/2026.10.22.06.05.55/doka.entityframeworkcore.mysql.10.6.1.json) (primary source; retrieved 2026-10-22)
+- [verified signed release](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/releases/tag/v10.6.1) (primary source; retrieved 2026-10-22)
+- [GUID SQL-default contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/53c8fbd7ae8987b5c376250fe4d6296d729669cf/docs/operations/migrations.md#guid-sql-defaults) (primary source; retrieved 2026-10-22)
+- [Doka 10.6.2 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.6.2) (primary source; retrieved 2026-10-25)
+- [NuGet catalog provenance](https://api.nuget.org/v3/catalog0/data/2026.10.25.00.38.58/doka.entityframeworkcore.mysql.10.6.2.json) (primary source; retrieved 2026-10-25)
+- [verified signed release](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/releases/tag/v10.6.2) (primary source; retrieved 2026-10-25)
+- [GUID SQL-default contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/6e2618140d821bd6befdf46181fcb82dca323c4f/docs/operations/migrations.md#guid-sql-defaults) (primary source; retrieved 2026-10-25)
+- [Doka 10.6.3 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.6.3) (primary source; retrieved 2026-10-29)
+- [NuGet catalog provenance](https://api.nuget.org/v3/catalog0/data/2026.10.29.13.59.01/doka.entityframeworkcore.mysql.10.6.3.json) (primary source; retrieved 2026-10-29)
+- [verified signed release](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/releases/tag/v10.6.3) (primary source; retrieved 2026-10-29)
+- [connector security upgrade](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/0372df8dd0c77b6f04e72fa94adae837e4deba7a/docs/security/dependency-audits.md#mysqlconnector-security-floor) (primary source; retrieved 2026-10-29)

@@ -42,33 +42,52 @@ internal sealed partial class SafeMigrationPreflightProjection
         string Name
     );
 
-    private sealed class TableKeyComparer(ISafeMigrationProviderObjectIdentityNormalizer? normalizer)
-        : IEqualityComparer<TableKey>
+    private sealed class TableKeyComparer : IEqualityComparer<TableKey>
     {
+        private readonly ISafeMigrationProviderObjectIdentityNormalizer? _normalizer;
+
+        /// <summary>Initializes physical table identity with the provider's normalization contract.</summary>
+        /// <param name="normalizer">The provider identity rules, or ordinal identity when absent.</param>
+        public TableKeyComparer(
+            ISafeMigrationProviderObjectIdentityNormalizer? normalizer
+        )
+        {
+            _normalizer = normalizer;
+        }
+
         public bool Equals(
             TableKey left,
             TableKey right
-        ) => IdentifierEquals(normalizer, left.Table, right.Table)
+        ) => IdentifierEquals(_normalizer, left.Table, right.Table)
             && StringComparer.Ordinal.Equals(Normalize(left.Schema), Normalize(right.Schema));
 
         public int GetHashCode(
             TableKey value
         ) => HashCode.Combine(
-            IdentifierHashCode(normalizer, value.Table),
+            IdentifierHashCode(_normalizer, value.Table),
             Normalize(value.Schema) is { } schema
                 ? StringComparer.Ordinal.GetHashCode(schema)
                 : 0);
 
         private string? Normalize(
             string? schema
-        ) => NormalizeSchema(normalizer, schema);
+        ) => NormalizeSchema(_normalizer, schema);
     }
 
-    private sealed class IndexKeyComparer(ISafeMigrationProviderObjectIdentityNormalizer? normalizer)
-        : IEqualityComparer<IndexKey>
+    private sealed class IndexKeyComparer : IEqualityComparer<IndexKey>
     {
-        private readonly StringComparer _nameComparer = normalizer?.IndexIdentifierComparer ?? StringComparer.Ordinal;
-        private readonly TableKeyComparer _tableComparer = new(normalizer);
+        private readonly StringComparer _nameComparer;
+        private readonly TableKeyComparer _tableComparer;
+
+        /// <summary>Initializes index identity while retaining the provider's table and member comparers.</summary>
+        /// <param name="normalizer">The provider identity rules, or ordinal identity when absent.</param>
+        public IndexKeyComparer(
+            ISafeMigrationProviderObjectIdentityNormalizer? normalizer
+        )
+        {
+            _nameComparer = normalizer?.IndexIdentifierComparer ?? StringComparer.Ordinal;
+            _tableComparer = new TableKeyComparer(normalizer);
+        }
 
         public bool Equals(
             IndexKey left,
@@ -83,13 +102,20 @@ internal sealed partial class SafeMigrationPreflightProjection
             _nameComparer.GetHashCode(value.Name));
     }
 
-    private sealed class IdentifierComparer(
-        ISafeMigrationProviderObjectIdentityNormalizer? normalizer,
-        StringComparer? memberComparer = null
-    ) : IEqualityComparer<string>
+    private sealed class IdentifierComparer : IEqualityComparer<string>
     {
-        private readonly StringComparer _comparer = memberComparer
-            ?? normalizer?.IdentifierComparer ?? StringComparer.Ordinal;
+        private readonly StringComparer _comparer;
+
+        /// <summary>Initializes member identity with the most specific available provider comparer.</summary>
+        /// <param name="normalizer">The provider identity rules, or ordinal identity when absent.</param>
+        /// <param name="memberComparer">The optional member-specific comparer.</param>
+        public IdentifierComparer(
+            ISafeMigrationProviderObjectIdentityNormalizer? normalizer,
+            StringComparer? memberComparer = null
+        )
+        {
+            _comparer = memberComparer ?? normalizer?.IdentifierComparer ?? StringComparer.Ordinal;
+        }
 
         public bool Equals(
             string? left,

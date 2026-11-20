@@ -10,10 +10,12 @@ public sealed class PostgreSqlModelManagedDataAllocationIntegrationTests : Postg
         PostgreSqlContainerFixture fixture
     ) : base(fixture) { }
 
+    /// <summary>Model Managed Data Fifty Thousand Mixed Rows Converge And Replay Idempotently.</summary>
     [Fact]
     [Trait("Category", "LargeScale")]
     public async Task ModelManagedData_FiftyThousandMixedRowsConvergeAndReplayIdempotently()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -32,34 +34,36 @@ public sealed class PostgreSqlModelManagedDataAllocationIntegrationTests : Postg
             "character varying(32)");
 
         var runner = context.GetService<ISafeMigrationRunner>();
+
+        // Act
         var commands = context
             .GetService<IMigrationsSqlGenerator>()
             .Generate(builder.Operations, context.Model);
 
         var initial = await ModelManagedDataLargeExecutionEvidence.MeasureAsync(
-            token => runner.AnalyzeAsync(
+            callbackCancellationToken => runner.AnalyzeAsync(
                 context,
                 builder.Operations,
                 new SafeMigrationRunOptions("large-model-managed-data"),
-                token),
+                callbackCancellationToken),
             CancellationToken.None);
 
         var initialExecution = await ModelManagedDataLargeExecutionEvidence.MeasureAsync(
-            token =>
-                ExecuteOperationsAsync(context, builder.Operations, token),
+            callbackCancellationToken =>
+                ExecuteOperationsAsync(context, builder.Operations, callbackCancellationToken),
             CancellationToken.None);
 
         var replayExecution = await ModelManagedDataLargeExecutionEvidence.MeasureAsync(
-            token =>
-                ExecuteOperationsAsync(context, builder.Operations, token),
+            callbackCancellationToken =>
+                ExecuteOperationsAsync(context, builder.Operations, callbackCancellationToken),
             CancellationToken.None);
 
         var replay = await ModelManagedDataLargeExecutionEvidence.MeasureAsync(
-            token => runner.AnalyzeAsync(
+            callbackCancellationToken => runner.AnalyzeAsync(
                 context,
                 builder.Operations,
                 new SafeMigrationRunOptions("large-model-managed-data-replay"),
-                token),
+                callbackCancellationToken),
             CancellationToken.None);
 
         ModelManagedDataLargeExecutionEvidence.Write(
@@ -71,6 +75,7 @@ public sealed class PostgreSqlModelManagedDataAllocationIntegrationTests : Postg
             replayExecution,
             replay.Measurement);
 
+        // Assert
         expectation.AssertInitialReport(initial.Result);
         expectation.AssertReplayReport(replay.Result);
         Assert.Equal(

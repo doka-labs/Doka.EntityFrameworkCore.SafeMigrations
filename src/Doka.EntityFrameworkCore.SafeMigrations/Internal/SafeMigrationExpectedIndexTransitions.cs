@@ -47,8 +47,13 @@ internal static class SafeMigrationExpectedIndexTransitions
             return true;
         }
 
-        foreach (var key in definition.Keys)
+        // WHY: This immutable definition snapshot is indexed; retain its authored order without interface enumeration.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var keyIndex = 0; keyIndex < definition.Keys.Count; keyIndex++)
         {
+            var key = definition.Keys[keyIndex];
+
             if (StringComparer.Ordinal.Equals(key.Column, column)
                 || key.Expression is not null
                 || IndexExpressionMayReferenceColumn(key.StructuredExpression, column))
@@ -139,6 +144,9 @@ internal static class SafeMigrationExpectedIndexTransitions
         foreach (var key in tables
             .Keys
             .Where(key => StringComparer.Ordinal.Equals(normalizeSchema(key.Schema), normalizedSchema))
+
+            // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+            // ReSharper disable once UseCollectionExpression
             .ToArray())
         {
             tables.Remove(key);
@@ -168,6 +176,8 @@ internal static class SafeMigrationExpectedIndexTransitions
             return;
         }
 
+        // WHY: Snapshot before changing the source collection; retain the existing materialization contract.
+        // ReSharper disable once UseCollectionExpression
         foreach (var pair in indexes.ToArray())
         {
             if (HasExpressionDependency(pair.Value, intent.Name))
@@ -184,6 +194,10 @@ internal static class SafeMigrationExpectedIndexTransitions
                     .Value
                     .Keys
                     .Select(key => RenameKey(key, intent.Name, intent.NewName))
+
+                    // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based
+                    // materialization.
+                    // ReSharper disable once UseCollectionExpression
                     .ToArray(),
                 includedColumns: pair
                     .Value
@@ -191,6 +205,10 @@ internal static class SafeMigrationExpectedIndexTransitions
                     .Select(column => StringComparer.Ordinal.Equals(column, intent.Name)
                         ? intent.NewName
                         : column)
+
+                    // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based
+                    // materialization.
+                    // ReSharper disable once UseCollectionExpression
                     .ToArray());
         }
     }
@@ -292,24 +310,36 @@ internal static class SafeMigrationExpectedIndexTransitions
         string Table
     );
 
-    private sealed class TableKeyComparer(
-        Func<string?, string?> normalizeSchema,
-        StringComparer tableComparer
-    ) : IEqualityComparer<TableKey>
+    private sealed class TableKeyComparer : IEqualityComparer<TableKey>
     {
+        private readonly Func<string?, string?> _normalizeSchema;
+        private readonly StringComparer _tableComparer;
+
+        /// <summary>Initializes table identity with the caller's verified provider rules.</summary>
+        /// <param name="normalizeSchema">The schema identity normalization function.</param>
+        /// <param name="tableComparer">The physical table identifier comparer.</param>
+        public TableKeyComparer(
+            Func<string?, string?> normalizeSchema,
+            StringComparer tableComparer
+        )
+        {
+            _normalizeSchema = normalizeSchema;
+            _tableComparer = tableComparer;
+        }
+
         public bool Equals(
             TableKey left,
             TableKey right
-        ) => tableComparer.Equals(left.Table, right.Table)
+        ) => _tableComparer.Equals(left.Table, right.Table)
             && StringComparer.Ordinal.Equals(
-                normalizeSchema(left.Schema),
-                normalizeSchema(right.Schema));
+                _normalizeSchema(left.Schema),
+                _normalizeSchema(right.Schema));
 
         public int GetHashCode(
             TableKey value
         ) => HashCode.Combine(
-            tableComparer.GetHashCode(value.Table),
-            normalizeSchema(value.Schema) is { } schema
+            _tableComparer.GetHashCode(value.Table),
+            _normalizeSchema(value.Schema) is { } schema
                 ? StringComparer.Ordinal.GetHashCode(schema)
                 : 0);
     }

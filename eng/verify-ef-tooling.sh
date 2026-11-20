@@ -108,6 +108,63 @@ run_query() {
   fi
 }
 
+verify_server_identity() {
+  local query='SELECT VERSION(), @@version_comment;'
+  local observation
+  local readback_status
+  local actual_version=""
+  if [[ "${engine}" == postgres ]]; then
+    query='SELECT version();'
+  fi
+
+  # WHY: The image label and requested profile are not native server evidence.
+  # Read through the independent bounded client before exporting a provider profile.
+  if observation="$(run_query bootstrap "${query}")"; then
+    :
+  else
+    readback_status=$?
+    echo "Native tooling server identity readback failed for ${engine}." >&2
+    return "${readback_status}"
+  fi
+
+  if [[ -z "${observation}" || "${observation//$'\t'/}" =~ [[:cntrl:]] ]]; then
+    echo "Native tooling server identity is missing or malformed for ${engine}." >&2
+    return 1
+  fi
+
+  if [[ "${engine}" == postgres ]]; then
+    if [[ "${observation}" != *$'\t'*
+      && "${observation}" =~ ^PostgreSQL[[:space:]]([0-9]+\.[0-9]+)([[:space:]]|$) ]]; then
+      actual_version="${BASH_REMATCH[1]}"
+    fi
+  elif [[ "${observation}" == *$'\t'* ]]; then
+    local native_version="${observation%%$'\t'*}"
+    local description="${observation#*$'\t'}"
+    if [[ -n "${description}" && "${description}" != *$'\t'* ]]; then
+      if [[ "${engine}" == mysql && "${description}" == MySQL\ *
+        && "${native_version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        actual_version="${native_version}"
+      elif [[ "${engine}" == mariadb
+        && "${native_version}" =~ ^([0-9]+\.[0-9]+\.[0-9]+)-MariaDB(-[A-Za-z0-9.+~_-]+)?$ ]]; then
+        actual_version="${BASH_REMATCH[1]}"
+      fi
+    fi
+  fi
+
+  if [[ -z "${actual_version}" ]]; then
+    echo "Native tooling server identity is malformed or unsupported for ${engine} ${version}." >&2
+    return 1
+  fi
+
+  if [[ "${actual_version}" != "${version}" ]]; then
+    echo "Native tooling server does not match requested ${engine} ${version}: actual ${actual_version}." >&2
+    return 1
+  fi
+
+  # WHY: Version comments and build banners are untrusted; retain only the proven numeric identity.
+  printf 'Verified native tooling server for %s %s: actual %s\n' "${engine}" "${version}" "${actual_version}"
+}
+
 run_script() {
   local database="$1"
   local script="$2"
@@ -414,6 +471,7 @@ if [[ "${engine}" == "postgres" ]]; then
     docker logs "${container_name}" >&2 || true
     exit 1
   fi
+  verify_server_identity
   docker exec -e PGPASSWORD=postgrespw "${container_name}" \
     createdb -h 127.0.0.1 -p 5432 -U postgres tooling_cli
   docker exec -e PGPASSWORD=postgrespw "${container_name}" \
@@ -454,6 +512,7 @@ else
     -e "${database_variable}=bootstrap" \
     -p 0:3306 "${image}" >/dev/null
   wait_for_mysql "${admin_client}"
+  verify_server_identity
   docker exec "${container_name}" "${client}" -h127.0.0.1 -uroot -prootpw \
     -e "CREATE DATABASE tooling_cli; CREATE DATABASE tooling_bundle; CREATE DATABASE tooling_transition_strict; CREATE DATABASE tooling_transition_legacy;"
   docker exec "${container_name}" "${client}" -h127.0.0.1 -uroot -prootpw \

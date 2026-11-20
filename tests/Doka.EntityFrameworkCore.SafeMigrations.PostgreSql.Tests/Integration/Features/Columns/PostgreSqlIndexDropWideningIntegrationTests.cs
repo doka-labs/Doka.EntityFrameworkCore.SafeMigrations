@@ -781,20 +781,31 @@ public sealed class PostgreSqlIndexDropWideningIntegrationTests : PostgreSqlInte
     }
 
     /// <summary>Owns only the isolated migration history used by the real upgrade regression.</summary>
-    public sealed class IntegerUpgradeDbContext(string connectionString) : DbContext
+    public sealed class IntegerUpgradeDbContext : DbContext
     {
+        private readonly string _connectionString;
+
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        public IntegerUpgradeDbContext(
+            string connectionString
+        )
+        {
+            _connectionString = connectionString;
+        }
+
         /// <inheritdoc />
         protected override void OnConfiguring(
             DbContextOptionsBuilder optionsBuilder
         ) => optionsBuilder
             .UseNpgsql(
-                connectionString,
+                _connectionString,
                 options => options.MigrationsHistoryTable("__IntegerUpgradeHistory"))
             .UsePostgreSqlSafeMigrations<IntegerUpgradeDbContext>();
     }
 
     /// <summary>Declares the intentionally model-free schema contract of these authored fixture migrations.</summary>
     [DbContext(typeof(IntegerUpgradeDbContext))]
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed class IntegerUpgradeSnapshot : ModelSnapshot
     {
         /// <inheritdoc />
@@ -806,6 +817,7 @@ public sealed class PostgreSqlIndexDropWideningIntegrationTests : PostgreSqlInte
     /// <summary>Creates a historical Int32 owner with a removable ordinary index and boundary payload.</summary>
     [DbContext(typeof(IntegerUpgradeDbContext))]
     [Migration(MigrationId)]
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed class IntegerBaseline : Migration
     {
         /// <summary>Identifies the frozen historical fixture migration.</summary>
@@ -831,6 +843,7 @@ public sealed class PostgreSqlIndexDropWideningIntegrationTests : PostgreSqlInte
     /// <summary>Executes the owned index-drop then exact integer-widening upgrade through EF.</summary>
     [DbContext(typeof(IntegerUpgradeDbContext))]
     [Migration(MigrationId)]
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed class IntegerUpgrade : Migration
     {
         /// <summary>Identifies the pending widening fixture migration.</summary>

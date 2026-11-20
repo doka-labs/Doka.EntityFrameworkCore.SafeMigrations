@@ -2,6 +2,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 public abstract partial class MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Resets matching-path observation variables on the retained physical test session.</summary>
     protected const string RuntimeMatchingResetSql = """
         SET @runtime_matching_catalog_visits = 0, @runtime_matching_transition_visits
         = 0,

@@ -3,6 +3,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 /// <summary>Verifies operation-local NULL-proof safety against generic live MySQL and MariaDB databases.</summary>
 public abstract partial class MySqlSafeMigrationIntegrationTests
 {
+    /// <summary>Checks the operation-local null-proof variables after interrupted native execution.</summary>
     protected const string NullProofVariablesClearedSql = """
         SELECT @doka_sm_nullability_blocked IS NULL
         AND @doka_sm_data_blocked IS NULL
@@ -97,6 +98,9 @@ public sealed class MySqlColumnsNullProofIntegrationTests : MySqlSafeMigrationIn
                 builder
                     .Operations
                     .Cast<SafeMigrationOperation>()
+
+                    // WHY: Retain this explicit materialization/copy path and its collection lowering.
+                    // ReSharper disable once UseCollectionExpression
                     .ToArray(),
                 CancellationToken.None);
 
@@ -261,6 +265,9 @@ public sealed class MySqlColumnsNullProofIntegrationTests : MySqlSafeMigrationIn
                 builder
                     .Operations
                     .Cast<SafeMigrationOperation>()
+
+                    // WHY: Retain this explicit materialization/copy path and its collection lowering.
+                    // ReSharper disable once UseCollectionExpression
                     .ToArray(),
                 CancellationToken.None);
 
@@ -983,10 +990,7 @@ public sealed class MySqlColumnsNullProofIntegrationTests : MySqlSafeMigrationIn
             : "SELECT `Id` FROM `runtime_setup_lock` WHERE `Id` = 1 FOR UPDATE;";
 
         observer.InjectFirstCompactedNullabilityProbeGroup(
-            "SET @null_proof_prepared = 1; " + probe + " SET @null_proof_after_failure = 1;",
-            failureMode == "cancellation"
-                ? () => cancellation.CancelAfter(TimeSpan.FromMilliseconds(500))
-                : null);
+            "SET @null_proof_prepared = 1; " + probe + " SET @null_proof_after_failure = 1;");
 
         await using var context = CreateRuntimeContext(connectionString, observer);
         context.Database.SetCommandTimeout(
@@ -1008,12 +1012,21 @@ public sealed class MySqlColumnsNullProofIntegrationTests : MySqlSafeMigrationIn
             SafeMigrationPolicy.RepairIfSafe);
 
         // Act
-        var result = await ExecuteNullProofRecoveryAsync(context, observer, builder.Operations, cancellation.Token);
+        var operation = ExecuteNullProofRecoveryAsync(context, observer, builder.Operations, cancellation.Token);
+        var result = failureMode == "cancellation"
+            ? await MySqlNativeCancellationCheckpoint.CancelWhenDispatchedAsync(
+                connectionString,
+                ((MySqlConnection)context.Database.GetDbConnection()).ServerThread,
+                "runtime_setup_lock",
+                cancellation,
+                operation,
+                CancellationToken.None)
+            : await operation;
 
         // Assert
         if (failureMode == "cancellation")
         {
-            Assert.IsAssignableFrom<OperationCanceledException>(result.Exception);
+            Assert.IsType<OperationCanceledException>(result.Exception, exactMatch: false);
         }
         else
         {

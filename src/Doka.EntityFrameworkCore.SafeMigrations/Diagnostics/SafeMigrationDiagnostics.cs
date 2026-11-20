@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations;
 
 /// <summary>Publishes stable OpenTelemetry-compatible diagnostic names.</summary>
+[PublicAPI]
 public static class SafeMigrationDiagnostics
 {
     /// <summary>Gets the ActivitySource name.</summary>

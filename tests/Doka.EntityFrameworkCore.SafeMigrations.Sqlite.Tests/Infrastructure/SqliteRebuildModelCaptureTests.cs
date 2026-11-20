@@ -110,10 +110,11 @@ public sealed class SqliteRebuildModelCaptureTests : SqliteIntegrationTestBase
         // Act
         var derived = capture.WithOperationHistory(builder.Operations);
         var candidate = derived.MayRebuildMissingColumn(drop);
+        var referenceCandidate = reference.MayRebuildMissingColumn(drop);
 
         // Assert
         Assert.Equal(expected, candidate);
-        Assert.Equal(reference.MayRebuildMissingColumn(drop), candidate);
+        Assert.Equal(referenceCandidate, candidate);
     }
 
     /// <summary>Each window snapshots its own caller-owned list and cannot inherit earlier candidate sets.</summary>
@@ -136,18 +137,23 @@ public sealed class SqliteRebuildModelCaptureTests : SqliteIntegrationTestBase
         var withDrop = capture.WithOperationHistory(history);
         history.Clear();
         var afterClear = capture.WithOperationHistory(history);
+        var candidateBeforeDrop = beforeDrop.MayRebuildMissingColumn(drop);
+        var candidateWithDrop = withDrop.MayRebuildMissingColumn(drop);
+        var candidateAfterClear = afterClear.MayRebuildMissingColumn(drop);
 
         // Assert
-        Assert.False(beforeDrop.MayRebuildMissingColumn(drop));
-        Assert.True(withDrop.MayRebuildMissingColumn(drop));
-        Assert.False(afterClear.MayRebuildMissingColumn(drop));
-        Assert.Single(Assert.IsAssignableFrom<IReadOnlyList<MigrationOperation>>(Field(beforeDrop, "_operations")));
+        Assert.False(candidateBeforeDrop);
+        Assert.True(candidateWithDrop);
+        Assert.False(candidateAfterClear);
+        Assert.Single(Assert.IsType<IReadOnlyList<MigrationOperation>>(
+            Field(beforeDrop, "_operations"), exactMatch: false));
         Assert.Equal(
             2,
-            Assert.IsAssignableFrom<IReadOnlyList<MigrationOperation>>(Field(withDrop, "_operations"))
+            Assert.IsType<IReadOnlyList<MigrationOperation>>(Field(withDrop, "_operations"), exactMatch: false)
                 .Count);
 
-        Assert.Empty(Assert.IsAssignableFrom<IReadOnlyList<MigrationOperation>>(Field(afterClear, "_operations")));
+        Assert.Empty(Assert.IsType<IReadOnlyList<MigrationOperation>>(
+            Field(afterClear, "_operations"), exactMatch: false));
         Assert.Same(Field(beforeDrop, "_tables"), Field(afterClear, "_tables"));
     }
 
@@ -169,12 +175,16 @@ public sealed class SqliteRebuildModelCaptureTests : SqliteIntegrationTestBase
         // Act
         var original = capture.WithOperationHistory([source, drop]);
         var copied = capture.WithOperationHistory([source, copy]);
+        var originalAcceptsDrop = original.MayRebuildMissingColumn(drop);
+        var originalAcceptsCopy = original.MayRebuildMissingColumn(copy);
+        var copiedAcceptsCopy = copied.MayRebuildMissingColumn(copy);
+        var copiedAcceptsDrop = copied.MayRebuildMissingColumn(drop);
 
         // Assert
-        Assert.True(original.MayRebuildMissingColumn(drop));
-        Assert.False(original.MayRebuildMissingColumn(copy));
-        Assert.True(copied.MayRebuildMissingColumn(copy));
-        Assert.False(copied.MayRebuildMissingColumn(drop));
+        Assert.True(originalAcceptsDrop);
+        Assert.False(originalAcceptsCopy);
+        Assert.True(copiedAcceptsCopy);
+        Assert.False(copiedAcceptsDrop);
     }
 
     /// <summary>Cumulative history cannot extend the current window's authored constraint transitions.</summary>
@@ -202,20 +212,21 @@ public sealed class SqliteRebuildModelCaptureTests : SqliteIntegrationTestBase
         // Act
         var beforeKey = capture.WithOperationHistory(builder.Operations, [creator]);
         var withKey = capture.WithOperationHistory(builder.Operations, builder.Operations);
+        var beforeKeyContract = beforeKey.GetTableConstraintTransitions(creator);
+        var withKeyContract = withKey.GetTableConstraintTransitions(creator);
+        var copiedContract = withKey.GetTableConstraintTransitions(copy);
 
         // Assert
-        var first = Assert.IsType<SafeMigrationExpectedTableConstraints>(
-            beforeKey.GetTableConstraintTransitions(creator));
+        var first = Assert.IsType<SafeMigrationExpectedTableConstraints>(beforeKeyContract);
 
-        var second = Assert.IsType<SafeMigrationExpectedTableConstraints>(
-            withKey.GetTableConstraintTransitions(creator));
+        var second = Assert.IsType<SafeMigrationExpectedTableConstraints>(withKeyContract);
 
         Assert.Empty(first.AllowedPrimaryKeys);
         Assert.Equal("pk_window_constraints",
             Assert.Single(second.AllowedPrimaryKeys)
                 .Name);
 
-        Assert.Null(withKey.GetTableConstraintTransitions(copy));
+        Assert.Null(copiedContract);
     }
 
     /// <summary>A missing operation history is rejected rather than silently borrowing the captured one.</summary>
@@ -367,11 +378,16 @@ public sealed class SqliteRebuildModelCaptureTests : SqliteIntegrationTestBase
         var captures = await ObserveCatalogCapturesAsync(connection, cancellationToken: CancellationToken.None);
         var models = builder
             .Operations
-            .Select(_ => (IModel?)model)
+            .Select(IModel? (_) => model)
             .ToArray();
 
         // Act
         var analyses = await analyzer.AnalyzeAsync(context, builder.Operations, models, CancellationToken.None);
+
+        var observedScalar1 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM pragma_table_xinfo('window_entities') WHERE name = 'Legacy';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var analysis = Assert.Single(analyses);
@@ -380,10 +396,7 @@ public sealed class SqliteRebuildModelCaptureTests : SqliteIntegrationTestBase
         Assert.Equal(1, captures());
         Assert.Equal(
             1,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM pragma_table_xinfo('window_entities') WHERE name = 'Legacy';",
-                cancellationToken: CancellationToken.None));
+            observedScalar1);
     }
 
     /// <summary>Observes the catalog boundary on this connection without changing production instrumentation.</summary>
@@ -496,13 +509,23 @@ public sealed class SqliteRebuildModelCaptureTests : SqliteIntegrationTestBase
 
     /// <summary>Owns a distinct immutable EF model identity without changing physical test setup.</summary>
     /// <typeparam name="TModel">The marker selecting a distinct target-model identity.</typeparam>
-    /// <param name="connection">The independently owned physical test connection.</param>
-    private sealed class WindowModelContext<TModel>(DbConnection connection) : DbContext
+    private sealed class WindowModelContext<TModel> : DbContext
     {
+        private readonly DbConnection _connection;
+
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="connection">The supplied connection for this fixture.</param>
+        public WindowModelContext(
+            DbConnection connection
+        )
+        {
+            _connection = connection;
+        }
+
         /// <inheritdoc />
         protected override void OnConfiguring(
             DbContextOptionsBuilder optionsBuilder
-        ) => optionsBuilder.UseSqlite(connection);
+        ) => optionsBuilder.UseSqlite(_connection);
 
         /// <inheritdoc />
         protected override void OnModelCreating(
@@ -533,6 +556,8 @@ public sealed class SqliteRebuildModelCaptureTests : SqliteIntegrationTestBase
     }
 
     /// <summary>Selects the target model owning only the retained primary key.</summary>
+    // WHY: The generic EF context uses this type as an independent model-cache identity.
+    // ReSharper disable once ClassNeverInstantiated.Local
     private sealed class BasicModel;
 
     /// <summary>Selects the distinct target model requiring an absent, unowned column.</summary>

@@ -64,8 +64,8 @@ public sealed class SqlServerLiveQualificationEvidenceTests
             SqlServerLiveQualificationEvidence.WriteStage(validIdentifier, value));
 
         // Assert
-        Assert.IsAssignableFrom<ArgumentException>(workloadFailure);
-        Assert.IsAssignableFrom<ArgumentException>(stageFailure);
+        Assert.IsType<ArgumentException>(workloadFailure, exactMatch: false);
+        Assert.IsType<ArgumentException>(stageFailure, exactMatch: false);
     }
 
     /// <summary>Records completion duration, submitted operations, and database transport counts.</summary>
@@ -109,16 +109,23 @@ public sealed class SqlServerLiveQualificationEvidenceTests
 
         // Act
         await Task.WhenAll(
-            RecordStageAsync(firstPath, 7, firstStarted, secondStarted.Task, cancellationToken: CancellationToken.None),
+            RecordStageAsync(
+                firstPath,
+                7,
+                firstStarted,
+                secondStarted.Task,
+                createCapture: null,
+                cancellationToken: CancellationToken.None),
             RecordStageAsync(
                 secondPath,
                 13,
                 secondStarted,
                 firstStarted.Task,
+                createCapture: null,
                 cancellationToken: CancellationToken.None));
 
-        var firstLines = File.ReadAllLines(firstPath);
-        var secondLines = File.ReadAllLines(secondPath);
+        var firstLines = await File.ReadAllLinesAsync(firstPath, CancellationToken.None);
+        var secondLines = await File.ReadAllLinesAsync(secondPath, CancellationToken.None);
 
         // Assert
         Assert.Equal(2, firstLines.Length);
@@ -135,7 +142,7 @@ public sealed class SqlServerLiveQualificationEvidenceTests
         // Arrange
         using var directory = new EvidenceDirectory();
         using var cancellation = new CancellationTokenSource();
-        cancellation.Cancel();
+        await cancellation.CancelAsync();
         var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var peerStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -145,14 +152,16 @@ public sealed class SqlServerLiveQualificationEvidenceTests
             2,
             peerStarted,
             started.Task,
-            CancellationToken.None);
+            createCapture: null,
+            cancellationToken: CancellationToken.None);
 
         var stage = RecordStageAsync(
             directory.FilePath("canceled.log"),
             1,
             started,
             peerStarted.Task,
-            cancellation.Token);
+            createCapture: null,
+            cancellationToken: cancellation.Token);
 
         var failure = await Record.ExceptionAsync(() => stage);
         var canceledBeforeControllerDrain = started.Task.IsCanceled;
@@ -166,12 +175,12 @@ public sealed class SqlServerLiveQualificationEvidenceTests
         Assert.True(canceledBeforeControllerDrain);
         Assert.Equal(
             cancellation.Token,
-            Assert.IsAssignableFrom<OperationCanceledException>(failure)
+            Assert.IsType<OperationCanceledException>(failure, exactMatch: false)
                 .CancellationToken);
 
         Assert.Equal(
             cancellation.Token,
-            Assert.IsAssignableFrom<OperationCanceledException>(peerFailure)
+            Assert.IsType<OperationCanceledException>(peerFailure, exactMatch: false)
                 .CancellationToken);
 
         Assert.True(peerStarted.Task.IsCompletedSuccessfully);
@@ -193,15 +202,16 @@ public sealed class SqlServerLiveQualificationEvidenceTests
             2,
             peerStarted,
             started.Task,
-            CancellationToken.None);
+            createCapture: null,
+            cancellationToken: CancellationToken.None);
 
         var stage = RecordStageAsync(
             directory.FilePath("failed.log"),
             1,
             started,
             peerStarted.Task,
-            CancellationToken.None,
-            _ => throw expected);
+            createCapture: _ => throw expected,
+            cancellationToken: CancellationToken.None);
 
         var failure = await Record.ExceptionAsync(() => stage);
         var faultedBeforeControllerDrain = started.Task.IsFaulted;
@@ -263,17 +273,17 @@ public sealed class SqlServerLiveQualificationEvidenceTests
     /// <param name="operationCount">The operation count attached to the emitted catalog-batch stage.</param>
     /// <param name="started">Signals listener readiness, or releases the peer with a startup failure.</param>
     /// <param name="peerStarted">The peer listener's readiness task awaited before emitting the stage.</param>
-    /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     /// <param name="createCapture">
     /// An optional isolated constructor-failure probe; otherwise creates the real listener.
     /// </param>
+    /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static async Task RecordStageAsync(
         string path,
         int operationCount,
         TaskCompletionSource started,
         Task peerStarted,
-        CancellationToken cancellationToken,
-        Func<string, SqlServerLiveQualificationEvidence.AnalysisStageCapture>? createCapture = null
+        Func<string, SqlServerLiveQualificationEvidence.AnalysisStageCapture>? createCapture,
+        CancellationToken cancellationToken
     )
     {
         try

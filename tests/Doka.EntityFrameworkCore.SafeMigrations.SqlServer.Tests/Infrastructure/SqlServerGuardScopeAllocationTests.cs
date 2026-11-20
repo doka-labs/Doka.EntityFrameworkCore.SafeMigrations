@@ -138,6 +138,8 @@ public sealed class SqlServerGuardScopeAllocationTests
             chunks.Add(chunk.ToString());
         }
 
+        // WHY: Fluent terminal materialization preserves the existing snapshot and enumeration contract.
+        // ReSharper disable once UseCollectionExpression
         return chunks.ToArray();
     }
 

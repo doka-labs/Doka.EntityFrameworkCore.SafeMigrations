@@ -532,9 +532,19 @@ public sealed class PostgreSqlExpressionTypeTraversalTests
     }
 
     /// <summary>Records actual member lookup order and never invents a missing source definition.</summary>
-    private sealed class RecordingColumns(params (string Name, Type ClrType, string StoreType)[] columns)
+    private sealed class RecordingColumns
         : ISafeMigrationProjectedColumnSource
     {
+        private readonly (string Name, Type ClrType, string StoreType)[] _columns;
+
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        public RecordingColumns(
+            params (string Name, Type ClrType, string StoreType)[] columns
+        )
+        {
+            _columns = columns;
+        }
+
         internal List<string> Reads { get; } = [];
 
         /// <inheritdoc />
@@ -546,14 +556,14 @@ public sealed class PostgreSqlExpressionTypeTraversalTests
         )
         {
             Reads.Add(column);
-            var found = Array.FindIndex(columns, item => item.Name == column);
+            var found = Array.FindIndex(_columns, item => item.Name == column);
             definition = found < 0
                 ? null
                 : new ExpectedColumnDefinition(
                     column,
-                    columns[found].ClrType,
+                    _columns[found].ClrType,
                     true,
-                    columns[found].StoreType);
+                    _columns[found].StoreType);
 
             return definition is not null;
         }

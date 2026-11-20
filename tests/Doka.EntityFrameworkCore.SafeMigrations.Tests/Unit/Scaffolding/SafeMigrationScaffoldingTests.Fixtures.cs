@@ -1,5 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
 public sealed partial class SafeMigrationScaffoldingTests
@@ -155,7 +153,7 @@ public sealed partial class SafeMigrationScaffoldingTests
         ) => operation is AlterDatabaseOperation;
     }
 
-    private sealed class UnknownMigrationOperation : MigrationOperation { }
+    private sealed class UnknownMigrationOperation : MigrationOperation;
 
     private sealed class NullTypeMappingSource : ITypeMappingSource
     {
@@ -188,10 +186,7 @@ public sealed partial class SafeMigrationScaffoldingTests
         ) => null;
     }
 
-    private sealed class TestMigrationsCodeGenerator(
-        string? language = "C#",
-        string? migrationSource = null
-    ) : IMigrationsCodeGenerator
+    private sealed class TestMigrationsCodeGenerator : IMigrationsCodeGenerator
     {
         public const string MigrationSource = "module Company.Migrations.CreateUsers";
 
@@ -210,7 +205,19 @@ public sealed partial class SafeMigrationScaffoldingTests
         public const string SnapshotSource = "using System;\npartial class ReviewContextModelSnapshot "
             + "{ private readonly Guid _id = new Guid(\"1714e708-5197-44c4-b355-ad0f2bc6cc80\"); }";
 
-        private readonly string _migrationSource = migrationSource ?? MigrationSource;
+        private readonly string _migrationSource;
+
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="language">The supplied language for this fixture.</param>
+        /// <param name="migrationSource">The supplied migration source for this fixture.</param>
+        public TestMigrationsCodeGenerator(
+            string? language = "C#",
+            string? migrationSource = null
+        )
+        {
+            _migrationSource = migrationSource ?? MigrationSource;
+            Language = language;
+        }
 
         public int MigrationCallCount { get; private set; }
 
@@ -224,7 +231,7 @@ public sealed partial class SafeMigrationScaffoldingTests
 
         public string FileExtension => ".cs";
 
-        public string? Language { get; } = language;
+        public string? Language { get; }
 
         public string GenerateMigration(
             string? migrationNamespace,
@@ -266,22 +273,43 @@ public sealed partial class SafeMigrationScaffoldingTests
         }
     }
 
-    private sealed class TestIndexProjector(
-        IReadOnlyList<int> prefixLengths,
-        IReadOnlyList<string>? includedColumns = null
-    ) : ISafeMigrationCreateIndexScaffoldingProjector
+    private sealed class TestIndexProjector : ISafeMigrationCreateIndexScaffoldingProjector
     {
+        private readonly IReadOnlyList<string>? _includedColumns;
+        private readonly IReadOnlyList<int> _prefixLengths;
+
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="prefixLengths">The supplied prefix lengths for this fixture.</param>
+        /// <param name="includedColumns">The supplied included columns for this fixture.</param>
+        public TestIndexProjector(
+            IReadOnlyList<int> prefixLengths,
+            IReadOnlyList<string>? includedColumns = null
+        )
+        {
+            _prefixLengths = prefixLengths;
+            _includedColumns = includedColumns;
+        }
+
         public SafeMigrationCreateIndexScaffoldingProjection Project(
             CreateIndexOperation operation
-        ) => new(operation, prefixLengths, includedColumns);
+        ) => new(operation, _prefixLengths, _includedColumns);
     }
 
-    private sealed class TestIncludedIndexProjector(
-        IReadOnlyList<string> includedColumns
-    ) : ISafeMigrationCreateIndexScaffoldingProjector
+    private sealed class TestIncludedIndexProjector : ISafeMigrationCreateIndexScaffoldingProjector
     {
+        private readonly IReadOnlyList<string> _includedColumns;
+
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        /// <param name="includedColumns">The supplied included columns for this fixture.</param>
+        public TestIncludedIndexProjector(
+            IReadOnlyList<string> includedColumns
+        )
+        {
+            _includedColumns = includedColumns;
+        }
+
         public SafeMigrationCreateIndexScaffoldingProjection Project(
             CreateIndexOperation operation
-        ) => new(operation, PrefixLengths: null, includedColumns);
+        ) => new(operation, PrefixLengths: null, _includedColumns);
     }
 }

@@ -113,6 +113,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             .Distinct()
             .Select(tableIdentity =>
                 $"({BuildPhysicalTableSupportExpression(tableIdentity.Table, tableIdentity.Schema)}) = 1")
+
+            // WHY: Retain this explicit fluent snapshot instead of a collection-spread rewrite.
+            // ReSharper disable once UseCollectionExpression
             .ToList();
 
         if (intent is DropForeignKeyIntent dropForeignKey)

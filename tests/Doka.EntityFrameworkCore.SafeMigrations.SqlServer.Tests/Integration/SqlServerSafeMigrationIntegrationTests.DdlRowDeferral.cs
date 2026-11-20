@@ -1037,7 +1037,8 @@ public sealed class SqlServerSafeMigrationDdlRowDeferralIntegrationTests : SqlSe
             "; ",
             report.Assessments.Select(static assessment =>
                 $"ordinal={assessment.Ordinal}, kind={assessment.OperationKind}, state={assessment.ObservedState}, "
-                + $"action={assessment.Action}, analysis={assessment.AnalysisCode}, decision={assessment.DecisionCode}"));
+                + $"action={assessment.Action}, analysis={assessment.AnalysisCode}, "
+                + $"decision={assessment.DecisionCode}"));
 
         Assert.True(report.Status == expected, $"Expected {expected}, actual {report.Status}. {details}");
     }

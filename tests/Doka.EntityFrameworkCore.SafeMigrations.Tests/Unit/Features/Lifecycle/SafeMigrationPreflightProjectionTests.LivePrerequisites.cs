@@ -923,8 +923,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         /// <inheritdoc />
         public bool CanRequalifyLiveForeignKeyPrerequisites(
             EnsureForeignKeyIntent intent,
-            SafeMigrationProviderAnalysis liveAnalysis,
-            ISafeMigrationProjectedColumnSource columns
+            SafeMigrationProviderAnalysis liveAnalysis
         )
         {
             RequalificationQueries++;
@@ -935,8 +934,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         /// <inheritdoc />
         public bool CanRequalifyLiveDropIndexPrerequisites(
             DropIndexIntent intent,
-            SafeMigrationProviderAnalysis liveAnalysis,
-            ISafeMigrationProjectedColumnSource columns
+            SafeMigrationProviderAnalysis liveAnalysis
         )
         {
             RequalificationQueries++;

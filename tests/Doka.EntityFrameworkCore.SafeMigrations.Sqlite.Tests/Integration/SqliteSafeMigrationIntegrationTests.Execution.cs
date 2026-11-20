@@ -3,9 +3,13 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 /// <summary>Exercises execution with independently owned SQLite state.</summary>
 public sealed class SqliteSafeMigrationExecutionIntegrationTests : SqliteSafeMigrationCatalogIntegrationTests
 {
+    /// <summary>
+    /// Pre cancelled analysis leaves catalog unchanged.
+    /// </summary>
     [Fact]
     public async Task PreCancelledAnalysis_LeavesCatalogUnchanged()
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
@@ -21,8 +25,9 @@ public sealed class SqliteSafeMigrationExecutionIntegrationTests : SqliteSafeMig
             nullable: true);
 
         using var cancellation = new CancellationTokenSource();
-        cancellation.Cancel();
+        await cancellation.CancelAsync();
 
+        // Act
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -31,14 +36,20 @@ public sealed class SqliteSafeMigrationExecutionIntegrationTests : SqliteSafeMig
                 new SafeMigrationRunOptions("sqlite-cancelled-analysis"),
                 cancellation.Token));
 
+        var observedScalar1 = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM pragma_table_xinfo('cancellation_probe') WHERE name = 'Value';",
+            cancellationToken: CancellationToken.None);
+
+        // Assert
         Assert.Equal(
             0,
-            await ScalarIntAsync(
-                connection,
-                "SELECT COUNT(*) FROM pragma_table_xinfo('cancellation_probe') WHERE name = 'Value';",
-                cancellationToken: CancellationToken.None));
+            observedScalar1);
     }
 
+    /// <summary>
+    /// Concurrent migrators converge through the EF migration lock.
+    /// </summary>
     [Fact]
     public async Task ConcurrentMigrators_ConvergeThroughTheEfMigrationLock()
     {
@@ -62,10 +73,14 @@ public sealed class SqliteSafeMigrationExecutionIntegrationTests : SqliteSafeMig
             var results = await Task.WhenAll(
                 Task.Run(() => ExecuteConcurrentMigrationAsync(
                     connectionString,
+                    // WHY: Task.WhenAll observes both actual workers before their barrier leaves this scope.
+                    // ReSharper disable once AccessToDisposedClosure
                     start,
                     cancellationToken: CancellationToken.None)),
                 Task.Run(() => ExecuteConcurrentMigrationAsync(
                     connectionString,
+                    // WHY: Task.WhenAll observes both actual workers before their barrier leaves this scope.
+                    // ReSharper disable once AccessToDisposedClosure
                     start,
                     cancellationToken: CancellationToken.None)));
 

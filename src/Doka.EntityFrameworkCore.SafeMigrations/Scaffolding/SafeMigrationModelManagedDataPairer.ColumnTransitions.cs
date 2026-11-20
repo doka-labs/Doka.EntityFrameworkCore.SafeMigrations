@@ -108,8 +108,17 @@ internal static partial class SafeMigrationModelManagedDataPairer
         ) => new(schema, table, column);
 
         private readonly record struct ColumnIdentity(
+
+            // WHY: The generated record equality keeps same-name members in different schemas independent.
+            // ReSharper disable once NotAccessedPositionalProperty.Local
             string? Schema,
+
+            // WHY: The table is part of generated dictionary-key equality, not an independently read payload.
+            // ReSharper disable once NotAccessedPositionalProperty.Local
             string Table,
+
+            // WHY: Generated record equality must distinguish each physical member within its exact owner.
+            // ReSharper disable once NotAccessedPositionalProperty.Local
             string Column
         );
     }

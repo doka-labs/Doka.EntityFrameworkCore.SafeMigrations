@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Benchmarks;
 
 /// <summary>Measures MySQL plan capture at the retained analyzer operation counts.</summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public class MySqlAnalyzerBenchmarks : IDisposable
 {
     private MySqlGenerationContext _context = null!;
@@ -64,6 +65,9 @@ internal static class MySqlBenchmarkPlanCapture
     {
         var safeOperations = operations
             .Cast<SafeMigrationOperation>()
+
+            // WHY: Retain fluent materialization and the resulting snapshot ownership.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         using var lease = planCapture.Begin(safeOperations);

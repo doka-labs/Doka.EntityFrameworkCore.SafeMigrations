@@ -1,5 +1,3 @@
-using System.Text.RegularExpressions;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
 /// <summary>Verifies ordinary native blockers through EF history, correction, retry and script replay.</summary>
@@ -99,6 +97,8 @@ public sealed class SqlServerSafeMigrationOrdinaryDropHistoryIntegrationTests : 
 
         // Act
         await context.Database.MigrateAsync();
+        // WHY: This branch deliberately tests the synchronous entry point independently of the async control.
+        // ReSharper disable once MethodHasAsyncOverload
         context.Database.Migrate();
         var history = await UpgradeHistoryAsync(connectionString, check, cancellationToken: CancellationToken.None);
         var columns = await ScalarIntAsync(

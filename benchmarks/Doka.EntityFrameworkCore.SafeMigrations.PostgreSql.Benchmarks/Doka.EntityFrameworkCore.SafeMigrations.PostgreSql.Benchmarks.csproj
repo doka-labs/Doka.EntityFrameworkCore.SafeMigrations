@@ -14,4 +14,10 @@
     <ProjectReference Include="..\..\src\Doka.EntityFrameworkCore.SafeMigrations\Doka.EntityFrameworkCore.SafeMigrations.csproj" />
     <ProjectReference Include="..\..\src\Doka.EntityFrameworkCore.SafeMigrations.PostgreSql\Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <Compile Update="PostgreSqlLiveColumnAttributionBenchmarks.*.cs">
+      <DependentUpon>PostgreSqlLiveColumnAttributionBenchmarks.cs</DependentUpon>
+    </Compile>
+  </ItemGroup>
 </Project>

@@ -9,6 +9,9 @@ internal static class SafeMigrationModelManagedValue
         Validate(value);
 
         return value is byte[] bytes
+
+            // WHY: Keep the defensive array clone so caller mutations cannot change captured binary values.
+            // ReSharper disable once UseCollectionExpression
             ? bytes.ToArray()
             : value;
     }
@@ -95,6 +98,10 @@ internal static class SafeMigrationModelManagedValue
             case Guid guid:
                 Span<byte> guidBytes = stackalloc byte[16];
                 _ = guid.TryWriteBytes(guidBytes, bigEndian: true, out _);
+
+                // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based
+                // materialization.
+                // ReSharper disable once UseCollectionExpression
                 writer.Add(guidBytes.ToArray());
                 break;
             case DateOnly date:

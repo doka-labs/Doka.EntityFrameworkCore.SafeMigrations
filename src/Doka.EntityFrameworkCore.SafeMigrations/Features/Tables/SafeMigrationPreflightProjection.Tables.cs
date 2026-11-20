@@ -144,17 +144,13 @@ internal sealed partial class SafeMigrationPreflightProjection
         }
 
         var intermediate = new TableKey(intent.NewName ?? intent.Name, intent.Schema);
-        if (liveAnalysis.RenameIntermediateTargetExists is { } intermediateExists
-            && ((intermediateExists && !_projectedMissingTables.Contains(intermediate))
-                || _tables.ContainsKey(intermediate)
-                || _prerequisites.ContainsKey(intermediate)))
-        {
-            return Analysis(SafeMigrationObservedState.Different);
-        }
-
-        if ((liveAnalysis.ObservedState == SafeMigrationObservedState.Different
-                || liveAnalysis.RenameTargetExists == true)
-            && !_projectedMissingTables.Contains(target))
+        if ((liveAnalysis.RenameIntermediateTargetExists is { } intermediateExists
+                && ((intermediateExists && !_projectedMissingTables.Contains(intermediate))
+                    || _tables.ContainsKey(intermediate)
+                    || _prerequisites.ContainsKey(intermediate)))
+            || ((liveAnalysis.ObservedState == SafeMigrationObservedState.Different
+                    || liveAnalysis.RenameTargetExists == true)
+                && !_projectedMissingTables.Contains(target)))
         {
             return Analysis(SafeMigrationObservedState.Different);
         }
@@ -205,8 +201,15 @@ internal sealed partial class SafeMigrationPreflightProjection
             _projectedIndexDropOnlyTables?.Remove(key);
             _projectedChangedColumns.Remove(key);
             RemoveProjectedColumnDefinitions(intent.Definition.Table, intent.Definition.Schema);
-            foreach (var column in intent.Definition.Columns)
+
+            // WHY: This immutable definition snapshot is indexed; retain its authored order without interface
+            // enumeration.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var columnIndex = 0; columnIndex < intent.Definition.Columns.Count; columnIndex++)
             {
+                var column = intent.Definition.Columns[columnIndex];
+
                 SetProjectedColumnDefinition(intent.Definition.Table, intent.Definition.Schema, column);
             }
 
@@ -231,14 +234,21 @@ internal sealed partial class SafeMigrationPreflightProjection
                 GeneratedColumnsComplete = true,
             };
 
-            foreach (var column in intent.Definition.Columns)
+            // WHY: This immutable definition snapshot is indexed; retain its authored order without interface
+            // enumeration.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var columnIndex1 = 0; columnIndex1 < intent.Definition.Columns.Count; columnIndex1++)
             {
+                var column = intent.Definition.Columns[columnIndex1];
+
                 prerequisites.Columns[column.Name] = ProjectedColumn.From(column, addedToExistingTable: false);
             }
 
             CaptureConstraintPrerequisites(prerequisites, intent.Definition, liveAnalysis);
 
             _prerequisites[key] = prerequisites;
+
             return;
         }
 
@@ -248,8 +258,15 @@ internal sealed partial class SafeMigrationPreflightProjection
             _projectedMissingTables.Remove(key);
             _projectedUnknownTableStructures.Remove(key);
             RemoveProjectedColumnDefinitions(intent.Definition.Table, intent.Definition.Schema);
-            foreach (var column in intent.Definition.Columns)
+
+            // WHY: This immutable definition snapshot is indexed; retain its authored order without interface
+            // enumeration.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var columnIndex2 = 0; columnIndex2 < intent.Definition.Columns.Count; columnIndex2++)
             {
+                var column = intent.Definition.Columns[columnIndex2];
+
                 SetProjectedColumnDefinition(intent.Definition.Table, intent.Definition.Schema, column);
             }
 
@@ -261,8 +278,14 @@ internal sealed partial class SafeMigrationPreflightProjection
                 prerequisites.GeneratedColumnsComplete = true;
             }
 
-            foreach (var column in intent.Definition.Columns)
+            // WHY: This immutable definition snapshot is indexed; retain its authored order without interface
+            // enumeration.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var columnIndex3 = 0; columnIndex3 < intent.Definition.Columns.Count; columnIndex3++)
             {
+                var column = intent.Definition.Columns[columnIndex3];
+
                 prerequisites.Columns[column.Name] = ProjectedColumn.From(column, addedToExistingTable: false);
             }
 
@@ -370,6 +393,7 @@ internal sealed partial class SafeMigrationPreflightProjection
             }
 
             _tables[target] = table;
+
             return;
         }
 

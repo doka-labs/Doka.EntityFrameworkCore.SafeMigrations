@@ -20,8 +20,13 @@ on:
         required: false
         default: 14
         type: number
+      capture-benchmark-evidence:
+        description: Explicitly execute and retain native BenchmarkDotNet Dry evidence for all five suites.
+        required: false
+        default: false
+        type: boolean
       capture-sqlserver-baseline:
-        description: Retain a SQL Server BenchmarkDotNet Short run in addition to execution smoke evidence.
+        description: Explicitly execute and retain a SQL Server BenchmarkDotNet Short measurement.
         required: false
         default: false
         type: boolean
@@ -136,9 +141,11 @@ jobs:
           if-no-files-found: error
           retention-days: ${{ inputs.artifact-retention-days }}
 
-      # Dry validates case execution and full JSON export, not statistical performance.
-      # Configuration, build, execution and missing/invalid evidence remain fatal.
+      # WHY: Even Dry starts measurement processes. Normal qualification tests deterministic
+      # workload/configuration/export contracts; measurements require explicit opt-in.
+      # Requested configuration, build, execution and missing/invalid evidence remain fatal.
       - name: Core BenchmarkDotNet execution smoke
+        if: ${{ inputs.capture-benchmark-evidence }}
         run: >-
           dotnet run
           --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Benchmarks.csproj
@@ -146,6 +153,7 @@ jobs:
           --filter '*' --job Dry --artifacts artifacts/performance/core
 
       - name: MySQL and MariaDB BenchmarkDotNet execution smoke
+        if: ${{ inputs.capture-benchmark-evidence }}
         run: >-
           dotnet run
           --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.MySql.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.MySql.Benchmarks.csproj
@@ -153,6 +161,7 @@ jobs:
           --filter '*' --job Dry --artifacts artifacts/performance/mysql
 
       - name: PostgreSQL BenchmarkDotNet execution smoke
+        if: ${{ inputs.capture-benchmark-evidence }}
         run: >-
           dotnet run
           --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks.csproj
@@ -160,6 +169,7 @@ jobs:
           --filter '*' --job Dry --artifacts artifacts/performance/postgresql
 
       - name: SQLite BenchmarkDotNet execution smoke
+        if: ${{ inputs.capture-benchmark-evidence }}
         run: >-
           dotnet run
           --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Benchmarks.csproj
@@ -167,11 +177,26 @@ jobs:
           --filter '*' --job Dry --artifacts artifacts/performance/sqlite
 
       - name: SQL Server BenchmarkDotNet execution smoke
+        if: ${{ inputs.capture-benchmark-evidence }}
         run: >-
           dotnet run
           --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Benchmarks.csproj
           --configuration Release --no-build --no-restore --
           --filter '*' --job Dry --artifacts artifacts/performance/sqlserver
+
+      - name: Upload requested benchmark evidence
+        if: ${{ always() && inputs.capture-benchmark-evidence }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: benchmark-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            artifacts/performance/core/results/*-full.json
+            artifacts/performance/mysql/results/*-full.json
+            artifacts/performance/postgresql/results/*-full.json
+            artifacts/performance/sqlite/results/*-full.json
+            artifacts/performance/sqlserver/results/*-full.json
+          if-no-files-found: error
+          retention-days: ${{ inputs.artifact-retention-days }}
 
       - name: Qualify reproducible packages
         env:
@@ -226,12 +251,12 @@ jobs:
     timeout-minutes: 45
     env:
       SAFE_MIGRATIONS_MYSQL_ENGINE: mariadb
-      SAFE_MIGRATIONS_MYSQL_VERSION: 12.3.3
-      SAFE_MIGRATIONS_MYSQL_IMAGE: mariadb:12.3.3@sha256:d46e102fa8b9b72bfcdeb56f9dd538742092119dc8b11f31fe662605cd234cd9
-      SAFE_MIGRATIONS_POSTGRES_VERSION: 18.6
-      SAFE_MIGRATIONS_POSTGRES_IMAGE: postgres:18.6@sha256:e3d24f6906d0760bf4da0dae872415391ededefad23fd471c47dc53b0ddf3c42
+      SAFE_MIGRATIONS_MYSQL_VERSION: '12.3.3'
+      SAFE_MIGRATIONS_MYSQL_IMAGE: mariadb123
+      SAFE_MIGRATIONS_POSTGRES_VERSION: '18.7'
+      SAFE_MIGRATIONS_POSTGRES_IMAGE: postgres18
       SAFE_MIGRATIONS_SQLSERVER_VERSION: '2022'
-      SAFE_MIGRATIONS_SQLSERVER_IMAGE: mcr.microsoft.com/mssql/server:2022-latest@sha256:cf8f0ab2ebe61feec2eed2629061a07d247f791c2a8ddda74a4ac9f06a291718
+      SAFE_MIGRATIONS_SQLSERVER_IMAGE: sqlserver2022
     steps:
       - name: Require supported x86-64 host
         run: test "$(uname -m)" = x86_64
@@ -240,6 +265,17 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: Resolve canonical coverage images
+        run: |
+          for variable in SAFE_MIGRATIONS_MYSQL_IMAGE SAFE_MIGRATIONS_POSTGRES_IMAGE SAFE_MIGRATIONS_SQLSERVER_IMAGE; do
+            image="$(bash eng/select-database-image.sh "${!variable}")"
+            # WHY: manifest inspect follows a tag before a digest; admit the immutable address only.
+            tagged_image="${image%@*}"
+            digest_image="${tagged_image%:*}@${image##*@}"
+            docker manifest inspect "$digest_image" >/dev/null
+            printf '%s=%s\n' "$variable" "$image" >> "$GITHUB_ENV"
+          done
 
       - name: Setup .NET
         uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
@@ -329,23 +365,23 @@ jobs:
       matrix:
         include:
           - engine: mysql
-            version: 8.4.13
-            image: mysql:8.4.13@sha256:a81d043930e51745522bd5c430961cf8286f0a23f0a9a2a6e0108f7ea71b0902
+            version: '8.4.13'
+            image: mysql84
           - engine: mysql
-            version: 9.7.4
-            image: mysql:9.7.4@sha256:df90258da46f6e7ff8574ff84f17618aba0765cac749928299c69fd4e7cb8ad8
+            version: '9.7.4'
+            image: mysql97
           - engine: mariadb
-            version: 10.11.19
-            image: mariadb:10.11.19@sha256:d769e37960821dfdcf096954f6e7ac89f747e116c1bba98e48edd265dfc7deae
+            version: '10.11.19'
+            image: mariadb1011
           - engine: mariadb
-            version: 11.4.13
-            image: mariadb:11.4.13@sha256:d1891ede5a559f1086f55053bb8cc1569b0298338c4d72d71725a7f74f6ba620
+            version: '11.4.13'
+            image: mariadb114
           - engine: mariadb
-            version: 11.8.9
-            image: mariadb:11.8.9@sha256:c4124d1afa875e47f2892edf26b482fa54f796e2f342d3717a04ca091a22a9bd
+            version: '11.8.9'
+            image: mariadb118
           - engine: mariadb
-            version: 12.3.3
-            image: mariadb:12.3.3@sha256:d46e102fa8b9b72bfcdeb56f9dd538742092119dc8b11f31fe662605cd234cd9
+            version: '12.3.3'
+            image: mariadb123
     env:
       SAFE_MIGRATIONS_MYSQL_ENGINE: ${{ matrix.engine }}
       SAFE_MIGRATIONS_MYSQL_VERSION: ${{ matrix.version }}
@@ -355,6 +391,15 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: Resolve canonical MySQL or MariaDB image
+        run: |
+          image="$(bash eng/select-database-image.sh "$SAFE_MIGRATIONS_MYSQL_IMAGE")"
+          # WHY: manifest inspect follows a tag before a digest; admit the immutable address only.
+          tagged_image="${image%@*}"
+          digest_image="${tagged_image%:*}@${image##*@}"
+          docker manifest inspect "$digest_image" >/dev/null
+          printf 'SAFE_MIGRATIONS_MYSQL_IMAGE=%s\n' "$image" >> "$GITHUB_ENV"
 
       - name: Setup .NET
         uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
@@ -411,16 +456,17 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - version: 14.24
-            image: postgres:14.24@sha256:834a046089d76edd1d2e81c4741f3ad5d1853646ededc86c2708936aad31c1ed
-          - version: 15.19
-            image: postgres:15.19@sha256:1aac5b49cefd627f02816141ca4ad012d6cc19460dfe02a9b5168a105be3fc53
-          - version: 16.15
-            image: postgres:16.15@sha256:f9a7b9ebf6f56201f949db745e47bc423c0f0f8294bafe991cc10bf74b029657
-          - version: 17.11
-            image: postgres:17.11@sha256:ff87138949ad9a46f32ff23bd6852b52ce024a13dffe9b4087be98292cdd3b4f
-          - version: 18.6
-            image: postgres:18.6@sha256:e3d24f6906d0760bf4da0dae872415391ededefad23fd471c47dc53b0ddf3c42
+          # WHY: Bare numeric YAML loses version identity: 15.20 becomes 15.2.
+          - version: '14.25'
+            image: postgres14
+          - version: '15.20'
+            image: postgres15
+          - version: '16.16'
+            image: postgres16
+          - version: '17.12'
+            image: postgres17
+          - version: '18.7'
+            image: postgres18
     env:
       SAFE_MIGRATIONS_POSTGRES_IMAGE: ${{ matrix.image }}
       SAFE_MIGRATIONS_POSTGRES_VERSION: ${{ matrix.version }}
@@ -429,6 +475,15 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: Resolve canonical PostgreSQL image
+        run: |
+          image="$(bash eng/select-database-image.sh "$SAFE_MIGRATIONS_POSTGRES_IMAGE")"
+          # WHY: manifest inspect follows a tag before a digest; admit the immutable address only.
+          tagged_image="${image%@*}"
+          digest_image="${tagged_image%:*}@${image##*@}"
+          docker manifest inspect "$digest_image" >/dev/null
+          printf 'SAFE_MIGRATIONS_POSTGRES_IMAGE=%s\n' "$image" >> "$GITHUB_ENV"
 
       - name: Setup .NET
         uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
@@ -538,11 +593,11 @@ jobs:
       matrix:
         include:
           - version: '2019'
-            image: mcr.microsoft.com/mssql/server:2019-latest@sha256:07d7dedecdbfcf6776035dc5eefb5bfd9aa1804b2f6b99f7dedb397d8a599069
+            image: sqlserver2019
           - version: '2022'
-            image: mcr.microsoft.com/mssql/server:2022-latest@sha256:cf8f0ab2ebe61feec2eed2629061a07d247f791c2a8ddda74a4ac9f06a291718
+            image: sqlserver2022
           - version: '2025'
-            image: mcr.microsoft.com/mssql/server:2025-latest@sha256:245f6b1c8903edae52cb20fa31419cefcde1a49938bb8c3447099011fc871ca3
+            image: sqlserver2025
     env:
       SAFE_MIGRATIONS_SQLSERVER_IMAGE: ${{ matrix.image }}
       SAFE_MIGRATIONS_SQLSERVER_VERSION: ${{ matrix.version }}
@@ -554,6 +609,15 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: Resolve canonical SQL Server image
+        run: |
+          image="$(bash eng/select-database-image.sh "$SAFE_MIGRATIONS_SQLSERVER_IMAGE")"
+          # WHY: manifest inspect follows a tag before a digest; admit the immutable address only.
+          tagged_image="${image%@*}"
+          digest_image="${tagged_image%:*}@${image##*@}"
+          docker manifest inspect "$digest_image" >/dev/null
+          printf 'SAFE_MIGRATIONS_SQLSERVER_IMAGE=%s\n' "$image" >> "$GITHUB_ENV"
 
       - name: Setup .NET
         uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0

@@ -178,6 +178,9 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests : MySqlSa
         await using var context = CreateContext(connectionString);
         var operations = ReplacementOperations(newIdentifier: false)
             .Take(4)
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var runner = context.GetService<ISafeMigrationRunner>();
@@ -503,6 +506,9 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests : MySqlSa
         await ExecuteOperationsAsync(context,
             operations
                 .Take(appliedCount)
+
+                // WHY: Retain this explicit materialization/copy path and its collection lowering.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray(),
             CancellationToken.None);
 
@@ -756,6 +762,9 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests : MySqlSa
         await ExecuteOperationsAsync(context,
             operations
                 .Take(3)
+
+                // WHY: Retain this explicit materialization/copy path and its collection lowering.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray(),
             CancellationToken.None);
 
@@ -769,6 +778,9 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests : MySqlSa
             connectionString,
             operations
                 .Skip(3)
+
+                // WHY: Retain this explicit materialization/copy path and its collection lowering.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray(),
             script,
             cancellationToken: CancellationToken.None));

@@ -57,32 +57,30 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
 
         var analysis = intent switch
         {
-            EnsureModelManagedDataIntent => states.All(static state =>
-                state == SafeMigrationModelManagedRowState.Target)
-                ? Matching(postconditionSatisfied: true)
-                : states.Any(static state => state == SafeMigrationModelManagedRowState.Different)
-                    ? Different("model_managed_row", "target", "different")
-                    : uniqueCollision
-                        ? DataBlocked("model_managed_unique_collision")
-                        : Missing(postconditionSatisfied: false),
-            UpdateModelManagedDataIntent => states.Any(static state =>
-                state == SafeMigrationModelManagedRowState.Missing)
-                ? PrerequisiteMissing()
-                : states.Any(static state => state == SafeMigrationModelManagedRowState.Different)
-                    ? Different("model_managed_row", "source_or_target", "different")
-                    : uniqueCollision
-                        ? DataBlocked("model_managed_unique_collision")
-                        : states.All(static state => state == SafeMigrationModelManagedRowState.Target)
-                            ? Matching(postconditionSatisfied: true)
-                            : TransitionReady(),
-            DeleteModelManagedDataIntent => states.Any(static state =>
-                state == SafeMigrationModelManagedRowState.Different)
-                ? Different("model_managed_row", "source_or_missing", "different")
-                : dependencyCounts.Any(static count => count > 0)
-                    ? DataBlocked("model_managed_dependency")
-                    : states.All(static state => state == SafeMigrationModelManagedRowState.Missing)
-                        ? Missing(postconditionSatisfied: true)
-                        : TransitionReady(),
+            EnsureModelManagedDataIntent when states.All(static state =>
+                state == SafeMigrationModelManagedRowState.Target) => Matching(postconditionSatisfied: true),
+            EnsureModelManagedDataIntent when states.Any(static state =>
+                    state == SafeMigrationModelManagedRowState.Different) =>
+                Different("model_managed_row", "target", "different"),
+            EnsureModelManagedDataIntent when uniqueCollision => DataBlocked("model_managed_unique_collision"),
+            EnsureModelManagedDataIntent => Missing(postconditionSatisfied: false),
+            UpdateModelManagedDataIntent when states.Any(static state =>
+                state == SafeMigrationModelManagedRowState.Missing) => PrerequisiteMissing(),
+            UpdateModelManagedDataIntent when states.Any(static state =>
+                    state == SafeMigrationModelManagedRowState.Different) =>
+                Different("model_managed_row", "source_or_target", "different"),
+            UpdateModelManagedDataIntent when uniqueCollision => DataBlocked("model_managed_unique_collision"),
+            UpdateModelManagedDataIntent when states.All(static state =>
+                state == SafeMigrationModelManagedRowState.Target) => Matching(postconditionSatisfied: true),
+            UpdateModelManagedDataIntent => TransitionReady(),
+            DeleteModelManagedDataIntent when states.Any(static state =>
+                    state == SafeMigrationModelManagedRowState.Different) =>
+                Different("model_managed_row", "source_or_missing", "different"),
+            DeleteModelManagedDataIntent when dependencyCounts.Any(static count => count > 0) =>
+                DataBlocked("model_managed_dependency"),
+            DeleteModelManagedDataIntent when states.All(static state =>
+                state == SafeMigrationModelManagedRowState.Missing) => Missing(postconditionSatisfied: true),
+            DeleteModelManagedDataIntent => TransitionReady(),
             _ => throw new UnreachableException(),
         };
 
@@ -244,14 +242,15 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
             intent.Columns.Select((column,
                     index) => $"stored.{Delimit(column)} IS expected.{Delimit($"source_{index}")}"));
 
-        var targetPredicate = target is null
-            ? "0"
-            : ReferenceEquals(source, target)
-                ? sourcePredicate
-                : string.Join(
-                    " AND ",
-                    intent.Columns.Select((column,
-                            index) => $"stored.{Delimit(column)} IS expected.{Delimit($"target_{index}")}"));
+        var targetPredicate = target switch
+        {
+            null => "0",
+            _ when ReferenceEquals(source, target) => sourcePredicate,
+            _ => string.Join(
+                " AND ",
+                intent.Columns.Select((column,
+                        index) => $"stored.{Delimit(column)} IS expected.{Delimit($"target_{index}")}")),
+        };
 
         const string marker = "__doka_sm_present_8f29d0d2";
         command.CommandText = $"""
@@ -306,11 +305,18 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
         IReadOnlyList<ExpectedModelManagedDataUniqueKeyDefinition> uniqueKeys
     )
     {
-        foreach (var uniqueKey in uniqueKeys)
+        // WHY: Traverse the stable ordered source by ordinal without materializing another collection.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var uniqueKeyIndex = 0; uniqueKeyIndex < uniqueKeys.Count; uniqueKeyIndex++)
         {
+            var uniqueKey = uniqueKeys[uniqueKeyIndex];
             var uniqueOrdinals = uniqueKey
                 .Columns
                 .Select(column => IndexOf(intent.Columns, column))
+
+                // WHY: Preserve explicit fluent materialization for the ordered snapshot.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray();
 
             var parameterCountPerRow = intent.KeyColumns.Count + uniqueOrdinals.Length;
@@ -361,6 +367,9 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
                 Enumerable
                     .Range(0, uniqueKey.Columns.Count)
                     .Select(static index => $"unique_{index}"))
+
+            // WHY: Preserve explicit fluent materialization for the ordered snapshot.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var rows = new string[count];
@@ -445,6 +454,9 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
             var principalOrdinals = foreignKey
                 .PrincipalColumns
                 .Select(column => IndexOf(intent.Columns, column))
+
+                // WHY: Preserve explicit fluent materialization for the ordered snapshot.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray();
 
             var parameterCountPerRow = principalOrdinals.Length;
@@ -486,6 +498,9 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
         var cteColumns = Enumerable
             .Range(0, principalOrdinals.Length)
             .Select(static index => $"principal_{index}")
+
+            // WHY: Preserve explicit fluent materialization for the ordered snapshot.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var rows = new string[count];
@@ -536,18 +551,24 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
     {
         foreach (var dependentTable in snapshot.Tables.Values)
         {
-            foreach (var foreignKey in dependentTable.ForeignKeys)
+            // WHY: Traverse the stable ordered source by ordinal without materializing another collection.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var foreignKeyIndex = 0; foreignKeyIndex < dependentTable.ForeignKeys.Count; foreignKeyIndex++)
             {
+                var foreignKey = dependentTable.ForeignKeys[foreignKeyIndex];
                 if (!s_identifierComparer.Equals(foreignKey.PrincipalTable, intent.Table))
                 {
                     continue;
                 }
 
-                var principalColumns = foreignKey.PrincipalColumns.Any(static column => column.Length > 0)
-                    ? foreignKey.PrincipalColumns
-                    : snapshot.Tables.TryGetValue(intent.Table, out var principalTable)
-                        ? principalTable.PrimaryKeyColumns
-                        : foreignKey.PrincipalColumns;
+                var principalColumns = foreignKey.PrincipalColumns.Any(static column => column.Length > 0) switch
+                {
+                    true => foreignKey.PrincipalColumns,
+                    _ when snapshot.Tables.TryGetValue(intent.Table, out var principalTable) =>
+                        principalTable.PrimaryKeyColumns,
+                    _ => foreignKey.PrincipalColumns,
+                };
 
                 var modeled = intent.ForeignKeys.Any(expected =>
                     s_identifierComparer.Equals(expected.Table, dependentTable.Name)

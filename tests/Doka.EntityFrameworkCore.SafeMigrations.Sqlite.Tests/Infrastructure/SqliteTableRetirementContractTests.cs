@@ -1,5 +1,3 @@
-using System.Collections;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 
 /// <summary>Constrains retirement certificates to exact references and unchanged atomic owner lifetimes.</summary>

@@ -1,6 +1,8 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-/// <summary>Locks exact owned guard transport, attribution, bounded payloads and query-free diagnostic rendering.</summary>
+/// <summary>
+/// Locks exact owned guard transport, attribution, bounded payloads and query-free diagnostic rendering.
+/// </summary>
 public sealed class MySqlRuntimeDiagnosticsTests
 {
     private static readonly string[] s_ownedAssertionColumns =
@@ -12,7 +14,9 @@ public sealed class MySqlRuntimeDiagnosticsTests
         "`postcondition_code` VARCHAR(40) NOT NULL",
     ];
 
-    /// <summary>Both engines' key qualification styles retain exact native category and reason-slot ownership.</summary>
+    /// <summary>
+    /// Both engines' key qualification styles retain exact native category and reason-slot ownership.
+    /// </summary>
     /// <param name="keyPrefix">The table-qualified MySQL or unqualified MariaDB key name.</param>
     /// <param name="guardCode">The existing native guard constraint name.</param>
     [Theory]
@@ -44,7 +48,9 @@ public sealed class MySqlRuntimeDiagnosticsTests
         Assert.All(payload, character => Assert.InRange(character, 0, 127));
     }
 
-    /// <summary>Ordinary duplicate failures, spoofed names, stale tokens and malformed transport remain native.</summary>
+    /// <summary>
+    /// Ordinary duplicate failures, spoofed names, stale tokens and malformed transport remain native.
+    /// </summary>
     /// <param name="defect">The independently varied ownership invariant.</param>
     [Theory]
     [InlineData("ordinary_value")]
@@ -111,7 +117,9 @@ public sealed class MySqlRuntimeDiagnosticsTests
         Assert.False(recognized);
     }
 
-    /// <summary>Markers are bounded, exact and ordinal-associated without scanning or copying entire commands.</summary>
+    /// <summary>
+    /// Markers are bounded, exact and ordinal-associated without scanning or copying entire commands.
+    /// </summary>
     [Fact]
     public void CommandMarkerRoundTripsExactAuthoredOwnership()
     {
@@ -131,7 +139,9 @@ public sealed class MySqlRuntimeDiagnosticsTests
         Assert.True(correlation.Equals(diagnostic.Correlation, StringComparison.Ordinal));
     }
 
-    /// <summary>No marker substring inside ordinary SQL or malformed correlation may acquire runtime ownership.</summary>
+    /// <summary>
+    /// No marker substring inside ordinary SQL or malformed correlation may acquire runtime ownership.
+    /// </summary>
     /// <param name="sql">A structurally invalid, incomplete or non-leading authored marker.</param>
     [Theory]
     [InlineData("SELECT 1;/*doka_sm_runtime:17:0123456789abcdef0123456789abcdef*/")]
@@ -153,7 +163,9 @@ public sealed class MySqlRuntimeDiagnosticsTests
         Assert.False(recognized);
     }
 
-    /// <summary>Explanation selection uses completed proof variables, never duplicated catalog or row queries.</summary>
+    /// <summary>
+    /// Explanation selection uses completed proof variables, never duplicated catalog or row queries.
+    /// </summary>
     [Fact]
     public void ReasonSlotsConsumeOnlyMaterializedFacts()
     {
@@ -187,7 +199,9 @@ public sealed class MySqlRuntimeDiagnosticsTests
         Assert.Equal("column_nullability_data_blocked", diagnostic.GetReasonCode(8));
     }
 
-    /// <summary>Atomic CHECK attribution requires the exact admitted fingerprint, owner and native failure contract.</summary>
+    /// <summary>
+    /// Atomic CHECK attribution requires the exact admitted fingerprint, owner and native failure contract.
+    /// </summary>
     /// <param name="mariaDb">Whether to use the qualified MariaDB error shape.</param>
     /// <param name="owned">Whether the message identifies this exact required-add CHECK.</param>
     [Theory]
@@ -295,7 +309,9 @@ public sealed class MySqlRuntimeDiagnosticsTests
         Assert.False(recognized);
     }
 
-    /// <summary>Each decorated operation keeps its own native scope and scripts emit real diagnostic result SQL.</summary>
+    /// <summary>
+    /// Each decorated operation keeps its own native scope and scripts emit real diagnostic result SQL.
+    /// </summary>
     /// <param name="script">Whether generation emits a script rather than a managed command.</param>
     [Theory]
     [InlineData(false)]
@@ -360,7 +376,9 @@ public sealed class MySqlRuntimeDiagnosticsTests
             .HasGenerationContract);
     }
 
-    /// <summary>Scripts need local failure-row metadata but never populate the managed decorator's generation lookup.</summary>
+    /// <summary>
+    /// Scripts need local failure-row metadata but never populate the managed decorator's generation lookup.
+    /// </summary>
     /// <param name="script">Whether the outer generation scope emits a raw script.</param>
     [Theory]
     [InlineData(false)]
@@ -403,7 +421,9 @@ public sealed class MySqlRuntimeDiagnosticsTests
         Assert.All(commands, command => Assert.Null(capture.FindRuntimeDiagnostic(command.CommandText)));
     }
 
-    /// <summary>Positional owned assertions require an exact five-column order and bounded binary ASCII values.</summary>
+    /// <summary>
+    /// Positional owned assertions require an exact five-column order and bounded binary ASCII values.
+    /// </summary>
     [Fact]
     public void PositionalRuntimeAssertionsHaveExactlyTheAdmittedOwnedShape()
     {
@@ -428,7 +448,9 @@ public sealed class MySqlRuntimeDiagnosticsTests
             StringComparison.Ordinal);
     }
 
-    /// <summary>The exact-shape oracle rejects reordered or wider columns instead of accepting a vacuous schema match.</summary>
+    /// <summary>
+    /// The exact-shape oracle rejects reordered or wider columns instead of accepting a vacuous schema match.
+    /// </summary>
     /// <param name="mutation">The independently invalidated owned-table invariant.</param>
     [Theory]
     [InlineData("reordered")]
@@ -474,7 +496,7 @@ public sealed class MySqlRuntimeDiagnosticsTests
 
         // Assert
         Assert.NotEqual(sql, mutated);
-        Assert.IsAssignableFrom<XunitException>(failure);
+        Assert.IsType<XunitException>(failure, exactMatch: false);
     }
 
     /// <summary>Checks physical schema and key positions before approving tuple-only INSERT generation.</summary>
@@ -540,13 +562,29 @@ public sealed class MySqlRuntimeDiagnosticsTests
             .UseMySqlSafeMigrations()
             .Options);
 
-    /// <summary>Inspects the active outer lease before cleanup, so a missing registration assertion cannot pass vacuously.</summary>
-    private sealed class RuntimeDiagnosticRegistrationProbe(
-        IMigrationsSqlGenerator inner,
-        MySqlSafeMigrationPlanCapture capture
-    ) : IMigrationsSqlGenerator
+    /// <summary>
+    /// Inspects the active outer lease before cleanup, so a missing registration assertion cannot pass vacuously.
+    /// </summary>
+    private sealed class RuntimeDiagnosticRegistrationProbe : IMigrationsSqlGenerator
     {
-        /// <summary>Gets the positively correlated commands recorded while the generation scope remains active.</summary>
+        private readonly MySqlSafeMigrationPlanCapture _capture;
+        private readonly IMigrationsSqlGenerator _inner;
+
+        /// <summary>Initializes the explicit dependencies of this isolated test helper.</summary>
+        /// <param name="inner">The ordinary provider generator whose commands remain authoritative.</param>
+        /// <param name="capture">The operation-local runtime diagnostic registration scope.</param>
+        public RuntimeDiagnosticRegistrationProbe(
+            IMigrationsSqlGenerator inner,
+            MySqlSafeMigrationPlanCapture capture
+        )
+        {
+            _inner = inner;
+            _capture = capture;
+        }
+
+        /// <summary>
+        /// Gets the positively correlated commands recorded while the generation scope remains active.
+        /// </summary>
         internal int RegisteredCount { get; private set; }
 
         /// <inheritdoc />
@@ -556,8 +594,9 @@ public sealed class MySqlRuntimeDiagnosticsTests
             MigrationsSqlGenerationOptions options = MigrationsSqlGenerationOptions.Default
         )
         {
-            var commands = inner.Generate(operations, model, options);
-            RegisteredCount = commands.Count(command => capture.FindRuntimeDiagnostic(command.CommandText) is not null);
+            var commands = _inner.Generate(operations, model, options);
+            RegisteredCount = commands.Count(command =>
+                _capture.FindRuntimeDiagnostic(command.CommandText) is not null);
 
             return commands;
         }

@@ -21,6 +21,8 @@ internal sealed partial class SafeMigrationPreflightProjection
         {
             if (_tables.TryGetValue(owner, out var table))
             {
+                // WHY: Consult accepted physical FK values with the concrete dictionary enumerator.
+                // ReSharper disable once ForeachCanBeConvertedToQueryUsingAnotherGetEnumerator
                 foreach (var definition in table.ForeignKeys.Values)
                 {
                     if (IsUnmodeledIncomingForeignKey(intent, target, definition))
@@ -32,6 +34,8 @@ internal sealed partial class SafeMigrationPreflightProjection
 
             if (_prerequisites.TryGetValue(owner, out var prerequisites))
             {
+                // WHY: Stop on the first incoming dependency without allocating a capturing predicate.
+                // ReSharper disable once LoopCanBeConvertedToQuery
                 foreach (var definition in prerequisites.ForeignKeys.Definitions)
                 {
                     if (IsUnmodeledIncomingForeignKey(intent, target, definition))
@@ -61,8 +65,13 @@ internal sealed partial class SafeMigrationPreflightProjection
         var dependent = ResolveAlterTable(new TableKey(definition.Table, definition.Schema));
         var columnComparer = _objectIdentityNormalizer?.ColumnIdentifierComparer ?? StringComparer.Ordinal;
 
-        foreach (var modeled in intent.ForeignKeys)
+        // WHY: This immutable definition snapshot is indexed; retain its authored order without interface enumeration.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var modeledIndex = 0; modeledIndex < intent.ForeignKeys.Count; modeledIndex++)
         {
+            var modeled = intent.ForeignKeys[modeledIndex];
+
             var modeledOwner = ResolveAlterTable(new TableKey(modeled.Table, modeled.Schema));
 
             if (!_prerequisites.Comparer.Equals(dependent, modeledOwner)

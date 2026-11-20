@@ -3,13 +3,24 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer;
 /// <summary>
 /// Memoizes provider results and immutable row snapshots within one analysis and row-lineage version.
 /// </summary>
-internal sealed class SqlServerProjectedSeedProofCache(EnsureModelManagedDataIntent[] seeds)
+internal sealed class SqlServerProjectedSeedProofCache
 {
     private readonly Dictionary<string, SqlServerProjectedSeedKeyProof> _proofs = new(StringComparer.Ordinal);
     private int _seedCount;
 
+    /// <summary>
+    /// Captures the analysis-owned immutable lineage buffer without copying its retained row references.
+    /// </summary>
+    /// <param name="seeds">The complete immutable lineage buffer for this invocation.</param>
+    internal SqlServerProjectedSeedProofCache(
+        EnsureModelManagedDataIntent[] seeds
+    )
+    {
+        Seeds = seeds;
+    }
+
     /// <summary>Gets the immutable complete lineage buffer shared by all evaluated prefixes.</summary>
-    internal EnsureModelManagedDataIntent[] Seeds { get; } = seeds;
+    internal EnsureModelManagedDataIntent[] Seeds { get; }
 
     /// <summary>
     /// Evaluates each ordered candidate tuple once at the current lineage version, including negative proofs.
@@ -53,8 +64,14 @@ internal sealed class SqlServerProjectedSeedProofCache(EnsureModelManagedDataInt
         // WHY: Length-prefixed names retain tuple order without collisions
         // between legal identifiers containing delimiters or punctuation.
         var tuple = new StringBuilder();
-        foreach (var column in columns)
+
+        // WHY: Ordered proof columns remain stable while their collision-free identity is encoded.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var columnIndex = 0; columnIndex < columns.Count; columnIndex++)
         {
+            var column = columns[columnIndex];
+
             tuple
                 .Append(column.Length.ToString(CultureInfo.InvariantCulture))
                 .Append(':')

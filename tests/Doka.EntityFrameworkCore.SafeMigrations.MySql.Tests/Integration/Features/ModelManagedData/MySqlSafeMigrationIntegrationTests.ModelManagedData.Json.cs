@@ -9,6 +9,9 @@ public sealed class MySqlModelManagedDataJsonIntegrationTests : MySqlSafeMigrati
         MySqlEngineContainerFixture fixture
     ) : base(fixture) { }
 
+    /// <summary>Preserves JSON semantic values through managed ensure, update, delete, and replay.</summary>
+    /// <param name="mode">The explicitly selected strict or legacy-convergence scaffolding mode.</param>
+    /// <param name="guidFormat">The native GUID storage-format annotation under test.</param>
     [Theory]
     [InlineData(SafeMigrationScaffoldingMode.Strict, DokaMySqlGuidFormat.Char36)]
     [InlineData(SafeMigrationScaffoldingMode.Strict, DokaMySqlGuidFormat.Binary16)]
@@ -19,6 +22,7 @@ public sealed class MySqlModelManagedDataJsonIntegrationTests : MySqlSafeMigrati
         DokaMySqlGuidFormat guidFormat
     )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var storeType = GuidStoreType(guidFormat);
@@ -127,6 +131,8 @@ public sealed class MySqlModelManagedDataJsonIntegrationTests : MySqlSafeMigrati
             initialValues);
 
         var runner = context.GetService<ISafeMigrationRunner>();
+
+        // Act
         var ensurePreflight = await runner.AnalyzeAsync(
             context,
             ensure.Operations,
@@ -219,6 +225,7 @@ public sealed class MySqlModelManagedDataJsonIntegrationTests : MySqlSafeMigrati
             new SafeMigrationRunOptions($"json-delete-postflight-{mode}-{guidFormat}"),
             CancellationToken.None);
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, ensurePreflight.Status);
         Assert.Equal(SafeMigrationObservedState.Matching, ensureReplay.Assessments[^1].ObservedState);
         Assert.All(ensurePostflight.Assessments, assessment => Assert.True(assessment.PostconditionSatisfied));
@@ -254,9 +261,24 @@ public sealed class MySqlModelManagedDataJsonIntegrationTests : MySqlSafeMigrati
                 cancellationToken: CancellationToken.None));
     }
 
-    [Fact]
-    public async Task ModelManagedJsonComparisonRejectsEverySemanticAndStorageBoundary()
+    /// <summary>
+    /// Rejects each JSON semantic or storage mismatch instead of reducing JSON identity to textual equality.
+    /// </summary>
+    /// <param name="mutationIndex">The independently applied JSON semantic or storage mismatch.</param>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    [InlineData(5)]
+    [InlineData(6)]
+    [InlineData(7)]
+    public async Task ModelManagedJsonComparisonRejectsEverySemanticAndStorageBoundary(
+        int mutationIndex
+    )
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
 
@@ -333,41 +355,23 @@ public sealed class MySqlModelManagedDataJsonIntegrationTests : MySqlSafeMigrati
             "`json_like_text` = '{ \"a\": 1, \"b\": 2 }'",
         };
 
-        var resets = new[]
-        {
-            "`scalar_payload` = '1'",
-            "`object_payload` = '{\"a\":1,\"b\":2}'",
-            "`object_payload` = '{\"a\":1,\"b\":2}'",
-            "`array_payload` = '[1,2]'",
-            "`duplicate_array_payload` = '[1,1]'",
-            "`json_null_payload` = 'null'",
-            "`sql_null_payload` = NULL",
-            "`json_like_text` = '{\"a\":1,\"b\":2}'",
-        };
+        // Act
+        await ExecuteSqlAsync(
+            connectionString,
+            $"UPDATE `json_comparison_boundaries` SET {mutations[mutationIndex]} WHERE `id` = 1;",
+            cancellationToken: CancellationToken.None);
 
-        for (var index = 0; index < mutations.Length; index++)
-        {
-            await ExecuteSqlAsync(
-                connectionString,
-                $"UPDATE `json_comparison_boundaries` SET {mutations[index]} WHERE `id` = 1;",
-                cancellationToken: CancellationToken.None);
+        var different = await runner.AnalyzeAsync(
+            context,
+            ensure.Operations,
+            new SafeMigrationRunOptions($"json-semantic-boundary-{mutationIndex}"),
+            CancellationToken.None);
 
-            var different = await runner.AnalyzeAsync(
-                context,
-                ensure.Operations,
-                new SafeMigrationRunOptions($"json-semantic-boundary-{index}"),
-                CancellationToken.None);
-
-            Assert.Equal(
-                SafeMigrationObservedState.Different,
-                Assert.Single(different.Assessments)
-                    .ObservedState);
-
-            await ExecuteSqlAsync(
-                connectionString,
-                $"UPDATE `json_comparison_boundaries` SET {resets[index]} WHERE `id` = 1;",
-                cancellationToken: CancellationToken.None);
-        }
+        // Assert
+        Assert.Equal(
+            SafeMigrationObservedState.Different,
+            Assert.Single(different.Assessments)
+                .ObservedState);
 
         Assert.Equal(SafeMigrationObservedState.Matching,
             Assert.Single(matching.Assessments)

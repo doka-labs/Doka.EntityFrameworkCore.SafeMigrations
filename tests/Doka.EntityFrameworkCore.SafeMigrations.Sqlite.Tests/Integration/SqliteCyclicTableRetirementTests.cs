@@ -381,7 +381,7 @@ public sealed class SqliteCyclicTableRetirementTests : SqliteIntegrationTestBase
         var mode = await ScalarIntAsync(database.Connection, "PRAGMA foreign_keys;", CancellationToken.None);
 
         // Assert
-        Assert.IsAssignableFrom<OperationCanceledException>(exception);
+        Assert.IsType<OperationCanceledException>(exception, exactMatch: false);
         Assert.Equal(before, after);
         Assert.Equal(1, rows);
         Assert.Equal(1, mode);

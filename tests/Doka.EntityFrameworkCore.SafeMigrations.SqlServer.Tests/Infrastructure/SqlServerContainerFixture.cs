@@ -5,9 +5,6 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 /// </summary>
 public sealed class SqlServerContainerFixture : IAsyncLifetime, IDisposable
 {
-    private const string DefaultImage =
-        "mcr.microsoft.com/mssql/server@sha256:cf8f0ab2ebe61feec2eed2629061a07d247f791c2a8ddda74a4ac9f06a291718";
-
     private const string Password = "SafeMigrations_Test_2026!";
     private readonly MsSqlContainer? _container;
     private readonly Func<string, CancellationToken, Task>? _createDatabaseAsync;
@@ -26,7 +23,7 @@ public sealed class SqlServerContainerFixture : IAsyncLifetime, IDisposable
     {
         var configuredImage = Environment.GetEnvironmentVariable("SAFE_MIGRATIONS_SQLSERVER_IMAGE");
         var image = string.IsNullOrWhiteSpace(configuredImage)
-            ? DefaultImage
+            ? DatabaseImageCatalog.GetImage(DatabaseImageCatalog.DefaultSqlServerTarget)
             : configuredImage.Trim();
 
         _container = new MsSqlBuilder(image)

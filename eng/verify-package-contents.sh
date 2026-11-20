@@ -114,6 +114,22 @@ for package_id in "${package_ids[@]}"; do
         exit 1
     fi
 
+    if grep -Eiq '<dependency id="JetBrains\.Annotations"' <<<"$nuspec_content" \
+        || grep -Eiq '(^|/)JetBrains\.Annotations\.dll$' <<<"$nupkg_entries"; then
+        echo "Build-only annotation dependency or runtime asset leaked into $nupkg." >&2
+        exit 1
+    fi
+
+    # WHY: These adapters consume Core internals. A minimum version is insufficient
+    # for that private ABI, including prerelease packages with different identities.
+    if [[ "$package_id" != Doka.EntityFrameworkCore.SafeMigrations ]] \
+        && ! grep -Fq \
+            "<dependency id=\"Doka.EntityFrameworkCore.SafeMigrations\" version=\"[$package_version]\"" \
+            <<<"$nuspec_content"; then
+        echo "Provider package does not require the matching Core private ABI in $nupkg." >&2
+        exit 1
+    fi
+
     if [[ "$package_id" != Doka.EntityFrameworkCore.SafeMigrations.SqlServer ]] \
         && grep -Fq '<dependency id="System.Security.Cryptography.Pkcs"' <<<"$nuspec_content"; then
         echo "SQL Server-only PKCS dependency leaked into $nupkg." >&2
@@ -241,9 +257,9 @@ fi
 
 # The published minimum must protect an isolated consumer that cannot see our
 # central pin or lockfile. Do not replace the minimum with an exact package lock.
-if ! grep -Fq '<dependency id="System.Security.Cryptography.Pkcs" version="9.0.22"' \
+if ! grep -Fq '<dependency id="System.Security.Cryptography.Pkcs" version="10.0.15"' \
     <<<"$sqlserver_nuspec"; then
-    echo "SQL Server package does not publish the patched PKCS minimum 9.0.22." >&2
+    echo "SQL Server package does not publish the patched PKCS minimum 10.0.15." >&2
     exit 1
 fi
 

@@ -434,15 +434,10 @@ internal sealed partial class SafeMigrationPreflightProjection
             return Analysis(SafeMigrationObservedState.Missing);
         }
 
-        if (sourceExists is null
-            && liveAnalysis.ObservedState == SafeMigrationObservedState.Missing)
-        {
-            return liveAnalysis;
-        }
-
-        if (liveAnalysis.ObservedState is not (SafeMigrationObservedState.Missing
-            or SafeMigrationObservedState.Matching
-            or SafeMigrationObservedState.Different))
+        if ((sourceExists is null && liveAnalysis.ObservedState == SafeMigrationObservedState.Missing)
+            || liveAnalysis.ObservedState is not (SafeMigrationObservedState.Missing
+                or SafeMigrationObservedState.Matching
+                or SafeMigrationObservedState.Different))
         {
             return liveAnalysis;
         }
@@ -654,6 +649,8 @@ internal sealed partial class SafeMigrationPreflightProjection
             // WHY: Accepted column facts are consulted before the full table.
             // They must share its transformed dependent expressions, including
             // opaque fragments whose original contract is no longer proven.
+            // WHY: Keep the dictionary's value enumerator while updating the separate accepted-column view.
+            // ReSharper disable once ForeachCanBePartlyConvertedToQueryUsingAnotherGetEnumerator
             foreach (var column in table.Columns.Values)
             {
                 if (column.ComputedColumnSql is not null
@@ -755,9 +752,15 @@ internal sealed partial class SafeMigrationPreflightProjection
             .Values
             .Where(static state => state.Definition is not null)
             .Select(static state => state.Definition!)
+
+            // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var checks = _prerequisites.TryGetValue(key, out var prerequisites)
+
+            // WHY: Retain the existing LINQ snapshot and ownership contract instead of spread-based materialization.
+            // ReSharper disable once UseCollectionExpression
             ? prerequisites.CheckConstraints.Definitions.ToArray()
             : [];
 
@@ -918,14 +921,26 @@ internal sealed partial class SafeMigrationPreflightProjection
     }
 
     /// <summary>Reads accepted facts for an incomplete table without inventing missing live definitions.</summary>
-    private sealed class ProjectedAlterTableView(
-        SafeMigrationPreflightProjection projection,
-        TableKey key
-    ) : ISafeMigrationProjectedAlterTable
+    private sealed class ProjectedAlterTableView : ISafeMigrationProjectedAlterTable
     {
+        private readonly TableKey _key;
+        private readonly SafeMigrationPreflightProjection _projection;
+
+        /// <summary>Initializes a borrowed view over accepted facts for one physical table identity.</summary>
+        /// <param name="projection">The analysis projection owning the accepted facts.</param>
+        /// <param name="key">The normalized physical table identity.</param>
+        public ProjectedAlterTableView(
+            SafeMigrationPreflightProjection projection,
+            TableKey key
+        )
+        {
+            _projection = projection;
+            _key = key;
+        }
+
         /// <inheritdoc />
         public IEnumerable<ExpectedColumnDefinition> Columns
-            => projection._projectedColumnStates.TryGetValue(key, out var columns)
+            => _projection._projectedColumnStates.TryGetValue(_key, out var columns)
                 ? columns
                     .Values
                     .Where(static value => value.Definition is not null)
@@ -934,19 +949,19 @@ internal sealed partial class SafeMigrationPreflightProjection
 
         /// <inheritdoc />
         public ExpectedPrimaryKeyDefinition? PrimaryKey
-            => projection._prerequisites.TryGetValue(key, out var prerequisites)
+            => _projection._prerequisites.TryGetValue(_key, out var prerequisites)
                 ? prerequisites.PrimaryKey
                 : null;
 
         /// <inheritdoc />
         public IEnumerable<ExpectedUniqueConstraintDefinition> UniqueConstraints
-            => projection._prerequisites.TryGetValue(key, out var prerequisites)
+            => _projection._prerequisites.TryGetValue(_key, out var prerequisites)
                 ? prerequisites.UniqueConstraints.Definitions
                 : [];
 
         /// <inheritdoc />
         public IEnumerable<ExpectedIndexDefinition> Indexes
-            => projection._prerequisites.TryGetValue(key, out var prerequisites)
+            => _projection._prerequisites.TryGetValue(_key, out var prerequisites)
                 ? prerequisites.Indexes.Definitions
                 : [];
 
@@ -956,7 +971,7 @@ internal sealed partial class SafeMigrationPreflightProjection
             string? schema,
             string column,
             [NotNullWhen(true)] out ExpectedColumnDefinition? definition
-        ) => projection.TryGetProjectedColumnDefinition(key.Table, key.Schema, column, out definition);
+        ) => _projection.TryGetProjectedColumnDefinition(_key.Table, _key.Schema, column, out definition);
     }
 
     private sealed partial class ProjectedTable

@@ -97,8 +97,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 ? Unsupported(featureFailure)
                 : operation.Intent switch
                 {
-                    EnsureSchemaIntent value => BuildEnsureSchema(value),
-                    DropSchemaIntent value => BuildDropSchema(value),
+                    EnsureSchemaIntent => BuildEnsureSchema(),
+                    DropSchemaIntent => BuildDropSchema(),
                     EnsureTableIntent value => BuildEnsureTable(
                         value,
                         context.ServerVersion.IsMariaDb,
@@ -204,7 +204,14 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 
             return plan with
             {
+                // WHY: Retain fluent materialization and its existing snapshot
+                // ownership rather than replacing this boundary with a spread.
+                // ReSharper disable once UseCollectionExpression
                 ParameterValues = _parameterValues.ToArray(),
+
+                // WHY: Retain fluent materialization and its existing snapshot
+                // ownership rather than replacing this boundary with a spread.
+                // ReSharper disable once UseCollectionExpression
                 BinaryDefaultProofs = _binaryDefaultProofs?.ToArray() ?? [],
                 RequiresLazyStateEvaluation = plan.RequiresLazyStateEvaluation || _binaryDefaultProofs is not null,
             };
@@ -341,8 +348,13 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         bool isMariaDb
     )
     {
-        foreach (var column in table.Columns)
+        // WHY: Index this stable list while preserving its order and ownership.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var columnIndex = 0; columnIndex < table.Columns.Count; columnIndex++)
         {
+            var column = table.Columns[columnIndex];
+
             var failure = MySqlCapturedExpressionContract.GetUnsupportedFeature(
                 column.CapturedComputedSql,
                 column.ComputedExpression,
@@ -354,8 +366,13 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             }
         }
 
-        foreach (var check in table.CheckConstraints)
+        // WHY: Index this stable list while preserving its order and ownership.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var checkIndex = 0; checkIndex < table.CheckConstraints.Count; checkIndex++)
         {
+            var check = table.CheckConstraints[checkIndex];
+
             var failure = MySqlCapturedExpressionContract.GetUnsupportedFeature(
                 check.CapturedSql,
                 check.Expression,
@@ -369,10 +386,6 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 
         return null;
     }
-
-    public string RenderExpression(
-        SafeMigrationSqlExpression expression
-    ) => _expressionRenderer.Render(expression);
 
     private string? GetUnsupportedSqlExpressionFeature(
         SafeMigrationIntent intent
@@ -450,8 +463,13 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             yield return definition.StructuredFilter;
         }
 
-        foreach (var key in definition.Keys)
+        // WHY: Index this stable list while preserving its order and ownership.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var keyIndex = 0; keyIndex < definition.Keys.Count; keyIndex++)
         {
+            var key = definition.Keys[keyIndex];
+
             if (key.Expression is not null)
             {
                 yield return SafeMigrationSql.Opaque(key.Expression);

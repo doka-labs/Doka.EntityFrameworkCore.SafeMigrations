@@ -89,8 +89,14 @@ internal sealed partial class SqlServerProjectedDependencyGraph
                 out var current);
 
             var compatible = false;
-            foreach (var proof in proofs)
+
+            // WHY: The stable indexed snapshot preserves declaration order without mutating the source.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var proofIndex0 = 0; proofIndex0 < proofs.Count; proofIndex0++)
             {
+                var proof = proofs[proofIndex0];
+
                 if (proof.Principal == principal
                     && proof.PrincipalColumn == id
                     && proof.OperandOrdinal == ordinal
@@ -176,8 +182,8 @@ internal sealed partial class SqlServerProjectedDependencyGraph
     /// <param name="inlinePrerequisite">The provider's inline storage and candidate-key predicate.</param>
     /// <param name="storageEquals">The provider's inferred physical column comparison.</param>
     /// <param name="inlinePhysicalWidthSupported">The provider's authored inline key-width proof.</param>
-    /// <param name="cancellationToken">The cancellation token.</param>
     /// <param name="sparsePrerequisite">The catalog-only mixed live/authored endpoint validator.</param>
+    /// <param name="cancellationToken">The required cancellation token for graph capture and metadata reads.</param>
     /// <returns>A mutable graph private to this analysis scope.</returns>
     public static async Task<SqlServerProjectedDependencyGraph> ReadAsync(
         DbConnection connection,
@@ -187,8 +193,8 @@ internal sealed partial class SqlServerProjectedDependencyGraph
         Func<ExpectedTableDefinition, ExpectedForeignKeyDefinition, string> inlinePrerequisite,
         Func<ExpectedColumnDefinition, ExpectedColumnDefinition, bool> storageEquals,
         Func<ExpectedTableDefinition, ExpectedForeignKeyDefinition, bool> inlinePhysicalWidthSupported,
-        CancellationToken cancellationToken,
-        Func<ExpectedTableDefinition?, ExpectedForeignKeyDefinition, int, string>? sparsePrerequisite = null
+        Func<ExpectedTableDefinition?, ExpectedForeignKeyDefinition, int, string>? sparsePrerequisite,
+        CancellationToken cancellationToken
     )
     {
         var graph = new SqlServerProjectedDependencyGraph(inlinePhysicalWidthSupported)
@@ -246,8 +252,15 @@ internal sealed partial class SqlServerProjectedDependencyGraph
                 graph._standaloneObjectNames.Add(request.ForeignKey.Name);
             }
 
-            foreach (var column in request.InitialForeignKey.PrincipalColumns)
+            // WHY: Immutable indexed slots retain their authored order without mutating the source.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var principalIndex = 0;
+                principalIndex < request.InitialForeignKey.PrincipalColumns.Count;
+                principalIndex++)
             {
+                var column = request.InitialForeignKey.PrincipalColumns[principalIndex];
+
                 requests.Add(
                     new BindingRequest(
                         request.InitialForeignKey.PrincipalSchema ?? "dbo",
@@ -257,14 +270,21 @@ internal sealed partial class SqlServerProjectedDependencyGraph
             }
         }
 
-        foreach (var operation in operations)
+        // WHY: The stable indexed snapshot preserves operation and declaration order.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var operationIndex0 = 0; operationIndex0 < operations.Count; operationIndex0++)
         {
+            var operation = operations[operationIndex0];
+
             if (operation.Intent is not RenameTableIntent rename
                 || (rename.Schema ?? "dbo") == (rename.NewSchema ?? rename.Schema ?? "dbo"))
             {
                 continue;
             }
 
+            // WHY: Keep direct set enumeration while appending bindings; filtering would add an iterator.
+            // ReSharper disable once ForeachCanBePartlyConvertedToQueryUsingAnotherGetEnumerator
             foreach (var name in graph._standaloneNames)
             {
                 if (name.Schema == (rename.NewSchema ?? rename.Schema ?? "dbo"))
@@ -431,6 +451,9 @@ internal sealed partial class SqlServerProjectedDependencyGraph
                     request.ForeignKey.Table,
                     request.ForeignKey.Schema,
                     request.ForeignKey.Columns[request.OperandOrdinal]))
+
+            // WHY: Retain this explicit fluent snapshot instead of a collection-spread rewrite.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         // WHY: Advance by accepted batch size while enforcing row and SQL byte limits.
@@ -448,11 +471,13 @@ internal sealed partial class SqlServerProjectedDependencyGraph
                 var selection = "SELECT "
                     + (start + count).ToString(CultureInfo.InvariantCulture)
                     + ", CONVERT(bit, CASE WHEN "
-                    + (request.IsSparse && sparsePrerequisite is not null
-                        ? sparsePrerequisite(request.Table, request.InitialForeignKey, request.OperandOrdinal)
-                        : request.Table is null
-                            ? "1 = 0"
-                            : inlinePrerequisite(request.Table, request.InitialForeignKey))
+                    + request switch
+                    {
+                        { IsSparse: true } when sparsePrerequisite is not null
+                            => sparsePrerequisite(request.Table, request.InitialForeignKey, request.OperandOrdinal),
+                        { Table: null } => "1 = 0",
+                        _ => inlinePrerequisite(request.Table, request.InitialForeignKey),
+                    }
                     + " THEN 1 ELSE 0 END)";
 
                 var addedBytes = Encoding.UTF8.GetByteCount(selection)
@@ -522,6 +547,9 @@ internal sealed partial class SqlServerProjectedDependencyGraph
                         .InitialForeignKey
                         .PrincipalColumns
                         .Select(column => graph._columnIds.GetValueOrDefault(new ColumnKey(principal, column)))
+
+                        // WHY: Retain this explicit fluent snapshot instead of a collection-spread rewrite.
+                        // ReSharper disable once UseCollectionExpression
                         .ToArray();
 
                     if (columnIds.All(static id => id > 0))
@@ -615,6 +643,8 @@ internal sealed partial class SqlServerProjectedDependencyGraph
             return null;
         }
 
+        // WHY: Preserve the early-return dictionary scan without allocating a captured endpoint predicate.
+        // ReSharper disable once ForeachCanBeConvertedToQueryUsingAnotherGetEnumerator
         foreach (var edge in _foreignKeys.Values)
         {
             if (edge.Dependent == dependent

@@ -98,7 +98,7 @@ public sealed class SqlServerRuntimeDiagnosticTests
         var failure = Record.Exception(() => ReadMessage(sql, code, 51003));
 
         // Assert
-        Assert.IsAssignableFrom<XunitException>(failure);
+        Assert.IsType<XunitException>(failure, exactMatch: false);
     }
 
     /// <summary>Every native rejection retains its number and supplies actionable operation context.</summary>
@@ -570,6 +570,7 @@ public sealed class SqlServerRuntimeDiagnosticTests
         ];
 
         var offset = -1;
+
         // WHY: Recognize only the exact generated THROW layouts. Do not trim
         // or normalize the native message literal, its number or its state.
         foreach (var prefix in prefixes)

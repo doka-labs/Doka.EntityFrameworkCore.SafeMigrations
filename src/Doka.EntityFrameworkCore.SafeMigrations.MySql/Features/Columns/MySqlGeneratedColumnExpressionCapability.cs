@@ -61,11 +61,8 @@ internal static class MySqlGeneratedColumnExpressionCapability
                 && expression.Arguments.Count == 1)
             || (name.Equals("COALESCE", StringComparison.OrdinalIgnoreCase) && expression.Arguments.Count > 0);
 
-        if (!supported)
-        {
-            return "generated_column_function_unverified";
-        }
-
-        return null;
+        return supported
+            ? null
+            : "generated_column_function_unverified";
     }
 }

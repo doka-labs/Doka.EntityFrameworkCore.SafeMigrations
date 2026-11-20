@@ -1,8 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
-/// <summary>Verifies immutable predecessor snapshots and records allocation evidence without timing gates.</summary>
-/// <param name="output">The report-only allocation output.</param>
-public sealed class SqlServerComputedDropCaptureAllocationTests(ITestOutputHelper output)
+/// <summary>Verifies immutable predecessor snapshots and owner-local capture routing.</summary>
+public sealed class SqlServerComputedDropCaptureAllocationTests
 {
     /// <summary>
     /// Unchanged prefixes share immutable storage; a later predecessor never mutates an earlier capture.
@@ -30,7 +29,7 @@ public sealed class SqlServerComputedDropCaptureAllocationTests(ITestOutputHelpe
     }
 
     /// <summary>
-    /// Measures candidate preparation alone, excluding EF setup and input creation; bytes are informational.
+    /// Candidate preparation retains every immutable index predecessor for every subsequent drop.
     /// </summary>
     [Fact]
     public void CandidatePreparationAllocationEvidenceIsInformational()
@@ -51,28 +50,15 @@ public sealed class SqlServerComputedDropCaptureAllocationTests(ITestOutputHelpe
             operations.Add(DropColumn("field_" + index.ToString(CultureInfo.InvariantCulture)));
         }
 
-        var allocations = new long[3];
         var prepare = Preparation(analyzer);
-        prepare(operations);
 
         // Act
-        for (var sample = 0; sample < allocations.Length; sample++)
-        {
-            var before = GC.GetAllocatedBytesForCurrentThread();
-            prepare(operations);
-            allocations[sample] = GC.GetAllocatedBytesForCurrentThread() - before;
-        }
-
+        prepare(operations);
         var captured = Captures(analyzer);
 
         // Assert
         Assert.Equal(drops, captured.Count);
         Assert.All(captured.Values, snapshot => Assert.Equal(indexes, snapshot.Length));
-        output.WriteLine(
-            "candidate-capture indexes={0} drops={1} samples-bytes={2}",
-            indexes,
-            drops,
-            string.Join(",", allocations));
     }
 
     /// <summary>Interleaved owners retain only their own predecessors, not growing global snapshots.</summary>
@@ -109,17 +95,9 @@ public sealed class SqlServerComputedDropCaptureAllocationTests(ITestOutputHelpe
             ?? throw new InvalidOperationException("The constraint predecessor preparation is unavailable.");
 
         var prepare = method.CreateDelegate<Action<IReadOnlyList<SafeMigrationOperation>>>(analyzer);
-        var allocations = new long[3];
-        prepare(operations);
 
         // Act
-        for (var sample = 0; sample < allocations.Length; sample++)
-        {
-            var before = GC.GetAllocatedBytesForCurrentThread();
-            prepare(operations);
-            allocations[sample] = GC.GetAllocatedBytesForCurrentThread() - before;
-        }
-
+        prepare(operations);
         var field = typeof(SqlServerSafeMigrationProviderAnalyzer).GetField(
                 "_columnDropConstraintCandidates",
                 BindingFlags.Instance | BindingFlags.NonPublic)
@@ -145,11 +123,9 @@ public sealed class SqlServerComputedDropCaptureAllocationTests(ITestOutputHelpe
 
             Assert.Equal(owner * 2, Assert.Single(Assert.IsType<int[]>(ordinals.GetValue(snapshot))));
         }
-
-        output.WriteLine("constraint-capture owners={0} samples-bytes={1}", owners, string.Join(",", allocations));
     }
 
-    /// <summary>Records native FK routing cost without using load-dependent elapsed time as a test gate.</summary>
+    /// <summary>Routes each native FK predecessor to its exact local owner and endpoint.</summary>
     [Fact]
     public void NativeForeignKeyRoutingEvidenceIsInformational()
     {
@@ -188,20 +164,9 @@ public sealed class SqlServerComputedDropCaptureAllocationTests(ITestOutputHelpe
             ?? throw new InvalidOperationException("The native predecessor capture is unavailable.");
 
         var prepare = method.CreateDelegate<Action<IReadOnlyList<SafeMigrationOperation>>>(analyzer);
-        prepare(operations);
-        var allocations = new long[3];
-        var elapsedTicks = new long[3];
 
         // Act
-        for (var sample = 0; sample < allocations.Length; sample++)
-        {
-            var allocated = GC.GetAllocatedBytesForCurrentThread();
-            var started = Stopwatch.GetTimestamp();
-            prepare(operations);
-            elapsedTicks[sample] = Stopwatch.GetTimestamp() - started;
-            allocations[sample] = GC.GetAllocatedBytesForCurrentThread() - allocated;
-        }
-
+        prepare(operations);
         var field = typeof(SqlServerSafeMigrationProviderAnalyzer).GetField(
                 "_columnDropConstraintCandidates",
                 BindingFlags.Instance | BindingFlags.NonPublic)
@@ -226,13 +191,6 @@ public sealed class SqlServerComputedDropCaptureAllocationTests(ITestOutputHelpe
 
             Assert.Equal(owner * 2, Assert.Single(Assert.IsType<int[]>(ordinals.GetValue(snapshot))));
         }
-
-        output.WriteLine(
-            "native-FK-capture owners={0} bytes={1} ticks={2} frequency={3}",
-            owners,
-            string.Join(",", allocations),
-            string.Join(",", elapsedTicks),
-            Stopwatch.Frequency);
     }
 
     private static void BindNativeGraph(
@@ -245,7 +203,7 @@ public sealed class SqlServerComputedDropCaptureAllocationTests(ITestOutputHelpe
     )
     {
         var type = typeof(SqlServerProjectedDependencyGraph);
-        var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
         var tableType = type.GetNestedType("TableKey", BindingFlags.NonPublic)
             ?? throw new InvalidOperationException("The native table identity key is unavailable.");
 
@@ -293,7 +251,7 @@ public sealed class SqlServerComputedDropCaptureAllocationTests(ITestOutputHelpe
                 1));
     }
 
-    /// <summary>Observes accepted-owner routing without making elapsed time or bytes a pass criterion.</summary>
+    /// <summary>Retains accepted-owner proof identity after every matching constraint removal.</summary>
     /// <param name="owners">The number of independent native CHECK/source owners.</param>
     [Theory]
     [InlineData(512)]
@@ -351,22 +309,12 @@ public sealed class SqlServerComputedDropCaptureAllocationTests(ITestOutputHelpe
             matching.ObservedState,
             SafeMigrationPolicy.ThrowIfDifferent);
 
-        var allocations = new long[3];
-        var ticks = new long[3];
         var columns = new ObserverColumns();
 
         // Act
-        for (var sample = 0; sample < allocations.Length; sample++)
+        for (var owner = 0; owner < owners; owner++)
         {
-            var allocated = GC.GetAllocatedBytesForCurrentThread();
-            var started = Stopwatch.GetTimestamp();
-            for (var owner = 0; owner < owners; owner++)
-            {
-                analyzer.ObserveAcceptedOperation(operations[owner * 2], matching, matching, decision);
-            }
-
-            ticks[sample] = Stopwatch.GetTimestamp() - started;
-            allocations[sample] = GC.GetAllocatedBytesForCurrentThread() - allocated;
+            analyzer.ObserveAcceptedOperation(operations[owner * 2], matching, matching, decision);
         }
 
         var results = operations
@@ -396,17 +344,10 @@ public sealed class SqlServerComputedDropCaptureAllocationTests(ITestOutputHelpe
         Assert.Equal(owners, routes.Count);
         foreach (DictionaryEntry owner in routes)
         {
-            var members = Assert.IsAssignableFrom<IList>(owner.Value);
-            var member = Assert.IsAssignableFrom<ITuple>(Assert.Single(members));
+            var members = Assert.IsType<IList>(owner.Value, exactMatch: false);
+            var member = Assert.IsType<ITuple>(Assert.Single(members), exactMatch: false);
             Assert.Same(proofs[Assert.IsType<SafeMigrationOperation>(member[0])], member[1]);
         }
-
-        output.WriteLine(
-            "accepted-observer owners={0} bytes={1} ticks={2} frequency={3}",
-            owners,
-            string.Join(",", allocations),
-            string.Join(",", ticks),
-            Stopwatch.Frequency);
     }
 
     private static SafeMigrationOperation DropIndex(

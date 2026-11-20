@@ -20,6 +20,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         }
 
         var usesUnchangedLiveMember = false;
+
+        // WHY: Stop at the first live source without allocating a predicate that captures projection state.
+        // ReSharper disable once LoopCanBeConvertedToQuery
         foreach (var column in NativePrerequisiteColumns(check))
         {
             if (!columns.TryGetProjectedColumn(check.Definition.Table, check.Definition.Schema, column, out _)
@@ -111,7 +114,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             .ToHashSet();
 
         var checks = new HashSet<ExpectedCheckConstraintDefinition>();
-        var requests = new List<CheckCallableIdentity>();
+        List<CheckCallableIdentity> requests = [];
         var requested = new HashSet<CheckCallableIdentity>();
 
         // WHY: Keep CHECK capability requests tied to their matching analysis slots.
@@ -199,7 +202,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                 SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes,
                 commandTimeout,
                 (command, offset) => BuildCheckCallableStatement(command, requests, offset),
-                async (reader, offset, count, token) =>
+                async (reader, offset, count, callbackCancellationToken) =>
                 {
                     if (reader.FieldCount != 8)
                     {
@@ -210,7 +213,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                     var current = -1;
                     var absent = false;
                     var seen = new HashSet<long>();
-                    while (await reader.ReadAsync(token))
+                    while (await reader.ReadAsync(callbackCancellationToken))
                     {
                         var ordinal = reader.GetInt32(0);
                         if (ordinal < offset
@@ -310,7 +313,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                         throw InvalidLivePrerequisiteEvidence();
                     }
                 },
-                cancellationToken);
+                transaction: null,
+                maximumParameters: SafeMigrationCatalogQueryLimits.MaximumParameters,
+                cancellationToken: cancellationToken);
         }
 
         return new SparseCheckTypeFacts(checks, signatures, casts);
@@ -324,7 +329,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     )
     {
         using var parameters = new PostgreSqlCatalogQueryParameters(command, _typeMappingSource);
-        var selections = new List<string>();
+        List<string> selections = [];
         var sqlBytes = Encoding.UTF8.GetByteCount(SafeMigrationCatalogQueryLimits.Trailer);
         while (offset + selections.Count < requests.Count
             && selections.Count < SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
@@ -588,25 +593,23 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
 
                 return false;
             case SafeMigrationSqlBetweenExpression between:
-                if (frame.Step == 0)
+                switch (frame.Step)
                 {
-                    frame.Step = 1;
-                    frame.First = result;
-                    child = between.Lower;
+                    case 0:
+                        frame.Step = 1;
+                        frame.First = result;
+                        child = between.Lower;
 
-                    return true;
-                }
+                        return true;
+                    case 1:
+                        frame.Step = 2;
+                        frame.Second = ResolveCheckCallable(
+                            new CheckCallableIdentity(">=", 2, Function: false),
+                            [frame.First, result]);
 
-                if (frame.Step == 1)
-                {
-                    frame.Step = 2;
-                    frame.Second = ResolveCheckCallable(
-                        new CheckCallableIdentity(">=", 2, Function: false),
-                        [frame.First, result]);
+                        child = between.Upper;
 
-                    child = between.Upper;
-
-                    return true;
+                        return true;
                 }
 
                 var upper = ResolveCheckCallable(
@@ -910,8 +913,13 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         var exactOrdinaryCount = 0;
         long? exactNamespace = null;
         var mixedExactNamespaces = false;
-        foreach (var signature in signatures)
+
+        // WHY: This pass only reads the stable ordered collection by ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var signatureIndex = 0; signatureIndex < signatures.Count; signatureIndex++)
         {
+            var signature = signatures[signatureIndex];
             var exact = true;
 
             // WHY: Compare each operand with the signature argument at the same position.
@@ -965,8 +973,13 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         var candidateCount = 0;
         var mostExactArguments = -1;
         var selectedVariadic = false;
-        foreach (var signature in signatures)
+
+        // WHY: This pass only reads the stable ordered collection by ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var signatureIndex = 0; signatureIndex < signatures.Count; signatureIndex++)
         {
+            var signature = signatures[signatureIndex];
             if (signature.Polymorphic)
             {
                 if (signature.Arguments.All(static type => type is 2249
@@ -1188,15 +1201,12 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             return false;
         }
 
-        if (literal.BorrowedValue is null)
+        switch (literal.BorrowedValue)
         {
-            return IsBuiltinCheckScalar(target);
-        }
-
-        if (literal.BorrowedValue is string text
-            && target is 25 or 1042 or 1043)
-        {
-            return !text.Contains('\0', StringComparison.Ordinal);
+            case null:
+                return IsBuiltinCheckScalar(target);
+            case string text when target is 25 or 1042 or 1043:
+                return !text.Contains('\0', StringComparison.Ordinal);
         }
 
         var integerTarget = target switch
@@ -1406,6 +1416,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         SafeMigrationSqlBinaryOperator.Multiply => "*",
         SafeMigrationSqlBinaryOperator.Divide => "/",
         SafeMigrationSqlBinaryOperator.Modulo => "%",
+        SafeMigrationSqlBinaryOperator.And or SafeMigrationSqlBinaryOperator.Or => throw new UnreachableException(),
         _ => throw new UnreachableException(),
     };
 
@@ -1449,13 +1460,22 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     }
 
     /// <summary>Stores native inference state only while an ancestor awaits a child result.</summary>
-    private struct CheckExpressionFrame(SafeMigrationSqlExpression expression)
+    private struct CheckExpressionFrame
     {
-        internal readonly SafeMigrationSqlExpression Expression = expression;
+        internal readonly SafeMigrationSqlExpression Expression;
         internal int Step;
         internal CheckExpressionType First;
         internal CheckExpressionType Second;
         internal CheckExpressionType[]? Results;
+
+        /// <summary>Begins one frame without changing its later mutable inference state.</summary>
+        /// <param name="expression">The immutable expression whose children are evaluated.</param>
+        internal CheckExpressionFrame(
+            SafeMigrationSqlExpression expression
+        )
+        {
+            Expression = expression;
+        }
     }
 
     /// <summary>A requested visible operator or function family, not a generated SQL expression.</summary>

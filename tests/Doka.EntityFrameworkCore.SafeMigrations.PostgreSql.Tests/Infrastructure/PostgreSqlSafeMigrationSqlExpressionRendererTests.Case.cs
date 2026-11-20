@@ -1,5 +1,8 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
+/// <summary>
+/// Verifies PostgreSQL SafeMigrations Sql Expression Renderer contracts in independently owned test state.
+/// </summary>
 public sealed partial class PostgreSqlSafeMigrationSqlExpressionRendererTests
 {
     /// <summary>Only untyped boxed Int64 values outside Int32 become native BIGINT constants.</summary>
@@ -122,13 +125,16 @@ public sealed partial class PostgreSqlSafeMigrationSqlExpressionRendererTests
         string sql
     )
     {
+        // Arrange
         using var context = CreateContext();
         var renderer = CreateRenderer(context);
         Assert.True(SafeMigrationSqlExpressionParser.TryParseCapturedSource(sql, out var expression));
 
+        // Act
         var ordinary = renderer.Render(expression);
         var native = renderer.RenderCatalogCapturedNativeDeparsedCandidateSql(expression, Literal);
 
+        // Assert
         Assert.Equal(sql, ordinary);
         Assert.Contains(sql, native, StringComparison.Ordinal);
         Assert.Contains("::", native, StringComparison.Ordinal);
@@ -172,6 +178,7 @@ public sealed partial class PostgreSqlSafeMigrationSqlExpressionRendererTests
     [Fact]
     public void CaseNativeIntegerCastRetainsItsInputType()
     {
+        // Arrange
         using var context = CreateContext();
         var renderer = CreateRenderer(context);
         var expression = SafeMigrationSql.Case(
@@ -182,8 +189,10 @@ public sealed partial class PostgreSqlSafeMigrationSqlExpressionRendererTests
             ],
             SafeMigrationSql.Cast(SafeMigrationSql.Literal(2), "bigint"));
 
+        // Act
         var candidate = renderer.RenderCatalogNativeDeparsedCandidateSql(expression, Literal);
 
+        // Assert
         Assert.NotNull(candidate);
         Assert.Contains("THEN (1)::bigint", candidate, StringComparison.Ordinal);
         Assert.Contains("ELSE (2)::bigint", candidate, StringComparison.Ordinal);
@@ -194,6 +203,7 @@ public sealed partial class PostgreSqlSafeMigrationSqlExpressionRendererTests
     [Fact]
     public void ParallelCaseCatalogRenderingRetainsInvocationOwnedState()
     {
+        // Arrange
         using var context = CreateContext();
         var renderer = CreateRenderer(context);
         var flat = SafeMigrationSql.Case(
@@ -208,6 +218,7 @@ public sealed partial class PostgreSqlSafeMigrationSqlExpressionRendererTests
         var expectedNested = renderer.RenderCatalogNativeDeparsedCandidateSql(nested, Literal);
         var results = new string?[64];
 
+        // Act
         Parallel.For(
             0,
             results.Length,
@@ -218,6 +229,7 @@ public sealed partial class PostgreSqlSafeMigrationSqlExpressionRendererTests
                         : nested,
                     Literal));
 
+        // Assert
         Assert.NotNull(expectedFlat);
         Assert.NotNull(expectedNested);
         Assert.NotEqual(expectedFlat, expectedNested);
@@ -235,6 +247,7 @@ public sealed partial class PostgreSqlSafeMigrationSqlExpressionRendererTests
     [Fact]
     public void CaseRendersAcrossDdlAndEveryCatalogCandidate()
     {
+        // Arrange
         using var context = CreateContext();
         var renderer = CreateRenderer(context);
         var expression = SafeMigrationSql.Case(
@@ -245,11 +258,13 @@ public sealed partial class PostgreSqlSafeMigrationSqlExpressionRendererTests
             ],
             SafeMigrationSql.Function("COALESCE", SafeMigrationSql.Identifier("value"), SafeMigrationSql.Literal("x")));
 
+        // Act
         var sql = renderer.Render(expression);
         var candidate = renderer.RenderCatalogCandidateSql(expression, static text => "'" + text + "'");
         var deparsed = renderer.RenderCatalogDeparsedCandidateSql(expression, static text => "'" + text + "'");
         var native = renderer.RenderCatalogNativeDeparsedCandidateSql(expression, static text => "'" + text + "'");
 
+        // Assert
         Assert.Equal("CASE WHEN (value IS NULL) THEN 'empty' ELSE coalesce(value, 'x') END", sql);
         Assert.Contains("CASE WHEN", candidate, StringComparison.Ordinal);
         Assert.Contains("CASE WHEN", deparsed, StringComparison.Ordinal);
@@ -269,6 +284,7 @@ public sealed partial class PostgreSqlSafeMigrationSqlExpressionRendererTests
         int role
     )
     {
+        // Arrange
         using var context = CreateContext();
         var renderer = CreateRenderer(context);
         var unsupported = SafeMigrationSql.ProviderFragment("foreign", "x");
@@ -286,8 +302,10 @@ public sealed partial class PostgreSqlSafeMigrationSqlExpressionRendererTests
                 ? unsupported
                 : SafeMigrationSql.Literal(0));
 
+        // Act
         var feature = renderer.GetUnsupportedFeature(expression);
 
+        // Assert
         Assert.Equal("provider_fragment_mismatch", feature);
     }
 }

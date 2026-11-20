@@ -1,11 +1,13 @@
 # MySQL and MariaDB DDL behavior
 
-Version 10.7.2 corrects native nested Boolean, temporal and expression-index
-comparisons while retaining explicit InnoDB contracts, certified generated/CHECK
-boundaries and native independent DROP proofs. Review the
-[current upgrade notes](support-and-qualification.md#upgrade-to-1072) for captured
-numeric-default approvals, required cancellation arguments and dependency floors,
-and the earlier
+Version 10.7.3 preserves the native nested Boolean, temporal and expression-index
+corrections from 10.7.2 and fixes owned asynchronous work/cleanup lifetimes.
+Explicit InnoDB contracts, certified generated/CHECK boundaries and native
+independent DROP proofs remain. Review the
+[current upgrade notes](support-and-qualification.md#upgrade-to-1073) for
+ownership, cleanup and dependency floors, the
+[10.7.2 upgrade](support-and-qualification.md#upgrade-to-1072) for affected
+captured numeric-default approvals, and the earlier
 [10.6.0 contract changes](support-and-qualification.md#upgrade-to-1060) for
 conditional fingerprint approvals and conservative boundaries.
 
@@ -798,7 +800,7 @@ Ensure repair. A captured replacement reports
 `projected_foreign_key_set_null_unrepresentable` instead of borrowing stale
 nullable metadata or promoting a previous matching/missing result.
 
-The Doka contract, established in 10.4.2 and retained by the locked 10.6.5,
+The Doka contract, established in 10.4.2 and retained by the locked 10.7.0,
 removes synthetic defaults and marks additions
 or nullable-to-required alterations requiring explicit backfill. Its provider
 generator rejects required additions without an explicit default, computed
@@ -1541,7 +1543,7 @@ contract.
 
 ### GUID storage and native UUID
 
-The Doka dependency range is `[10.6.5,10.7.0)`. `Binary16` remains the default;
+The Doka dependency range is `[10.7.0,10.8.0)`. `Binary16` remains the default;
 `Char36` is unchanged. Native `uuid` is an explicit Doka model choice through
 `DefaultGuidFormat(MySqlGuidFormat.Uuid)` or a property's
 `HasMySqlGuidFormat(MySqlGuidFormat.Uuid)`. It requires MariaDB 10.7 or later;

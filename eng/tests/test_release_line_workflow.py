@@ -4,6 +4,7 @@ import importlib.util
 import json
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 import textwrap
@@ -50,6 +51,17 @@ class ReleaseWorkflowTests(unittest.TestCase):
                 self.assertNotIn("name: nuget", block)
                 self.assertNotIn("NuGet/login@", block)
 
+    def test_version_intent_reaches_both_validation_and_frozen_authority(self):
+        # Arrange
+        preflight = jobs(ROOT / ".github/workflows/release-candidate.yml")["preflight"]
+        validation = preflight.split("- name: Validate release version\n", 1)[1].split("\n      - name:", 1)[0]
+
+        # Act / Assert
+        self.assertIn("QUALIFICATION_ONLY: ${{ inputs.qualification-only }}", validation)
+        self.assertIn('--qualification-only "$QUALIFICATION_ONLY"', validation)
+        self.assertIn('--qualification-only "$QUALIFICATION_ONLY"', preflight)
+        self.assertIn("- name: Require an unused NuGet version", preflight)
+        self.assertIn("- name: Require the candidate tag to remain absent", preflight)
     def test_finalization_is_a_separate_nonbuilding_nonuploading_protected_path(self):
         # Arrange
         blocks = jobs(ROOT / ".github/workflows/release-candidate.yml")
@@ -185,6 +197,135 @@ class ReleaseWorkflowTests(unittest.TestCase):
                 self.assertEqual(tag_exists, "before the release tag exists" in result.stderr)
                 self.assertLess(source.index("- name: " + name),
                                 source.index("- name: Retain exact source-line qualification identity"))
+
+
+
+
+class ReleaseVersionTests(unittest.TestCase):
+    """Exercise the real validator against isolated released source snapshots."""
+
+    def setUp(self):
+        """Copy only the existing validator; own all source and output fixtures."""
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.root = Path(directory.name)
+        (self.root / "eng").mkdir()
+        (self.root / "src").mkdir()
+        self.validator = self.root / "eng/validate-release-version.sh"
+        shutil.copyfile(ROOT / "eng/validate-release-version.sh", self.validator)
+        self.write_source()
+
+    def write_source(self, source_version="10.7.3"):
+        """Arrange a released source snapshot independently of this repository's version."""
+        (self.root / "src/Directory.Build.props").write_text(
+            f"<Project><PropertyGroup><VersionPrefix>{source_version}</VersionPrefix></PropertyGroup></Project>\n",
+            encoding="ascii")
+        (self.root / "CHANGELOG.md").write_text(f"## [{source_version}] - 2026-11-20\n", encoding="ascii")
+
+    def validate(self, version, *arguments):
+        """Return process evidence without contacting GitHub or public package feeds."""
+        return subprocess.run(["bash", str(self.validator), version, *arguments], cwd=self.root,
+                              capture_output=True, text=True, check=False, timeout=5)
+
+    def test_qualification_accepts_unused_same_major_versions_without_source_changes(self):
+        for source_version, version in (("10.7.3", "10.7.4-rc.1"), ("10.7.3", "10.8.0"),
+                                        ("11.0.0", "11.0.1-rc.1")):
+            with self.subTest(source=source_version, version=version):
+                # Arrange
+                expected = f"## [{source_version}] - 2026-11-20\n"
+                self.write_source(source_version)
+
+                # Act
+                result = self.validate(version, "--qualification-only", "true")
+
+                # Assert
+                self.assertEqual(0, result.returncode, result.stderr)
+                self.assertIn(version, result.stdout)
+                self.assertEqual(expected, (self.root / "CHANGELOG.md").read_text(encoding="ascii"))
+                self.assertIn(f"<VersionPrefix>{source_version}</VersionPrefix>",
+                              (self.root / "src/Directory.Build.props").read_text(encoding="ascii"))
+
+    def test_publication_keeps_exact_source_and_dated_changelog_requirements(self):
+        for version in ("10.7.4-rc.1", "10.7.3-rc.1", "10.8.0"):
+            for arguments in ((), ("--qualification-only", "false")):
+                with self.subTest(version=version, arguments=arguments):
+                    # Arrange / Act
+                    result = self.validate(version, *arguments)
+
+                    # Assert
+                    self.assertNotEqual(0, result.returncode)
+
+    def test_qualification_rejects_foreign_major_and_noncanonical_versions(self):
+        for version in ("11.0.0-rc.1", "9.9.9", "v10.7.4", "10.7.4-RC.1", "10.7.4-rc.01",
+                        "10.7.4+build.1", "10.7.4--rc", "010.7.4", "10.7.4\n", ""):
+            with self.subTest(version=version):
+                # Arrange / Act
+                result = self.validate(version, "--qualification-only", "true")
+
+                # Assert
+                self.assertNotEqual(0, result.returncode)
+
+    def test_invalid_intent_cannot_skip_publication_validation(self):
+        for arguments in (("--qualification-only",), ("--qualification-only", "TRUE"),
+                          ("--qualification-only", "1"), ("--qualification-only", ""),
+                          ("--unknown", "true"), ("--qualification-only", "true", "extra")):
+            with self.subTest(arguments=arguments):
+                # Arrange / Act
+                result = self.validate("10.7.3", *arguments)
+
+                # Assert
+                self.assertNotEqual(0, result.returncode)
+
+    def test_publication_rejects_missing_or_duplicate_dated_release_notes(self):
+        for content in ("", "## [10.7.3] - pending\n", "## [10.7.3] - 2026-11-20\n" * 2):
+            with self.subTest(content=content):
+                # Arrange
+                (self.root / "CHANGELOG.md").write_text(content, encoding="ascii")
+
+                # Act
+                result = self.validate("10.7.3", "--qualification-only", "false")
+
+                # Assert
+                self.assertEqual(1, result.returncode)
+                self.assertIn("exactly one dated entry", result.stderr)
+
+    def test_qualification_rejects_missing_malformed_or_ambiguous_source_version(self):
+        for content in ("<Project />", "<VersionPrefix>10.07.3</VersionPrefix>",
+                        "<VersionPrefix>10.7.3</VersionPrefix>\n<VersionPrefix>11.0.0</VersionPrefix>"):
+            with self.subTest(content=content):
+                # Arrange
+                (self.root / "src/Directory.Build.props").write_text(content, encoding="ascii")
+
+                # Act
+                result = self.validate("10.7.4-rc.1", "--qualification-only", "true")
+
+                # Assert
+                self.assertEqual(1, result.returncode)
+                self.assertIn("canonical stable VersionPrefix", result.stderr)
+
+    def test_real_workflow_command_binds_intent_to_version_outputs(self):
+        for qualification_only, version, expected_exit in (("true", "10.7.4-rc.1", 0),
+                                                          ("false", "10.7.4-rc.1", 1),
+                                                          ("false", "10.7.3", 0)):
+            with self.subTest(intent=qualification_only, version=version):
+                # Arrange
+                preflight = jobs(ROOT / ".github/workflows/release-candidate.yml")["preflight"]
+                step = preflight.split("- name: Validate release version\n", 1)[1].split("\n      - name:", 1)[0]
+                command = step.split("        run: ", 1)[1].strip()
+                output = self.root / "outputs.txt"
+                output.write_text("", encoding="ascii")
+                env = {**os.environ, "PACKAGE_VERSION": version, "QUALIFICATION_ONLY": qualification_only,
+                       "GITHUB_OUTPUT": str(output)}
+
+                # Act
+                result = subprocess.run(["bash", "-euo", "pipefail", "-c", command], env=env, cwd=self.root,
+                                        capture_output=True, text=True, check=False, timeout=5)
+
+                # Assert
+                self.assertEqual(expected_exit, result.returncode, result.stderr)
+                expected = f"package-version={version}\nrelease-tag=v{version}\n" if expected_exit == 0 else ""
+                self.assertEqual(expected, output.read_text(encoding="ascii"))
+
 
 
 class QueueContractTests(unittest.TestCase):

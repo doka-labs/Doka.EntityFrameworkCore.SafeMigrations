@@ -18,7 +18,7 @@ public sealed class SqlServerProjectedSeedProofCacheTests
     )
     {
         // Arrange
-        using var context = new SafeMigrationDbContext(ConnectionString);
+        await using var context = new SafeMigrationDbContext(ConnectionString);
         var builder = Catalog(context);
         var seed = Seed(1);
         var rows = new[] { seed };
@@ -30,7 +30,7 @@ public sealed class SqlServerProjectedSeedProofCacheTests
 
         Task<int> Execute(
             string sql,
-            CancellationToken token
+            CancellationToken cancellationToken
         )
         {
             executions++;
@@ -69,7 +69,7 @@ public sealed class SqlServerProjectedSeedProofCacheTests
     public async Task AppendedSeedVersions_ShareLinearImmutableReferenceStorage()
     {
         // Arrange
-        using var context = new SafeMigrationDbContext(ConnectionString);
+        await using var context = new SafeMigrationDbContext(ConnectionString);
         var builder = Catalog(context);
         var rows = Enumerable
             .Range(1, 100)
@@ -83,7 +83,7 @@ public sealed class SqlServerProjectedSeedProofCacheTests
 
         Task<int> Execute(
             string sql,
-            CancellationToken token
+            CancellationToken cancellationToken
         )
         {
             executions++;
@@ -119,7 +119,7 @@ public sealed class SqlServerProjectedSeedProofCacheTests
     public async Task ChangedCandidateOrFilter_DoesNotBorrowTheEarlierProof()
     {
         // Arrange
-        using var context = new SafeMigrationDbContext(ConnectionString);
+        await using var context = new SafeMigrationDbContext(ConnectionString);
         var builder = Catalog(context);
         var rows = new[] { Seed(1) };
         var lineage = new SqlServerProjectedSeedLineage(Table());
@@ -129,7 +129,7 @@ public sealed class SqlServerProjectedSeedProofCacheTests
 
         Task<int> Execute(
             string sql,
-            CancellationToken token
+            CancellationToken cancellationToken
         )
         {
             executions++;
@@ -180,7 +180,7 @@ public sealed class SqlServerProjectedSeedProofCacheTests
     public async Task OrderedCapture_RepeatedKeysDoNotRepeatTheCandidateCommand()
     {
         // Arrange
-        using var context = new SafeMigrationDbContext(ConnectionString);
+        await using var context = new SafeMigrationDbContext(ConnectionString);
         var analyzer = new SqlServerSafeMigrationProviderAnalyzer(
             context.GetService<IRelationalTypeMappingSource>(),
             context.GetService<ISqlGenerationHelper>());
@@ -210,7 +210,7 @@ public sealed class SqlServerProjectedSeedProofCacheTests
 
         Task<int> Execute(
             string sql,
-            CancellationToken token
+            CancellationToken cancellationToken
         )
         {
             commands.Add(sql);

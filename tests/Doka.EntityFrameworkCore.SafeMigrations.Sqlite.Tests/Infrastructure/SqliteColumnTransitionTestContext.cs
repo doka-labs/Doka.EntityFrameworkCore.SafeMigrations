@@ -52,6 +52,8 @@ internal sealed class SqliteColumnTransitionTestContext : DbContext
         });
     }
 
+    // WHY: EF binds this fixture entity through writable property metadata.
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class ColumnTransitionEntity
     {
         public int Id { get; set; }
@@ -61,6 +63,8 @@ internal sealed class SqliteColumnTransitionTestContext : DbContext
         public string? AddedCode { get; set; }
     }
 
+    // WHY: EF binds this fixture entity through writable property metadata.
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     private sealed class RenameTargetEntity
     {
         public int Id { get; set; }

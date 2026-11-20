@@ -1,7 +1,3 @@
-using System.Data;
-using Microsoft.Data.SqlClient;
-using Microsoft.EntityFrameworkCore.Diagnostics;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer;
 
 /// <summary>
@@ -75,7 +71,9 @@ internal sealed class SqlServerSafeMigrationIdentityInsertCommand : SqlServerSaf
             connection.Open();
             scopeOpened = true;
 
-            using (var command = connection.DbConnection.CreateCommand())
+            var command = connection.DbConnection.CreateCommand();
+            Exception? bootstrapFailure = null;
+            try
             {
                 ConfigureScopeCommand(
                     connection,
@@ -84,6 +82,26 @@ internal sealed class SqlServerSafeMigrationIdentityInsertCommand : SqlServerSaf
 
                 scopeIssued = true;
                 command.ExecuteNonQuery();
+            }
+            catch (Exception exception)
+            {
+                bootstrapFailure = exception;
+
+                throw;
+            }
+            finally
+            {
+                try
+                {
+                    command.Dispose();
+                }
+                catch (Exception exception) when (bootstrapFailure is not null)
+                {
+                    SafeMigrationAnalysisCleanup.RetainFailure(
+                        bootstrapFailure,
+                        exception,
+                        "SafeMigrations.AnalysisCommandDisposeException");
+                }
             }
 
             providerDispatched = true;
@@ -108,9 +126,13 @@ internal sealed class SqlServerSafeMigrationIdentityInsertCommand : SqlServerSaf
                 {
                     connection.Close();
                 }
-                catch when (originalFailure is not null)
+                catch (Exception exception) when (originalFailure is not null)
                 {
                     QuarantineSession(originalFailure);
+                    SafeMigrationAnalysisCleanup.RetainFailure(
+                        originalFailure,
+                        exception,
+                        "SafeMigrations.AnalysisConnectionCloseException");
                 }
             }
         }
@@ -144,7 +166,9 @@ internal sealed class SqlServerSafeMigrationIdentityInsertCommand : SqlServerSaf
             // fresh invocation. EF's counted Open/Close keeps caller ownership.
             // If Open/CreateCommand/configuration fails before SQL is issued,
             // no owned marker or ON exists and recovery must not touch callers.
-            await using (var command = connection.DbConnection.CreateCommand())
+            var command = connection.DbConnection.CreateCommand();
+            Exception? bootstrapFailure = null;
+            try
             {
                 ConfigureScopeCommand(
                     connection,
@@ -154,6 +178,19 @@ internal sealed class SqlServerSafeMigrationIdentityInsertCommand : SqlServerSaf
                 scopeIssued = true;
 
                 await command.ExecuteNonQueryAsync(cancellationToken);
+            }
+            catch (Exception exception)
+            {
+                bootstrapFailure = exception;
+
+                throw;
+            }
+            finally
+            {
+                await SafeMigrationAnalysisCleanup.DisposeAsync(
+                    command,
+                    bootstrapFailure,
+                    "SafeMigrations.AnalysisCommandDisposeException");
             }
 
             cancellationToken.ThrowIfCancellationRequested();
@@ -179,14 +216,23 @@ internal sealed class SqlServerSafeMigrationIdentityInsertCommand : SqlServerSaf
                 {
                     await connection.CloseAsync();
                 }
-                catch when (originalFailure is not null)
+                catch (Exception exception) when (originalFailure is not null)
                 {
                     QuarantineSession(originalFailure);
+                    SafeMigrationAnalysisCleanup.RetainFailure(
+                        originalFailure,
+                        exception,
+                        "SafeMigrations.AnalysisConnectionCloseException");
                 }
             }
         }
     }
 
+    /// <summary>Recovers exact owned identity state without replacing the original execution failure.</summary>
+    /// <param name="connection">The borrowed relational session and transaction.</param>
+    /// <param name="token">The invocation's hexadecimal ownership marker, not a cancellation token.</param>
+    /// <param name="providerDispatched">Whether the original command could have enabled identity insertion.</param>
+    /// <param name="originalException">The primary failure retaining any secondary recovery evidence.</param>
     private void RecoverSession(
         IRelationalConnection connection,
         string token,
@@ -208,9 +254,14 @@ internal sealed class SqlServerSafeMigrationIdentityInsertCommand : SqlServerSaf
             ConfigureCleanupCommand(connection, command, token, providerDispatched);
             command.ExecuteNonQuery();
         }
-        catch
+        catch (Exception exception)
         {
             QuarantineSession(originalException);
+            SafeMigrationAnalysisCleanup.RetainFailure(
+                originalException,
+                exception,
+                "Doka.SafeMigrations.SqlServer.IdentityInsertCleanupException");
+
             recoveryRequired = providerDispatched;
         }
         finally
@@ -221,9 +272,14 @@ internal sealed class SqlServerSafeMigrationIdentityInsertCommand : SqlServerSaf
                 {
                     command.Dispose();
                 }
-                catch
+                catch (Exception exception)
                 {
                     QuarantineSession(originalException);
+                    SafeMigrationAnalysisCleanup.RetainFailure(
+                        originalException,
+                        exception,
+                        "SafeMigrations.AnalysisCommandDisposeException");
+
                     recoveryRequired = providerDispatched;
                 }
             }
@@ -238,24 +294,49 @@ internal sealed class SqlServerSafeMigrationIdentityInsertCommand : SqlServerSaf
         {
             DiscardPooledSession(connection.DbConnection);
             connection.DbConnection.Close();
-            originalException.Data[RecoveryFailureDataKey] = "session_closed";
+            SafeMigrationAnalysisCleanup.RetainRecoveryStatus(
+                originalException,
+                RecoveryFailureDataKey,
+                "session_closed");
         }
-        catch
+        catch (Exception exception)
         {
+            SafeMigrationAnalysisCleanup.RetainFailure(
+                originalException,
+                exception,
+                "SafeMigrations.AnalysisConnectionCloseException");
+
             try
             {
                 connection.DbConnection.Dispose();
-                originalException.Data[RecoveryFailureDataKey] = "session_disposed";
+                SafeMigrationAnalysisCleanup.RetainRecoveryStatus(
+                    originalException,
+                    RecoveryFailureDataKey,
+                    "session_disposed");
             }
-            catch
+            catch (Exception disposeFailure)
             {
                 // WHY: Even both failed physical boundaries cannot clear the
                 // scoped quarantine or replace the original migration failure.
-                originalException.Data[RecoveryFailureDataKey] = "session_quarantined";
+                SafeMigrationAnalysisCleanup.RetainRecoveryStatus(
+                    originalException,
+                    RecoveryFailureDataKey,
+                    "session_quarantined");
+
+                SafeMigrationAnalysisCleanup.RetainFailure(
+                    originalException,
+                    disposeFailure,
+                    "SafeMigrations.AnalysisConnectionDisposeException");
             }
         }
     }
 
+    /// <summary>Retains actual native recovery and disposal work until the borrowed lifetime ends.</summary>
+    /// <param name="connection">The borrowed relational session and transaction.</param>
+    /// <param name="token">The invocation's hexadecimal ownership marker, not a cancellation token.</param>
+    /// <param name="providerDispatched">Whether the original command could have enabled identity insertion.</param>
+    /// <param name="originalException">The primary failure retaining any secondary recovery evidence.</param>
+    /// <returns>Completion of protected recovery, including any required physical connection disposal.</returns>
     private async Task RecoverSessionAsync(
         IRelationalConnection connection,
         string token,
@@ -263,7 +344,6 @@ internal sealed class SqlServerSafeMigrationIdentityInsertCommand : SqlServerSaf
         Exception originalException
     )
     {
-        using var cleanupTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
         DbCommand? command = null;
         var recoveryRequired = false;
 
@@ -278,15 +358,19 @@ internal sealed class SqlServerSafeMigrationIdentityInsertCommand : SqlServerSaf
             ConfigureCleanupCommand(connection, command, token, providerDispatched);
 
             // WHY: SQL Server TRY/CATCH does not catch client attentions.
-            // Recovery must outlive the canceled operation's token, but it
-            // remains bounded independently of the caller's canceled token.
-            await command
-                .ExecuteNonQueryAsync(cleanupTimeout.Token)
-                .WaitAsync(cleanupTimeout.Token);
+            // Recovery retains its actual borrowed command until execution ends;
+            // canceling an observer would not finish the native operation. Keep
+            // its explicit command timeout, without an independent waiting timer.
+            await command.ExecuteNonQueryAsync(CancellationToken.None);
         }
-        catch
+        catch (Exception exception)
         {
             QuarantineSession(originalException);
+            SafeMigrationAnalysisCleanup.RetainFailure(
+                originalException,
+                exception,
+                "Doka.SafeMigrations.SqlServer.IdentityInsertCleanupException");
+
             recoveryRequired = providerDispatched;
         }
         finally
@@ -295,14 +379,16 @@ internal sealed class SqlServerSafeMigrationIdentityInsertCommand : SqlServerSaf
             {
                 try
                 {
-                    await command
-                        .DisposeAsync()
-                        .AsTask()
-                        .WaitAsync(cleanupTimeout.Token);
+                    await command.DisposeAsync();
                 }
-                catch
+                catch (Exception exception)
                 {
                     QuarantineSession(originalException);
+                    SafeMigrationAnalysisCleanup.RetainFailure(
+                        originalException,
+                        exception,
+                        "SafeMigrations.AnalysisCommandDisposeException");
+
                     recoveryRequired = providerDispatched;
                 }
             }
@@ -316,30 +402,40 @@ internal sealed class SqlServerSafeMigrationIdentityInsertCommand : SqlServerSaf
         try
         {
             DiscardPooledSession(connection.DbConnection);
-            using var closeTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-            await connection
-                .DbConnection
-                .CloseAsync()
-                .WaitAsync(closeTimeout.Token);
+            await connection.DbConnection.CloseAsync();
 
-            originalException.Data[RecoveryFailureDataKey] = "session_closed";
+            SafeMigrationAnalysisCleanup.RetainRecoveryStatus(
+                originalException,
+                RecoveryFailureDataKey,
+                "session_closed");
         }
-        catch
+        catch (Exception exception)
         {
+            SafeMigrationAnalysisCleanup.RetainFailure(
+                originalException,
+                exception,
+                "SafeMigrations.AnalysisConnectionCloseException");
+
             try
             {
-                using var disposeTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-                await connection
-                    .DbConnection
-                    .DisposeAsync()
-                    .AsTask()
-                    .WaitAsync(disposeTimeout.Token);
+                await connection.DbConnection.DisposeAsync();
 
-                originalException.Data[RecoveryFailureDataKey] = "session_disposed";
+                SafeMigrationAnalysisCleanup.RetainRecoveryStatus(
+                    originalException,
+                    RecoveryFailureDataKey,
+                    "session_disposed");
             }
-            catch
+            catch (Exception disposeFailure)
             {
-                originalException.Data[RecoveryFailureDataKey] = "session_quarantined";
+                SafeMigrationAnalysisCleanup.RetainRecoveryStatus(
+                    originalException,
+                    RecoveryFailureDataKey,
+                    "session_quarantined");
+
+                SafeMigrationAnalysisCleanup.RetainFailure(
+                    originalException,
+                    disposeFailure,
+                    "SafeMigrations.AnalysisConnectionDisposeException");
             }
         }
     }
@@ -349,9 +445,12 @@ internal sealed class SqlServerSafeMigrationIdentityInsertCommand : SqlServerSaf
     )
     {
         // WHY: An uncertain session and its caller transaction cannot be
-        // reused even if Close or Dispose subsequently fails or times out.
-        Analyzer.QuarantineConnection();
-        originalException.Data[RecoveryFailureDataKey] = "session_quarantined";
+        // reused even if actual Close or Dispose subsequently fails.
+        Analyzer.QuarantineConnection(originalException);
+        SafeMigrationAnalysisCleanup.RetainRecoveryStatus(
+            originalException,
+            RecoveryFailureDataKey,
+            "session_quarantined");
     }
 
     /// <summary>Recognizes the bootstrap's exact existing-key rejection before any owned marker is written.</summary>
@@ -480,6 +579,9 @@ internal class SqlServerSafeMigrationGuardedCommand : MigrationCommand
     protected void ThrowIfConnectionQuarantined() => Analyzer.ThrowIfConnectionQuarantined();
 
     private static IRelationalCommand CreateEmptyMetadataCommand(
+
+        // WHY: The wrapper must reject a null delegated EF command before publishing its metadata shell.
+        // ReSharper disable once ParameterOnlyUsedForPreconditionCheck.Local
         MigrationCommand command,
         MigrationsSqlGeneratorDependencies dependencies
     )

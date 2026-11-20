@@ -88,19 +88,11 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             : $"({MySqlSafeMigrationRuntimePlan.RequiredColumnAddStatusPlaceholder}) = 'complete'";
 
         var prerequisite = plan.PrerequisiteExpression;
-        var mode = NativeEnumNoBackslashEscapesExpression;
-        var ordinaryCode = plan.ClassificationCodeExpression ?? "NULL";
 
-        string QualifyState(
-            string expression
-        ) => $"""
-            CASE WHEN NOT ({prerequisite})
-            THEN 'prerequisite_missing'
-            WHEN ({matching})
-            THEN 'matching'
-            WHEN NOT ({mode})
-            THEN 'unsupported' ELSE ({expression}) END
-            """;
+        // WHY: Name the one native-mode fact shared by every qualified expression in this plan.
+        // ReSharper disable once InlineTemporaryVariable
+        const string mode = NativeEnumNoBackslashEscapesExpression;
+        var ordinaryCode = plan.ClassificationCodeExpression ?? "NULL";
 
         // WHY: Native comment setup enables NO_BACKSLASH_ESCAPES. A different
         // original mode can create another member domain and falsely satisfy
@@ -135,6 +127,17 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 }
                 : null,
         };
+
+        string QualifyState(
+            string expression
+        ) => $"""
+            CASE WHEN NOT ({prerequisite})
+            THEN 'prerequisite_missing'
+            WHEN ({matching})
+            THEN 'matching'
+            WHEN NOT ({mode})
+            THEN 'unsupported' ELSE ({expression}) END
+            """;
     }
 
     /// <summary>Compares ordered ENUM/SET members exactly under the native literal-decoding mode.</summary>
@@ -146,16 +149,6 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     {
         var escaped = BuildEnumSetCatalogDisplay(storeType, backslashEscapes: true, out var escapedDoubleQuotes);
         var literal = BuildEnumSetCatalogDisplay(storeType, backslashEscapes: false, out var literalDoubleQuotes);
-
-        string Match(
-            string? display,
-            bool doubleQuotes
-        ) => display is null
-            ? "FALSE"
-            : $"CAST(c.COLUMN_TYPE AS BINARY) = CAST({Literal(display)} AS BINARY)"
-            + (doubleQuotes
-                ? " AND FIND_IN_SET('ANSI_QUOTES', @@SESSION.sql_mode) = 0"
-                : string.Empty);
 
         // WHY: Folding the complete type also folds member values. Backslash
         // interpretations must remain mode-qualified; accepting both displays
@@ -172,6 +165,16 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             THEN ({Match(literal, literalDoubleQuotes)})
             ELSE ({escapedMatch}) END)
             """;
+
+        string Match(
+            string? display,
+            bool doubleQuotes
+        ) => display is null
+            ? "FALSE"
+            : $"CAST(c.COLUMN_TYPE AS BINARY) = CAST({Literal(display)} AS BINARY)"
+            + (doubleQuotes
+                ? " AND FIND_IN_SET('ANSI_QUOTES', @@SESSION.sql_mode) = 0"
+                : string.Empty);
     }
 
     /// <summary>Serializes only a quoted ENUM/SET member list using the native catalog display rules.</summary>
@@ -201,11 +204,12 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var keyword = text[..open]
             .TrimEnd(EnumSetSqlWhitespace);
 
-        var kind = keyword.Equals("enum", StringComparison.OrdinalIgnoreCase)
-            ? "enum"
-            : keyword.Equals("set", StringComparison.OrdinalIgnoreCase)
-                ? "set"
-                : null;
+        var kind = keyword.Equals("enum", StringComparison.OrdinalIgnoreCase) switch
+        {
+            true => "enum",
+            _ when keyword.Equals("set", StringComparison.OrdinalIgnoreCase) => "set",
+            _ => null,
+        };
 
         if (kind is null)
         {
@@ -349,7 +353,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             '\0' => result.Append("\\0"),
             '\n' => result.Append("\\n"),
             '\r' => result.Append("\\r"),
-            '\\' => result.Append("\\\\"),
+            '\\' => result.Append(@"\\"),
             '\'' => result.Append("''"),
             _ => result.Append(character),
         };

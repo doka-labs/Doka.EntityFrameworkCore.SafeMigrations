@@ -365,12 +365,16 @@ public sealed class SafeMigrationExpressionInspectorStackTests
         return expression;
     }
 
+    /// <summary>Exercises unsupported-node behavior without extending the production node family.</summary>
     private sealed class UnknownExpression : SafeMigrationSqlExpression;
 
+    /// <summary>Records comparison order without changing ordinal equality semantics.</summary>
     private sealed class RecordingComparer : IEqualityComparer<string>
     {
+        /// <summary>Gets the left operands in their actual visitation order.</summary>
         public List<string> Seen { get; } = [];
 
+        /// <inheritdoc />
         public bool Equals(
             string? left,
             string? right
@@ -381,15 +385,19 @@ public sealed class SafeMigrationExpressionInspectorStackTests
             return StringComparer.Ordinal.Equals(left, right);
         }
 
+        /// <inheritdoc />
         public int GetHashCode(
             string value
         ) => StringComparer.Ordinal.GetHashCode(value);
     }
 
+    /// <summary>Records identifier collection order while retaining ordinary set uniqueness.</summary>
     private sealed class RecordingSet : HashSet<string>, ISet<string>
     {
+        /// <summary>Gets all attempted insertions, including values already present in the set.</summary>
         public List<string> Seen { get; } = [];
 
+        /// <inheritdoc />
         bool ISet<string>.Add(
             string item
         )

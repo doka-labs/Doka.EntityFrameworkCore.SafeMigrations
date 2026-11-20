@@ -32,13 +32,13 @@ public sealed partial class SqlServerSafeMigrationsSqlGenerator
         int newlineOffset;
         while ((newlineOffset = remaining.IndexOfAny('\r', '\n')) >= 0)
         {
-            AppendEscapedSqlLiteral(builder, remaining.Slice(0, newlineOffset));
+            AppendEscapedSqlLiteral(builder, remaining[..newlineOffset]);
             builder.Append(
                 remaining[newlineOffset] == '\r'
                     ? "' + NCHAR(13) + N'"
                     : "' + NCHAR(10) + N'");
 
-            remaining = remaining.Slice(newlineOffset + 1);
+            remaining = remaining[(newlineOffset + 1)..];
         }
 
         AppendEscapedSqlLiteral(builder, remaining);
@@ -69,7 +69,7 @@ public sealed partial class SqlServerSafeMigrationsSqlGenerator
             var newline = sql.IndexOf('\n');
             var line = (newline < 0
                 ? sql
-                : sql.Slice(0, newline)).TrimStart();
+                : sql[..newline]).TrimStart();
 
             if ((newline > 0 && sql[newline - 1] == '\\')
                 || (line.StartsWith("GO", StringComparison.OrdinalIgnoreCase)
@@ -83,7 +83,7 @@ public sealed partial class SqlServerSafeMigrationsSqlGenerator
                 break;
             }
 
-            sql = sql.Slice(newline + 1);
+            sql = sql[(newline + 1)..];
         }
 
         return false;
@@ -440,7 +440,7 @@ public sealed partial class SqlServerSafeMigrationsSqlGenerator
 
                 GuardScopeSuffix
                     .AsSpan()
-                    .CopyTo(destination.Slice(destination.Length - GuardScopeSuffix.Length));
+                    .CopyTo(destination[^GuardScopeSuffix.Length..]);
             });
     }
 
@@ -501,22 +501,22 @@ public sealed partial class SqlServerSafeMigrationsSqlGenerator
                     while ((apostropheOffset = statement.IndexOf('\'')) >= 0)
                     {
                         statement
-                            .Slice(0, apostropheOffset)
-                            .CopyTo(destination.Slice(offset));
+                                [..apostropheOffset]
+                            .CopyTo(destination[offset..]);
 
                         offset += apostropheOffset;
                         destination[offset++] = '\'';
                         destination[offset++] = '\'';
-                        statement = statement.Slice(apostropheOffset + 1);
+                        statement = statement[(apostropheOffset + 1)..];
                     }
 
-                    statement.CopyTo(destination.Slice(offset));
+                    statement.CopyTo(destination[offset..]);
                     offset += statement.Length;
                 }
 
                 GuardScopeSuffix
                     .AsSpan()
-                    .CopyTo(destination.Slice(offset));
+                    .CopyTo(destination[offset..]);
             });
     }
 

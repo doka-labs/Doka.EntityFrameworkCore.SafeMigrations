@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Benchmarks;
 
 /// <summary>Measures MySQL column SQL generation at the retained operation counts.</summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public class MySqlGenerationBenchmarks : IDisposable
 {
     private MySqlGenerationContext _context = null!;

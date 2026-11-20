@@ -1,5 +1,6 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
+/// <summary>Protects native expression display normalization without changing token meaning.</summary>
 public sealed class MySqlExpressionCanonicalizerTests
 {
     /// <summary>AND must not remove parentheses that determine the meaning of an inner OR group.</summary>
@@ -62,40 +63,58 @@ public sealed class MySqlExpressionCanonicalizerTests
                 .Count());
     }
 
+    /// <summary>
+    /// Preserves identifier, string-literal, and Boolean token boundaries in native catalog display candidates.
+    /// </summary>
     [Fact]
     public void CatalogDisplayCandidates_PreserveIdentifiersStringsAndBooleanBoundaries()
     {
+        // Arrange
         const string identifier = "`Co``de\\'_\u00fc`";
 
+        // Act
         var candidates = MySqlExpressionCanonicalizer.BuildCatalogDisplayCandidates(
             $"(({identifier} IS NULL) OR ({identifier} <> ''))",
             includeMySqlEncodedDisplay: false);
 
+        // Assert
         Assert.Contains($"{identifier} is null or {identifier} <> ''", candidates, StringComparer.Ordinal);
     }
 
+    /// <summary>Removes only complete balanced outer parentheses from catalog expressions.</summary>
     [Fact]
     public void CatalogDisplayCandidates_RemoveOnlyBalancedOuterParentheses()
     {
+        // Arrange
+        const string expression = "((`a` + `b`) * `c`)";
+
+        // Act
         var candidates = MySqlExpressionCanonicalizer.BuildCatalogDisplayCandidates(
-            "((`a` + `b`) * `c`)",
+            expression,
             includeMySqlEncodedDisplay: false);
 
+        // Assert
         Assert.Contains("(`a` + `b`) * `c`", candidates, StringComparer.Ordinal);
         Assert.DoesNotContain("`a` + `b`) * `c", candidates, StringComparer.Ordinal);
     }
 
+    /// <summary>
+    /// Adds encoded native catalog display candidates without replacing the canonical logical candidate.
+    /// </summary>
     [Fact]
     public void CatalogDisplayCandidates_AddMySqlEncodedMetadataWithoutReplacingCanonicalCandidate()
     {
+        // Arrange
         const string identifier = "`Co``de\\'_\u00fc`";
 
+        // Act
         var candidates = MySqlExpressionCanonicalizer.BuildCatalogDisplayCandidates(
             $"{identifier} IS NULL OR {identifier} <> ''",
             includeMySqlEncodedDisplay: true);
 
         var renderedIdentifier = "`Co``de" + new string('\\', 3) + "'_\u00c3\u00bc`";
 
+        // Assert
         Assert.Contains($"{identifier} is null or {identifier} <> ''", candidates, StringComparer.Ordinal);
         Assert.Contains(
             $"(({renderedIdentifier} is null) or ({renderedIdentifier} <> _utf8mb4\\'\\'))",

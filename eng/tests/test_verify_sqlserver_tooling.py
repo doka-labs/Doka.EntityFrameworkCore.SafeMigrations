@@ -55,6 +55,9 @@ elif name == "docker":
         sys.exit(int(os.environ.get("MOCK_SCRIPT_EXIT", "0")))
     elif args[0] == "exec" and "-Q" in args:
         query = args[args.index("-Q") + 1]
+        if "doka_tooling_server_identity" in query:
+            print(os.environ.get("MOCK_NATIVE_IDENTITY", "17:17.0.1000.1"))
+            sys.exit(int(os.environ.get("MOCK_NATIVE_IDENTITY_EXIT", "0")))
         if "sys.dm_exec_requests" in query:
             print("Mock SQL Server wait metadata")
             sys.exit(int(os.environ.get("MOCK_DIAGNOSTICS_EXIT", "0")))
@@ -152,7 +155,7 @@ class VerifySqlServerToolingTests(unittest.TestCase):
     def test_all_native_requests_have_finite_connect_and_query_budgets(self) -> None:
         """Readiness, DDL, scripts, readback and diagnostics cannot wait without a native budget."""
         # Arrange
-        expected_requests = {"readiness": 1, "script": 6, "create": 4, "readback": 8}
+        expected_requests = {"readiness": 1, "identity": 1, "script": 6, "create": 4, "readback": 8}
 
         # Act
         result, invocations, _ = self.run_harness()
@@ -169,6 +172,7 @@ class VerifySqlServerToolingTests(unittest.TestCase):
             self.assertIn("-t", args)
             query = args[args.index("-Q") + 1] if "-Q" in args else ""
             request = ("script" if "-i" in args else "readiness" if query == "SELECT 1"
+                       else "identity" if "doka_tooling_server_identity" in query
                        else "create" if query.startswith("CREATE DATABASE") else "readback")
             observed[request] += 1
             expected_budget = "5" if request == "readiness" else "120"
@@ -290,7 +294,8 @@ class VerifySqlServerToolingTests(unittest.TestCase):
 
     def test_every_script_connection_enables_quoted_identifiers(self) -> None:
         """Both clients and all engine profiles execute strict/legacy scripts under the native contract."""
-        for version in ("2019", "2022", "2025"):
+        for version, native_identity in (("2019", "15:15.0.4445.1"), ("2022", "16:16.0.4236.2"),
+                                         ("2025", "17:17.0.1000.1")):
             for client in ("/opt/mssql-tools18/bin/sqlcmd", "/opt/mssql-tools/bin/sqlcmd"):
                 with self.subTest(version=version, client=client):
                     # Arrange
@@ -298,10 +303,17 @@ class VerifySqlServerToolingTests(unittest.TestCase):
                                 "tooling_legacy_normal_script": 1, "tooling_legacy_idempotent_script": 2}
 
                     # Act
-                    result, invocations, _ = self.run_harness(version=version, MOCK_SQLCMD_PATH=client)
+                    result, invocations, _ = self.run_harness(
+                        version=version, MOCK_SQLCMD_PATH=client, MOCK_NATIVE_IDENTITY=native_identity)
 
                     # Assert
                     self.assertEqual(0, result.returncode, result.stderr)
+                    identity = next(index for index, call in enumerate(invocations)
+                                    if call["name"] == "docker" and "-Q" in call["args"]
+                                    and "doka_tooling_server_identity" in call["args"][call["args"].index("-Q") + 1])
+                    scaffold = next(index for index, call in enumerate(invocations) if call["name"] == "dotnet")
+                    self.assertLess(identity, scaffold)
+                    self.assertIn(native_identity, result.stdout)
                     executions = [call["args"] for call in invocations
                                   if call["name"] == "docker" and "-i" in call["args"]]
                     self.assertEqual(6, len(executions))
@@ -314,6 +326,31 @@ class VerifySqlServerToolingTests(unittest.TestCase):
                         observed[database] = observed.get(database, 0) + 1
 
                     self.assertEqual(expected, observed)
+
+    def test_native_identity_rejects_wrong_or_unproven_profile_before_scaffolding(self) -> None:
+        """Native major/version evidence must agree with the annual profile before any dotnet command runs."""
+        cases = (("2025", "16:16.0.4236.2", "0"), ("2022", "17:17.0.1000.1", "0"),
+                 ("2019", "17:17.0.1000.1", "0"), ("2025", "17:16.0.4236.2", "0"),
+                 ("2025", "17:17.0.1000", "0"), ("2025", "17:17.0.invalid.1", "0"),
+                 ("2025", "", "0"), ("2025", ":17.0.1000.1", "0"),
+                 ("2025", "17:17.0.1000.1\n17:17.0.1000.1", "0"),
+                 ("2025", "17:17.0.1000.1\x1b[31m", "0"),
+                 ("2025", "17:17.0.1000.1", "53"), ("2099", "17:17.0.1000.1", "0"))
+        for version, native_identity, native_exit in cases:
+            with self.subTest(version=version, native_identity=native_identity, native_exit=native_exit):
+                # Arrange
+                settings = {"MOCK_NATIVE_IDENTITY": native_identity, "MOCK_NATIVE_IDENTITY_EXIT": native_exit}
+
+                # Act
+                result, invocations, root = self.run_harness(version=version, **settings)
+
+                # Assert
+                self.assertEqual(int(native_exit) if native_exit != "0" else 1, result.returncode, result.stderr)
+                self.assertIn("sql server identity", result.stderr.lower())
+                self.assertFalse(any(call["name"] == "dotnet" for call in invocations))
+                self.assertTrue(any(call["name"] == "docker" and call["args"][0] == "rm"
+                                    for call in invocations))
+                self.assertEqual([], list((root / "work").iterdir()))
 
     def test_removed_quoted_identifier_flag_fails_and_preserves_cleanup(self) -> None:
         """The negative control mutates the real command rather than asserting a copied predicate."""

@@ -4,6 +4,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// Describes an incoming source-model foreign key whose dependent rows must
 /// not be changed implicitly by deletion of a model-managed principal row.
 /// </summary>
+[PublicAPI]
 public sealed class ExpectedModelManagedDataForeignKeyDefinition
 {
     /// <summary>Initializes an incoming foreign-key definition.</summary>

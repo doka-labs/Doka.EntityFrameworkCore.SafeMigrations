@@ -15,7 +15,14 @@
 [assembly: InternalsVisibleTo("Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Benchmarks")]
 [assembly: InternalsVisibleTo("Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Benchmarks")]
 
+// WHY: MySQL/MariaDB consumes the shared parser, ordered projection and native proof contracts.
 [assembly: InternalsVisibleTo("Doka.EntityFrameworkCore.SafeMigrations.MySql")]
+
+// WHY: PostgreSQL uses the common expression, projection and catalog transport implementation.
 [assembly: InternalsVisibleTo("Doka.EntityFrameworkCore.SafeMigrations.PostgreSql")]
+
+// WHY: SQLite integrates Core projection and expression contracts with its atomic rebuild path.
 [assembly: InternalsVisibleTo("Doka.EntityFrameworkCore.SafeMigrations.Sqlite")]
+
+// WHY: SQL Server shares Core proof, guarded-command and ordered analysis contracts.
 [assembly: InternalsVisibleTo("Doka.EntityFrameworkCore.SafeMigrations.SqlServer")]

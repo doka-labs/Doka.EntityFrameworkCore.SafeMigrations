@@ -50,8 +50,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
     /// <inheritdoc />
     bool ISafeMigrationLivePrerequisiteSource.CanRequalifyLiveForeignKeyPrerequisites(
         EnsureForeignKeyIntent intent,
-        SafeMigrationProviderAnalysis liveAnalysis,
-        ISafeMigrationProjectedColumnSource columns
+        SafeMigrationProviderAnalysis liveAnalysis
     ) => liveAnalysis.Code == "foreign_key_multi_valued_supporting_index"
         && _livePrerequisiteKeys?.TryGetValue(intent.Definition, out var captured) == true
         && captured.MultiValuedIndexRisk
@@ -144,6 +143,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
             return true;
         }
 
+        // WHY: Retain direct captured-name iteration and stop at the first unaccepted physical removal.
+        // ReSharper disable once LoopCanBeConvertedToQuery
         foreach (var name in captured.MatchingForeignKeyNames)
         {
             var key = (owner.Item1, owner.Table, name);
@@ -281,8 +282,13 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
             return;
         }
 
-        foreach (var column in definition.Columns)
+        // WHY: Index this stable list while preserving its order and ownership.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var columnIndex = 0; columnIndex < definition.Columns.Count; columnIndex++)
         {
+            var column = definition.Columns[columnIndex];
+
             if (_livePrerequisiteColumns.TryGetValue((owner.Item1, owner.Table, column.Name), out var captured))
             {
                 // WHY: Defaults are inherited at CREATE, not at the later FK.
@@ -303,6 +309,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
 
         // A separate ADD can introduce the only requested FK member, so its
         // sentinel still carries the same owner's native creation defaults.
+        // ReSharper disable once ForeachCanBePartlyConvertedToQueryUsingAnotherGetEnumerator
         foreach (var pair in _livePrerequisiteColumns)
         {
             if (StringComparer.Ordinal.Equals(pair.Key.Schema, owner.Item1)
@@ -425,6 +432,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
                 continue;
             }
 
+            // WHY: General physical-key authority deliberately precedes narrower index/key fallback evidence.
+            // ReSharper disable once ConvertIfStatementToSwitchStatement
             if (intent is EnsureColumnIntent ensureColumn
                 && analyses[ordinal].ObservedState is not (SafeMigrationObservedState.Unsupported
                     or SafeMigrationObservedState.PrerequisiteMissing))
@@ -575,6 +584,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
             return;
         }
 
+        // WHY: Retain fluent materialization and its existing snapshot
+        // ownership rather than replacing this boundary with a spread.
+        // ReSharper disable once UseCollectionExpression
         var requests = requestedColumns.ToArray();
         var captured =
             new Dictionary<(string? Schema, string Table, string Name), LivePrerequisiteColumn>(PhysicalMemberComparer);
@@ -590,7 +602,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
                 offset,
                 maximumPayloadBytes,
                 captureCreationDefaults),
-            async (reader, offset, count, token) =>
+            async (reader, offset, count, callbackCancellationToken) =>
             {
                 if (reader.FieldCount
                     != (captureCreationDefaults
@@ -601,7 +613,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
                 }
 
                 var seen = new bool[count];
-                while (await reader.ReadAsync(token))
+                while (await reader.ReadAsync(callbackCancellationToken))
                 {
                     var ordinal = Convert.ToInt32(reader.GetValue(0), CultureInfo.InvariantCulture);
                     if (ordinal < offset
@@ -650,8 +662,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
                     throw new InvalidOperationException("MySQL omitted a live-prerequisite column certificate.");
                 }
             },
-            cancellationToken,
-            context.Database.CurrentTransaction?.GetDbTransaction());
+            context.Database.CurrentTransaction?.GetDbTransaction(),
+            SafeMigrationCatalogQueryLimits.MaximumParameters,
+            cancellationToken);
 
         Dictionary<ExpectedForeignKeyDefinition, LivePrerequisiteKeyProof>? capturedKeys = null;
         var isMariaDb = false;
@@ -659,6 +672,10 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         {
             (capturedKeys, isMariaDb) = await ReadLiveCandidateKeysAsync(
                 context,
+
+                // WHY: Retain fluent materialization and its existing snapshot
+                // ownership rather than replacing this boundary with a spread.
+                // ReSharper disable once UseCollectionExpression
                 requestedKeys.ToArray(),
                 maximumPayloadBytes,
                 commandTimeout,
@@ -941,12 +958,15 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
                     databaseScopedNames,
                     version.IsMariaDb),
                 ordinal),
-            async (reader, ordinal, _, token) =>
+            async (reader, ordinal, _, callbackCancellationToken) =>
             {
-                captured.Add(requests[ordinal], await ReadLiveCandidateKeyProofAsync(reader, token));
+                captured.Add(
+                    requests[ordinal],
+                    await ReadLiveCandidateKeyProofAsync(reader, callbackCancellationToken));
             },
-            cancellationToken,
-            context.Database.CurrentTransaction?.GetDbTransaction());
+            context.Database.CurrentTransaction?.GetDbTransaction(),
+            SafeMigrationCatalogQueryLimits.MaximumParameters,
+            cancellationToken);
 
         return (captured, version.IsMariaDb);
     }
@@ -1025,13 +1045,13 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
             var isLocal = rawKind == "local_covering_index";
             var isUnsafe = rawKind == "local_multi_valued_index";
             var isForeignKey = rawKind == "local_matching_foreign_key";
-            var identities = isForeignKey
-                ? foreignKeyNames ??= new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-                : isUnsafe
-                    ? unsafeNames ??= new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-                    : isLocal
-                        ? localNames ??= new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-                        : names ??= new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var identities = isForeignKey switch
+            {
+                true => foreignKeyNames ??= new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+                _ when isUnsafe => unsafeNames ??= new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+                _ when isLocal => localNames ??= new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+                _ => names ??= new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+            };
 
             if (name.Length == 0
                 || sawSentinel
@@ -1101,15 +1121,31 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
             multiValuedIndexRisk.Value,
             keys is null
                 ? []
+
+                // WHY: Retain fluent materialization and its existing snapshot
+                // ownership rather than replacing this boundary with a spread.
+                // ReSharper disable once UseCollectionExpression
                 : keys.ToArray(),
             covering is null
                 ? []
+
+                // WHY: Retain fluent materialization and its existing snapshot
+                // ownership rather than replacing this boundary with a spread.
+                // ReSharper disable once UseCollectionExpression
                 : covering.ToArray(),
             unsafeIndexes is null
                 ? []
+
+                // WHY: Retain fluent materialization and its existing snapshot
+                // ownership rather than replacing this boundary with a spread.
+                // ReSharper disable once UseCollectionExpression
                 : unsafeIndexes.ToArray(),
             matchingForeignKeys is null
                 ? []
+
+                // WHY: Retain fluent materialization and its existing snapshot
+                // ownership rather than replacing this boundary with a spread.
+                // ReSharper disable once UseCollectionExpression
                 : matchingForeignKeys.ToArray());
     }
 

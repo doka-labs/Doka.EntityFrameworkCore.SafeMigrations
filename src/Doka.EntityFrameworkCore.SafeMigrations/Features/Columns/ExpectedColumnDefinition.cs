@@ -3,6 +3,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// <summary>
 /// Describes the complete provider-neutral definition of a column.
 /// </summary>
+[PublicAPI]
 public sealed class ExpectedColumnDefinition
 {
     /// <summary>Initializes a complete expected column definition.</summary>

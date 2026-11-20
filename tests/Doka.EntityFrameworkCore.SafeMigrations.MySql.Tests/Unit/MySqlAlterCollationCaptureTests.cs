@@ -7,6 +7,7 @@ public sealed class MySqlAlterCollationCaptureTests
     [Fact]
     public async Task NoBackfillTransitionPerformsNoProbe()
     {
+        // Arrange
         await using var connection = new CatalogStatementTestConnection(true, Results);
         SafeMigrationOperation[] operations =
         [
@@ -21,8 +22,10 @@ public sealed class MySqlAlterCollationCaptureTests
                 SafeMigrationPolicy.RepairIfSafe),
         ];
 
+        // Act
         var result = await Capture(connection, operations, cancellationToken: CancellationToken.None);
 
+        // Assert
         Assert.Empty(result);
         Assert.Empty(connection.Submissions);
     }
@@ -31,13 +34,19 @@ public sealed class MySqlAlterCollationCaptureTests
     [Fact]
     public async Task ExplicitCollationIsResolvedOnce()
     {
+        // Arrange
         await using var connection = new CatalogStatementTestConnection(true, Results);
         var operations = Enumerable
             .Repeat(Operation("latin1_bin"), 1000)
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
+        // Act
         var result = await Capture(connection, operations, cancellationToken: CancellationToken.None);
 
+        // Assert
         Assert.Equal("latin1",
             Assert.Single(result)
                 .Value);
@@ -52,10 +61,13 @@ public sealed class MySqlAlterCollationCaptureTests
     [Fact]
     public async Task UnknownCollationDoesNotProduceEvidence()
     {
+        // Arrange
         await using var connection = new CatalogStatementTestConnection(true, (_, _) => EmptyResults());
 
+        // Act
         var result = await Capture(connection, [Operation("unknown_bin")], cancellationToken: CancellationToken.None);
 
+        // Assert
         Assert.Empty(result);
         Assert.Single(connection.Submissions);
     }
@@ -69,6 +81,7 @@ public sealed class MySqlAlterCollationCaptureTests
         bool duplicate
     )
     {
+        // Arrange
         await using var connection = new CatalogStatementTestConnection(
             true,
             (sql, parameters) =>
@@ -83,11 +96,13 @@ public sealed class MySqlAlterCollationCaptureTests
                 return result;
             });
 
+        // Act
         var exception = await Record.ExceptionAsync(() => Capture(
             connection,
             [Operation("latin1_bin")],
             cancellationToken: CancellationToken.None));
 
+        // Assert
         Assert.IsType<InvalidOperationException>(exception);
         Assert.Equal(1, connection.ReadersDisposed);
     }

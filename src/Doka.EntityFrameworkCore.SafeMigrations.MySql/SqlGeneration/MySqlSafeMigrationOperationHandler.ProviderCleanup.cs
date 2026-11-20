@@ -51,6 +51,8 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
         {
             var command = baseline.Commands[index];
 
+            // WHY: Body-only scopes skip this iteration; scoped protocols then require exact setup/cleanup evidence.
+            // ReSharper disable once ConvertIfStatementToSwitchStatement
             if (command.CleanupCommands.Count == 0)
             {
                 // WHY: Validated scoped specifications require both setup

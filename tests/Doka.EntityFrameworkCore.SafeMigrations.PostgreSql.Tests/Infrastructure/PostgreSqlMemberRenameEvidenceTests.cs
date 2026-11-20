@@ -1,5 +1,3 @@
-using System.Text.RegularExpressions;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
 /// <summary>Checks complete PostgreSQL destination capture for source-independent member renames.</summary>
@@ -192,6 +190,9 @@ public sealed class PostgreSqlMemberRenameEvidenceTests
                 ? new RenameColumnIntent("source_" + ordinal, "MixedOwner", "target_" + ordinal, "MemberScope")
                 : new RenameIndexIntent("source_" + ordinal, "MixedOwner", "target_" + ordinal, "MemberScope"),
             SafeMigrationPolicy.ThrowIfDifferent))
+
+        // WHY: Retain explicit fluent materialization and its independently owned result snapshot.
+        // ReSharper disable once UseCollectionExpression
         .ToArray();
 
     private static SafeMigrationProviderAnalysis[] Analyses(
@@ -199,6 +200,9 @@ public sealed class PostgreSqlMemberRenameEvidenceTests
     ) => Enumerable
         .Range(0, count)
         .Select(static _ => Live(SafeMigrationObservedState.Missing))
+
+        // WHY: Retain explicit fluent materialization and its independently owned result snapshot.
+        // ReSharper disable once UseCollectionExpression
         .ToArray();
 
     private static SafeMigrationProviderAnalysis Live(

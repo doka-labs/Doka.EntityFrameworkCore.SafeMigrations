@@ -1,5 +1,6 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
+/// <summary>Hosts the isolated canonical migration model and provider services for native tests.</summary>
 public class SafeMigrationDbContext : DbContext
 {
     private readonly string? _connectionString;
@@ -8,6 +9,8 @@ public class SafeMigrationDbContext : DbContext
     private readonly MySqlServerVersion? _serverVersion;
     private ServiceProvider? _ownedServices;
 
+    /// <summary>Initializes the isolated model and explicit provider dependencies.</summary>
+    /// <param name="options">The isolated model and provider service options.</param>
     public SafeMigrationDbContext(
         DbContextOptions<SafeMigrationDbContext> options
     ) : base(options)
@@ -15,6 +18,15 @@ public class SafeMigrationDbContext : DbContext
         _registerSafeMigrations = false;
     }
 
+    /// <summary>Initializes the isolated model and explicit provider dependencies.</summary>
+    /// <param name="connectionString">The uniquely owned native test database.</param>
+    /// <param name="serverVersion">The selected native engine family and version contract.</param>
+    /// <param name="registerSafeMigrations">
+    /// Whether this context registers the additive guarded migration services.
+    /// </param>
+    /// <param name="excludeModelManagedDataForExcludedTables">
+    /// Whether externally owned seed changes are filtered.
+    /// </param>
     public SafeMigrationDbContext(
         string connectionString,
         MySqlServerVersion serverVersion,
@@ -37,6 +49,7 @@ public class SafeMigrationDbContext : DbContext
         }
     }
 
+    /// <inheritdoc />
     protected override void OnConfiguring(
         DbContextOptionsBuilder optionsBuilder
     )

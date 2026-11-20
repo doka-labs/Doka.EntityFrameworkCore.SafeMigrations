@@ -103,8 +103,8 @@ public abstract class PostgreSqlSafeMigrationIntegrationTests : PostgreSqlIntegr
     /// <returns>The asynchronous fixture operation or observation.</returns>
     protected static Task CreateSimpleFilterTableAsync(
         string connectionString,
-        CancellationToken cancellationToken,
-        string column = "parent"
+        string column,
+        CancellationToken cancellationToken
     ) => ExecuteSqlAsync(
         connectionString,
         $"""
@@ -213,59 +213,80 @@ public abstract class PostgreSqlSafeMigrationIntegrationTests : PostgreSqlIntegr
     ) => SafeMigrationSql.Function(name, SqlColumn(column));
 
     /// <summary>Retains the CountingDbConnection CLR identity while feature classes share its model.</summary>
-    protected sealed class CountingDbConnection(
-        NpgsqlConnection connection
-    ) : DbConnection
+    protected sealed class CountingDbConnection : DbConnection
     {
+        private readonly NpgsqlConnection _connection;
+
         private int _commandCount;
 
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        public CountingDbConnection(
+            NpgsqlConnection connection
+        )
+        {
+            _connection = connection;
+        }
+
+        /// <summary>Gets the number of native commands created by this connection wrapper.</summary>
         public int CommandCount => Volatile.Read(ref _commandCount);
 
+        /// <inheritdoc />
         [AllowNull]
         public override string ConnectionString
         {
-            get => connection.ConnectionString;
-            set => connection.ConnectionString = value ?? string.Empty;
+            get => _connection.ConnectionString;
+            set => _connection.ConnectionString = value ?? string.Empty;
         }
 
-        public override string Database => connection.Database;
+        /// <inheritdoc />
+        public override string Database => _connection.Database;
 
-        public override string DataSource => connection.DataSource;
+        /// <inheritdoc />
+        public override string DataSource => _connection.DataSource;
 
-        public override string ServerVersion => connection.ServerVersion;
+        /// <inheritdoc />
+        public override string ServerVersion => _connection.ServerVersion;
 
-        public override ConnectionState State => connection.State;
+        /// <inheritdoc />
+        public override ConnectionState State => _connection.State;
 
+        /// <inheritdoc />
         public override void ChangeDatabase(
             string databaseName
-        ) => connection.ChangeDatabase(databaseName);
+        ) => _connection.ChangeDatabase(databaseName);
 
-        public override void Close() => connection.Close();
+        /// <inheritdoc />
+        public override void Close() => _connection.Close();
 
-        public override void Open() => connection.Open();
+        /// <inheritdoc />
+        public override void Open() => _connection.Open();
 
+        /// <inheritdoc />
         public override Task OpenAsync(
             CancellationToken cancellationToken
-        ) => connection.OpenAsync(cancellationToken);
+        ) => _connection.OpenAsync(cancellationToken);
 
+        /// <inheritdoc />
         protected override DbTransaction BeginDbTransaction(
             IsolationLevel isolationLevel
-        ) => connection.BeginTransaction(isolationLevel);
+        ) => _connection.BeginTransaction(isolationLevel);
 
+        /// <inheritdoc />
         protected override DbCommand CreateDbCommand()
         {
             _ = Interlocked.Increment(ref _commandCount);
 
-            return connection.CreateCommand();
+            return _connection.CreateCommand();
         }
 
+        /// <inheritdoc />
         protected override void Dispose(
             bool disposing
         )
         {
             if (disposing)
             {
-                connection.Dispose();
+                _connection.Dispose();
             }
 
             base.Dispose(disposing);
@@ -273,17 +294,35 @@ public abstract class PostgreSqlSafeMigrationIntegrationTests : PostgreSqlIntegr
     }
 
     /// <summary>Retains the MatchingDerivedContext CLR identity while feature classes share its model.</summary>
-    protected sealed class MatchingDerivedContext(string connectionString) : SafeMigrationDbContext(connectionString);
+    protected sealed class MatchingDerivedContext : SafeMigrationDbContext
+    {
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        public MatchingDerivedContext(
+            string connectionString
+        ) : base(connectionString) { }
+    }
 
     /// <summary>Retains the BlockingProviderAnalyzer CLR identity while feature classes share its model.</summary>
-    protected sealed class BlockingProviderAnalyzer(string providerId) : ISafeMigrationProviderAnalyzer
+    protected sealed class BlockingProviderAnalyzer : ISafeMigrationProviderAnalyzer
     {
-        private readonly TaskCompletionSource _started = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _started;
 
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        public BlockingProviderAnalyzer(
+            string providerId
+        )
+        {
+            _started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            ProviderId = providerId;
+        }
+
+        /// <summary>Completes only after the provider analyzer has admitted the actual operation.</summary>
         public Task Started => _started.Task;
 
-        public string ProviderId { get; } = providerId;
+        /// <summary>Identifies the provider contract exercised by this analyzer fixture.</summary>
+        public string ProviderId { get; }
 
+        /// <summary>Validate Context.</summary>
         public void ValidateContext(
             DbContext context
         ) => ArgumentNullException.ThrowIfNull(context);
@@ -324,10 +363,12 @@ public abstract class PostgreSqlSafeMigrationIntegrationTests : PostgreSqlIntegr
     /// <summary>Retains the SnapshotFreeContext CLR identity while feature classes share its model.</summary>
     protected sealed class SnapshotFreeContext : DbContext
     {
+        /// <summary>Initializes the fixture with its configured dependencies and ownership boundary.</summary>
         public SnapshotFreeContext(
             DbContextOptions<SnapshotFreeContext> options
         ) : base(options) { }
 
+        /// <inheritdoc />
         protected override void OnModelCreating(
             ModelBuilder modelBuilder
         )
@@ -345,16 +386,22 @@ public abstract class PostgreSqlSafeMigrationIntegrationTests : PostgreSqlIntegr
     }
 
     /// <summary>Retains the SnapshotFreeEntry CLR identity while feature classes share its model.</summary>
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     protected sealed class SnapshotFreeEntry
     {
+        /// <summary>Gets or sets the mapped id fixture value.</summary>
         public int Id { get; set; }
     }
 
     /// <summary>Retains the StandaloneForeignKeyContext CLR identity while feature classes share its model.</summary>
-    protected sealed class StandaloneForeignKeyContext(
-        DbContextOptions<StandaloneForeignKeyContext> options
-    ) : DbContext(options)
+    protected sealed class StandaloneForeignKeyContext : DbContext
     {
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        public StandaloneForeignKeyContext(
+            DbContextOptions<StandaloneForeignKeyContext> options
+        ) : base(options) { }
+
+        /// <inheritdoc />
         protected override void OnModelCreating(
             ModelBuilder modelBuilder
         )
@@ -404,14 +451,17 @@ public abstract class PostgreSqlSafeMigrationIntegrationTests : PostgreSqlIntegr
     /// <summary>Retains the TransitionParent CLR identity while feature classes share its model.</summary>
     protected sealed class TransitionParent
     {
+        /// <summary>Gets or sets the mapped id fixture value.</summary>
         public int Id { get; init; }
     }
 
     /// <summary>Retains the TransitionChild CLR identity while feature classes share its model.</summary>
     protected sealed class TransitionChild
     {
+        /// <summary>Gets or sets the mapped id fixture value.</summary>
         public int Id { get; init; }
 
+        /// <summary>Gets or sets the mapped parent id fixture value.</summary>
         public int? ParentId { get; init; }
     }
 
@@ -419,9 +469,15 @@ public abstract class PostgreSqlSafeMigrationIntegrationTests : PostgreSqlIntegr
     protected sealed class UnmappedValue;
 
     /// <summary>Retains the SchemaChangingDerivedContext CLR identity while feature classes share its model.</summary>
-    protected sealed class SchemaChangingDerivedContext(string connectionString)
-        : SafeMigrationDbContext(connectionString)
+    protected sealed class SchemaChangingDerivedContext
+        : SafeMigrationDbContext
     {
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        public SchemaChangingDerivedContext(
+            string connectionString
+        ) : base(connectionString) { }
+
+        /// <inheritdoc />
         protected override void OnModelCreating(
             ModelBuilder modelBuilder
         ) => modelBuilder
@@ -430,8 +486,10 @@ public abstract class PostgreSqlSafeMigrationIntegrationTests : PostgreSqlIntegr
     }
 
     /// <summary>Retains the DerivedEntity CLR identity while feature classes share its model.</summary>
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     protected sealed class DerivedEntity
     {
+        /// <summary>Gets or sets the mapped id fixture value.</summary>
         public int Id { get; set; }
     }
 }

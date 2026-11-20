@@ -1190,6 +1190,9 @@ public sealed class MySqlMultiValuedIndexLifetimesIntegrationTests : MySqlSafeMi
             builder
                 .Operations
                 .Take(3)
+
+                // WHY: Retain this explicit materialization/copy path and its collection lowering.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray(),
             script,
             cancellationToken: CancellationToken.None);
@@ -1208,6 +1211,9 @@ public sealed class MySqlMultiValuedIndexLifetimesIntegrationTests : MySqlSafeMi
             builder
                 .Operations
                 .Skip(3)
+
+                // WHY: Retain this explicit materialization/copy path and its collection lowering.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray(),
             script,
             cancellationToken: CancellationToken.None));

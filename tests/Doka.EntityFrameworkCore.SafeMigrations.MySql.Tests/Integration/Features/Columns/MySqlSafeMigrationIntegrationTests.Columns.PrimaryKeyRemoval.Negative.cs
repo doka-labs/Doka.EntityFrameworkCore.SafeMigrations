@@ -1,6 +1,8 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-/// <summary>Exercises the ColumnsPrimaryKeyRemovalNegative migration contracts in an independent class collection.</summary>
+/// <summary>
+/// Exercises the ColumnsPrimaryKeyRemovalNegative migration contracts in an independent class collection.
+/// </summary>
 public sealed partial class MySqlColumnsPrimaryKeyRemovalNegativeIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
     /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
@@ -229,6 +231,9 @@ public sealed partial class MySqlColumnsPrimaryKeyRemovalNegativeIntegrationTest
         await ExecuteOperationsAsync(context,
             operations
                 .Take(3)
+
+                // WHY: Retain this explicit materialization/copy path and its collection lowering.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray(),
             CancellationToken.None);
 

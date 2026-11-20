@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations;
 
 /// <summary>Runs read-only preflight and postflight analysis outside EF migration history.</summary>
+[PublicAPI]
 public interface ISafeMigrationRunner
 {
     /// <summary>Analyzes all operations from migrations not recorded as applied.</summary>

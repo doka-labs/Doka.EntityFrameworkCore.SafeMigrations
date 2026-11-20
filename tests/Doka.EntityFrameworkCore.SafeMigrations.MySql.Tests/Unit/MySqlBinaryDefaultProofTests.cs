@@ -157,7 +157,7 @@ public sealed class MySqlBinaryDefaultProofTests : IDisposable
         // Arrange
         using var context = CreateContext();
         var valueMarker = MySqlCatalogSqlTemplate.Marker(0);
-        var proofMarker = MySqlSafeMigrationBinaryDefaultProof.MarkerPrefix + "0__";
+        const string proofMarker = MySqlSafeMigrationBinaryDefaultProof.MarkerPrefix + "0__";
         var table = "owner`" + valueMarker + proofMarker;
         var column = "value`" + valueMarker + proofMarker;
         var operation = EnsureBinary(table, column, "varbinary(8)", [0, 255]);
@@ -237,7 +237,7 @@ public sealed class MySqlBinaryDefaultProofTests : IDisposable
         const string marker = "__DOKA_SM_BINARY_DEFAULT_0__";
         var parameterMarker = MySqlCatalogSqlTemplate.Marker(0);
         var template = marker + " AND `a``" + marker + "` = 'b''" + marker + "' AND " + parameterMarker;
-        var parameterSql = "'payload " + marker + "'";
+        const string parameterSql = "'payload " + marker + "'";
         var expected = "TRUE AND `a``" + marker + "` = 'b''" + marker + "' AND " + parameterSql;
         var plan = new MySqlSafeMigrationRuntimePlan(template, template, SafeMigrationRepairCapability.None, "FALSE")
         {
@@ -430,6 +430,9 @@ public sealed class MySqlBinaryDefaultProofTests : IDisposable
 
         var sql = commands
             .Select(static command => command.CommandText)
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var payloads = sql
@@ -594,8 +597,12 @@ public sealed class MySqlBinaryDefaultProofTests : IDisposable
         string value
     )
     {
+        // Arrange
+        const int proofCount = 2;
+        const int variableOffset = 7;
+
         // Act
-        var sql = MySqlSafeMigrationBinaryDefaultProof.BuildResetSql(2, 7, clear);
+        var sql = MySqlSafeMigrationBinaryDefaultProof.BuildResetSql(proofCount, variableOffset, clear);
 
         // Assert
         Assert.Equal("SET @doka_sm_binary_default_7 = " + value + ", @doka_sm_binary_default_8 = " + value + ";", sql);
@@ -605,15 +612,19 @@ public sealed class MySqlBinaryDefaultProofTests : IDisposable
     [Fact]
     public void EmptyProofScopeDoesNotCreateEvaluationOrCleanupSql()
     {
+        // Arrange
+        const string stateExpression = "TRUE";
+        const int variableOffset = 7;
+
         // Act
         var evaluation = MySqlSafeMigrationBinaryDefaultProof.BuildEvaluationSql(
             [],
             [],
-            "TRUE",
+            stateExpression,
             "doka_sm_binary_probe",
             "@doka_sm_binary_sql");
 
-        var cleanup = MySqlSafeMigrationBinaryDefaultProof.BuildResetSql(0, 7, clear: true);
+        var cleanup = MySqlSafeMigrationBinaryDefaultProof.BuildResetSql(0, variableOffset, clear: true);
 
         // Assert
         Assert.Same(string.Empty, evaluation);

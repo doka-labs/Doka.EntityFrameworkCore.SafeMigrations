@@ -1,5 +1,8 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
+/// <summary>
+/// Holds the SqlServerStandaloneForeignKeyProjectionTests test contracts for this focused fixture topic.
+/// </summary>
 public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
 {
     /// <summary>Captures the same compact key/storage inputs while keeping this unit fixture catalog-only.</summary>
@@ -14,7 +17,8 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        using var context = new SafeMigrationDbContext("Server=localhost;Database=catalog;Integrated Security=true;");
+        await using var context = new SafeMigrationDbContext(
+            "Server=localhost;Database=catalog;Integrated Security=true;");
         var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
             context.GetService<IRelationalTypeMappingSource>(),
             context.GetService<ISqlGenerationHelper>());
@@ -31,10 +35,10 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
                     : "0 = 1",
             catalog.ColumnStorageEquals,
             static (_, _) => true,
-            cancellationToken,
             static (table, _, _) => table is null || table.Columns[0].StoreType == "int"
                 ? "1 = 1"
-                : "0 = 1");
+                : "0 = 1",
+            cancellationToken);
     }
 
     private static ExpectedTableDefinition Child(

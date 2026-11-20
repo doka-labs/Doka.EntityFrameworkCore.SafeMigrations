@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks;
 
 /// <summary>Measures PostgreSQL column SQL generation at the retained operation counts.</summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public class PostgreSqlGenerationBenchmarks : IDisposable
 {
     private PostgreSqlGenerationContext _context = null!;

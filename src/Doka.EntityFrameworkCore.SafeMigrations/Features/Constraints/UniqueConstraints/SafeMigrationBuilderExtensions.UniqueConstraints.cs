@@ -7,6 +7,10 @@ public static partial class SafeMigrationBuilderExtensions
     /// <param name="definition">The complete expected database-object definition.</param>
     /// <param name="policy">The conflict policy for the operation.</param>
     /// <returns>A builder for annotations on the created SafeMigrations operation.</returns>
+
+    // WHY: C# 14 extension blocks fail RS0016 in the current public API analyzer;
+    // retain the published static-call and XML member identities.
+    // ReSharper disable once ConvertToExtensionBlock
     public static OperationBuilder<SafeMigrationOperation> EnsureUniqueConstraint(
         this MigrationBuilder migrationBuilder,
         ExpectedUniqueConstraintDefinition definition,
@@ -21,6 +25,10 @@ public static partial class SafeMigrationBuilderExtensions
     /// <param name="schema">The schema name, or null for the provider default.</param>
     /// <param name="policy">The conflict policy for the operation.</param>
     /// <returns>A builder for annotations on the created SafeMigrations operation.</returns>
+
+    // WHY: C# 14 extension blocks fail RS0016 in the current public API analyzer;
+    // retain the published static-call and XML member identities.
+    // ReSharper disable once ConvertToExtensionBlock
     public static OperationBuilder<SafeMigrationOperation> AddUniqueConstraintIfNotExists(
         this MigrationBuilder migrationBuilder,
         string name,
@@ -38,6 +46,10 @@ public static partial class SafeMigrationBuilderExtensions
     /// <param name="table">The table name.</param>
     /// <param name="schema">The schema name, or null for the provider default.</param>
     /// <returns>A builder for annotations on the created SafeMigrations operation.</returns>
+
+    // WHY: C# 14 extension blocks fail RS0016 in the current public API analyzer;
+    // retain the published static-call and XML member identities.
+    // ReSharper disable once ConvertToExtensionBlock
     public static OperationBuilder<SafeMigrationOperation> DropUniqueConstraintIfExists(
         this MigrationBuilder migrationBuilder,
         string name,

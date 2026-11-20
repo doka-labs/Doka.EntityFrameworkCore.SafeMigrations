@@ -3,6 +3,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 /// <summary>
 /// Supplies the canonical empty application model for hand-authored migration tests.
 /// </summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 [DbContext(typeof(SafeMigrationDbContext))]
 public sealed class SafeMigrationDbContextModelSnapshot : ModelSnapshot
 {

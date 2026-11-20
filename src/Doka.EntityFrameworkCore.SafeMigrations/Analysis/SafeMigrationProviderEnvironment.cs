@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations;
 
 /// <summary>Describes the live provider environment used by a report.</summary>
+[PublicAPI]
 public sealed class SafeMigrationProviderEnvironment
 {
     /// <summary>Initializes provider environment metadata.</summary>

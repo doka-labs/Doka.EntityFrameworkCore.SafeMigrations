@@ -243,7 +243,7 @@ public sealed class PostgreSqlColumnMatchingOptimizationTests
     )
     {
         // Arrange
-        var token = PostgreSqlSafeMigrationRuntimePlan.MatchingPlaceholder;
+        const string token = PostgreSqlSafeMigrationRuntimePlan.MatchingPlaceholder;
         var quoted = "'a doubled ''" + token + " /* comment */' || \"a doubled\"\"" + token + "\" || ";
         var plan = new PostgreSqlSafeMigrationRuntimePlan(
             quoted + token,

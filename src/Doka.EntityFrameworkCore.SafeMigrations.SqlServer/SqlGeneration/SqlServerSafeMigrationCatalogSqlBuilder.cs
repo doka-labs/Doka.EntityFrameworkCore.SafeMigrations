@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer;
 
 /// <summary>Builds bounded SQL Server catalog and guarded execution contracts.</summary>
@@ -130,7 +128,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     /// <summary>Keeps a denied dependency-catalog read outside the dynamically compiled classifier.</summary>
     /// <param name="plan">The feature-owned classifier and its independent admission gates.</param>
     /// <returns>A delayed permission-qualified plan, or the unchanged unrelated plan.</returns>
-    internal static SqlServerSafeMigrationRuntimePlan QualifyExpressionDependencyRead(
+    private static SqlServerSafeMigrationRuntimePlan QualifyExpressionDependencyRead(
         SqlServerSafeMigrationRuntimePlan plan
     )
     {
@@ -164,7 +162,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     /// <summary>Builds catalog-only prerequisites before SQL binds row-reading expressions.</summary>
     /// <param name="intent">The operation whose physical prerequisites are required.</param>
     /// <returns>A scalar Boolean expression suitable for a delayed execution gate.</returns>
-    public string BuildPrerequisiteExpression(
+    private string BuildPrerequisiteExpression(
         SafeMigrationIntent intent
     )
     {
@@ -188,6 +186,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                     .Concat(value.Definition.IncludedColumns)
                     .Concat(IndexFilterColumns(value.Definition))
                     .Distinct(StringComparer.Ordinal)
+
+                    // WHY: Retain this explicit fluent snapshot instead of a collection-spread rewrite.
+                    // ReSharper disable once UseCollectionExpression
                     .ToArray()),
             EnsurePrimaryKeyIntent value => TableAndColumnsExist(
                 value.Definition.Table,
@@ -210,13 +211,6 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         return Bit(predicate);
     }
 
-    /// <summary>Renders one provider-qualified structured expression.</summary>
-    /// <param name="expression">The immutable expression to validate and render.</param>
-    /// <returns>The SQL Server expression text.</returns>
-    public string RenderExpression(
-        SafeMigrationSqlExpression expression
-    ) => _expressionRenderer.Render(expression);
-
     private string? GetUnsupportedFeature(
         SafeMigrationOperation operation
     )
@@ -228,6 +222,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             return "operation_annotation";
         }
 
+        // WHY: These early validation stages retain table-facet failure precedence before scalar-operation checks.
+        // ReSharper disable once ConvertIfStatementToSwitchStatement
         if (operation.Intent is DropSchemaIntent dropSchema
             && IsReservedSchema(dropSchema.Name))
         {
@@ -260,21 +256,33 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 return "primary_key_nullable_column";
             }
 
-            foreach (var column in table.Definition.Columns)
+            // WHY: Immutable column slots retain authored order for generated prerequisites.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var columnIndex = 0; columnIndex < table.Definition.Columns.Count; columnIndex++)
             {
+                var column = table.Definition.Columns[columnIndex];
+
                 if (GetUnsupportedColumnFeature(column) is { } code)
                 {
                     return code;
                 }
             }
 
-            foreach (var column in table.Definition.Columns)
+            // WHY: Immutable column slots retain the same source-qualification order.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var columnIndex = 0; columnIndex < table.Definition.Columns.Count; columnIndex++)
             {
+                var column = table.Definition.Columns[columnIndex];
+
                 if (!SqlServerComputedColumnContract.IsComputed(column))
                 {
                     continue;
                 }
 
+                // WHY: Preserve first-failure source order without capturing the authored table in a predicate.
+                // ReSharper disable once LoopCanBeConvertedToQuery
                 foreach (var name in ComputedPrerequisiteColumns(column))
                 {
                     var operand = table.Definition.Columns.FirstOrDefault(value => value.Name == name);
@@ -312,8 +320,13 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 return "key_unproven_width";
             }
 
-            foreach (var check in table.Definition.CheckConstraints)
+            // WHY: Immutable CHECK slots retain declaration order while prerequisites are emitted.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var checkIndex = 0; checkIndex < table.Definition.CheckConstraints.Count; checkIndex++)
             {
+                var check = table.Definition.CheckConstraints[checkIndex];
+
                 if (GetUnsupportedCheckSourceFeature(check) is { } sourceFeature)
                 {
                     return sourceFeature;
@@ -549,40 +562,33 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             ? storeType.AsSpan(opening + 1, storeType.Length - opening - 2)
             : default;
 
-        if (opening >= 0
-            && !hasArguments)
-        {
-            type = default;
-
-            return false;
-        }
-
-        if (name is not ("bigint"
-            or "binary"
-            or "bit"
-            or "char"
-            or "date"
-            or "datetime"
-            or "datetime2"
-            or "datetimeoffset"
-            or "decimal"
-            or "float"
-            or "int"
-            or "money"
-            or "nchar"
-            or "numeric"
-            or "nvarchar"
-            or "real"
-            or "rowversion"
-            or "smalldatetime"
-            or "smallint"
-            or "smallmoney"
-            or "time"
-            or "timestamp"
-            or "tinyint"
-            or "uniqueidentifier"
-            or "varbinary"
-            or "varchar"))
+        if ((opening >= 0 && !hasArguments)
+            || name is not ("bigint"
+                or "binary"
+                or "bit"
+                or "char"
+                or "date"
+                or "datetime"
+                or "datetime2"
+                or "datetimeoffset"
+                or "decimal"
+                or "float"
+                or "int"
+                or "money"
+                or "nchar"
+                or "numeric"
+                or "nvarchar"
+                or "real"
+                or "rowversion"
+                or "smalldatetime"
+                or "smallint"
+                or "smallmoney"
+                or "time"
+                or "timestamp"
+                or "tinyint"
+                or "uniqueidentifier"
+                or "varbinary"
+                or "varchar"))
         {
             type = default;
 
@@ -594,6 +600,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         var precision = default(byte?);
         var scale = default(byte?);
 
+        // WHY: Each family populates different metadata fields while preserving lazy argument-validation order.
+        // ReSharper disable once ConvertIfStatementToSwitchStatement
         if (name is "char" or "nchar" or "varchar" or "nvarchar" or "binary" or "varbinary")
         {
             if (!hasArguments)
@@ -809,7 +817,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         string value
     ) => _literal(value);
 
-    private string RenderStringLiteral(
+    private static string RenderStringLiteral(
         string value
     ) => SqlServerSqlStringLiteral.Render(value);
 

@@ -1,8 +1,8 @@
 ---
 id: D-020
 status: proposed
-date: 2026-11-09
-decision-makers: [Dominic Kalkbrenner]
+date: 2026-11-19
+decision-makers: ["Dominic Kalkbrenner"]
 consulted: []
 informed: ["@doka-labs/core-maintainers"]
 scope: "Exact-window SQLite foreign-key retirement without an absent target rebuild model"
@@ -130,6 +130,10 @@ of the owned DDL transaction. Source-generated data operations remain separate.
 ### Decision History
 
 - 2026-11-09: Decision recorded with status proposed.
+- 2026-11-19: Aligned last-update metadata, reciprocal amendments, option titles
+  and source/navigation format with the current documentation profile. Retained
+  the recorded status and historical approval evidence; this migration grants no
+  new architectural acceptance or publication authority.
 
 ### Implementation References
 
@@ -141,11 +145,7 @@ of the owned DDL transaction. Source-generated data operations remain separate.
 
 ### Sources
 
-- [SQLite ALTER TABLE](https://www.sqlite.org/lang_altertable.html)
-  (primary source; retrieved 2026-11-09)
-- [SQLite foreign keys](https://www.sqlite.org/foreignkeys.html)
-  (primary source; retrieved 2026-11-09)
-- [SQLite DROP TABLE](https://www.sqlite.org/lang_droptable.html)
-  (primary source; retrieved 2026-11-09)
-- [EF Core SQLite limitations](https://learn.microsoft.com/en-us/ef/core/providers/sqlite/limitations)
-  (primary source; retrieved 2026-11-09)
+- [SQLite ALTER TABLE](https://www.sqlite.org/lang_altertable.html) (primary source; retrieved 2026-11-09)
+- [SQLite foreign keys](https://www.sqlite.org/foreignkeys.html) (primary source; retrieved 2026-11-09)
+- [SQLite DROP TABLE](https://www.sqlite.org/lang_droptable.html) (primary source; retrieved 2026-11-09)
+- [EF Core SQLite limitations](https://learn.microsoft.com/en-us/ef/core/providers/sqlite/limitations) (primary source; retrieved 2026-11-09)

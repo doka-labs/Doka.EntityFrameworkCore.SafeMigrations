@@ -101,7 +101,10 @@ public sealed class SqliteSafeMigrationInventorySnapshotsIntegrationTests : Sqli
         // Act
         await using (var transaction = await connection.BeginTransactionAsync(CancellationToken.None))
         {
-            await using var contextTransaction = context.Database.UseTransaction(transaction);
+            await using var contextTransaction = await context.Database.UseTransactionAsync(
+                transaction,
+                CancellationToken.None);
+
             await using var command = connection.CreateCommand();
             command.Transaction = (SqliteTransaction)transaction;
             command.CommandText = "CREATE INDEX transaction_index ON inventory_transactions (Legacy);";

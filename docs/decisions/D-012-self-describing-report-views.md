@@ -1,8 +1,8 @@
 ---
 id: D-012
 status: implemented
-date: 2026-09-10
-decision-makers: [Dominic Kalkbrenner]
+date: 2026-11-19
+decision-makers: ["Dominic Kalkbrenner"]
 consulted: []
 informed: ["@doka-labs/core-maintainers"]
 scope: "Self-describing, allocation-bounded report views for operator triage"
@@ -79,8 +79,9 @@ creating an intermediate array, DTO graph, or mutable report copy.
 - Reject zero, undefined selections, and inconsistent blocked reports before
   writing output.
 - Validate serialized views against the packaged closed JSON Schema.
-- Record 50,000-assessment blocker selection against informational duration
-  and allocation budgets; retain complete measurements and comparison verdicts.
+- Verify 50,000-assessment blocker-selection identities and order functionally;
+  collect duration/allocation evidence only through explicitly requested
+  informational BenchmarkDotNet diagnostics, without a functional byte/time budget.
 - Run public API, package-content, documentation, and existing report-v2 tests.
 
 ## Pros and Cons of the Options
@@ -127,16 +128,21 @@ recovery policy.
 ### Decision History
 
 - 2026-09-10: Decision recorded with status proposed.
+- 2026-09-10: Status changed from proposed to accepted.
 - 2026-09-10: Dominic Kalkbrenner selected a distinct view schema and closed
-  selection modes; status changed from proposed to accepted.
+  selection modes.
 - 2026-09-10: Implemented selection, streaming serialization, closed schema,
-  tests, performance gate, and operator documentation; status changed from
-  accepted to implemented.
+  tests, performance gate, and operator documentation.
+- 2026-09-10: Status changed from accepted to implemented.
 - 2026-09-25: The canonical report advanced to schema v3 to distinguish
   runtime validation after raw SQL from proven preflight blockers. Report views
   advanced to v2 with the deferred origin. `NonMatching` includes deferred
   assessments; `BlockingOnly` excludes them because they are not proven
   blockers. Both earlier schemas remain packaged for persisted artifacts.
+- 2026-11-19: Aligned last-update metadata, reciprocal amendments, option titles
+  and source/navigation format with the current documentation profile. Retained
+  the recorded status and historical approval evidence; this migration grants no
+  new architectural acceptance or publication authority.
 
 ### Implementation References
 
@@ -149,11 +155,8 @@ recovery policy.
 
 ### Sources
 
-- [JSON Schema Core 2020-12](https://json-schema.org/draft/2020-12/json-schema-core)
-  (primary source; retrieved 2026-09-10)
-- [.NET 10 Utf8JsonWriter](https://learn.microsoft.com/en-us/dotnet/api/system.text.json.utf8jsonwriter?view=net-10.0)
-  (primary source; retrieved 2026-09-10)
-- [.NET 10 ArrayBufferWriter][array-buffer-writer]
-  (primary source; retrieved 2026-09-10)
+- [JSON Schema Core 2020-12](https://json-schema.org/draft/2020-12/json-schema-core) (primary source; retrieved 2026-09-10)
+- [.NET 10 Utf8JsonWriter](https://learn.microsoft.com/en-us/dotnet/api/system.text.json.utf8jsonwriter?view=net-10.0) (primary source; retrieved 2026-09-10)
+- [.NET 10 ArrayBufferWriter](https://learn.microsoft.com/en-us/dotnet/api/system.buffers.arraybufferwriter-1?view=net-10.0) (primary source; retrieved 2026-09-10)
 
 [array-buffer-writer]: https://learn.microsoft.com/en-us/dotnet/api/system.buffers.arraybufferwriter-1?view=net-10.0

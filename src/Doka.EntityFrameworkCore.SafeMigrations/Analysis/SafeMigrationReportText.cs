@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations;
 
 /// <summary>Writes bounded operator summaries without constructing a filtered report.</summary>
+[PublicAPI]
 public static class SafeMigrationReportText
 {
     private const int MaximumDisplayedAssessments = 20;
@@ -51,8 +52,14 @@ public static class SafeMigrationReportText
         var selectedCount = 0;
         var blockedCount = 0;
         var deferredCount = 0;
-        foreach (var assessment in report.Assessments)
+
+        // WHY: This immutable definition snapshot is indexed; retain its authored order without interface enumeration.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var assessmentIndex = 0; assessmentIndex < report.Assessments.Count; assessmentIndex++)
         {
+            var assessment = report.Assessments[assessmentIndex];
+
             selectedCount += SafeMigrationReportJson.ShouldIncludeAssessment(report.Mode, assessment, selection)
                 ? 1
                 : 0;
@@ -97,8 +104,14 @@ public static class SafeMigrationReportText
         // Large migrations retain complete immutable JSON evidence, while
         // console diagnostics cannot allocate or flood an unbounded log entry.
         var displayedCount = 0;
-        foreach (var assessment in report.Assessments)
+
+        // WHY: This immutable definition snapshot is indexed; retain its authored order without interface enumeration.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var assessmentIndex1 = 0; assessmentIndex1 < report.Assessments.Count; assessmentIndex1++)
         {
+            var assessment = report.Assessments[assessmentIndex1];
+
             if (!SafeMigrationReportJson.ShouldIncludeAssessment(report.Mode, assessment, selection))
             {
                 continue;

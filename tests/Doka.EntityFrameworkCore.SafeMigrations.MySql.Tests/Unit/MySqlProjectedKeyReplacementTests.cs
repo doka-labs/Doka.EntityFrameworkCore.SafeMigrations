@@ -61,8 +61,8 @@ public sealed class MySqlProjectedKeyReplacementTests
     {
         // Arrange
         using var context = Context(mariaDb);
-        var analyzer = Assert.IsAssignableFrom<ISafeMigrationProjectedColumnAnalyzer>(
-            context.GetService<ISafeMigrationProviderAnalyzer>());
+        var analyzer = Assert.IsType<ISafeMigrationProjectedColumnAnalyzer>(
+            context.GetService<ISafeMigrationProviderAnalyzer>(), exactMatch: false);
 
         // Act
         var preserved = analyzer.PreservesIntrinsicColumnSources(new DropColumnIntent("legacy", "items"));
@@ -556,8 +556,8 @@ public sealed class MySqlProjectedKeyReplacementTests
     /// <summary>Resolves the real native proof implementation without starting a database.</summary>
     private static ISafeMigrationProjectedKeyAnalyzer KeyAnalyzer(
         DbContext context
-    ) => Assert.IsAssignableFrom<ISafeMigrationProjectedKeyAnalyzer>(
-        context.GetService<ISafeMigrationProviderAnalyzer>());
+    ) => Assert.IsType<ISafeMigrationProjectedKeyAnalyzer>(
+        context.GetService<ISafeMigrationProviderAnalyzer>(), exactMatch: false);
 
     /// <summary>Constructs the exact replacement target used by isolated provider contracts.</summary>
     private static EnsurePrimaryKeyIntent Primary()

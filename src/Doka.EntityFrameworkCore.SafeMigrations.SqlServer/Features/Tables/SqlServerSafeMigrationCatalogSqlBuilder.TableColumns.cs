@@ -29,6 +29,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 .Columns
                 .Where(static column
                     => !SqlServerComputedColumnContract.IsComputed(column))
+
+                // WHY: Retain this explicit fluent snapshot instead of a collection-spread rewrite.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray();
 
             var predicates = computed.Select(column => ColumnMatches(definition.Table, definition.Schema, column));
@@ -97,11 +100,13 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                     : ", 0, ");
 
             sql.Append(
-                !type.IsCharacter
-                    ? "CAST(NULL AS nvarchar(128))"
-                    : column.Collation is null
-                        ? "CONVERT(sysname, DATABASEPROPERTYEX(DB_NAME(), 'Collation'))"
-                        : Literal(column.Collation.Name));
+                type.IsCharacter switch
+                {
+                    false => "CAST(NULL AS nvarchar(128))",
+                    true when column.Collation is null
+                        => "CONVERT(sysname, DATABASEPROPERTYEX(DB_NAME(), 'Collation'))",
+                    true => Literal(column.Collation.Name),
+                });
 
             sql.Append(", ");
             AppendTableColumnIdentityFacet(

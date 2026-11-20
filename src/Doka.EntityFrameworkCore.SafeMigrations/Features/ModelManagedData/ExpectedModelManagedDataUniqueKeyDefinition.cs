@@ -4,6 +4,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// Describes a source-model candidate key whose values must remain unique while
 /// model-managed rows converge.
 /// </summary>
+[PublicAPI]
 public sealed class ExpectedModelManagedDataUniqueKeyDefinition
 {
     /// <summary>Initializes a candidate-key definition.</summary>

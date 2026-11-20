@@ -1,5 +1,3 @@
-using System.Text.RegularExpressions;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
 /// <summary>Verifies complete SQL Server metadata chunks and owned inventory transport boundaries.</summary>
@@ -24,7 +22,8 @@ public sealed class SqlServerCatalogTailBatchingTests
     )
     {
         // Arrange
-        using var context = new SafeMigrationDbContext("Server=localhost;Database=catalog;Integrated Security=true;");
+        await using var context = new SafeMigrationDbContext(
+            "Server=localhost;Database=catalog;Integrated Security=true;");
         var analyzer = Analyzer(context);
         await using var connection = new CatalogStatementTestConnection(
             false,
@@ -143,10 +142,11 @@ public sealed class SqlServerCatalogTailBatchingTests
     )
     {
         // Arrange
-        using var context = new SafeMigrationDbContext("Server=localhost;Database=catalog;Integrated Security=true;");
+        await using var context = new SafeMigrationDbContext(
+            "Server=localhost;Database=catalog;Integrated Security=true;");
         var analyzer = Analyzer(context);
         await using var connection = new CatalogStatementTestConnection(native, MetadataResults);
-        await using var transaction = connection.BeginTransaction();
+        await using var transaction = await connection.BeginTransactionAsync(CancellationToken.None);
         var operations = Operations(257, keys);
 
         // Act
@@ -237,8 +237,10 @@ public sealed class SqlServerCatalogTailBatchingTests
     )
     {
         // Arrange
-        var sql = "DECLARE @doka_key_tables TABLE(ordinal int);" + newline
-            + "INSERT @doka_key_tables VALUES (3, 1, -1," + newline
+        var sql = "DECLARE @doka_key_tables TABLE(ordinal int);"
+            + newline
+            + "INSERT @doka_key_tables VALUES (3, 1, -1,"
+            + newline
             + "(SELECT N'not;a delimiter'), 1, N'dbo', N'tail''{0}\u20ac');";
 
         // Act
@@ -279,7 +281,8 @@ public sealed class SqlServerCatalogTailBatchingTests
     )
     {
         // Arrange
-        using var context = new SafeMigrationDbContext("Server=localhost;Database=catalog;Integrated Security=true;");
+        await using var context = new SafeMigrationDbContext(
+            "Server=localhost;Database=catalog;Integrated Security=true;");
         var analyzer = Analyzer(context);
         await using var connection = new CatalogStatementTestConnection(native, MetadataResults);
 
@@ -329,7 +332,8 @@ public sealed class SqlServerCatalogTailBatchingTests
     )
     {
         // Arrange
-        using var context = new SafeMigrationDbContext("Server=localhost;Database=catalog;Integrated Security=true;");
+        await using var context = new SafeMigrationDbContext(
+            "Server=localhost;Database=catalog;Integrated Security=true;");
         var analyzer = Analyzer(context);
         await using var connection = new CatalogStatementTestConnection(
             native,
@@ -384,7 +388,8 @@ public sealed class SqlServerCatalogTailBatchingTests
     )
     {
         // Arrange
-        using var context = new SafeMigrationDbContext("Server=localhost;Database=catalog;Integrated Security=true;");
+        await using var context = new SafeMigrationDbContext(
+            "Server=localhost;Database=catalog;Integrated Security=true;");
         var analyzer = Analyzer(context);
         await using var connection = new CatalogStatementTestConnection(true, MetadataResults)
         {
@@ -418,7 +423,8 @@ public sealed class SqlServerCatalogTailBatchingTests
     )
     {
         // Arrange
-        using var context = new SafeMigrationDbContext("Server=localhost;Database=catalog;Integrated Security=true;");
+        await using var context = new SafeMigrationDbContext(
+            "Server=localhost;Database=catalog;Integrated Security=true;");
         var analyzer = Analyzer(context);
         using var cancellation = new CancellationTokenSource();
         var reads = 0;
@@ -464,7 +470,8 @@ public sealed class SqlServerCatalogTailBatchingTests
     )
     {
         // Arrange
-        using var context = new SafeMigrationDbContext("Server=localhost;Database=catalog;Integrated Security=true;");
+        await using var context = new SafeMigrationDbContext(
+            "Server=localhost;Database=catalog;Integrated Security=true;");
         var analyzer = Analyzer(context);
         using var cancellation = new CancellationTokenSource();
         await using var connection = new CatalogStatementTestConnection(native, InventoryResults)
@@ -475,7 +482,7 @@ public sealed class SqlServerCatalogTailBatchingTests
                 : null,
         };
 
-        await using var transaction = connection.BeginTransaction();
+        await using var transaction = await connection.BeginTransactionAsync(cancellation.Token);
         var inventory = new SafeMigrationExpectedTableInventory(
             "owned",
             "dbo",
@@ -505,7 +512,7 @@ public sealed class SqlServerCatalogTailBatchingTests
         {
             if (fault == "cancelled")
             {
-                Assert.IsAssignableFrom<OperationCanceledException>(failure);
+                Assert.IsType<OperationCanceledException>(failure, exactMatch: false);
             }
             else
             {
@@ -535,10 +542,10 @@ public sealed class SqlServerCatalogTailBatchingTests
         DbTransaction? transaction,
         SafeMigrationOperation[] operations,
         bool keys,
-        CancellationToken token
+        CancellationToken cancellationToken
     ) => keys
-        ? analyzer.ReadProjectedKeySnapshotAsync(connection, transaction, operations, 71, token)
-        : analyzer.ReadProjectedColumnLayoutsAsync(connection, transaction, operations, 71, token);
+        ? analyzer.ReadProjectedKeySnapshotAsync(connection, transaction, operations, 71, cancellationToken)
+        : analyzer.ReadProjectedColumnLayoutsAsync(connection, transaction, operations, 71, cancellationToken);
 
     private static SqlServerSafeMigrationProviderAnalyzer Analyzer(
         DbContext context
@@ -569,6 +576,8 @@ public sealed class SqlServerCatalogTailBatchingTests
                 : new EnsureColumnIntent($"tail_{index:D4}",
                     new ExpectedColumnDefinition("id", typeof(int), true, "int")),
             SafeMigrationPolicy.ThrowIfDifferent))
+        // WHY: Fluent terminal materialization preserves the existing snapshot and enumeration contract.
+        // ReSharper disable once UseCollectionExpression
         .ToArray();
 
     private static DataTable MetadataResults(

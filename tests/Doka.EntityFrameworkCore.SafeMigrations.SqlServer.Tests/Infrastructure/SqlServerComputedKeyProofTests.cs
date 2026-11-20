@@ -333,13 +333,25 @@ public sealed class SqlServerComputedKeyProofTests
         Assert.Equal(1, shape.DeclaredBytes);
     }
 
-    private sealed class Source(
-        ExpectedColumnDefinition? definition,
-        bool recreated,
-        bool unknown = false
-    )
+    private sealed class Source
         : ISafeMigrationProjectedColumnSource, ISafeMigrationProjectedTableSource
     {
+        private readonly ExpectedColumnDefinition? _definition;
+        private readonly bool _recreated;
+        private readonly bool _unknown;
+
+        /// <summary>Initializes the test helper with its supplied dependencies and values.</summary>
+        public Source(
+            ExpectedColumnDefinition? definition,
+            bool recreated,
+            bool unknown = false
+        )
+        {
+            _definition = definition;
+            _recreated = recreated;
+            _unknown = unknown;
+        }
+
         public bool TryGetProjectedColumn(
             string table,
             string? schema,
@@ -347,8 +359,8 @@ public sealed class SqlServerComputedKeyProofTests
             [NotNullWhen(true)] out ExpectedColumnDefinition? result
         )
         {
-            result = definition?.Name == column
-                ? definition
+            result = _definition?.Name == column
+                ? _definition
                 : null;
 
             return result is not null;
@@ -360,7 +372,7 @@ public sealed class SqlServerComputedKeyProofTests
             out SafeMigrationProjectedTableState result
         )
         {
-            result = new SafeMigrationProjectedTableState(recreated, false, false, unknown);
+            result = new SafeMigrationProjectedTableState(_recreated, false, false, _unknown);
 
             return true;
         }

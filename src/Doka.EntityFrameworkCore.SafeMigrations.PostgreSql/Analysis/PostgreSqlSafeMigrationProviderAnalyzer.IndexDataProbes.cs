@@ -40,7 +40,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes,
             commandTimeout,
             (command, offset) => BuildIndexDataProbeStatement(command, operations, ordinals, offset),
-            async (reader, offset, count, token) =>
+            async (reader, offset, count, callbackCancellationToken) =>
             {
                 if (reader.FieldCount != 2)
                 {
@@ -48,7 +48,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                 }
 
                 var next = offset;
-                while (await reader.ReadAsync(token))
+                while (await reader.ReadAsync(callbackCancellationToken))
                 {
                     if (next >= offset + count
                         || reader.GetValue(0) is not int ordinal
@@ -66,7 +66,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                     throw InvalidLivePrerequisiteEvidence();
                 }
             },
-            cancellationToken);
+            transaction: null,
+            maximumParameters: SafeMigrationCatalogQueryLimits.MaximumParameters,
+            cancellationToken: cancellationToken);
 
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -119,8 +121,12 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             return false;
         }
 
-        foreach (var key in definition.Keys)
+        // WHY: This pass only reads the stable ordered collection by ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var keyIndex = 0; keyIndex < definition.Keys.Count; keyIndex++)
         {
+            var key = definition.Keys[keyIndex];
             if (PostgreSqlSafeMigrationCatalogSqlBuilder.IndexPhysicalMember(key) is not { } member)
             {
                 // WHY: Computed expression result binding remains the existing
@@ -167,7 +173,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             parameters.AddString,
             parameters.Add);
 
-        var selections = new List<string>();
+        List<string> selections = [];
         var sqlBytes = Encoding.UTF8.GetByteCount(SafeMigrationCatalogQueryLimits.Trailer);
         while (offset + selections.Count < ordinals.Count
             && selections.Count < SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)

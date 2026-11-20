@@ -7,18 +7,22 @@ public sealed class MySqlActionAssignmentCacheTests
     /// Enumerates every valid planner tuple, including policies not normally selected by scaffolding.
     /// </summary>
     /// <returns>The operation kind, policy and repair capability for one canonical assignment.</returns>
-    public static IEnumerable<object[]> CanonicalContracts()
+    public static TheoryData<SafeMigrationOperationKind, SafeMigrationPolicy, SafeMigrationRepairCapability>
+        CanonicalContracts()
     {
+        var cases = new TheoryData<SafeMigrationOperationKind, SafeMigrationPolicy, SafeMigrationRepairCapability>();
         foreach (var kind in Enum.GetValues<SafeMigrationOperationKind>())
         {
             foreach (var policy in Enum.GetValues<SafeMigrationPolicy>())
             {
                 foreach (var capability in Enum.GetValues<SafeMigrationRepairCapability>())
                 {
-                    yield return [kind, policy, capability];
+                    cases.Add(kind, policy, capability);
                 }
             }
         }
+
+        return cases;
     }
 
     /// <summary>Every cached assignment remains exactly coupled to all canonical planner states.</summary>
@@ -167,6 +171,9 @@ public sealed class MySqlActionAssignmentCacheTests
         using var context = CreateContext();
         var handler = CreateHandler(context);
         var contracts = CanonicalContracts()
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var expected = contracts
@@ -174,6 +181,9 @@ public sealed class MySqlActionAssignmentCacheTests
                 (SafeMigrationOperationKind)contract[0],
                 (SafeMigrationPolicy)contract[1],
                 (SafeMigrationRepairCapability)contract[2]))
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var results = new string[512];

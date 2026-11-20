@@ -1,6 +1,8 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-/// <summary>Exercises the ColumnsRequiredDefaultsEnumDomain migration contracts in an independent class collection.</summary>
+/// <summary>
+/// Exercises the ColumnsRequiredDefaultsEnumDomain migration contracts in an independent class collection.
+/// </summary>
 public sealed class MySqlColumnsRequiredDefaultsEnumDomainIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
     /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
@@ -57,10 +59,7 @@ public sealed class MySqlColumnsRequiredDefaultsEnumDomainIntegrationTests : MyS
             new SafeMigrationRunOptions("required-enum-domain-exact-final"),
             CancellationToken.None);
 
-        var state = await ReadAtomicRequiredAddStateAsync(
-            connectionString,
-            operation,
-            cancellationToken: CancellationToken.None);
+        var state = await ReadAtomicRequiredAddStateAsync(connectionString, operation, null, CancellationToken.None);
 
         var storedValue = await ScalarStringAsync(
             connectionString,
@@ -125,10 +124,7 @@ public sealed class MySqlColumnsRequiredDefaultsEnumDomainIntegrationTests : MyS
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
-        var before = await ReadAtomicRequiredAddStateAsync(
-            connectionString,
-            operation,
-            cancellationToken: CancellationToken.None);
+        var before = await ReadAtomicRequiredAddStateAsync(connectionString, operation, null, CancellationToken.None);
 
         // Act
         var report = await context
@@ -149,10 +145,7 @@ public sealed class MySqlColumnsRequiredDefaultsEnumDomainIntegrationTests : MyS
         var failure = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, [operation], CancellationToken.None));
 
-        var after = await ReadAtomicRequiredAddStateAsync(
-            connectionString,
-            operation,
-            cancellationToken: CancellationToken.None);
+        var after = await ReadAtomicRequiredAddStateAsync(connectionString, operation, null, CancellationToken.None);
 
         var storedValue = await ScalarStringAsync(
             connectionString,

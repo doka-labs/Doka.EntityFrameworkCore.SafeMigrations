@@ -77,11 +77,15 @@ def _templates(source: str) -> dict[str, str]:
             or {ecosystem for ecosystem, _, _ in blocks} != ECOSYSTEMS):
         raise DependencyPolicyError("The canonical template must retain exactly the three default ecosystems.")
 
-    return {ecosystem: body for ecosystem, _, body in blocks}
+    templates = {ecosystem: body for ecosystem, _, body in blocks}
+    for ecosystem, body in templates.items():
+        _target_block(body, ecosystem, "main")
+
+    return templates
 
 
-def _generated_ignore(ecosystem: str, major: int) -> str:
-    """Add only framework-major ceilings for additional maintained/preview targets."""
+def _generated_ignore(ecosystem: str, major: int | None = None) -> str:
+    """Use relative main exclusions or absolute maintained/preview framework ceilings."""
     if ecosystem == "dotnet-sdk":
         return ('    ignore:\n      - dependency-name: "*"\n'
                 '        update-types:\n          - version-update:semver-major\n')
@@ -89,25 +93,32 @@ def _generated_ignore(ecosystem: str, major: int) -> str:
     if ecosystem != "nuget":
         return ""
 
+    # WHY: Relative main rules survive a deliberate framework cutover. Additional
+    # lines retain absolute ceilings, including both prerelease ordering floors.
+    rule = ('        update-types:\n          - version-update:semver-major\n' if major is None
+            else f'        versions: [">={major + 1}.0.0-0", ">={major + 1}.0.0--"]\n')
     result = "    ignore:\n"
     for name in FRAMEWORK_PACKAGES:
-        # WHY: -0 is SemVer's first prerelease. Dependabot's accepted leading-
-        # hyphen identifiers sort below it lexically, so retain that floor too.
-        result += (f'      - dependency-name: "{name}"\n'
-                   f'        versions: [">={major + 1}.0.0-0", ">={major + 1}.0.0--"]\n')
+        result += f'      - dependency-name: "{name}"\n' + rule
 
     return result
 
 
 def _target_block(template: str, ecosystem: str, branch: str) -> str:
-    """Preserve main exactly; derive additional targets without copying stale prose."""
+    """Require main guards; replace only those guards for additional exact targets."""
+    required = _generated_ignore(ecosystem)
+    block = re.search(r"^    ignore:\n(?:(?: {6,}[^\n]*|[ \t]*|[ \t]*#[^\n]*)\n)*", template, re.MULTILINE)
+    if required and (block is None or _semantic(block[0]) != _semantic(required)):
+        raise DependencyPolicyError("Template must retain the exact SDK/framework major exclusions.")
+
+    unbounded = template[:block.start()] + template[block.end():] if required else template
+    if re.search(r"^    (?:target-branch|ignore):", unbounded, re.MULTILINE):
+        raise DependencyPolicyError("Template branch/ignore additions require explicit renderer reconciliation.")
+
     if branch == "main":
         return template
 
-    if re.search(r"^    (?:target-branch|ignore):", template, re.MULTILINE):
-        raise DependencyPolicyError("Template branch/ignore additions require explicit renderer reconciliation.")
-
-    body = "\n".join(row for row in template.splitlines() if not row.lstrip().startswith("#"))
+    body = "\n".join(row for row in unbounded.splitlines() if not row.lstrip().startswith("#"))
     header, remainder = body.split("\n", 1)
     major = int(branch.split("/", 1)[1].removesuffix(".x"))
 

@@ -9,6 +9,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// completed cleanup. Ordinary database errors, cancellation, transport errors
 /// and uncertain cleanup failures retain their original exception contracts.
 /// </remarks>
+[PublicAPI]
 public sealed class SafeMigrationExecutionException : InvalidOperationException
 {
     /// <summary>Initializes an operation-associated runtime rejection.</summary>

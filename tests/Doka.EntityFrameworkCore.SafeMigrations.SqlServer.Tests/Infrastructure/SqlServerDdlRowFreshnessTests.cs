@@ -62,7 +62,9 @@ public sealed class SqlServerDdlRowFreshnessTests
         }
     }
 
-    /// <summary>Neither metadata-only widening nor tightening can retain trigger-mutable dependency certificates.</summary>
+    /// <summary>
+    /// Neither metadata-only widening nor tightening can retain trigger-mutable dependency certificates.
+    /// </summary>
     [Theory]
     [InlineData(false, SafeMigrationRepairCapability.None)]
     [InlineData(true, SafeMigrationRepairCapability.None)]
@@ -116,7 +118,9 @@ public sealed class SqlServerDdlRowFreshnessTests
         Assert.Equal("projected_ddl_visibility_structure_unknown", result.Code);
     }
 
-    /// <summary>Managed Matching and metadata Matching are both mutable, with distinct uncertainty diagnostics.</summary>
+    /// <summary>
+    /// Managed Matching and metadata Matching are both mutable, with distinct uncertainty diagnostics.
+    /// </summary>
     [Theory]
     [InlineData(false, SafeMigrationObservedState.PrerequisiteMissing)]
     [InlineData(true, SafeMigrationObservedState.PrerequisiteMissing)]
@@ -674,7 +678,10 @@ public sealed class SqlServerDdlRowFreshnessTests
         SqlServerSafeMigrationProviderAnalyzer analyzer
     )
     {
-        using var table = new DataTable { Locale = CultureInfo.InvariantCulture };
+        using var table = new DataTable
+        {
+            Locale = CultureInfo.InvariantCulture,
+        };
         table.Columns.Add("schema", typeof(string));
         table.Columns.Add("table", typeof(string));
         table.Columns.Add("columns", typeof(int));

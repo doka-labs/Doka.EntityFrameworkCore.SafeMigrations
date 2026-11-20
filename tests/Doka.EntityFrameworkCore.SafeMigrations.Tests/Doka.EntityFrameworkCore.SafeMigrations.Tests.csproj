@@ -1,8 +1,15 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
+    <!-- WHY: Metadata negatives exercise the exact guard used by isolated package consumers. -->
+    <Compile Include="..\..\eng\package-consumer\GeneratedExpressionConsumerContract.cs"
+             Link="Infrastructure\GeneratedExpressionConsumerContract.cs" />
     <Compile Include="..\..\benchmarks\Doka.EntityFrameworkCore.SafeMigrations.Benchmarks\Features\Columns\PreparedColumnProjectionWorkload.cs"
              Link="Infrastructure\PreparedColumnProjectionWorkload.cs" />
+    <Compile Include="..\..\benchmarks\Doka.EntityFrameworkCore.SafeMigrations.Benchmarks\CoreDeepEqualityBenchmarks.cs"
+             Link="Infrastructure\CoreDeepEqualityBenchmarks.cs" />
     <Compile Include="..\..\benchmarks\Shared\BenchmarkProgram.cs" Link="Infrastructure\BenchmarkProgram.cs" />
+    <Compile Include="..\..\benchmarks\Shared\MaintenanceAttribution.cs"
+             Link="Infrastructure\MaintenanceAttribution.cs" />
     <Compile Include="..\..\benchmarks\Shared\SourceBoundToolchain.cs"
              Link="Infrastructure\SourceBoundToolchain.cs" />
     <AssemblyMetadata Include="BenchmarkProjectPath" Value="$(MSBuildProjectFullPath)" />
@@ -13,8 +20,6 @@
              Link="Infrastructure\SafeMigrationStateSpaceGenerator.cs" />
     <Compile Include="..\Shared\LargeMigrationStressContract.cs"
              Link="Infrastructure\LargeMigrationStressContract.cs" />
-    <Compile Include="..\Shared\LivePerformanceEvidence.cs"
-             Link="Infrastructure\LivePerformanceEvidence.cs" />
     <Compile Include="..\Shared\ModelManagedDataLargeExecutionContract.cs"
              Link="Infrastructure\ModelManagedDataLargeExecutionContract.cs" />
     <None Include="..\..\schemas\safe-migration-report-view-v1.schema.json"

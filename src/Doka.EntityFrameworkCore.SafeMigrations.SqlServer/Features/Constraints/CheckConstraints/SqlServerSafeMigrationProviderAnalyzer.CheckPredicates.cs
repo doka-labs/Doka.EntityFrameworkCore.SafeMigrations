@@ -47,8 +47,8 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         CancellationToken cancellationToken
     )
     {
-        var localDrops = new HashSet<TransitionDependency>();
-        var candidates = new List<SafeMigrationOperation>();
+        HashSet<TransitionDependency> localDrops = [];
+        List<SafeMigrationOperation> candidates = [];
 
         // WHY: Capture replacements only after their preceding accepted CHECK removals.
         // ReSharper disable once ForCanBeConvertedToForeach
@@ -56,6 +56,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         for (var ordinal = 0; ordinal < operations.Count; ordinal++)
         {
             var operation = operations[ordinal];
+
+            // WHY: An accepted removal updates the prefix before a later CHECK may consume it as a candidate.
+            // ReSharper disable once ConvertIfStatementToSwitchStatement
             if (operation.Intent is DropCheckConstraintIntent drop
                 && analyses[ordinal].ObservedState == SafeMigrationObservedState.Matching)
             {
@@ -77,6 +80,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
 
         var uniqueCandidates = candidates
             .Distinct()
+
+            // WHY: Retain this explicit fluent snapshot instead of a collection-spread rewrite.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         var proofs = new SafeMigrationProviderAnalysis[uniqueCandidates.Length];
@@ -97,6 +103,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                 .Take(count)
                 .Select(operation =>
                     _catalogSqlBuilder.BuildCheckPredicateCapturePlan((EnsureCheckConstraintIntent)operation.Intent))
+
+                // WHY: Retain this explicit fluent snapshot instead of a collection-spread rewrite.
+                // ReSharper disable once UseCollectionExpression
                 .ToArray();
 
             await ReadCatalogCaptureAsync(

@@ -3,9 +3,14 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Benchmarks;
 public partial class SqlServerColumnAttribution
 {
     /// <summary>Probes actual dynamic binding rather than inferring guard behavior from generated text.</summary>
-    private static void ProbeRepairBinding(
+    /// <param name="connection">The owned diagnostic connection.</param>
+    /// <param name="output">The owned evidence directory.</param>
+    /// <param name="cancellationToken">The token controlling commands and artifact persistence.</param>
+    /// <returns>The asynchronous live repair-binding control verification.</returns>
+    private static async Task ProbeRepairBindingAsync(
         SqlConnection connection,
-        string output
+        string output,
+        CancellationToken cancellationToken
     )
     {
         (string Name, string State, SafeMigrationPolicy Policy, SafeMigrationRepairCapability Capability,
@@ -61,7 +66,10 @@ public partial class SqlServerColumnAttribution
             };
 
             var sql = SqlServerSafeMigrationsSqlGenerator.BuildGuardedSql(operation, plan, [], []);
-            File.WriteAllText(Path.Combine(output, "repair-binding-" + probe.Name + ".sql"), sql);
+            await File.WriteAllTextAsync(
+                Path.Combine(output, "repair-binding-" + probe.Name + ".sql"),
+                sql,
+                cancellationToken);
 
             // WHY: Baseline and final products share this harness. Infer only
             // the rendered control-flow shape, not the existence of an unrelated
@@ -76,7 +84,7 @@ public partial class SqlServerColumnAttribution
             var errorNumber = 0;
             try
             {
-                Execute(connection, sql);
+                await ExecuteAsync(connection, sql, cancellationToken);
             }
             catch (SqlException exception) when (exception.Number is 208 or 51001)
             {
@@ -98,7 +106,7 @@ public partial class SqlServerColumnAttribution
             contractsSatisfied &= errorNumber == expectedError;
         }
 
-        WriteJson(Path.Combine(output, "repair-binding-probes.json"), results);
+        await WriteJsonAsync(Path.Combine(output, "repair-binding-probes.json"), results, cancellationToken);
         if (!contractsSatisfied)
         {
             throw new InvalidOperationException("The candidate repair guard violated a live binding contract.");

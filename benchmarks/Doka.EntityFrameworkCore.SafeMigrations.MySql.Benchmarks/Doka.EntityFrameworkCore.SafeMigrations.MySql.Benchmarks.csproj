@@ -5,6 +5,13 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- WHY: Reuse the real native workload and its observer without referencing a test assembly or xUnit. -->
+    <Compile Include="..\..\tests\Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests\Infrastructure\MySqlLiveBenchmarkWorkload.cs"
+             Link="Infrastructure\MySqlLiveBenchmarkWorkload.cs" />
+    <Compile Include="..\..\tests\Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests\Infrastructure\MySqlRuntimePerformanceDbContext.cs"
+             Link="Infrastructure\MySqlRuntimePerformanceDbContext.cs" />
+    <Compile Include="..\..\tests\Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests\Infrastructure\MySqlRuntimeCommandInterceptor.cs"
+             Link="Infrastructure\MySqlRuntimeCommandInterceptor.cs" />
     <Compile Include="..\Doka.EntityFrameworkCore.SafeMigrations.Benchmarks\Features\Columns\ColumnBenchmarkWorkload.cs"
              Link="Features\Columns\ColumnBenchmarkWorkload.cs" />
     <Compile Include="..\Doka.EntityFrameworkCore.SafeMigrations.Benchmarks\Features\ModelManagedData\ModelManagedDataBenchmarkWorkload.cs"

@@ -26,12 +26,12 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         CancellationToken cancellationToken
     )
     {
-        if (!operations.Any(static operation => operation.Intent is EnsureColumnIntent))
+        if (operations.All(static operation => operation.Intent is not EnsureColumnIntent))
         {
             return;
         }
 
-        var requested = new Dictionary<(string Schema, string Table), HashSet<string>>();
+        Dictionary<(string Schema, string Table), HashSet<string>> requested = [];
         foreach (var column in operations
             .Select(static operation => operation.Intent)
             .OfType<EnsureColumnIntent>())
@@ -62,8 +62,13 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             }
         }
 
-        foreach (var operation in operations)
+        // WHY: The stable indexed snapshot preserves operation and declaration order.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var operationIndex0 = 0; operationIndex0 < operations.Count; operationIndex0++)
         {
+            var operation = operations[operationIndex0];
+
             switch (operation.Intent)
             {
                 case DropColumnIntent column when requested.ContainsKey((column.Schema ?? "dbo", column.Table)):
@@ -76,8 +81,13 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                 case EnsureIndexIntent index when requested.TryGetValue(
                     (index.Definition.Schema ?? "dbo", index.Definition.Table),
                     out var names):
-                    foreach (var key in index.Definition.Keys)
+                    // WHY: The stable indexed snapshot preserves operation and declaration order.
+                    // ReSharper disable once ForCanBeConvertedToForeach
+                    // ReSharper disable once LoopCanBeConvertedToQuery
+                    for (var keyIndex0 = 0; keyIndex0 < index.Definition.Keys.Count; keyIndex0++)
                     {
+                        var key = index.Definition.Keys[keyIndex0];
+
                         if (key.Column is not null)
                         {
                             names.Add(key.Column);
@@ -88,8 +98,13 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                     break;
                 case EnsurePrimaryKeyIntent primary when requested.ContainsKey(
                     (primary.Definition.Schema ?? "dbo", primary.Definition.Table)):
-                    foreach (var name in primary.Definition.Columns)
+                    // WHY: The stable indexed snapshot preserves operation and declaration order.
+                    // ReSharper disable once ForCanBeConvertedToForeach
+                    // ReSharper disable once LoopCanBeConvertedToQuery
+                    for (var columnIndex0 = 0; columnIndex0 < primary.Definition.Columns.Count; columnIndex0++)
                     {
+                        var name = primary.Definition.Columns[columnIndex0];
+
                         RegisterColumnLayoutRequest(
                             requested,
                             primary.Definition.Schema,
@@ -114,7 +129,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             }
         }
 
-        var captured = requested.Keys.ToDictionary(static key => key, static _ => (ColumnLayoutState?)null);
+        var captured = requested.Keys.ToDictionary(static key => key, static ColumnLayoutState? (_) => null);
         var tables = requested.Keys.ToArray();
 
         // WHY: Aggregates stay server-side; even a 1,024-column table allocates
@@ -154,14 +169,14 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
 
                 return new SafeMigrationCatalogProbeStatement(1, 0, offset);
             },
-            async (reader, offset, _, token) =>
+            async (reader, offset, _, callbackCancellationToken) =>
             {
                 var permitted = tables
                     .Skip(offset * SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
                     .Take(SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
                     .ToHashSet();
 
-                while (await reader.ReadAsync(token))
+                while (await reader.ReadAsync(callbackCancellationToken))
                 {
                     var key = (reader.GetString(0), reader.GetString(1));
                     if (!permitted.Remove(key))
@@ -172,9 +187,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                     CaptureProjectedColumnLayout(reader, captured);
                 }
             },
-            cancellationToken,
             transaction,
-            SqlServerCatalogParameterBindings.MaximumParameters);
+            SqlServerCatalogParameterBindings.MaximumParameters,
+            cancellationToken);
 
         // WHY: The requested inventory is frozen here. Stream it into bounded chunks
         // instead of retaining a second complete tuple array alongside the catalog maps.
@@ -185,7 +200,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             .Chunk(SafeMigrationCatalogQueryLimits.MaximumInventoryValues)
             .GetEnumerator();
 
-        var pending = new Dictionary<int, (string Schema, string Table, string Name)[]>();
+        Dictionary<int, (string Schema, string Table, string Name)[]> pending = [];
 
         await SafeMigrationCatalogProbeBatch.ReadAsync(
             connection,
@@ -237,14 +252,14 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
 
                 return new SafeMigrationCatalogProbeStatement(1, 0, offset);
             },
-            async (reader, offset, _, token) =>
+            async (reader, offset, _, callbackCancellationToken) =>
             {
                 var permitted = pending[offset]
                     .ToHashSet();
 
                 pending.Remove(offset);
 
-                while (await reader.ReadAsync(token))
+                while (await reader.ReadAsync(callbackCancellationToken))
                 {
                     if (!permitted.Remove((reader.GetString(0), reader.GetString(1), reader.GetString(2))))
                     {
@@ -254,9 +269,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                     CaptureProjectedColumnLayoutBinding(reader, captured);
                 }
             },
-            cancellationToken,
             transaction,
-            SqlServerCatalogParameterBindings.MaximumParameters);
+            SqlServerCatalogParameterBindings.MaximumParameters,
+            cancellationToken);
 
         await ReadColumnLayoutRowPresenceAsync(
             connection,
@@ -336,15 +351,15 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         CancellationToken cancellationToken
     )
     {
-        var prospective = new Dictionary<(string Schema, string Table), ColumnLayoutState>();
-        var materialized = new HashSet<(string Schema, string Table)>();
+        Dictionary<(string Schema, string Table), ColumnLayoutState> prospective = [];
+        HashSet<(string Schema, string Table)> materialized = [];
         var clusteredMutations = operations
             .Select(static operation => operation.Intent)
             .OfType<EnsurePrimaryKeyIntent>()
             .Select(static primary => (primary.Definition.Schema ?? "dbo", primary.Definition.Table))
             .ToHashSet();
 
-        var renamedSources = new Dictionary<(string Schema, string Table), (string Schema, string Table)>();
+        Dictionary<(string Schema, string Table), (string Schema, string Table)> renamedSources = [];
         foreach (var table in operations
             .Select(static operation => operation.Intent)
             .OfType<RenameTableIntent>())
@@ -562,8 +577,14 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             case EnsureTableIntent table when analysis.ObservedState == SafeMigrationObservedState.Missing
                 && _projectedColumnLayouts.ContainsKey((table.Definition.Schema ?? "dbo", table.Definition.Table)):
                 var created = new ColumnLayoutState(0, 0, 0, 0, true) { HasRows = false };
-                foreach (var column in table.Definition.Columns)
+
+                // WHY: The stable indexed snapshot preserves operation and declaration order.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
+                for (var columnIndex0 = 0; columnIndex0 < table.Definition.Columns.Count; columnIndex0++)
                 {
+                    var column = table.Definition.Columns[columnIndex0];
+
                     if (_catalogSqlBuilder.TryGetColumnStorageLayout(column, out var storage))
                     {
                         created.Add(column.Name, storage);
@@ -689,6 +710,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                 _projectedColumnLayouts[(table.Schema ?? "dbo", table.Name)] = null;
                 break;
             case SqlOperation:
+                // WHY: Mutate captured layouts through the dictionary's direct value enumerator,
+                // without introducing a filtered iterator.
+                // ReSharper disable once ForeachCanBePartlyConvertedToQueryUsingAnotherGetEnumerator
                 foreach (var layout in _projectedColumnLayouts.Values)
                 {
                     if (layout is not null)
@@ -829,6 +853,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             .Bindings
             .Where(pair => pair.Value == identity)
             .Select(static pair => pair.Key)
+
+            // WHY: Retain this explicit fluent snapshot instead of a collection-spread rewrite.
+            // ReSharper disable once UseCollectionExpression
             .ToArray())
         {
             layout.Bindings.Remove(alias);
@@ -858,6 +885,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             .Bindings
             .Where(pair => pair.Value == identity)
             .Select(static pair => pair.Key)
+
+            // WHY: Retain this explicit fluent snapshot instead of a collection-spread rewrite.
+            // ReSharper disable once UseCollectionExpression
             .ToArray())
         {
             layout.Bindings.Remove(alias);
@@ -877,25 +907,43 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         string code
     ) => new(SafeMigrationObservedState.Unsupported, SafeMigrationRepairCapability.None, false, code);
 
-    private sealed class ColumnLayoutState(
-        int columns,
-        int fixedBytes,
-        int bits,
-        int variables,
-        bool known,
-        int clusteredVariableExtra = 0
-    )
+    private sealed class ColumnLayoutState
     {
-        private int _allocatedColumns = columns;
-        private int _bits = bits;
-        private long _clusteredVariableExtra = clusteredVariableExtra;
-        private long _fixedBytes = fixedBytes;
+        private int _allocatedColumns;
+        private int _bits;
+        private long _clusteredVariableExtra;
+        private long _fixedBytes;
         private int _nextIdentity = -1;
-        private int _variables = variables;
+        private int _variables;
 
-        internal int VisibleColumns { get; set; } = columns;
+        /// <summary>Captures one known or conservative physical column-allocation state.</summary>
+        /// <param name="columns">The allocated column slots retained by native storage.</param>
+        /// <param name="fixedBytes">The retained fixed-width storage.</param>
+        /// <param name="bits">The retained bit-column count.</param>
+        /// <param name="variables">The retained variable-width slots.</param>
+        /// <param name="known">Whether native metadata proves this allocation.</param>
+        /// <param name="clusteredVariableExtra">Retained clustered-key variable storage beyond ordinary slots.</param>
+        internal ColumnLayoutState(
+            int columns,
+            int fixedBytes,
+            int bits,
+            int variables,
+            bool known,
+            int clusteredVariableExtra = 0
+        )
+        {
+            _allocatedColumns = columns;
+            _fixedBytes = fixedBytes;
+            _bits = bits;
+            _variables = variables;
+            _clusteredVariableExtra = clusteredVariableExtra;
+            VisibleColumns = columns;
+            IsKnown = known;
+        }
 
-        internal bool IsKnown { get; set; } = known;
+        internal int VisibleColumns { get; set; }
+
+        internal bool IsKnown { get; set; }
 
         internal bool? HasRows { get; set; }
 
@@ -926,8 +974,13 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             IReadOnlyList<string> columns
         )
         {
-            foreach (var name in columns)
+            // WHY: The stable indexed snapshot preserves declaration order without mutating the source.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var columnIndex0 = 0; columnIndex0 < columns.Count; columnIndex0++)
             {
+                var name = columns[columnIndex0];
+
                 if (!Bindings.TryGetValue(name, out var identity))
                 {
                     RowCapacityKnown = false;

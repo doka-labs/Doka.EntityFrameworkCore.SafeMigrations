@@ -149,9 +149,9 @@ public sealed class MySqlRequiredColumnAddGenerationTests
                 : null,
             IsNullable = false,
             Comment = "keep; 'quoted'\\path",
+            ["Doka:MySql:RequiresExplicitBackfill"] = true,
         };
 
-        authored["Doka:MySql:RequiresExplicitBackfill"] = true;
         if (guidColumn)
         {
             authored["Doka:MySql:GuidFormat"] = DokaMySqlGuidFormat.Char36;
@@ -170,6 +170,9 @@ public sealed class MySqlRequiredColumnAddGenerationTests
             .Where(static sql => sql.StartsWith(
                 "ALTER TABLE ",
                 StringComparison.Ordinal))
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         // Assert
@@ -247,7 +250,7 @@ public sealed class MySqlRequiredColumnAddGenerationTests
         using var context = CreateContext(isMariaDb);
         var handler = CreateHandler(context);
         var operation = RequiredOperation(SafeMigrationPolicy.ThrowIfDifferent);
-        var rendered = new List<MigrationOperation>();
+        List<MigrationOperation> rendered = [];
         var operationContext = CreateOperationContext(
             context,
             handler,
@@ -374,7 +377,7 @@ public sealed class MySqlRequiredColumnAddGenerationTests
             + guard
             + "` CHECK (`value` IS NOT NULL)";
 
-        var plainModify = "ALTER TABLE `items` MODIFY COLUMN `value` int NOT NULL";
+        const string plainModify = "ALTER TABLE `items` MODIFY COLUMN `value` int NOT NULL";
         var stageTwo = plainModify
             + (isMariaDb
                 ? ", DROP CONSTRAINT `"
@@ -556,6 +559,9 @@ public sealed class MySqlRequiredColumnAddGenerationTests
             .Where(static sql => sql.StartsWith(
                 "ALTER TABLE ",
                 StringComparison.Ordinal))
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         // Assert
@@ -586,16 +592,16 @@ public sealed class MySqlRequiredColumnAddGenerationTests
             ClrType = typeof(DateTime),
             ColumnType = "timestamp",
             IsNullable = false,
+            ["Doka:MySql:RequiresExplicitBackfill"] = true,
         };
 
-        authored["Doka:MySql:RequiresExplicitBackfill"] = true;
         var operation = new SafeMigrationOperation(
             new EnsureColumnIntent(
                 "items",
                 SafeMigrationExpectedDefinitionFactory.From(authored)),
             SafeMigrationPolicy.RepairIfSafe);
 
-        var rendered = new List<MigrationOperation>();
+        List<MigrationOperation> rendered = [];
         var operationContext = CreateOperationContext(
             context,
             handler,
@@ -650,17 +656,17 @@ public sealed class MySqlRequiredColumnAddGenerationTests
             ClrType = typeof(int),
             ColumnType = "int",
             IsNullable = false,
+            ["Doka:MySql:ValueGenerationStrategy"] = MySqlValueGenerationStrategy.AutoIncrement,
+            ["Doka:MySql:RequiresExplicitBackfill"] = true,
         };
 
-        authored["Doka:MySql:ValueGenerationStrategy"] = MySqlValueGenerationStrategy.AutoIncrement;
-        authored["Doka:MySql:RequiresExplicitBackfill"] = true;
         var operation = new SafeMigrationOperation(
             new EnsureColumnIntent(
                 "items",
                 SafeMigrationExpectedDefinitionFactory.From(authored)),
             SafeMigrationPolicy.ThrowIfDifferent);
 
-        var rendered = new List<MigrationOperation>();
+        List<MigrationOperation> rendered = [];
         var operationContext = CreateOperationContext(
             context,
             handler,
@@ -725,6 +731,9 @@ public sealed class MySqlRequiredColumnAddGenerationTests
             .Where(static sql => sql.StartsWith(
                 "ALTER TABLE ",
                 StringComparison.Ordinal))
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         // Assert
@@ -834,6 +843,9 @@ public sealed class MySqlRequiredColumnAddGenerationTests
             .Where(static sql => sql.StartsWith(
                 "ALTER TABLE ",
                 StringComparison.Ordinal))
+
+            // WHY: Retain this explicit materialization/copy path and its collection lowering.
+            // ReSharper disable once UseCollectionExpression
             .ToArray();
 
         // Assert
@@ -1139,6 +1151,9 @@ public sealed class MySqlRequiredColumnAddGenerationTests
         .Fragments
         .Where(fragment => fragment.Kind == kind)
         .Select(static fragment => fragment.CommandText.ToString())
+
+        // WHY: Retain this explicit materialization/copy path and its collection lowering.
+        // ReSharper disable once UseCollectionExpression
         .ToArray();
 
     /// <summary>Decodes actual prepared bodies without interpreting their SQL.</summary>
@@ -1149,7 +1164,7 @@ public sealed class MySqlRequiredColumnAddGenerationTests
     {
         const string prefix = "CONVERT(0x";
         const string suffix = " USING utf8mb4)";
-        var payloads = new List<string>();
+        List<string> payloads = [];
         var offset = 0;
         while ((offset = sql.IndexOf(prefix, offset, StringComparison.Ordinal)) >= 0)
         {
@@ -1164,6 +1179,8 @@ public sealed class MySqlRequiredColumnAddGenerationTests
             offset = end + suffix.Length;
         }
 
+        // WHY: Retain this explicit materialization/copy path and its collection lowering.
+        // ReSharper disable once UseCollectionExpression
         return payloads.ToArray();
     }
 

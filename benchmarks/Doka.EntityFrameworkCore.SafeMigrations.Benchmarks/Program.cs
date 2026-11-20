@@ -4,4 +4,5 @@ return BenchmarkProgram.Run(
     typeof(CoreReportViewBenchmarks),
     typeof(CoreModelManagedDataBenchmarks),
     typeof(CoreProjectionBenchmarks),
-    typeof(CoreEvidenceBenchmarks));
+    typeof(CoreEvidenceBenchmarks),
+    typeof(CoreDeepEqualityBenchmarks));
