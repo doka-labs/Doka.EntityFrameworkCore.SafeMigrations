@@ -1,8 +1,11 @@
-"""Execute the actual hosted-runner gate without starting SDK or server workloads."""
+"""Execute hosted runner/image admission without starting SDK or server workloads."""
 
+import os
 import re
+import shutil
 import subprocess
 import tempfile
+import textwrap
 import unittest
 from pathlib import Path
 
@@ -97,6 +100,60 @@ class HostedRunnerConfigurationTests(unittest.TestCase):
             # Assert
             self.assertNotEqual(0, result.returncode)
             self.assertIn("At least one pinned ubuntu-26.04 x64 workflow job is required.", result.stderr)
+
+
+class CanonicalImageAdmissionTests(unittest.TestCase):
+    """Reject inaccessible exact manifests before exporting native fixture identities."""
+
+    def test_actual_image_resolution_steps_verify_every_exact_pin_before_export(self):
+        source = (ROOT / ".github/workflows/quality-gates.yml").read_text(encoding="ascii")
+        images = {row.split()[3]: row.split()[1] for row in
+                  (ROOT / "docker/database-images.Dockerfile").read_text(encoding="ascii").splitlines()
+                  if row.startswith("FROM ")}
+        steps = {"Resolve canonical coverage images": ("mysql84", "postgres18", "sqlserver2022"),
+                 "Resolve canonical MySQL or MariaDB image": ("mysql84",),
+                 "Resolve canonical PostgreSQL image": ("postgres18",),
+                 "Resolve canonical SQL Server image": ("sqlserver2022",)}
+        variables = {"mysql84": "SAFE_MIGRATIONS_MYSQL_IMAGE", "postgres18": "SAFE_MIGRATIONS_POSTGRES_IMAGE",
+                     "sqlserver2022": "SAFE_MIGRATIONS_SQLSERVER_IMAGE"}
+        for name, targets in steps.items():
+            for failing in (None, *dict.fromkeys((targets[0], targets[-1]))):
+                with self.subTest(step=name, failing=failing), tempfile.TemporaryDirectory() as directory:
+                    # Arrange
+                    root = Path(directory)
+                    (root / "eng").mkdir()
+                    (root / "docker").mkdir()
+                    shutil.copyfile(ROOT / "eng/select-database-image.sh", root / "eng/select-database-image.sh")
+                    shutil.copyfile(ROOT / "docker/database-images.Dockerfile",
+                                    root / "docker/database-images.Dockerfile")
+                    native = root / "docker-client"
+                    native.mkdir()
+                    (native / "docker").write_text(
+                        '#!/usr/bin/env bash\nset -euo pipefail\n'
+                        '[[ "$#" == 3 && "$1 $2" == "manifest inspect" && "$3" == *@sha256:* ]] || exit 86\n'
+                        'printf "%s\\n" "$3" >> "$IMAGE_LOG"\n'
+                        '[[ "$3" != "$FAIL_IMAGE" ]] || exit 7\n', encoding="ascii")
+                    (native / "docker").chmod(0o755)
+                    log = root / "images.log"
+                    exported = root / "env"
+                    exported.write_text("", encoding="ascii")
+                    step = source.split(f"- name: {name}\n", 1)[1].split("\n      - name:", 1)[0]
+                    command = textwrap.dedent(step.split("        run: |\n", 1)[1])
+                    stop = len(targets) if failing is None else targets.index(failing)
+                    env = {**os.environ, **{value: key for key, value in variables.items()},
+                           "PATH": str(native) + os.pathsep + os.environ["PATH"], "GITHUB_ENV": str(exported),
+                           "IMAGE_LOG": str(log), "FAIL_IMAGE": images[failing] if failing else ""}
+
+                    # Act
+                    result = subprocess.run(["bash", "-euo", "pipefail", "-c", command], cwd=root, env=env,
+                                            capture_output=True, text=True, check=False, timeout=5)
+
+                    # Assert
+                    self.assertEqual(0 if failing is None else 7, result.returncode, result.stderr)
+                    self.assertEqual([images[target] for target in targets[:stop + (failing is not None)]],
+                                     log.read_text(encoding="ascii").splitlines() if log.exists() else [])
+                    self.assertEqual([f"{variables[target]}={images[target]}" for target in targets[:stop]],
+                                     exported.read_text(encoding="ascii").splitlines())
 
 
 if __name__ == "__main__":

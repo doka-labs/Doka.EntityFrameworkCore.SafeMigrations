@@ -421,6 +421,18 @@ class DatabaseImageCatalogTests(unittest.TestCase):
     """Exercise the actual data-only image resolver without Docker or database startup."""
 
     @staticmethod
+    def offline_registry(directory: str, **variables: str) -> dict:
+        """Replace registry transport only; retain real catalog and workflow execution."""
+        executable = Path(directory) / "docker"
+        executable.write_text('#!/usr/bin/env bash\nset -euo pipefail\n'
+                              '[[ "$#" == 3 && "$1 $2" == "manifest inspect" && "$3" == *@sha256:* ]] || exit 86\n'
+                              'printf "%s\\n" "$3" >> "$IMAGE_ADMISSION_LOG"\n', encoding="ascii")
+        executable.chmod(0o755)
+
+        return dict(os.environ, PATH=directory + os.pathsep + os.environ["PATH"],
+                    IMAGE_ADMISSION_LOG=str(Path(directory) / "images.log"), **variables)
+
+    @staticmethod
     def resolve(target: str, manifest: str) -> subprocess.CompletedProcess:
         """Run the real utility against an isolated repository-shaped manifest fixture."""
         with tempfile.TemporaryDirectory() as directory:
@@ -525,7 +537,7 @@ class DatabaseImageCatalogTests(unittest.TestCase):
                 # Arrange
                 command = self.workflow_resolution(job)
                 output = Path(directory) / "environment"
-                environment = dict(os.environ, GITHUB_ENV=str(output))
+                environment = self.offline_registry(directory, GITHUB_ENV=str(output))
                 environment[variable] = target
 
                 # Act
@@ -536,6 +548,8 @@ class DatabaseImageCatalogTests(unittest.TestCase):
                 self.assertEqual(0, result.returncode, result.stderr)
                 exported = output.read_text(encoding="ascii")
                 self.assertRegex(exported, "^" + variable + r"=.+@sha256:[0-9a-f]{64}\n$")
+                self.assertEqual(exported.split("=", 1)[1].strip(),
+                                 (Path(directory) / "images.log").read_text(encoding="ascii").strip())
                 self.assertEqual("", result.stdout)
 
     def test_invalid_workflow_selection_cannot_be_hidden_by_environment_export(self) -> None:
@@ -564,9 +578,10 @@ class DatabaseImageCatalogTests(unittest.TestCase):
             # Arrange
             command = self.workflow_resolution("coverage")
             output = Path(directory) / "environment"
-            environment = dict(os.environ, GITHUB_ENV=str(output), SAFE_MIGRATIONS_MYSQL_IMAGE="mariadb123",
-                               SAFE_MIGRATIONS_POSTGRES_IMAGE="postgres18",
-                               SAFE_MIGRATIONS_SQLSERVER_IMAGE="sqlserver2022")
+            environment = self.offline_registry(directory, GITHUB_ENV=str(output),
+                                                SAFE_MIGRATIONS_MYSQL_IMAGE="mariadb123",
+                                                SAFE_MIGRATIONS_POSTGRES_IMAGE="postgres18",
+                                                SAFE_MIGRATIONS_SQLSERVER_IMAGE="sqlserver2022")
 
             # Act
             result = subprocess.run(["bash", "-euo", "pipefail", "-c", command], cwd=REPOSITORY_ROOT,
@@ -576,6 +591,8 @@ class DatabaseImageCatalogTests(unittest.TestCase):
             self.assertEqual(0, result.returncode, result.stderr)
             exports = output.read_text(encoding="ascii").splitlines()
             self.assertEqual(3, len(exports))
+            self.assertEqual([value.split("=", 1)[1] for value in exports],
+                             (Path(directory) / "images.log").read_text(encoding="ascii").splitlines())
             self.assertTrue(all(re.fullmatch(r"SAFE_MIGRATIONS_[A-Z]+_IMAGE=.+@sha256:[0-9a-f]{64}", value)
                                 for value in exports))
 

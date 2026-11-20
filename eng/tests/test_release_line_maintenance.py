@@ -1680,9 +1680,12 @@ class DependencyTargetsTests(unittest.TestCase):
         rendered = dependencies.render_configuration(policy, source)
         rendered = rendered.replace('      - dependency-name: "Npgsql.EntityFrameworkCore.PostgreSQL"\n'
                                     '        versions: [">=11.0.0-0", ">=11.0.0--"]\n', "")
+        maintained = next(body for ecosystem, branch, body in dependencies.entries(rendered)
+                          if ecosystem == "nuget" and branch == "maintenance/10.x")
 
         # Act / Assert
-        self.assertNotIn('dependency-name: "Npgsql.EntityFrameworkCore.PostgreSQL"', rendered)
+        self.assertNotIn('dependency-name: "Npgsql.EntityFrameworkCore.PostgreSQL"', maintained)
+        self.assertIn('dependency-name: "Npgsql.EntityFrameworkCore.PostgreSQL"', rendered)
         with self.assertRaises(dependencies.DependencyPolicyError):
             dependencies.validate_configuration(policy, rendered)
 

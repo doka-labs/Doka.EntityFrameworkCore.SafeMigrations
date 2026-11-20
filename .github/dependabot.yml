@@ -22,6 +22,21 @@ updates:
       nuget-dependencies:
         patterns:
           - "*"
+    # Framework adoption is deliberate on main too. Relative exclusions survive
+    # the 10.x -> 11.x cutover without blocking servicing or independent tools.
+    ignore:
+      - dependency-name: "Microsoft.EntityFrameworkCore.*"
+        update-types:
+          - version-update:semver-major
+      - dependency-name: "Doka.EntityFrameworkCore.MySql"
+        update-types:
+          - version-update:semver-major
+      - dependency-name: "Npgsql.EntityFrameworkCore.PostgreSQL"
+        update-types:
+          - version-update:semver-major
+      - dependency-name: "Microsoft.Extensions.*"
+        update-types:
+          - version-update:semver-major
     open-pull-requests-limit: 1
     commit-message:
       prefix: chore
@@ -66,6 +81,11 @@ updates:
       timezone: Europe/Berlin
     cooldown:
       default-days: 3
+    # A release line never adopts another framework major through a routine bump.
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
     open-pull-requests-limit: 1
     commit-message:
       prefix: chore

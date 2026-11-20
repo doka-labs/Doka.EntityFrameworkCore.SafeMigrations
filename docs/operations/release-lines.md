@@ -106,10 +106,14 @@ group/cooldown policy or leaving inactive update targets enabled.
 The renderer does not activate policy or open PRs. It reuses the existing three
 ecosystems, groups and cooldowns, retaining framework-major boundaries for SDK,
 EF, Doka, Npgsql EF and framework-coupled Microsoft.Extensions dependencies.
-The generated NuGet ceilings exclude the next major's prereleases too, not only
+Main uses relative SDK/framework `semver-major` exclusions, including while it
+still owns .NET 10. These rules continue protecting the new main major after
+a deliberate cutover; routine servicing and independently versioned tools or
+transport packages remain eligible. Additional maintenance/preview targets use
+absolute NuGet ceilings, which exclude the next major's prereleases too, not only
 its GA version. Paired prerelease floors cover canonical numeric identifiers
 and Dependabot's accepted leading-hyphen ordering; current-major servicing
-remains eligible. Neither these generated targets nor preview lines are active
+remains eligible. Neither additional generated targets nor preview lines are active
 in the current configuration.
 CI checks the result without writing it back to a branch. Do not resurrect
 unrelated Docker-image update targets as part of line setup.
