@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 
 from eng.release import dependencies, lines
+from eng.tests.test_release_lines import policy as initial_policy
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -15,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def target_policy(role: str, major: int) -> tuple[dict, str]:
     """Prepare synthetic active targets without activating any repository line."""
-    policy = copy.deepcopy(lines.load_policy())
+    policy = initial_policy()
     policy["lines"][0]["packageMajor"] = major + 1
     entry = copy.deepcopy(policy["lines"][1])
     entry.update(sourceRef=f"refs/heads/{role}/{major}.x", role=role, packageMajor=major,
@@ -89,7 +90,7 @@ class DependencyPrereleaseBoundTests(unittest.TestCase):
             with self.subTest(role=role, major=major):
                 # Arrange
                 policy, branch = target_policy(role, major)
-                source = (ROOT / ".github/dependabot.yml").read_text(encoding="ascii")
+                source = (ROOT / ".github/dependabot-template.yml").read_text(encoding="ascii")
                 next_major = major + 1
                 versions = [f"{next_major}.0.0{suffix}" for suffix in
                             ("-0", "-0.0", "-alpha", "-BETA.1", "-rc.1", "--", "--x", "")]
@@ -111,7 +112,7 @@ class DependencyPrereleaseBoundTests(unittest.TestCase):
             with self.subTest(role=role, major=major):
                 # Arrange
                 policy, branch = target_policy(role, major)
-                source = (ROOT / ".github/dependabot.yml").read_text(encoding="ascii")
+                source = (ROOT / ".github/dependabot-template.yml").read_text(encoding="ascii")
                 versions = [f"{major}.0.0-0", f"{major}.0.0-alpha", f"{major}.0.0-rc.2",
                             f"{major}.0.0", f"{major}.0.13", f"{major}.999.999"]
 
@@ -129,7 +130,7 @@ class DependencyPrereleaseBoundTests(unittest.TestCase):
             with self.subTest(replacement=replacement):
                 # Arrange
                 policy, _ = target_policy("preview", 11)
-                source = (ROOT / ".github/dependabot.yml").read_text(encoding="ascii")
+                source = (ROOT / ".github/dependabot-template.yml").read_text(encoding="ascii")
                 rendered = dependencies.render_configuration(policy, source)
                 tampered = rendered.replace('[">=12.0.0-0", ">=12.0.0--"]', replacement, 1)
 

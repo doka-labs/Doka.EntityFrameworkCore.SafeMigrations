@@ -150,6 +150,11 @@ environment `nuget`. Confirm that the run SHA equals `release_commit`. Do not
 approve it yet.
 
 For a prepared line or a nonpublishing rehearsal, set qualification-only true.
+Only this mode may select an unused canonical same-major version without a
+matching source patch/changelog entry; see the
+[maintenance bootstrap procedure](release-lines.md#prepare-and-activate-a-maintenance-line).
+The selected version still binds the qualified package and evidence bytes,
+and all tag/package absence and protected-source checks remain mandatory.
 The complete reversible qualification and attestation run, but the publisher job
 is skipped before requesting its environment or NuGet credentials. Do not create
 a tag or perform steps 4/5 for that run.

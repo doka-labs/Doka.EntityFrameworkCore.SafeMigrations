@@ -62,6 +62,12 @@ Updating packages alone requires no schema migration or history rewrite.
 
 ### Fixed
 
+- Allow qualification-only release-line rehearsals to use an unused canonical
+  same-major version without changing a released source snapshot's version or
+  changelog. Keep publication admission, public-version absence and exact-source
+  checks intact. Isolate release-line test scenarios from live activation and
+  toolchain data while retaining real configuration integrity checks, so the
+  main/11 and maintenance/10 cutover needs no fixture-repair patch.
 - Await actual owned analysis/recovery/disposal work before releasing its command,
   transaction or connection. Preserve primary work/cancellation identity when
   cleanup also fails, retain cleanup-only errors and session quarantine, and

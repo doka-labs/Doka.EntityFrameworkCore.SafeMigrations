@@ -19,12 +19,14 @@ expect_failure() {
     fi
 }
 
-expect_success 10.7.3
+source_version="$(sed -n 's:.*<VersionPrefix>\([^<]*\)</VersionPrefix>.*:\1:p' \
+    "$repo_root/src/Directory.Build.props")"
+expect_success "$source_version"
 
 # Release-note categories belong to one section each, even when several fixes
 # and release-preparation changes are combined in the same patch.
-awk '
-    /^## \[10\.7\.3\] - / { in_release = 1; next }
+awk -v version="$source_version" '
+    index($0, "## [" version "] - ") == 1 { in_release = 1; next }
     in_release && /^## / { exit }
     in_release && /^### / && seen[$0]++ {
         print "Duplicate release-note category: " $0 > "/dev/stderr"
@@ -32,12 +34,11 @@ awk '
     }
 ' "$repo_root/CHANGELOG.md"
 
-expect_failure v10.7.3
-expect_failure 10.7.3-RC.1
-expect_failure 10.7.3+build.1
-expect_failure 10.7.3-rc.01
-expect_failure 10.7.3--rc
-expect_failure 10.7.3-rc.1
+expect_failure "v$source_version"
+expect_failure "$source_version-RC.1"
+expect_failure "$source_version+build.1"
+expect_failure "$source_version-rc.01"
+expect_failure "$source_version--rc"
 expect_failure 10.1.0
 expect_failure 10.2.0
 expect_failure 10.2.1

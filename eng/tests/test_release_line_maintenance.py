@@ -11,6 +11,7 @@ from pathlib import Path
 from unittest import mock
 
 from eng.release import dependencies, lines, maintenance
+from eng.tests.test_release_lines import policy as initial_policy
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -18,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def policy_fixture():
     """Return a synthetic future-main/maintained-10 pair without changing source."""
-    policy = lines.load_policy()
+    policy = initial_policy()
     policy["repository"] = "owner/repository"
     policy["lines"][0]["packageMajor"] = 11
     policy["lines"][1]["state"] = "active"
@@ -1641,11 +1642,11 @@ class MaintenanceTests(unittest.TestCase):
 class DependencyTargetsTests(unittest.TestCase):
     """Preserve existing grouping while adding only reviewed active-line targets."""
 
-    def test_current_main_only_configuration_remains_byte_identical(self):
+    def test_initial_main_only_scenario_remains_byte_identical(self):
         """Registering an inactive line must not create more Dependabot PR targets."""
         # Arrange
-        policy = lines.load_policy()
-        source = (ROOT / ".github/dependabot.yml").read_text(encoding="ascii")
+        policy = initial_policy()
+        source = (ROOT / ".github/dependabot-template.yml").read_text(encoding="ascii")
 
         # Act
         rendered = dependencies.render_configuration(policy, source)
@@ -1658,7 +1659,7 @@ class DependencyTargetsTests(unittest.TestCase):
         """Maintenance reads its own manifests without importing main's framework major."""
         # Arrange
         policy = policy_fixture()
-        source = (ROOT / ".github/dependabot.yml").read_text(encoding="ascii")
+        source = (ROOT / ".github/dependabot-template.yml").read_text(encoding="ascii")
 
         # Act
         rendered = dependencies.render_configuration(policy, source)
@@ -1675,7 +1676,7 @@ class DependencyTargetsTests(unittest.TestCase):
         """The PostgreSQL EF adapter is bounded independently of its transport driver."""
         # Arrange
         policy = policy_fixture()
-        source = (ROOT / ".github/dependabot.yml").read_text(encoding="ascii")
+        source = (ROOT / ".github/dependabot-template.yml").read_text(encoding="ascii")
         rendered = dependencies.render_configuration(policy, source)
         rendered = rendered.replace('      - dependency-name: "Npgsql.EntityFrameworkCore.PostgreSQL"\n'
                                     '        versions: [">=11.0.0-0", ">=11.0.0--"]\n', "")
@@ -1688,8 +1689,8 @@ class DependencyTargetsTests(unittest.TestCase):
     def test_templates_survive_main_inactive_then_new_main_major_roundtrip(self):
         """A valid maintenance-only stage must not lose the next activation's settings."""
         # Arrange
-        source = (ROOT / ".github/dependabot.yml").read_text(encoding="ascii")
-        initial = lines.load_policy()
+        source = (ROOT / ".github/dependabot-template.yml").read_text(encoding="ascii")
+        initial = initial_policy()
         maintenance_only = copy.deepcopy(initial)
         maintenance_only["lines"][0]["state"] = "inactive"
         maintenance_only["lines"][1]["state"] = "active"
@@ -1719,7 +1720,7 @@ class DependencyTargetsTests(unittest.TestCase):
         for mutation in ("extra-ignore", "changed-ceiling", "conflicting-group"):
             with self.subTest(mutation=mutation):
                 # Arrange
-                source = (ROOT / ".github/dependabot.yml").read_text(encoding="ascii")
+                source = (ROOT / ".github/dependabot-template.yml").read_text(encoding="ascii")
                 policy = policy_fixture()
                 rendered = dependencies.render_configuration(policy, source)
                 if mutation == "extra-ignore":
@@ -1742,8 +1743,8 @@ class DependencyTargetsTests(unittest.TestCase):
     def test_all_inactive_retirement_can_resume_without_dead_update_targets(self):
         """An empty generated update list cannot destroy its independent source template."""
         # Arrange
-        source = (ROOT / ".github/dependabot.yml").read_text(encoding="ascii")
-        retired = lines.load_policy()
+        source = (ROOT / ".github/dependabot-template.yml").read_text(encoding="ascii")
+        retired = initial_policy()
         for line in retired["lines"]:
             line["state"] = "inactive"
 
@@ -1768,7 +1769,7 @@ class DependencyTargetsTests(unittest.TestCase):
     def test_render_and_gate_consume_the_canonical_template_settings(self):
         """Grouping/cooldown input is executable policy, not an inert duplicate file."""
         # Arrange
-        policy = lines.load_policy()
+        policy = initial_policy()
         template = (ROOT / ".github/dependabot-template.yml").read_text(encoding="ascii")
         changed = template.replace("default-days: 3", "default-days: 5")
 
@@ -1783,8 +1784,8 @@ class DependencyTargetsTests(unittest.TestCase):
     def test_canonical_template_drift_cannot_silently_change_existing_targets(self):
         """Review must reconcile changes rather than silently overwrite current policy."""
         # Arrange
-        policy = lines.load_policy()
-        source = (ROOT / ".github/dependabot.yml").read_text(encoding="ascii")
+        policy = initial_policy()
+        source = (ROOT / ".github/dependabot-template.yml").read_text(encoding="ascii")
         changed = source.replace("default-days: 3", "default-days: 5")
 
         # Act / Assert
@@ -1797,7 +1798,7 @@ class DependencyTargetsTests(unittest.TestCase):
             with self.subTest(mutation=mutation):
                 # Arrange
                 policy = policy_fixture()
-                source = (ROOT / ".github/dependabot.yml").read_text(encoding="ascii")
+                source = (ROOT / ".github/dependabot-template.yml").read_text(encoding="ascii")
                 rendered = dependencies.render_configuration(policy, source)
                 if mutation == "missing":
                     rendered = source
