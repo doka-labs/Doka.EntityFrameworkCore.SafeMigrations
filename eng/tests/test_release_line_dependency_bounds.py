@@ -92,14 +92,17 @@ class DependencyPrereleaseBoundTests(unittest.TestCase):
                 policy = initial_policy()
                 policy["lines"][0]["packageMajor"] = major
                 source = (ROOT / ".github/dependabot-template.yml").read_text(encoding="ascii")
+                tools = json.loads((ROOT / ".config/dotnet-tools.json").read_text(encoding="ascii"))["tools"]
+                ef_cli = tuple(name for name, tool in tools.items() if "dotnet-ef" in tool["commands"])
                 framework_names = ("Microsoft.EntityFrameworkCore.*", "Doka.EntityFrameworkCore.MySql",
-                                   "Npgsql.EntityFrameworkCore.PostgreSQL", "Microsoft.Extensions.*")
+                                   "Npgsql.EntityFrameworkCore.PostgreSQL", "Microsoft.Extensions.*", *ef_cli)
 
                 # Act
                 blocks = {ecosystem: body for ecosystem, _, body in
                           dependencies.entries(dependencies.render_configuration(policy, source))}
 
                 # Assert
+                self.assertEqual(("dotnet-ef",), ef_cli)
                 sdk = blocks["dotnet-sdk"]
                 self.assertIn('    ignore:\n      - dependency-name: "*"\n'
                               '        update-types:\n          - version-update:semver-major\n', sdk)
@@ -116,7 +119,7 @@ class DependencyPrereleaseBoundTests(unittest.TestCase):
                     self.assertNotIn(f'dependency-name: "{independent}"', blocks["nuget"])
 
     def test_main_missing_or_widened_rules_are_rejected_even_in_the_template(self):
-        for mutation in ("sdk", "ef", "independent", "servicing", "extra-rule", "separated-extra-rule"):
+        for mutation in ("sdk", "ef", "ef-cli", "independent", "servicing", "extra-rule", "separated-extra-rule"):
             for change_template in (False, True):
                 with self.subTest(mutation=mutation, template=change_template):
                     # Arrange
@@ -128,6 +131,10 @@ class DependencyPrereleaseBoundTests(unittest.TestCase):
                                                  '          - version-update:semver-major\n', "")
                     elif mutation == "ef":
                         changed = source.replace('      - dependency-name: "Microsoft.EntityFrameworkCore.*"\n'
+                                                 '        update-types:\n'
+                                                 '          - version-update:semver-major\n', "")
+                    elif mutation == "ef-cli":
+                        changed = source.replace('      - dependency-name: "dotnet-ef"\n'
                                                  '        update-types:\n'
                                                  '          - version-update:semver-major\n', "")
                     elif mutation == "independent":
@@ -201,7 +208,7 @@ class DependencyPrereleaseBoundTests(unittest.TestCase):
                 actual = framework_requirements(dependencies.render_configuration(policy, source), branch)
 
                 # Assert
-                self.assertEqual(4, len(actual))
+                self.assertEqual(5, len(actual))
                 for package, requirements in actual.items():
                     for version in versions:
                         self.assertFalse(ignored(requirements, version), (package, requirements, version))

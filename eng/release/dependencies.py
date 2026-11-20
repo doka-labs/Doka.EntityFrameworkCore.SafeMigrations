@@ -15,10 +15,10 @@ TEMPLATE_PATH = Path(__file__).resolve().parents[2] / ".github/dependabot-templa
 ECOSYSTEMS = frozenset(("nuget", "github-actions", "dotnet-sdk"))
 ENTRY = re.compile(r"^  - package-ecosystem: ([a-z-]+)\s*$", re.MULTILINE)
 TARGET = re.compile(r"^    target-branch: ([^\n]+)$", re.MULTILINE)
-# WHY: These majors follow EF. SqlClient and other transport packages have
-# independent version lines and must not inherit the framework-major ceiling.
+# WHY: Framework packages and dotnet-ef share EF's major. Transports such as
+# SqlClient keep independent version lines and must not inherit this ceiling.
 FRAMEWORK_PACKAGES = ("Microsoft.EntityFrameworkCore.*", "Doka.EntityFrameworkCore.MySql",
-                      "Npgsql.EntityFrameworkCore.PostgreSQL", "Microsoft.Extensions.*")
+                      "Npgsql.EntityFrameworkCore.PostgreSQL", "Microsoft.Extensions.*", "dotnet-ef")
 
 
 class DependencyPolicyError(ValueError):

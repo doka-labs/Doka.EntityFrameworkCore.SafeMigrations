@@ -105,7 +105,9 @@ This also permits retirement of every line and later resumption without losing
 group/cooldown policy or leaving inactive update targets enabled.
 The renderer does not activate policy or open PRs. It reuses the existing three
 ecosystems, groups and cooldowns, retaining framework-major boundaries for SDK,
-EF, Doka, Npgsql EF and framework-coupled Microsoft.Extensions dependencies.
+EF, its `dotnet-ef` NuGet CLI tool, Doka, Npgsql EF and framework-coupled
+Microsoft.Extensions dependencies. The SDK ecosystem and EF package-name
+wildcard do not cover `dotnet-ef` in `.config/dotnet-tools.json`.
 Main uses relative SDK/framework `semver-major` exclusions, including while it
 still owns .NET 10. These rules continue protecting the new main major after
 a deliberate cutover; routine servicing and independently versioned tools or
