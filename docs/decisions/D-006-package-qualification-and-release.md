@@ -1,7 +1,7 @@
 ---
 id: D-006
 status: implemented
-date: 2026-11-20
+date: 2026-11-21
 decision-makers: ["Dominic Kalkbrenner"]
 consulted: []
 informed: ["@doka-labs/core-maintainers"]
@@ -96,8 +96,9 @@ and the existing nuget environment. Prepared/qualification-only runs skip that
 environment-bearing job. All lines share one non-cancelling publication queue;
 same-run retries retain their original admission and bytes. Stable Latest is
 monotonic by canonical SemVer; historical verification does not require a release
-to remain Latest. Only main/10 is active; additional lines remain inactive and
-.NET 11 adoption is outside this change. Separate immutable workflow receipts do
+to remain Latest. The .NET 11 source branch prepares main/11 and leaves
+maintenance/10.x inactive; hosted activation is separately authorized.
+Separate immutable workflow receipts do
 not expand the twelve provenance subjects or thirteen public Release assets.
 
 ### Repository dependency lock scope
@@ -118,7 +119,7 @@ consistent; the historical smaller lock scope below is no longer the current rul
 
 Transitive pinning remains enabled only for nonshipping projects. Shipping provider
 projects publish explicit owner-specific minimum references: MySqlConnector 2.6.2
-belongs only to MySQL/MariaDB; SqlClient 6.1.8 and PKCS 9.0.22 belong only to SQL
+belongs only to MySQL/MariaDB; SqlClient 7.1.2 and PKCS 11.0.0 belong only to SQL
 Server. Disabling shipping transitive promotion must not remove these existing
 consumer floors. Core and unrelated providers must not acquire those dependencies.
 Actual nuspec, lock, isolated-consumer and SBOM checks qualify the resulting graph.
@@ -393,6 +394,16 @@ owns independent consumer readback.
   status. Existing protected publication, hosted matrix, x64 SQL Server,
   coverage, SBOM and readback gates remain. No tag, package upload, additional
   release line or .NET 11 support is authorized by preparation.
+
+- 2026-11-21: The owner approved full .NET/EF Core 11 source migration and the
+  required SqlClient 7.1.2 transition. Select the shared 11.0.0 source identity,
+  retaining the default development suffix and exact matching own-Core ABI.
+  Review the byte-identical SNI.runtime 7.1.2 license as the sole exact
+  development/testing exception and remove the unused NativeInterop waiver.
+  Keep the existing five-package inventory, strict audits and complete native,
+  tooling, package, coverage and publication gates. Local prepared policy does
+  not activate hosted publication or maintenance; historical 10.x evidence is
+  not carried forward as 11.x qualification.
 
 ### Implementation References
 

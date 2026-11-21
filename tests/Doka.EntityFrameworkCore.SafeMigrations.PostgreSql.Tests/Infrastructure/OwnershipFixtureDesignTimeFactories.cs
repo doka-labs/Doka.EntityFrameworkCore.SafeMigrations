@@ -14,6 +14,8 @@ public sealed class CoreOwnershipDesignTimeDbContextFactory
         options.UseNpgsql(
             PostgreSqlDesignTimeContextConfiguration.ConnectionString(),
             provider => provider
+                // WHY: Source and derived ownership histories must remain usable on the PostgreSQL14 matrix cell.
+                .SetPostgresVersion(14, 0)
                 .MigrationsAssembly(typeof(CoreOwnershipDbContext).Assembly.FullName!)
                 .MigrationsHistoryTable("__SafeMigrationsCoreHistory"));
 
@@ -37,6 +39,8 @@ public sealed class CustomOwnershipDesignTimeDbContextFactory
         options.UseNpgsql(
             PostgreSqlDesignTimeContextConfiguration.ConnectionString(),
             provider => provider
+                // WHY: Source and derived ownership histories must remain usable on the PostgreSQL14 matrix cell.
+                .SetPostgresVersion(14, 0)
                 .MigrationsAssembly(typeof(CustomOwnershipDbContext).Assembly.FullName!)
                 .MigrationsHistoryTable("__SafeMigrationsCustomHistory"));
 

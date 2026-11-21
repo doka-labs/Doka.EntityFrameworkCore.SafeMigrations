@@ -1,0 +1,18 @@
+<Project>
+  <!-- WHY: Only authored benchmark projects import these items. Native BDN hosts live
+       below their source project and inherit Directory.Build.props, but must not compile
+       the parent's shared workloads or replace its build-stamped source identity. -->
+  <ItemGroup>
+    <!-- WHY: Conditional IDE annotations describe reflection use without runtime assets. -->
+    <PackageReference Include="JetBrains.Annotations" PrivateAssets="all" IncludeAssets="compile" />
+    <!-- WHY: Generated hosts reference the executable and require its transitive native
+         compile/runtime assets. No publishable package references a benchmark project. -->
+    <PackageReference Include="BenchmarkDotNet" />
+    <AssemblyMetadata Include="BenchmarkProjectPath" Value="$(MSBuildProjectFullPath)" />
+    <Compile Include="$(MSBuildThisFileDirectory)**/*.cs" LinkBase="Infrastructure" />
+    <Compile Include="$(MSBuildThisFileDirectory)../../tests/Shared/DatabaseImageCatalog.cs"
+             Link="Infrastructure/DatabaseImageCatalog.cs" />
+    <EmbeddedResource Include="$(MSBuildThisFileDirectory)../../docker/database-images.Dockerfile"
+                      LogicalName="Doka.SafeMigrations.DatabaseImages" />
+  </ItemGroup>
+</Project>

@@ -1,5 +1,10 @@
 # SQLite behavior
 
+The current source line targets .NET/EF Core 11 and the bundle-neutral official
+SQLite provider core. See the [11.0 upgrade](support-and-qualification.md#upgrade-to-1100).
+The application still owns the native bundle; historical 10.x evidence below
+does not qualify a new 11.x package.
+
 Version 10.7.3 preserves the quoted/depth-sensitive catalog corrections from
 10.7.2 and fixes owned asynchronous work/cleanup lifetimes. Atomic retiring-table
 FK removal, safe rebuild column order and generated-column/DROP proofs remain.

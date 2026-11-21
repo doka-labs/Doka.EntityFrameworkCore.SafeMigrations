@@ -1,13 +1,13 @@
 <Project>
   <PropertyGroup Label="Target framework and build outputs">
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net11.0</TargetFramework>
     <UseArtifactsOutput>true</UseArtifactsOutput>
     <ArtifactsPath>$(MSBuildThisFileDirectory)artifacts</ArtifactsPath>
     <IncludeProjectNameInArtifactsPaths>true</IncludeProjectNameInArtifactsPaths>
     <UseArtifactsIntermediateOutput>true</UseArtifactsIntermediateOutput>
     <!-- WHY: Legacy local outputs and BDN-generated child sources must not enter
          SDK default globs when the repository uses centralized artifact output. -->
-    <DefaultItemExcludes>$(DefaultItemExcludes);**/bin/**;**/obj/**;**/BenchmarkDotNet.Artifacts/**</DefaultItemExcludes>
+    <DefaultItemExcludes>$(DefaultItemExcludes);**/bin/**;**/obj/**;**/BenchmarkDotNet.Artifacts/**;**/.bdn/**</DefaultItemExcludes>
   </PropertyGroup>
 
   <PropertyGroup Label="Compiler and analysis">

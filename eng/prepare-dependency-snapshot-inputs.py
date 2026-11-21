@@ -14,7 +14,7 @@ MAX_TOTAL_BYTES = 512 * 1024 * 1024
 MAX_PROJECTS = 512
 MAX_DISCOVERY_ENTRIES = 32768
 MAX_DISCOVERY_DEPTH = 16
-EXCLUDED_PARTS = {"artifacts", "bin", "obj", ".git"}
+EXCLUDED_PARTS = {"artifacts", "bin", "obj", ".git", ".bdn", "BenchmarkDotNet.Artifacts"}
 
 
 def safe_file(root: Path, relative: Path) -> Path:

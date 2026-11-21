@@ -2,6 +2,7 @@
 **/bin/
 **/obj/
 **/BenchmarkDotNet.Artifacts/
+**/.bdn/
 
 # NuGet packages and local pack output
 **/*.nupkg

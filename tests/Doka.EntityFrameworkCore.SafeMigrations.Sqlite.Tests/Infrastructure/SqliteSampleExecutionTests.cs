@@ -174,7 +174,7 @@ public sealed class SqliteSampleExecutionTests : IDisposable
             CancellationToken.None);
 
         // Act
-        var exception = await Record.ExceptionAsync(() => context.Database.ExecuteSqlInterpolatedAsync(
+        var exception = await Record.ExceptionAsync(() => context.Database.ExecuteSqlAsync(
             $"INSERT INTO orders (id, user_id, total) VALUES ('rejected-order', {user}, {total});",
             CancellationToken.None));
 

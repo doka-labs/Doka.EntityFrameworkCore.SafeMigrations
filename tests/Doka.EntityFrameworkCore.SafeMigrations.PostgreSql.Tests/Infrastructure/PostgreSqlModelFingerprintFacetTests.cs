@@ -84,9 +84,11 @@ public sealed class PostgreSqlModelFingerprintFacetTests
         var actual = Fingerprint(context);
 
         // Assert
+        // WHY: v1 retains framework-qualified generic annotation identities. Token comparison with EF10
+        // proves that only the inverse-navigation dictionary's framework version changes for this model.
         Assert.Equal(
             "safe-relational-model:v1:Npgsql.EntityFrameworkCore.PostgreSQL:sha256:"
-            + "d3f10dbf2826f558cd812ad3a46544b157e5aef3758a222e16a87eb862e4c191",
+            + "83c70afdb19469e01fefab49e3f0796b8e312e21efb8130a1eb6c2136385706c",
             actual);
     }
 

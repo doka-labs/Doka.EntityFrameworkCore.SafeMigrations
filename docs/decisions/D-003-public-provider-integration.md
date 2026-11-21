@@ -1,7 +1,7 @@
 ---
 id: D-003
 status: implemented
-date: 2026-11-19
+date: 2026-11-21
 decision-makers: ["Dominic Kalkbrenner"]
 consulted: []
 informed: ["@doka-labs/core-maintainers"]
@@ -103,7 +103,8 @@ Its first release requires independent x64 Linux qualification on all three
 declared SQL Server majors; local ARM64 test skips are not qualification.
 
 The current MySQL/MariaDB adapter consumes Doka through the bounded
-`[10.7.0,10.8.0)` NuGet dependency range. Doka 10.3.0 introduced typed
+`[11.0.0,11.1.0)` NuGet dependency range on the .NET/EF Core 11 line.
+Doka 10.3.0 introduced typed
 read-only migration metadata for Guid storage, value generation, and index
 prefixes. Doka 10.4.0 adds an explicit commandless consumed result, which the
 internal design-time-services guard uses without emitting synthetic SQL.
@@ -310,6 +311,13 @@ where it is created instead of rejecting published migrations later.
   `0bafbb1d3a0facd6ab67e26e98e83477f69ee1b7`. Preserve the migration SPI,
   explicit connector floor, provider isolation and application-owned opt-in
   configuration; retain next-minor exclusion and strict release qualification.
+
+- 2026-11-21: The owner requested full .NET/EF Core 11 migration using public
+  Doka 11.0.0 and GA provider packages. Advance the Doka range to
+  `[11.0.0,11.1.0)` while retaining the public SPI and explicit MySqlConnector
+  2.6.2 minimum with optional 3.0.0. Integrate default charset/collation and EF11
+  discovery/snapshot checks into the normal test graph. Qualification and hosted
+  cutover remain separate evidence, not claims inferred from package availability.
 
 ### Implementation References
 

@@ -25,7 +25,8 @@ public abstract class SafeMigrationScaffoldingDbContext : DbContext
         DbContextOptionsBuilder optionsBuilder
     )
     {
-        optionsBuilder.UseNpgsql(_connectionString);
+        // WHY: Scaffolded SQL must also execute on the oldest declared PostgreSQL matrix cell.
+        optionsBuilder.UseNpgsql(_connectionString, provider => provider.SetPostgresVersion(14, 0));
         optionsBuilder.UsePostgreSqlSafeMigrations(options =>
         {
             options.UseScaffoldingMode(_mode);
@@ -395,7 +396,8 @@ public abstract class SafeMigrationDataTransitionScaffoldingDbContext : DbContex
         DbContextOptionsBuilder optionsBuilder
     )
     {
-        optionsBuilder.UseNpgsql(_connectionString);
+        // WHY: Scaffolded SQL must also execute on the oldest declared PostgreSQL matrix cell.
+        optionsBuilder.UseNpgsql(_connectionString, provider => provider.SetPostgresVersion(14, 0));
         optionsBuilder.UsePostgreSqlSafeMigrations(options =>
         {
             options.UseScaffoldingMode(_mode);

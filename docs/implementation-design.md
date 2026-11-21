@@ -1396,7 +1396,7 @@ See [MySQL/MariaDB runtime boundaries](mysql-mariadb-ddl-behavior.md#session-loc
 The repository measures construction, planning, all provider generators, and
 report serialization at 1, 100, and 1000 operations, plus blocker-view
 selection across 50,000 assessments. Core, MySQL/MariaDB, PostgreSQL, SQLite,
-and SQL Server have independent BenchmarkDotNet 0.15.8 executables for their
+and SQL Server have independent BenchmarkDotNet 0.16.0-preview.2 executables for their
 registered default parameterized cases. Canonical snapshot initialization,
 `IMigrationsModelDiffer` comparison and the runner's model fingerprint path
 remain separate workloads. Compile-linked configuration and a thin entry

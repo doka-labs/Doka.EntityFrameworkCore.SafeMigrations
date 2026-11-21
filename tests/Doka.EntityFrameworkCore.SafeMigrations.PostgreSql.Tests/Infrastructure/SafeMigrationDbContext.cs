@@ -37,6 +37,8 @@ public class SafeMigrationDbContext : DbContext
         optionsBuilder.UseNpgsql(
             _connectionString ?? throw new InvalidOperationException("A PostgreSQL connection string is required."),
             provider => provider
+                // WHY: Npgsql11 defaults to PostgreSQL16; this fixture still qualifies the PostgreSQL14 cell.
+                .SetPostgresVersion(14, 0)
                 .MigrationsAssembly(typeof(SafeMigrationDbContext).Assembly.FullName)
                 .MigrationsHistoryTable("__ApplicationDbContextMigrationsHistory"));
 

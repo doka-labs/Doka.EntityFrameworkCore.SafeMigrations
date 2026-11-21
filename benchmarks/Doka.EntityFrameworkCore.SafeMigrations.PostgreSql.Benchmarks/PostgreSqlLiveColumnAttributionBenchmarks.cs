@@ -166,8 +166,8 @@ public partial class PostgreSqlLiveColumnAttributionBenchmarks : IAsyncDisposabl
             throw new InvalidOperationException("The previous native runtime transaction is still owned.");
         }
 
-        // WHY: BenchmarkDotNet 0.15.8 iteration hooks are Action, not asynchronous delegates.
-        // Use the genuine synchronous native API here; its work is outside the timed Task operation.
+        // WHY: Acquire the owned transaction outside the measured runtime operation. This existing
+        // synchronous native path never blocks on a Task or adds setup work to the timed operation.
         try
         {
             _transaction = Connection.BeginTransaction();

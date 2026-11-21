@@ -459,6 +459,8 @@ public sealed class SqlServerMultilineScriptContext : DbContext
         optionsBuilder.UseSqlServer(
             _connectionString,
             provider => provider
+                // WHY: Scripts must remain executable on the oldest declared SQL Server engine.
+                .UseCompatibilityLevel(150)
                 .MigrationsAssembly(typeof(SqlServerMultilineScriptContext).Assembly.FullName)
                 .CommandTimeout(SafeMigrationDbContext.CommandTimeoutSeconds));
 

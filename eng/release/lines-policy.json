@@ -1,16 +1,16 @@
 {
   "schemaVersion": 1,
-  "revision": "2026-10-25.1",
+  "revision": "2026-11-21.11-preparation",
   "repository": "doka-labs/Doka.EntityFrameworkCore.SafeMigrations",
   "authorityRef": "refs/heads/main",
   "lines": [
     {
       "sourceRef": "refs/heads/main",
       "role": "main",
-      "packageMajor": 10,
+      "packageMajor": 11,
       "channel": "stable-and-prerelease",
       "upstreamStage": "ga",
-      "state": "active",
+      "state": "prepared",
       "workflowPath": ".github/workflows/release-candidate.yml",
       "publisherEnvironment": "nuget"
     },

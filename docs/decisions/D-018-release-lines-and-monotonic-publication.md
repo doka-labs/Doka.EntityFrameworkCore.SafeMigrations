@@ -1,7 +1,7 @@
 ---
 id: D-018
 status: implemented
-date: 2026-11-19
+date: 2026-11-21
 decision-makers: ["Dominic Kalkbrenner"]
 consulted: []
 informed: ["@doka-labs/core-maintainers"]
@@ -48,9 +48,11 @@ primitives must retain one protected publisher. Adapt Doka D-030's line contract
 subsystem, package inventory or framework migration.
 
 The reviewed policy names exact refs, roles, package majors, channels and upstream
-stages. Lifecycle states are inactive, prepared and active. Main/10 remains active;
-maintenance/10.x is registered inactive. The x is literal. No preview line, new
-SDK, dependency major, branch or hosted grant is introduced or activated.
+stages. Lifecycle states are inactive, prepared and active. The original rollout
+kept main/10 active and maintenance/10.x inactive. The separately approved .NET 11
+source migration now prepares main/11 locally; maintenance/10.x remains inactive.
+The x is literal. The feature branch creates no hosted branch or deployment grant
+and does not activate a publisher. Current protected-main policy remains authority.
 
 The existing release-candidate workflow qualifies each admitted source using its
 branch-owned toolchain. Qualification-only and prepared runs do not request the
@@ -98,8 +100,9 @@ qualification-only, tampering, retry, Latest, scheduling and dependency tests.
 Retain existing five-package/provenance/readback shell regressions, including
 partial publication and historical retries. Verify actual workflow step order,
 Action contracts, engineering suites, locked restore and warning-free build.
-Keep .NET 10 unchanged and all additional policy lines inactive. Local mocked
-tests do not prove hosted grants, dispatch, OIDC, approval or publication.
+Keep each line's reviewed framework contract unchanged during activation; do not
+copy the .NET 11 source graph onto maintenance/10.x. Local mocked tests do not
+prove hosted grants, dispatch, OIDC, approval or publication.
 Exercise timestamped skipped-step histories, every declared native matrix row
 under key permutations, and next-major prerelease dependency boundaries.
 
@@ -147,6 +150,12 @@ No additional active line or hosted configuration is implied by this decision.
   and source/navigation format with the current documentation profile. Retained
   the recorded status and historical approval evidence; this migration grants no
   new architectural acceptance or publication authority.
+
+- 2026-11-21: Prepare the .NET 11 source identity under the existing lifecycle
+  contract without hosted cutover. Main/11 is prepared and maintenance/10.x
+  remains inactive in this branch. The generated Dependabot targets follow
+  active lines only; retain the template for separately reviewed activation.
+  No new publication path, credential, grant or required-check exemption is added.
 
 ### Implementation References
 

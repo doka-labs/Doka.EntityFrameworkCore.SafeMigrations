@@ -209,8 +209,8 @@ internal sealed class MySqlLiveBenchmarkDatabase : IAsyncDisposable
         MySqlLiveBenchmarkWorkload.RequireInitialState(initialState);
         MySqlLiveBenchmarkWorkload.RequireOwnedDatabaseName(_database);
 
-        // WHY: BDN 0.15.8 iteration callbacks are Action, not Task. Use genuine synchronous
-        // native IO only at that framework boundary; never block on an asynchronous operation.
+        // WHY: Fixture reset stays outside the measured invocation. This synchronous native path
+        // prepares state directly and never waits on an asynchronous operation.
         var connection = new MySqlConnection(_fixtureConnectionString);
         MySqlCommand? command = null;
         Exception? failure = null;

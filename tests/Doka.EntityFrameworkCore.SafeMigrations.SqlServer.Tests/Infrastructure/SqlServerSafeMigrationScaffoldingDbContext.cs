@@ -100,6 +100,8 @@ public sealed class SqlServerSafeMigrationScaffoldingDbContext : SqlServerScaffo
         optionsBuilder.UseSqlServer(
             _connectionString,
             provider => provider
+                // WHY: Both ordinary and convergence scaffolding qualify SQL Server 2019 as well as newer engines.
+                .UseCompatibilityLevel(150)
                 .MigrationsAssembly(typeof(SqlServerSafeMigrationScaffoldingDbContext).Assembly.FullName)
                 .MigrationsHistoryTable("__SqlServerSafeMigrationsHistory"));
 
@@ -132,6 +134,8 @@ public sealed class SqlServerLegacySafeMigrationScaffoldingDbContext : SqlServer
         optionsBuilder.UseSqlServer(
             _connectionString,
             provider => provider
+                // WHY: Both ordinary and convergence scaffolding qualify SQL Server 2019 as well as newer engines.
+                .UseCompatibilityLevel(150)
                 .MigrationsAssembly(typeof(SqlServerLegacySafeMigrationScaffoldingDbContext).Assembly.FullName)
                 .MigrationsHistoryTable("__SqlServerLegacySafeMigrationsHistory"));
 

@@ -76,10 +76,17 @@ public class PostgreSqlMaintenanceAttribution : IDisposable, IAsyncDisposable
 
     /// <summary>Runs exact native-batch and fallback windows without claiming native database timings.</summary>
     /// <param name="args">The BenchmarkDotNet command-line arguments.</param>
+    /// <param name="cancellationToken">Cancels native discovery, execution and export.</param>
     /// <returns>The shared benchmark runner exit code.</returns>
-    internal static int Run(
-        string[] args
-    ) => BenchmarkProgram.Run(args, typeof(PostgreSqlMaintenanceAttribution));
+    internal static Task<int> RunAsync(
+        string[] args,
+        CancellationToken cancellationToken
+    ) => BenchmarkProgram.RunAsync(
+        args,
+        [
+            typeof(PostgreSqlMaintenanceAttribution),
+        ],
+        cancellationToken);
 
     /// <summary>Checks exact SQL, ordinal ownership, replay and cancellation outside measurements.</summary>
     /// <returns>The asynchronous setup and functional verification.</returns>

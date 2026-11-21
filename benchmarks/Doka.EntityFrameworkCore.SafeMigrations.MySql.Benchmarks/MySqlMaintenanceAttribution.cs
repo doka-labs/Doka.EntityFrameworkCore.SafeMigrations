@@ -53,10 +53,18 @@ public class MySqlMaintenanceAttribution : IDisposable, IAsyncDisposable
 
     /// <summary>Runs the independent prerequisite and native-profile generation benchmark families.</summary>
     /// <param name="args">The BenchmarkDotNet command-line arguments.</param>
+    /// <param name="cancellationToken">Cancels native discovery, execution and export.</param>
     /// <returns>The shared benchmark runner exit code.</returns>
-    internal static int Run(
-        string[] args
-    ) => BenchmarkProgram.Run(args, typeof(MySqlPrerequisiteAttribution), typeof(MySqlMaintenanceAttribution));
+    internal static Task<int> RunAsync(
+        string[] args,
+        CancellationToken cancellationToken
+    ) => BenchmarkProgram.RunAsync(
+        args,
+        [
+            typeof(MySqlPrerequisiteAttribution),
+            typeof(MySqlMaintenanceAttribution),
+        ],
+        cancellationToken);
 
     /// <summary>Prepares real native mappings and verifies exact producer output before timing.</summary>
     /// <returns>The asynchronous setup and optional evidence persistence.</returns>

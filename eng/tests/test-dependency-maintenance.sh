@@ -89,7 +89,7 @@ fi
 actual_lockfiles="$(
   find . \
     -type d \( -name .git -o -name artifacts -o -name bin -o -name obj \
-      -o -name BenchmarkDotNet.Artifacts \) -prune -o \
+      -o -name BenchmarkDotNet.Artifacts -o -name .bdn \) -prune -o \
     -type f -name packages.lock.json -print \
     | sed 's#^\./##' \
     | LC_ALL=C sort

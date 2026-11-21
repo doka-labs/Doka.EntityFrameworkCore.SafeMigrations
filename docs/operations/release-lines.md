@@ -2,15 +2,24 @@
 
 SafeMigrations supports independently maintained source lines through the existing
 five-package release pipeline. [D-018](../decisions/D-018-release-lines-and-monotonic-publication.md)
-records the contract. This capability does not migrate the product to .NET 11.
+records the contract. Framework migration and hosted line activation are
+separate operations.
 
 ## Current configuration
 
 The authority is [lines-policy.json](../../eng/release/lines-policy.json) on
-protected main. Main/10 is active; maintenance/10.x is inactive. The x is literal,
-not a branch wildcard. No preview branch or additional publication route is
-activated. The SDK, EF graph, package identities and existing nuget environment
-remain unchanged.
+protected main. This .NET 11 feature branch carries a local preparation policy:
+main/11 is prepared; maintenance/10.x is inactive. The x is literal, not a branch
+wildcard. These files do not claim that protected-main authority, branch
+protection, deployment grants or hosted schedules have changed. No preview
+branch or additional publication route is activated. The five-package inventory,
+signed-tag publisher and existing nuget environment remain unchanged.
+
+Only active lines receive generated Dependabot targets. The preparation policy
+has no active lines; its generated configuration is therefore empty. Keep the
+retained template intact, and render targets again against the separately
+reviewed activation policy. Do not merge an unfinished preparation policy as a
+substitute for the complete protected main/11 and maintenance/10 cutover.
 
 | State | Allowed behavior |
 | --- | --- |

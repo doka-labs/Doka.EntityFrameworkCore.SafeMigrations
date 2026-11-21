@@ -3,6 +3,20 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 /// <summary>Pins current-run evidence and safe build logging with native argument parsing only.</summary>
 public sealed class BenchmarkProgramInvocationTests
 {
+    /// <summary>Rejects absent native options instead of treating an incomplete parse as safe.</summary>
+    [Fact]
+    public void IsSafeInvocation_RejectsMissingOptions()
+    {
+        // Arrange
+        CommandLineOptions? options = null;
+
+        // Act
+        var safe = BenchmarkProgram.IsSafeInvocation(options);
+
+        // Assert
+        Assert.False(safe);
+    }
+
     /// <summary>Preserves ordinary native measurement, discovery and statistics options.</summary>
     /// <param name="arguments">The native argument vector, parsed without running any workload.</param>
     [Theory]
@@ -117,6 +131,7 @@ public sealed class BenchmarkProgramInvocationTests
 
         // Assert
         Assert.True(parsed);
+        Assert.NotNull(options);
         Assert.Equal(variable, Assert.Single(options.EnvironmentVariables));
         Assert.Equal(expectedSafe, safe);
     }
@@ -163,6 +178,7 @@ public sealed class BenchmarkProgramInvocationTests
 
         // Assert
         Assert.True(parsed);
+        Assert.NotNull(options);
         Assert.Equal(variable, Assert.Single(options.EnvironmentVariables));
         Assert.Equal(expectedSafe, safe);
     }

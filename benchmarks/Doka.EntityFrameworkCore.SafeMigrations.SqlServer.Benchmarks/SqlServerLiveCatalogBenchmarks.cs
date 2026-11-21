@@ -381,7 +381,10 @@ public class SqlServerLiveCatalogBenchmarks : IAsyncDisposable
             DbContextOptionsBuilder optionsBuilder
         )
         {
-            optionsBuilder.UseSqlServer(_connectionString, provider => provider.CommandTimeout(CommandTimeoutSeconds));
+            // WHY: Catalog workloads retain the declared SQL Server 2019 compatibility cell.
+            optionsBuilder.UseSqlServer(
+                _connectionString,
+                provider => provider.UseCompatibilityLevel(150).CommandTimeout(CommandTimeoutSeconds));
             optionsBuilder.UseSqlServerSafeMigrations<CatalogContext>();
         }
     }

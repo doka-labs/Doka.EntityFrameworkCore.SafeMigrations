@@ -26,7 +26,6 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design"
                       PrivateAssets="all"
                       IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive; compile" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
     <!-- WHY: Publish the approved transport floor even without transitive pinning. -->
     <PackageReference Include="MySqlConnector" />
     <ProjectReference Include="..\Doka.EntityFrameworkCore.SafeMigrations\Doka.EntityFrameworkCore.SafeMigrations.csproj" />

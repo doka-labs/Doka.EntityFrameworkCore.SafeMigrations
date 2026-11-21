@@ -1,4 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <Import Project="../Shared/BenchmarkProject.props" />
+
   <PropertyGroup>
     <AssemblyName>Doka.EntityFrameworkCore.SafeMigrations.MySql.Benchmarks</AssemblyName>
     <RootNamespace>Doka.EntityFrameworkCore.SafeMigrations.MySql.Benchmarks</RootNamespace>

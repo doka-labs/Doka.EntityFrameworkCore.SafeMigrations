@@ -148,7 +148,7 @@ Explicit submissions have precedence per manifest; the hosted warning header
 must still be empty before success is claimed. The comparison job reviews the
 pull-request delta with the official action, rejects new high-or-critical
 vulnerabilities and dependencies outside the approved SPDX license set or the
-two exact [package exceptions](#sql-server-dependency-license-exceptions), and
+exact [package exception](#sql-server-dependency-license-exceptions), and
 runs its bounded snapshot retry. The pinned action proceeds after its timeout
 even if a warning remains, so the workflow then checks the same GitHub compare
 endpoint and requires the snapshot-warning header to be present and empty.
@@ -175,7 +175,7 @@ fork completed the hosted handoff; the hosted comparison gate remains mandatory.
 
 An EF Design or Tools update also crosses the source-generation trust boundary.
 Re-run strict and legacy scaffolding for every provider, compile the generated
-source, exercise the direct-Design, Tools-only, runtime-only, and excluded
+source, exercise the direct-Design, Tools with explicit Design, runtime-only, and excluded
 SafeMigrations-build-assets package profiles, and retain negative tests for
 unexpected generator shapes and unmodeled provider annotations.
 
@@ -186,30 +186,33 @@ the [upgrade contract](../efcore-provider-upgrade-risk.md).
 
 ### SQL Server dependency-license exceptions
 
-Only the following versions have a repository-specific license exception:
+Only the following version has a repository-specific license exception in the
+current .NET 11 dependency graph:
 
 | NuGet package | Approved version | Reviewed vendor terms |
 | --- | --- | --- |
-| Microsoft.Data.SqlClient.SNI.runtime | 6.0.3 | [Package license](https://www.nuget.org/packages/Microsoft.Data.SqlClient.SNI.runtime/6.0.3/License) |
-| Microsoft.Identity.Client.NativeInterop | 0.20.6 | [Package license](https://www.nuget.org/packages/Microsoft.Identity.Client.NativeInterop/0.20.6/License) |
+| Microsoft.Data.SqlClient.SNI.runtime | 7.1.2 | [Package license](https://www.nuget.org/packages/Microsoft.Data.SqlClient.SNI.runtime/7.1.2/License) |
 
-The 2026-10-20 EF Core 10.0.13 update resolves SqlClient 6.1.7 and SNI 6.0.3.
-The SNI 6.0.3 package's `LICENSE.txt` is byte-identical to the previously
-reviewed 6.0.2 file; both have SHA-256
+The 2026-11-21 .NET/EF Core 11 update resolves SqlClient 7.1.2 and SNI 7.1.2.
+The SNI 7.1.2 package's `LICENSE.txt` is byte-identical to the previously
+reviewed 6.0.3 file; both have SHA-256
 `9335e8bad875dd7be4eebd55d2335eb6433d1cea61aadb3817af7807bef8932a`.
 Only the exact SNI version changes; the exception's use and package-shape
 boundaries below remain unchanged. The earlier version is not retained as a
 second allowed version.
 
-The 10.6.1 SafeMigrations servicing baseline promotes SqlClient to 6.1.8.
-SNI.runtime remains 6.0.3 and Broker still resolves NativeInterop 0.20.6;
-neither exact exception nor the use/package-shape boundary is expanded.
+SqlClient 7 separates built-in Azure/Entra authentication into an optional
+extension package. That extension is not added to this graph, and the previous
+NativeInterop 0.20.6 exception is removed rather than retained as an unused
+waiver. Applications choosing additional authentication dependencies own their
+corresponding license and compatibility review. Historical 10.x graphs used
+SNI 6.0.3 and NativeInterop 0.20.6; those are not current exceptions.
 
 These transitive dependencies belong to the EF Core SQL Server / SqlClient
 stack, not Core or the other providers. Their vendor terms allow the
 repository's development and testing use. SafeMigrations publishes its own
 MIT-licensed code and dependency references; its SQL Server package does not
-bundle either vendor's managed or native binaries. This approval is for that
+bundle vendor managed or native binaries. This approval is for that
 use and package shape, not a grant of consumer binary-redistribution rights.
 Consumers remain subject to the terms of the SQL Server stack they choose.
 No vendor license text or binaries are added to the SafeMigrations package.

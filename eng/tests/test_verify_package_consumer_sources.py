@@ -85,6 +85,90 @@ def stage_sources(script_directory: Path, workspace: Path) -> subprocess.Complet
 class VerifyPackageConsumerSourcesTests(unittest.TestCase):
     """Keep linked consumer sources present across all isolated tooling profiles."""
 
+    def test_generated_benchmark_driver_does_not_inherit_authored_workload_items(self) -> None:
+        """A source-local native host must compile only its own driver, not shared workload sources."""
+        # Arrange
+        with tempfile.TemporaryDirectory() as temporary_root:
+            workspace = Path(temporary_root)
+            for relative in ("Directory.Build.props", "global.json", "benchmarks/Directory.Build.props",
+                             "benchmarks/Shared/BenchmarkProject.props", "benchmarks/Shared/BenchmarkProgram.cs"):
+                source = REPOSITORY_ROOT / relative
+                if source.is_file():
+                    target = workspace / relative
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(source, target)
+
+            driver = workspace / "benchmarks/Owned/.bdn/invocation/native-driver.csproj"
+            driver.parent.mkdir(parents=True)
+            driver.write_text('<Project Sdk="Microsoft.NET.Sdk" />', encoding="ascii")
+            (driver.parent / "gen.cs").write_text("internal sealed class NativeDriver { }", encoding="ascii")
+
+            # Act
+            result = subprocess.run(
+                ["dotnet", "msbuild", str(driver),
+                 "-getItem:Compile,PackageReference,AssemblyMetadata,EmbeddedResource"],
+                cwd=workspace, capture_output=True, text=True, check=False,
+            )
+
+            # Assert
+            self.assertEqual(0, result.returncode, result.stderr)
+            items = json.loads(result.stdout)["Items"]
+            self.assertEqual(["gen.cs"], [item["Identity"] for item in items["Compile"]])
+            self.assertNotIn("BenchmarkDotNet", {item["Identity"] for item in items["PackageReference"]})
+            self.assertNotIn("BenchmarkProjectPath", {item["Identity"] for item in items["AssemblyMetadata"]})
+            self.assertEqual([], items["EmbeddedResource"])
+
+    def test_authored_benchmark_projects_keep_explicit_workload_ownership(self) -> None:
+        """All five authored executables retain shared workloads, native assets and exact source stamping."""
+        for suffix in ("", ".MySql", ".PostgreSql", ".Sqlite", ".SqlServer"):
+            with self.subTest(provider=suffix):
+                # Arrange
+                name = f"Doka.EntityFrameworkCore.SafeMigrations{suffix}.Benchmarks"
+                project = REPOSITORY_ROOT / "benchmarks" / name / f"{name}.csproj"
+
+                # Act
+                result = subprocess.run(
+                    ["dotnet", "msbuild", str(project),
+                     "-getItem:Compile,PackageReference,AssemblyMetadata,EmbeddedResource"],
+                    cwd=REPOSITORY_ROOT, capture_output=True, text=True, check=False,
+                )
+
+                # Assert
+                self.assertEqual(0, result.returncode, result.stderr)
+                items = json.loads(result.stdout)["Items"]
+                self.assertIn(str(REPOSITORY_ROOT / "benchmarks/Shared/BenchmarkProgram.cs"),
+                              {str(Path(item["FullPath"])) for item in items["Compile"]})
+                self.assertIn("BenchmarkDotNet", {item["Identity"] for item in items["PackageReference"]})
+                self.assertEqual([str(project)], [item["Value"] for item in items["AssemblyMetadata"]
+                                                 if item["Identity"] == "BenchmarkProjectPath"])
+                self.assertIn("Doka.SafeMigrations.DatabaseImages",
+                              {item["LogicalName"] for item in items["EmbeddedResource"]})
+
+    def test_tools_profiles_reference_design_without_changing_no_tooling_controls(self) -> None:
+        """EF11 tooling requires Design explicitly; the unsupported None profile must stay negative."""
+        for provider in PROVIDERS:
+            for mode in ("Source", "Package"):
+                for profile in ("Tools", "None"):
+                    with self.subTest(provider=provider, mode=mode, profile=profile):
+                        # Arrange
+                        project = (CONSUMER_ROOT / provider
+                                   / f"Doka.EntityFrameworkCore.SafeMigrations.{provider}.PackageConsumer.csproj")
+                        arguments = ["dotnet", "msbuild", str(project), "-getItem:PackageReference",
+                                     f"-p:SafeMigrationsPackageConsumerMode={mode}",
+                                     f"-p:SafeMigrationsEfToolingReference={profile}",
+                                     "-p:SafeMigrationsPackageVersion=11.0.0-dev"]
+
+                        # Act
+                        result = subprocess.run(arguments, cwd=REPOSITORY_ROOT, capture_output=True,
+                                                text=True, check=False)
+                        references = ({item["Identity"] for item in json.loads(result.stdout)
+                                       ["Items"]["PackageReference"]} if result.returncode == 0 else set())
+
+                        # Assert
+                        self.assertEqual(0, result.returncode, result.stderr)
+                        self.assertEqual(profile == "Tools", "Microsoft.EntityFrameworkCore.Design" in references)
+                        self.assertEqual(profile == "Tools", "Microsoft.EntityFrameworkCore.Tools" in references)
+
     def test_lock_inventory_accepts_all_24_current_solution_projects(self) -> None:
         """The real gate includes source, tests, benchmarks, engineering consumers and samples."""
         # Arrange
@@ -120,6 +204,7 @@ class VerifyPackageConsumerSourcesTests(unittest.TestCase):
     def test_lock_inventory_rejects_ordinary_extra_paths(self) -> None:
         """An unlisted engineering or lookalike artifact directory cannot hide an extra lock."""
         for relative in ("ordinary-extra/packages.lock.json", "eng/unlisted/packages.lock.json",
+                         "nested/.bdn-lookalike/packages.lock.json",
                          "artifacts-lookalike/packages.lock.json"):
             with self.subTest(path=relative), tempfile.TemporaryDirectory() as temporary_root:
                 # Arrange
@@ -145,7 +230,8 @@ class VerifyPackageConsumerSourcesTests(unittest.TestCase):
             stage_lock_inventory_fixture(workspace)
             for relative in (".git/snapshot/packages.lock.json", "artifacts/nested/packages.lock.json",
                              "nested/bin/packages.lock.json", "nested/obj/packages.lock.json",
-                             "nested/BenchmarkDotNet.Artifacts/packages.lock.json"):
+                             "nested/BenchmarkDotNet.Artifacts/packages.lock.json",
+                             "nested/.bdn/generated/packages.lock.json"):
                 generated = workspace / relative
                 generated.parent.mkdir(parents=True, exist_ok=True)
                 generated.write_text("{}", encoding="ascii")
@@ -205,7 +291,7 @@ class VerifyPackageConsumerSourcesTests(unittest.TestCase):
         """Evaluate the actual root/source policy instead of simulating MSBuild conditions."""
         # Arrange
         projects = sorted(REPOSITORY_ROOT.glob("**/*.csproj"))
-        generated_directories = {"artifacts", "bin", "obj", "BenchmarkDotNet.Artifacts"}
+        generated_directories = {"artifacts", "bin", "obj", "BenchmarkDotNet.Artifacts", ".bdn"}
         projects = [project for project in projects
                     if not generated_directories.intersection(project.relative_to(REPOSITORY_ROOT).parts)]
         environment = {**os.environ, "GITHUB_ACTIONS": "true", "ContinuousIntegrationBuild": "false"}
@@ -313,7 +399,7 @@ class VerifyPackageConsumerSourcesTests(unittest.TestCase):
             project = workspace / "Probe.csproj"
             project.write_text('<Project Sdk="Microsoft.NET.Sdk" />', encoding="ascii")
             for relative in ("Owned.cs", "nested/bin/Generated.cs", "nested/obj/Generated.cs",
-                             "nested/BenchmarkDotNet.Artifacts/Generated.cs"):
+                             "nested/BenchmarkDotNet.Artifacts/Generated.cs", "nested/.bdn/generated/Generated.cs"):
                 path = workspace / relative
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text("internal sealed class Probe { }", encoding="ascii")

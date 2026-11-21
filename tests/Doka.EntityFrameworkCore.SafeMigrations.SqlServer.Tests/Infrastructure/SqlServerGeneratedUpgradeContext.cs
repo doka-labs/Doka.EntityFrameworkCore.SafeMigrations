@@ -22,6 +22,8 @@ public sealed class SqlServerGeneratedUpgradeContext : DbContext
         optionsBuilder.UseSqlServer(
             _connectionString,
             provider => provider
+                // WHY: The same authored upgrade must execute on every declared SQL Server major, including 2019.
+                .UseCompatibilityLevel(150)
                 .MigrationsAssembly(typeof(SqlServerGeneratedUpgradeContext).Assembly.FullName)
                 .CommandTimeout(SafeMigrationDbContext.CommandTimeoutSeconds));
 

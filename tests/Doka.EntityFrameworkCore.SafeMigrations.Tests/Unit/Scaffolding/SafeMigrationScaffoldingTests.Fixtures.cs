@@ -166,10 +166,6 @@ public sealed partial class SafeMigrationScaffoldingTests
         ) => null;
 
         public CoreTypeMapping? FindMapping(
-            MemberInfo member
-        ) => null;
-
-        public CoreTypeMapping? FindMapping(
             MemberInfo member,
             IModel model,
             bool useAttributes
@@ -225,6 +221,14 @@ public sealed partial class SafeMigrationScaffoldingTests
 
         public int SnapshotCallCount { get; private set; }
 
+        public string? LastSnapshotMigrationId { get; private set; }
+
+        public string? LastMigrationTypeName { get; private set; }
+
+        public string? LastMetadataTypeName { get; private set; }
+
+        public string? LastMetadataMigrationId { get; private set; }
+
         public IReadOnlyList<MigrationOperation>? LastUpOperations { get; private set; }
 
         public IReadOnlyList<MigrationOperation>? LastDownOperations { get; private set; }
@@ -241,6 +245,7 @@ public sealed partial class SafeMigrationScaffoldingTests
         )
         {
             MigrationCallCount++;
+            LastMigrationTypeName = migrationName;
             LastUpOperations = upOperations;
             LastDownOperations = downOperations;
 
@@ -256,6 +261,8 @@ public sealed partial class SafeMigrationScaffoldingTests
         )
         {
             MetadataCallCount++;
+            LastMetadataTypeName = migrationName;
+            LastMetadataMigrationId = migrationId;
 
             return MetadataSource;
         }
@@ -264,10 +271,12 @@ public sealed partial class SafeMigrationScaffoldingTests
             string? modelSnapshotNamespace,
             Type contextType,
             string modelSnapshotName,
-            IModel model
+            IModel model,
+            string? latestMigrationId = null
         )
         {
             SnapshotCallCount++;
+            LastSnapshotMigrationId = latestMigrationId;
 
             return SnapshotSource;
         }

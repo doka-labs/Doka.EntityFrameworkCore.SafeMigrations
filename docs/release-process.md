@@ -15,8 +15,14 @@ SafeMigrations publishes these package IDs at one version:
 - `Doka.EntityFrameworkCore.SafeMigrations.Sqlite`; and
 - `Doka.EntityFrameworkCore.SafeMigrations.SqlServer`.
 
+The current development source selects the 11.0.0 identity on .NET/EF Core 11.
+It does not claim publication or completed qualification. The
+[11.0 upgrade](support-and-qualification.md#upgrade-to-1100) owns application
+compatibility; the [publication runbook](operations/release-publication.md)
+owns actual release status and historical evidence.
+
 Stable 10.4.6 introduced this five-package inventory; releases 10.4.2 through
-10.4.5 retain their historical four-package set. Version 10.7.3 keeps the shared
+10.4.5 retain their historical four-package set. The earlier 10.7.3 line kept the shared
 .NET/EF Core 10 identity and corrects asynchronous work, cleanup and native
 tooling identity internally, without changing existing public APIs. Dependency
 floors advance, including SQL Server-only PKCS 10.0.15. Explicit cancellation
@@ -41,8 +47,9 @@ The workflow accepts a canonical lowercase NuGet version without a leading
 dated changelog entry, be absent from all five NuGet package IDs, and be
 dispatched from the exact current protected source-line SHA before any release
 tag exists. [D-018](decisions/D-018-release-lines-and-monotonic-publication.md)
-defines exact registered release lines. Only main/10 is active; maintenance/10.x
-is inactive. This capability does not activate another framework or adopt .NET 11.
+defines exact registered release lines. The local .NET 11 branch prepares
+main/11 while maintenance/10.x remains inactive. Hosted activation requires the
+separate reviewed cutover; candidate-local policy never grants publication.
 
 ## Reversible qualification
 

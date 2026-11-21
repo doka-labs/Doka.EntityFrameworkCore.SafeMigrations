@@ -57,8 +57,8 @@ public class MySqlLiveRuntimeBenchmarks : IAsyncDisposable
     {
         try
         {
-            // WHY: BDN 0.15.8 iteration hooks require Action. Genuine synchronous provider APIs
-            // prepare the fixture here; no Task is synchronously waited or included in timing.
+            // WHY: Fixture reset is outside the timed async workload. Genuine synchronous provider
+            // calls prepare this existing path directly; no asynchronous Task is synchronously waited.
             _context?.Dispose();
             _context = null;
             var database = _database ?? throw new InvalidOperationException("Setup has not completed.");

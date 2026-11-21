@@ -2,6 +2,15 @@
 
 ## Support contract
 
+The 11.0 development line targets .NET 11 and EF Core 11 across all five
+packages. Published upstream GA packages exist for every provider; no provider
+RC is required. Upstream availability does not establish SafeMigrations native
+qualification or publication. The [11.0 upgrade](#upgrade-to-1100) describes the
+framework and dependency boundary; the 10.x sections below retain their
+historical contracts and evidence.
+
+### Previous 10.x contracts
+
 Version 10.7.3 corrects asynchronous ownership, cancellation propagation,
 cleanup failure handling, SQL Server application-lock validation and EF tooling
 server identity checks through the existing public APIs. It retains .NET/EF
@@ -28,6 +37,85 @@ MySQL/MariaDB callers must account for the owned-guard outer exception type;
 see [diagnostic compatibility](diagnostics.md#runtime-provider-differences).
 Native qualification still requires the complete blocking matrix; ARM SQL Server
 skips and offline SQL-shape tests are not substitutes for its x64 cells.
+
+## Upgrade to 11.0.0
+
+Upgrade the application SDK/runtime and complete EF/provider graph together.
+All five SafeMigrations packages now target `net11.0`; do not load them into an
+EF Core 10 process. Keep the own-package versions identical, including local
+`11.0.0-dev` builds, because adapters consume Core's private ABI. The default
+development version is not a published stable release. Applications staying on
+.NET/EF Core 10 must remain on the compatible 10.x line.
+
+The repository selects SDK 11.0.100, EF Core and dotnet-ef 11.0.0, Doka
+`[11.0.0,11.1.0)`, Npgsql EF `[11.0.0,12.0.0)` and dependency-injection
+abstractions `[11.0.0,11.1.0)`. Restore a coherent application graph rather than
+suppressing downgrade or compatibility warnings. Doka 11 is consumed directly
+from NuGet; no local Doka build or temporary opt-in framework property is needed.
+
+SQL Server now requires SqlClient at least 7.1.2 and PKCS at least 11.0.0.
+Its exact SNI.runtime 7.1.2 development/testing license exception replaces the
+historical 6.0.3 exception; the unused NativeInterop exception is removed.
+See [secure development](security/secure-development.md#sql-server-dependency-license-exceptions).
+SqlClient 7 moved its built-in Azure/Entra authentication implementations to
+`Microsoft.Data.SqlClient.Extensions.Azure`. Applications using those modes must
+select and configure that optional package themselves. SQL-password, Windows
+integrated authentication and application-supplied access tokens do not require
+it. SafeMigrations does not add an Azure dependency to every SQL Server consumer.
+See Microsoft's [SqlClient release notes](https://learn.microsoft.com/en-us/sql/connect/ado-net/microsoft-data-sql-client-release-notes)
+and [authentication guidance](https://learn.microsoft.com/en-us/sql/connect/ado-net/sql/azure-active-directory-authentication).
+
+EF11 defaults to SQL Server compatibility level 160, and Npgsql 11 defaults to
+PostgreSQL 16. Applications targeting SQL Server 2019 or PostgreSQL 14/15 must
+explicitly select the appropriate provider compatibility level. The existing
+qualification cells remain; changing a provider default does not silently remove
+an older engine cell. EF11 also rejects migration execution without migrations,
+and its Tools package no longer supplies Design transitively. Reference Design
+explicitly in design-time/tooling projects, retaining its private assets.
+
+The existing MySqlConnector minimum remains 2.6.2; explicit 3.0.0 selection is
+also allowed. Doka's `DefaultCharSet`/`DefaultCollation` APIs remain application
+choices, not implicit model rewrites or safety bypasses. Ordinary model changes
+still need reviewed migrations and matching snapshots. Additional EF11 migration
+assemblies preserve canonical context ownership and duplicate-ID rejection;
+the latest registered assembly supplies its snapshot, including an absent one.
+
+No new public SafeMigrations overload is required for this framework migration.
+Existing migration policies, report schemas, fingerprint formats, runtime guards,
+history and recovery contracts remain. Updating dependencies does not grant a
+schema change, rewrite historical migration source or waive fingerprint checks.
+Public framework-facing implementations now follow EF11's own signatures.
+
+For canonical timestamp-prefixed EF11 migration IDs, enabled SafeMigrations
+scaffolding uses `Migration{timestamp}{name}` for both generated partial class
+names. This retains timestamp uniqueness without the native leading underscore;
+filenames, `MigrationAttribute` and snapshot `LastMigrationId` retain the original
+full migration ID. Disabled scaffolding remains provider-owned.
+
+The model-fingerprint v1 serialization and schema/facet ordering remain unchanged,
+but EF11's `InversePropertyAttributeConvention:InverseNavigations` annotation can
+contain a closed generic `Type.FullName` whose framework assembly identity changes
+from `10.0.0.0` to `11.0.0.0`, changing the resulting hash without a schema change.
+Cross-major hash identity is therefore not guaranteed: review and recompute any
+persisted `ExpectedModelFingerprint` against the intended EF11 baseline rather
+than disabling validation or blindly reusing the EF10 digest.
+Runtime-versus-snapshot comparisons continue normally when both models use the
+reviewed EF11 graph.
+
+BenchmarkDotNet 0.16.0-preview.2 is a nonshipping dependency required for its
+.NET 11 runtime support. Benchmark execution remains explicitly opted in, with
+timing/allocation values informational. A successful restore/build or upstream
+package publication is not native, package, CLI/script/bundle or release evidence.
+The complete hosted matrix, including native x64 SQL Server, remains blocking.
+See [local EF11 verification](../eng/compatibility/ef11/README.md) and the
+[publication status](operations/release-publication.md).
+
+Primary contracts checked on 2026-11-21:
+
+- [EF11 breaking changes](https://learn.microsoft.com/en-us/ef/core/what-is-new/ef-core-11.0/breaking-changes).
+- [Npgsql 11 release notes](https://www.npgsql.org/efcore/release-notes/11.0.html).
+- [Doka 11.0.0 metadata](https://api.nuget.org/v3-flatcontainer/doka.entityframeworkcore.mysql/11.0.0/doka.entityframeworkcore.mysql.nuspec).
+- [SQL Server EF11 metadata](https://api.nuget.org/v3-flatcontainer/microsoft.entityframeworkcore.sqlserver/11.0.0/microsoft.entityframeworkcore.sqlserver.nuspec).
 
 ## Upgrade to 10.7.3
 
@@ -72,7 +160,7 @@ evidence gates remain required; ARM SQL Server skips do not qualify native x64.
 
 ## Stable 10.7.3 dependency update
 
-The current repository requires Doka `[10.7.0,10.8.0)` for MySQL/MariaDB.
+The 10.7.3 source required Doka `[10.7.0,10.8.0)` for MySQL/MariaDB.
 This changes the dependency floor from SafeMigrations 10.7.2; the historical
 version notes below retain their original dependency contracts. The target
 remains .NET/EF Core 10. Doka's new feature APIs are opt-in: this update does
@@ -86,7 +174,7 @@ downgrade diagnostics. The default repository profile remains on connector 2.6.2
 See the [published connector 3.0.0 dependency metadata](https://api.nuget.org/v3-flatcontainer/mysqlconnector/3.0.0/mysqlconnector.nuspec).
 Native, tooling and isolated-package qualification remain release requirements.
 
-The current SDK pin is 10.0.404; EF Core, dependency-injection abstractions
+Its SDK pin is 10.0.404; EF Core, dependency-injection abstractions
 and dotnet-ef advance to 10.0.15. SQL Server also requires PKCS minimum
 10.0.15: EF Core SQL Server 10.0.15 now declares PKCS at least 10.0.13, so
 retaining a 9.x minimum would create a dependency downgrade. This remains a
@@ -299,23 +387,34 @@ The complete hosted/native matrix and package/readback gates remain mandatory;
 see the [publication runbook](operations/release-publication.md) for release
 status and evidence requirements.
 
-Repository release-line automation retains the same five packages, signed-tag
-publisher and .NET 10 identity. Only main/10 is active; maintenance/10.x remains
-inactive. This is not .NET 11 support or an application migration requirement;
-see [release lines](operations/release-lines.md).
+The earlier 10.x release-line preparation retained the same five packages and
+signed-tag publisher. The current branch prepares the .NET 11 identity without
+performing hosted cutover; see [release lines](operations/release-lines.md).
 
 ## Dependencies and package identity
 
-All publishable projects target `net10.0`. The repository pins SDK 10.0.404
-with roll-forward disabled. SafeMigrations supports EF Core 10 only.
+All publishable projects target `net11.0`. The repository pins SDK 11.0.100
+with roll-forward disabled. This source line supports EF Core 11; the separate
+10.x line retains .NET/EF Core 10.
 
 | Package | Runtime dependency contract |
 | --- | --- |
-| Core | `Microsoft.EntityFrameworkCore.Relational` `[10.0.15,10.1.0)` |
-| MySQL/MariaDB | `Doka.EntityFrameworkCore.MySql` `[10.7.0,10.8.0)`; `MySqlConnector` minimum `2.6.2` |
-| PostgreSQL | `Npgsql.EntityFrameworkCore.PostgreSQL` `[10.0.3,11.0.0)` |
-| SQLite | EF Core SQLite Core `[10.0.15,10.1.0)`; application-owned native bundle |
-| SQL Server (available since 10.4.6) | `Microsoft.EntityFrameworkCore.SqlServer` `[10.0.15,10.1.0)`; `Microsoft.Data.SqlClient` minimum `6.1.8`; `System.Security.Cryptography.Pkcs` minimum `10.0.15` |
+| Core | `Microsoft.EntityFrameworkCore.Relational` `[11.0.0,11.1.0)` |
+| MySQL/MariaDB | `Doka.EntityFrameworkCore.MySql` `[11.0.0,11.1.0)`; `MySqlConnector` minimum `2.6.2`, explicit `3.0.0` allowed |
+| PostgreSQL | `Npgsql.EntityFrameworkCore.PostgreSQL` `[11.0.0,12.0.0)` |
+| SQLite | EF Core SQLite Core `[11.0.0,11.1.0)`; application-owned native bundle |
+| SQL Server (available since 10.4.6) | `Microsoft.EntityFrameworkCore.SqlServer` `[11.0.0,11.1.0)`; `Microsoft.Data.SqlClient` minimum `7.1.2`; `System.Security.Cryptography.Pkcs` minimum `11.0.0` |
+
+Runtime transport/security dependencies remain owned by the selected adapter;
+Core and sibling providers do not acquire SQL Server dependencies. The MySQL
+range protects the public SPI boundary without an exact Doka pin; repository
+locks identify the actual reviewed NuGet bytes, not the version selected by every
+application. Qualified package consumers must use their own resolved graph.
+
+### Historical 10.x dependency rationale
+
+The following paragraphs preserve the 10.7.3/earlier dependency decisions and
+their original source identities. They are not the current 11.x dependency table.
 
 The EF Core and dependency-injection abstraction minimums are 10.0.15. These
 are published package dependency floors, not CI-only updates; consumers on an
@@ -345,7 +444,7 @@ version is patched. The original advisories identify 10.0.13 as the first
 fixed 10.x version; the current package contract requires 10.0.15 or later.
 NuGet audit remains enabled for the actual resolved graph.
 
-The current MySQL/MariaDB package requires Doka 10.7.0 or a compatible later 10.7 patch
+The 10.7.3 MySQL/MariaDB package requires Doka 10.7.0 or a compatible later 10.7 patch
 release and rejects the next minor line. This boundary avoids an exact
 transitive pin without claiming compatibility across an unqualified behavioral
 SPI revision. CI does not build Doka and never uses a cross-repository
@@ -389,8 +488,9 @@ SqlClient 6.1.8 corrects managed-SNI enforcement of an explicit
 `HostNameInCertificate`; a certificate matching another name can now reject.
 Review the [transport upgrade boundary](efcore-provider-upgrade-risk.md#sql-server-boundary)
 before rollout. SafeMigrations does not enable certificate-validation or
-revocation bypasses. SNI 6.0.3 and NativeInterop 0.20.6 remain the only existing
-exact license exceptions; this servicing change does not broaden them.
+revocation bypasses. That historical servicing change retained the exact SNI
+6.0.3 and NativeInterop 0.20.6 exceptions. The current .NET 11 exception is
+documented separately in [secure development](security/secure-development.md#sql-server-dependency-license-exceptions).
 
 SafeMigrations 10.6.0 raises its Doka dependency floor to the 10.6 line.
 Doka now budgets implicit indexed string/binary
@@ -422,7 +522,7 @@ Bounded package ranges describe external compatibility. All 24 repository
 projects retain default source-mode locks for exact reviewed identities and
 content hashes; they do not prescribe the graph selected by an application.
 The four adapters additionally require their matching own-Core version because
-they share a private ABI: stable 10.7.3 requires Core `[10.7.3]`, while candidate
+they share a private ABI: 11.0.0-dev requires Core `[11.0.0-dev]`, while candidate
 adapters require the exact corresponding Core candidate identity.
 External dependency floors remain provider-owned;
 the Doka update above advances its independently bounded range. Historical
@@ -436,7 +536,8 @@ Version 10.7.0 replaces ten optional-token declarations with required-token
 declarations in the shipped baseline; it does not add an overload or restore
 the removed defaults. Version 10.7.3 retains that shipped baseline exactly;
 its ownership, cancellation and tooling corrections add no public declaration.
-The current Doka dependency contract is the 10.7 line above.
+The historical Doka dependency contract in that release was the 10.7 line above;
+the current 11.x dependency table supersedes it for this branch.
 Qualification requires the blocking
 workflow, including all three native x86-64 SQL Server cells. The
 [publication runbook](operations/release-publication.md) owns the five-package
@@ -518,7 +619,7 @@ PostgreSQL 14 reached upstream end of life; its existing qualification cell is
 retained pending a separate support-policy decision, not represented as supported
 by the vendor. No PostgreSQL 19 cell is introduced by this refresh.
 
-The same inventory selects SDK 10.0.404, EF Core/DI/dotnet-ef 10.0.15,
+That historical 10.7.3 inventory selects SDK 10.0.404, EF Core/DI/dotnet-ef 10.0.15,
 PKCS 10.0.15, Testcontainers 4.17.0, Microsoft.CodeAnalysis.Analyzers 5.12.0
 and Microsoft.NET.Test.Sdk 18.12.0. The SqlClient minimum remains 6.1.8;
 raising it to 7.x requires
@@ -883,7 +984,7 @@ used to hide an uncovered regression.
 ## Performance and memory
 
 Core, MySQL/MariaDB, PostgreSQL, SQLite and SQL Server each have an isolated
-BenchmarkDotNet 0.15.8 executable. The default workload families include all
+BenchmarkDotNet 0.16.0-preview.2 executable. The default workload families include all
 registered parameterized cases, including operation-count parameters where applicable.
 BenchmarkDotNet owns process isolation, warmup, timing, statistics, managed
 allocation diagnostics and native full JSON export. The former custom timer,
@@ -923,12 +1024,14 @@ with the source revision, runtime, OS, architecture and job configuration.
 The [full exporter][bdn-json]
 retains raw measurements rather than only a repository-derived median.
 
-On .NET 10 the
+The historical .NET 10/BenchmarkDotNet 0.15.8 investigation showed that its
 [allocation counter][bdn-gc]
-uses process-wide managed allocated bytes, including work on other managed
+used process-wide managed allocated bytes, including work on other managed
 threads. This is not the old handwritten thread-local counter. Historical
 allocation and timing numbers are not methodologically comparable with the
-new engine, even when a workload name is unchanged. Managed bytes allocated
+current .NET 11/BenchmarkDotNet toolchain, even when a workload name is unchanged.
+That historical implementation citation does not establish every current
+measurement detail. Managed bytes allocated
 are neither peak live managed memory nor native process/database memory.
 
 ### Allocation-counter limitations
@@ -967,7 +1070,7 @@ retention and disposal counters; no observation cleanup is included in each
 invocation. Result construction and real resource cleanup remain active. These
 client-side measurements are not native server timings.
 
-[bdn-json]: https://github.com/dotnet/BenchmarkDotNet/blob/v0.15.8/src/BenchmarkDotNet/Exporters/Json/JsonExporter.cs
+[bdn-json]: https://github.com/dotnet/BenchmarkDotNet/blob/v0.16.0-preview.2/src/BenchmarkDotNet/Exporters/Json/JsonExporter.cs
 [bdn-gc]: https://github.com/dotnet/BenchmarkDotNet/blob/v0.15.8/src/BenchmarkDotNet/Engines/GcStats.cs#L126-L146
 
 Prepared-input BenchmarkDotNet workloads measure shared seed and diagnostic

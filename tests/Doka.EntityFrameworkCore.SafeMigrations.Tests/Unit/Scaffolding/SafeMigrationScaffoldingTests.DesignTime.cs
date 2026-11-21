@@ -127,6 +127,79 @@ public sealed partial class SafeMigrationScaffoldingTests
         Assert.Equal(1, providerGenerator.SnapshotCallCount);
     }
 
+    /// <summary>Preserves an explicit latest migration identity without synthesizing a missing identity.</summary>
+    /// <param name="latestMigrationId">The provider-owned identity, or no identity for an initial snapshot.</param>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("20261121000001_AddColumn")]
+    public void SnapshotDelegationPreservesOptionalLatestMigrationIdentity(
+        string? latestMigrationId
+    )
+    {
+        // Arrange
+        var providerGenerator = new TestMigrationsCodeGenerator();
+        var generator = CreateMigrationsGenerator(providerGenerator, isEnabled: true);
+
+        // Act
+        var snapshot = generator.GenerateSnapshot(
+            "Company.Migrations",
+            typeof(SafeMigrationScaffoldingTests),
+            "ReviewContextModelSnapshot",
+            model: null!,
+            latestMigrationId);
+
+        // Assert
+        Assert.Equal(TestMigrationsCodeGenerator.SnapshotSource, snapshot);
+        Assert.Equal(latestMigrationId, providerGenerator.LastSnapshotMigrationId);
+        Assert.Equal(1, providerGenerator.SnapshotCallCount);
+        Assert.Equal(0, providerGenerator.MigrationCallCount);
+        Assert.Equal(0, providerGenerator.MetadataCallCount);
+    }
+
+    /// <summary>Normalizes only an enabled canonical EF11 class name while preserving the migration identity.</summary>
+    /// <param name="migrationName">The framework-supplied class-name input.</param>
+    /// <param name="isEnabled">Whether SafeMigrations owns the generated migration source.</param>
+    /// <param name="expectedTypeName">The identical type name passed to both provider renderers.</param>
+    [Theory]
+    [InlineData("20261121021957_AddColumn", true, "Migration20261121021957AddColumn")]
+    [InlineData("20261121021957_AddColumn", false, "20261121021957_AddColumn")]
+    [InlineData("20261121021958_AddColumn", true, "Migration20261121021958AddColumn")]
+    [InlineData("AddColumn", true, "AddColumn")]
+    [InlineData("2026112102195_AddColumn", true, "2026112102195_AddColumn")]
+    [InlineData("x0261121021957_AddColumn", true, "x0261121021957_AddColumn")]
+    [InlineData("20261121021957-AddColumn", true, "20261121021957-AddColumn")]
+    [InlineData("20261121021957_", true, "20261121021957_")]
+    [InlineData("20261121021957_Add_Column", true, "Migration20261121021957Add_Column")]
+    public void MigrationAndMetadataShareOnlyCanonicalTypeNameNormalization(
+        string migrationName,
+        bool isEnabled,
+        string expectedTypeName
+    )
+    {
+        // Arrange
+        var providerGenerator = new TestMigrationsCodeGenerator(migrationSource:
+            TestMigrationsCodeGenerator.CSharpMigrationSource);
+
+        var generator = CreateMigrationsGenerator(providerGenerator, isEnabled);
+        IReadOnlyList<MigrationOperation> operations = isEnabled
+            ? [new SafeMigrationDesignTimeServicesRequiredOperation()]
+            : [];
+
+        const string migrationId = "20261121021957_OriginalHistoryIdentity";
+
+        // Act
+        _ = generator.GenerateMigration("Company.Migrations", migrationName, operations, operations);
+        _ = generator.GenerateMetadata("Company.Migrations", typeof(SafeMigrationScaffoldingTests),
+            migrationName, migrationId, targetModel: null!);
+
+        // Assert
+        Assert.Equal(expectedTypeName, providerGenerator.LastMigrationTypeName);
+        Assert.Equal(expectedTypeName, providerGenerator.LastMetadataTypeName);
+        Assert.Equal(migrationId, providerGenerator.LastMetadataMigrationId);
+        Assert.Equal(1, providerGenerator.MigrationCallCount);
+        Assert.Equal(1, providerGenerator.MetadataCallCount);
+    }
+
     /// <summary>Defers generator selection until provider services are registered.</summary>
     [Fact]
     public void DesignTimeServicesDeferGeneratorDecorationUntilProviderServicesExist()

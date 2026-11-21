@@ -64,7 +64,8 @@ mkdir -p "${repository_root}"
 hash_source_lockfiles() {
   local output_file="$1"
   find "${source_root}" \
-    \( -name .git -o -name .fastembed_cache -o -name artifacts -o -name bin -o -name obj \) -prune -o \
+    \( -name .git -o -name .fastembed_cache -o -name artifacts -o -name bin -o -name obj \
+      -o -name .bdn -o -name BenchmarkDotNet.Artifacts \) -prune -o \
     -type f -name packages.lock.json -exec shasum -a 256 {} + \
     | LC_ALL=C sort >"${output_file}"
 }
@@ -76,6 +77,8 @@ rsync -a \
   --exclude 'artifacts/' \
   --exclude 'bin/' \
   --exclude 'obj/' \
+  --exclude '.bdn/' \
+  --exclude 'BenchmarkDotNet.Artifacts/' \
   "${source_root}/" "${repository_root}/"
 
 container_name="safe-migrations-tooling-${engine}-${RANDOM}-$$"

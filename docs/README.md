@@ -1,14 +1,16 @@
 # Documentation
 
-This is the task-oriented entry point for SafeMigrations 10.7.3 documentation
+This is the task-oriented entry point for the SafeMigrations 11.0 development line
 covering all five packages. Start with the task table
 below; release changes and consumer upgrade notes belong in the
 [changelog](../CHANGELOG.md). The [diagnostics guide](diagnostics.md) explains
 readable errors, affected owners, text summaries and report-schema compatibility;
 [support and qualification](support-and-qualification.md) owns dependency and
 native UUID and lossless signed-integer upgrade boundaries. Review the
-[10.7.3 upgrade](support-and-qualification.md#upgrade-to-1073) for resource
-ownership, cleanup and dependency-floor changes. Applications upgrading from
+[.NET 11 upgrade](support-and-qualification.md#upgrade-to-1100) for framework,
+provider and SQL Server authentication changes. Publication and qualification
+status belong in the [publication runbook](operations/release-publication.md),
+not a version number in product documentation. Applications upgrading from
 before 10.7.2 must also review its
 [expression/catalog corrections](support-and-qualification.md#upgrade-to-1072)
 and affected captured numeric-default fingerprint approvals.
@@ -31,6 +33,7 @@ OpenSSF status is established by its linked external registry.
 | Separate migration lineages | [Model-managed-data ownership](model-managed-data-ownership.md) |
 | Find public inputs, outputs, and failure boundaries | [API reference](api-reference.md) |
 | Check engines, dependency ranges, qualified boundaries, and evidence | [Support and qualification](support-and-qualification.md) |
+| Upgrade the complete application graph from .NET/EF Core 10 to 11 | [.NET 11 upgrade](support-and-qualification.md#upgrade-to-1100) |
 | Understand MySQL/MariaDB session guards and implicit commits | [MySQL and MariaDB DDL](mysql-mariadb-ddl-behavior.md) |
 | Review owned MySQL/MariaDB required-column staging and recovery | [Atomic additions](mysql-mariadb-ddl-behavior.md#atomic-required-column-additions) and [decision rationale](decisions/D-015-owned-atomic-required-column-additions.md) |
 | Understand PostgreSQL schema identity, seed-delete fences, analysis, and transactions | [PostgreSQL behavior](postgresql-behavior.md) |

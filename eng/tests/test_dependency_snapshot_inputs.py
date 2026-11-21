@@ -124,6 +124,40 @@ def changed_assets(entries: dict, mutate) -> None:
 class DependencySnapshotInputTests(unittest.TestCase):
     """Keep resolved input graphs complete and isolated from executable content."""
 
+    def test_rejects_generated_benchmark_projects_from_the_declared_snapshot(self) -> None:
+        """A generated host cannot be promoted into the source graph by a solution entry."""
+        for name in (".bdn", "BenchmarkDotNet.Artifacts"):
+            with self.subTest(directory=name), tempfile.TemporaryDirectory() as temporary_root:
+                # Arrange
+                source = Path(temporary_root).resolve() / "source"
+                project = create_project(source, name)
+                write_solution(source, [project])
+                destination = Path(temporary_root).resolve() / "output"
+
+                # Act
+                result = stage(source, destination)
+
+                # Assert
+                self.assertNotEqual(0, result.returncode)
+                self.assertEqual("could not validate dependency snapshot inputs\n", result.stderr)
+                self.assertFalse(destination.exists())
+
+    def test_preserves_ordinary_projects_with_benchmark_directory_lookalike_names(self) -> None:
+        """Generated-directory exclusion compares whole path segments, not substrings."""
+        # Arrange
+        with tempfile.TemporaryDirectory() as temporary_root:
+            source = Path(temporary_root).resolve() / "source"
+            project = create_project(source, ".bdn-lookalike")
+            write_solution(source, [project])
+            destination = Path(temporary_root).resolve() / "output"
+
+            # Act
+            result = stage(source, destination)
+
+            # Assert
+            self.assertEqual(0, result.returncode, result.stderr)
+            self.assertTrue((destination / project.relative_to(source)).is_file())
+
     def test_stages_exact_data_for_all_solution_projects(self) -> None:
         """Staging retains exact bytes but excludes arbitrary scripts and binaries."""
         # Arrange

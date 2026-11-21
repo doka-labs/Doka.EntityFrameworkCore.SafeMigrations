@@ -3,13 +3,58 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 /// <summary>Pins complete native JSON evidence independently of benchmark duration and allocations.</summary>
 public sealed class BenchmarkProgramExportTests
 {
+    /// <summary>Replaces earlier content with the native current-summary export before validation.</summary>
+    [Fact]
+    public async Task ExportFullAsync_ReplacesOlderEvidence()
+    {
+        // Arrange
+        using var evidence = new BenchmarkProgramTestEvidence();
+        var benchmark = BenchmarkProgramTestEvidence.CreateCases()[0];
+        var report = BenchmarkProgramTestEvidence.CreateReport(
+            benchmark,
+            true,
+            BenchmarkProgramTestEvidence.CreateExecution());
+
+        var summary = evidence.CreateSummary([report]);
+        var oldPath = ((JsonExporter)JsonExporter.Full).GetArtifactFullName(summary);
+        File.WriteAllText(oldPath, "old evidence");
+
+        // Act
+        var path = await BenchmarkProgram.ExportFullAsync(summary, NullLogger.Instance, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(oldPath, path);
+        BenchmarkProgram.ValidateExport(path, 1);
+        Assert.DoesNotContain("old evidence", File.ReadAllText(path), StringComparison.Ordinal);
+    }
+
+    /// <summary>Fails when the canonical artifact cannot be replaced rather than accepting a fallback path.</summary>
+    [Fact]
+    public async Task ExportFullAsync_RejectsOccupiedArtifactWithoutFallbackEvidence()
+    {
+        // Arrange
+        using var evidence = new BenchmarkProgramTestEvidence();
+        var summary = evidence.CreateSummary([]);
+        var path = ((JsonExporter)JsonExporter.Full).GetArtifactFullName(summary);
+        Directory.CreateDirectory(path);
+
+        // Act
+        var exception = await Record.ExceptionAsync(() =>
+            BenchmarkProgram.ExportFullAsync(summary, NullLogger.Instance, CancellationToken.None));
+
+        // Assert
+        Assert.True(exception is IOException or UnauthorizedAccessException);
+        Assert.True(Directory.Exists(path));
+        Assert.Empty(Directory.GetFiles(evidence.DirectoryPath, "*-report-full*.json"));
+    }
+
     /// <summary>Accepts real full exporter output, including extreme synthetic durations and allocations.</summary>
     /// <param name="nanoseconds">The synthetic native measurement duration.</param>
     /// <param name="allocatedBytes">The synthetic native allocation count.</param>
     [Theory]
     [InlineData(100D, 64L)]
     [InlineData(1_000_000_000_000_000D, 1_000_000_000_000L)]
-    public void ValidateExport_AcceptsNativeFullExportWithoutPerformanceBudgets(
+    public async Task ValidateExport_AcceptsNativeFullExportWithoutPerformanceBudgets(
         double nanoseconds,
         long allocatedBytes
     )
@@ -25,19 +70,14 @@ public sealed class BenchmarkProgramExportTests
             .ToArray();
 
         var summary = evidence.CreateSummary(reports);
-        var paths = JsonExporter
-            .Full
-            .ExportToFiles(summary, NullLogger.Instance)
-            .ToArray();
-
-        var path = paths.Single();
+        var path = await BenchmarkProgram.ExportFullAsync(summary, NullLogger.Instance, CancellationToken.None);
 
         // Act
         var exception = Record.Exception(() => BenchmarkProgram.ValidateExport(path, reports.Length));
 
         // Assert
         Assert.Null(exception);
-        Assert.Single(paths);
+        Assert.Equal(((JsonExporter)JsonExporter.Full).GetArtifactFullName(summary), path);
         Assert.True(File.Exists(path));
     }
 

@@ -5,7 +5,27 @@ untagged authorized source-line commit first, then waits at the protected `nuget
 Only after that wait begins does the operator create the signed tag and approve
 publication. Run every command separately and stop on the first failure.
 
-The release target is stable 10.7.3 for all five package IDs, retaining the
+## Current .NET 11 branch status
+
+As of 2026-11-21, this development branch selects the 11.0.0 source identity
+and builds `11.0.0-dev` by default. Its policy marks main/11 as prepared and
+maintenance/10.x as inactive. No hosted cutover, deployment grant, publication
+or release qualification is established by those local files. Use qualification-
+only mode only after the reviewed source and policy are admitted through the
+protected workflow. Do not publish from this preparation or reuse 10.x artifacts
+as 11.x evidence. See the [.NET 11 upgrade](../support-and-qualification.md#upgrade-to-1100)
+and [release-line cutover](release-lines.md).
+
+All five final package pairs, lockfiles, CLI/script/bundle consumers, independent
+native engines, coverage and provenance must be freshly qualified. Native x64
+SQL Server 2019/2022/2025 remains required; local ARM skips cannot satisfy it.
+Record exact committed source, candidate bytes, completed checks and public
+readback before calling any release complete. Nothing in this status section
+claims that the 11.x release or all migration checks have succeeded.
+
+## Historical 10.7.3 preparation evidence
+
+The previous release target was stable 10.7.3 for all five package IDs, retaining the
 inventory introduced in 10.4.6. Review the
 [10.7.3 compatibility notes](../../CHANGELOG.md#1073---2026-11-20) and
 [upgrade procedure](../support-and-qualification.md#upgrade-to-1073), including
@@ -82,8 +102,8 @@ Configure these controls before the first release:
 
 Do not configure a long-lived NuGet API key. The protected job exchanges its
 GitHub OIDC token for a short-lived key immediately before publication.
-Only main/10 is active. The registered maintenance/10.x line remains inactive;
-this implementation creates no branch, grant or .NET 11 support. Additional
+The current local source policy prepares main/11; maintenance/10.x remains
+inactive. This change creates no hosted branch or deployment grant. Additional
 line preparation/activation requires the separate review in
 [Release lines](release-lines.md). It does not require a new environment or
 credential generation.

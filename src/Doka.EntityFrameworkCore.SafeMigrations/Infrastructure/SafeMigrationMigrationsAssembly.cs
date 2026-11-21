@@ -16,6 +16,7 @@ internal sealed class SafeMigrationMigrationsAssembly : IMigrationsAssembly
     // ReSharper disable once ReplaceWithFieldKeyword
     private ModelSnapshot? _modelSnapshot;
     private bool _modelSnapshotInitialized;
+    private List<(Assembly Assembly, TypeInfo[] Types)>? _additionalAssemblies;
 
     /// <summary>Initializes migration discovery for the configured canonical context boundary.</summary>
     /// <param name="currentContext">The active EF context.</param>
@@ -57,7 +58,8 @@ internal sealed class SafeMigrationMigrationsAssembly : IMigrationsAssembly
     }
 
     /// <inheritdoc />
-    public IReadOnlyDictionary<string, TypeInfo> Migrations => _migrations ??= _definedTypes
+    public IReadOnlyDictionary<string, TypeInfo> Migrations => _migrations ??=
+        GetMigrationTypes()
         .Where(type => !type.IsAbstract && typeof(Migration).IsAssignableFrom(type))
         .Select(type => new
         {
@@ -80,7 +82,15 @@ internal sealed class SafeMigrationMigrationsAssembly : IMigrationsAssembly
                 return _modelSnapshot;
             }
 
-            var snapshots = _definedTypes
+            var snapshotTypes = _definedTypes;
+            // WHY: EF11 selects the latest added assembly for the snapshot, not the
+            // union of historical snapshots. Canonical ownership and ambiguity checks still apply.
+            if (_additionalAssemblies is { Count: > 0 })
+            {
+                snapshotTypes = _additionalAssemblies[^1].Types;
+            }
+
+            var snapshots = snapshotTypes
                 .Where(type => !type.IsAbstract && typeof(ModelSnapshot).IsAssignableFrom(type))
                 .Where(type => type.GetCustomAttribute<DbContextAttribute>()
                         ?.ContextType
@@ -116,6 +126,44 @@ internal sealed class SafeMigrationMigrationsAssembly : IMigrationsAssembly
 
     /// <inheritdoc />
     public Assembly Assembly { get; }
+
+    /// <inheritdoc />
+    public void AddMigrations(
+        Assembly additionalMigrationsAssembly
+    )
+    {
+        ArgumentNullException.ThrowIfNull(additionalMigrationsAssembly);
+
+        // WHY: Validate loading before replacing either cached view. Repeated assembly
+        // registration keeps one migration inventory while selecting its snapshot last.
+        var types = GetDefinedTypes(additionalMigrationsAssembly);
+        _additionalAssemblies ??= [];
+        for (var index = _additionalAssemblies.Count - 1; index >= 0; index--)
+        {
+            if (_additionalAssemblies[index].Assembly == additionalMigrationsAssembly)
+            {
+                _additionalAssemblies.RemoveAt(index);
+            }
+        }
+
+        _additionalAssemblies.Add((additionalMigrationsAssembly, types));
+        _migrations = null;
+        _modelSnapshot = null;
+        _modelSnapshotInitialized = false;
+    }
+    /// <summary>Enumerates owned migration types while retaining duplicate-ID rejection.</summary>
+    private IEnumerable<TypeInfo> GetMigrationTypes()
+    {
+        if (_additionalAssemblies is { Count: > 0 })
+        {
+            // WHY: Adding the configured assembly must not duplicate its migration IDs.
+            return _additionalAssemblies.Any(value => value.Assembly == Assembly)
+                ? _additionalAssemblies.SelectMany(static value => value.Types)
+                : _definedTypes.Concat(_additionalAssemblies.SelectMany(static value => value.Types));
+        }
+
+        return _definedTypes;
+    }
 
     /// <inheritdoc />
     public string? FindMigrationId(

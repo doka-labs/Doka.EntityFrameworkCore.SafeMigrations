@@ -1,28 +1,40 @@
 if (args is ["--maintenance-attribution", .. var maintenanceArgs])
 {
-    return MySqlMaintenanceAttribution.Run(maintenanceArgs);
+    return await MySqlMaintenanceAttribution.RunAsync(maintenanceArgs, CancellationToken.None);
 }
 
 if (args is ["--live-catalog", .. var catalogArgs])
 {
-    return BenchmarkProgram.Run(catalogArgs, typeof(MySqlLiveCatalogBenchmarks));
+    return await BenchmarkProgram.RunAsync(
+        catalogArgs,
+        [
+            typeof(MySqlLiveCatalogBenchmarks),
+        ],
+        CancellationToken.None);
 }
 
 if (args is ["--live-runtime", .. var runtimeArgs])
 {
-    return BenchmarkProgram.Run(runtimeArgs,
-        typeof(MySqlLiveRuntimeBenchmarks),
-        typeof(MySqlLiveRuntimeGenerationBenchmarks));
+    return await BenchmarkProgram.RunAsync(
+        runtimeArgs,
+        [
+            typeof(MySqlLiveRuntimeBenchmarks),
+            typeof(MySqlLiveRuntimeGenerationBenchmarks),
+        ],
+        CancellationToken.None);
 }
 
-return BenchmarkProgram.Run(
+return await BenchmarkProgram.RunAsync(
     args,
-    typeof(MySqlGenerationBenchmarks),
-    typeof(MySqlAllocationBenchmarks),
-    typeof(MySqlGeneratedDependencyCatalogBenchmarks),
-    typeof(MySqlAnalyzerBenchmarks),
-    typeof(MySqlMigrationBenchmarks),
-    typeof(MySqlModelFingerprintBenchmarks));
+    [
+        typeof(MySqlGenerationBenchmarks),
+        typeof(MySqlAllocationBenchmarks),
+        typeof(MySqlGeneratedDependencyCatalogBenchmarks),
+        typeof(MySqlAnalyzerBenchmarks),
+        typeof(MySqlMigrationBenchmarks),
+        typeof(MySqlModelFingerprintBenchmarks),
+    ],
+    CancellationToken.None);
 
 internal sealed class MySqlGenerationContext : DbContext
 {

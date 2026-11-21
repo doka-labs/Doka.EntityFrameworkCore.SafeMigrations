@@ -6,6 +6,40 @@ the shared release identity described in [Release process](docs/release-process.
 
 ## [Unreleased]
 
+### Changed
+
+- Move the development line to .NET/EF Core 11 with SDK 11.0.100, EF tooling
+  11.0.0, published Doka 11.0.0 and Npgsql 11.0.0. Retain the existing five
+  packages, exact matching own-Core dependency and provider separation.
+  This major framework migration requires rebuilding applications against
+  the matching provider graph; .NET/EF Core 10 consumers remain on 10.x.
+- Raise SQL Server's explicit SqlClient minimum to 7.1.2 and PKCS minimum to
+  11.0.0. SqlClient 7 moves built-in Azure/Entra authentication into a separately
+  selected extension package; SafeMigrations does not force that optional
+  dependency on consumers. MySqlConnector minimum 2.6.2 and explicit 3.0.0
+  selection remain supported.
+- Integrate EF11 migration-assembly registration, latest-migration snapshot
+  identity and file-scoped generated source into the normal provider/test graph.
+  Retain canonical context ownership, duplicate rejection, replay and fail-closed
+  validation. Compare Doka's default charset/collation behavior with and without
+  SafeMigrations through the existing isolated native fixtures.
+- Normalize canonical EF11 generated migration class names consistently across
+  migration and metadata partials while retaining timestamp uniqueness and the
+  unchanged migration-history and snapshot IDs. No warning suppression or new
+  public overload is required.
+- Requalify model-fingerprint goldens for EF11 framework assembly identities in
+  closed generic convention annotations. The v1 format and schema/facet ordering
+  are unchanged, but persisted EF10 `ExpectedModelFingerprint` pins need review
+  against the intended EF11 baseline; do not disable validation or assume
+  cross-major hash equality. See the [upgrade notes](docs/support-and-qualification.md#upgrade-to-1100).
+- Move the existing BenchmarkDotNet toolchain to its .NET 11-capable
+  0.16.0-preview.2 development dependency. Performance/allocation measurements
+  remain explicitly requested and informational; no numeric performance gate
+  is introduced. The temporary local-package EF11 opt-in profile is retired.
+- Prepare the main/11 source identity without activating hosted publication or
+  maintenance/10.x. Full provider, CLI/script/bundle, package and native x64
+  SQL Server qualification remain required before release.
+
 ## [10.7.3] - 2026-11-20
 
 Version 10.7.3 corrects asynchronous resource ownership, cleanup and native

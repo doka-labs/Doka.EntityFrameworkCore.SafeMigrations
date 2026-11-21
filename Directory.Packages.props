@@ -4,12 +4,12 @@
   </PropertyGroup>
 
   <PropertyGroup Label="Shared compatibility and qualification versions">
-    <EfCorePackageVersion Condition="'$(EfCorePackageVersion)' == ''">[10.0.15,10.1.0)</EfCorePackageVersion>
-    <DokaMySqlPackageVersion Condition="'$(DokaMySqlPackageVersion)' == ''">[10.7.0,10.8.0)</DokaMySqlPackageVersion>
-    <NpgsqlPackageVersion Condition="'$(NpgsqlPackageVersion)' == ''">[10.0.3,11.0.0)</NpgsqlPackageVersion>
+    <EfCorePackageVersion Condition="'$(EfCorePackageVersion)' == ''">[11.0.0,11.1.0)</EfCorePackageVersion>
+    <DokaMySqlPackageVersion Condition="'$(DokaMySqlPackageVersion)' == ''">[11.0.0,11.1.0)</DokaMySqlPackageVersion>
+    <NpgsqlPackageVersion Condition="'$(NpgsqlPackageVersion)' == ''">[11.0.0,12.0.0)</NpgsqlPackageVersion>
     <DependencyInjectionPackageVersion
       Condition="'$(DependencyInjectionPackageVersion)' == ''"
-    >[10.0.15,10.1.0)</DependencyInjectionPackageVersion>
+    >[11.0.0,11.1.0)</DependencyInjectionPackageVersion>
     <TestcontainersPackageVersion
       Condition="'$(TestcontainersPackageVersion)' == ''"
     >[4.17.0]</TestcontainersPackageVersion>
@@ -24,7 +24,8 @@
   </ItemGroup>
 
   <ItemGroup Label="Design-time and engineering">
-    <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
+    <!-- WHY: The stable 0.15 line cannot validate .NET 11; retain native runtime validation. -->
+    <PackageVersion Include="BenchmarkDotNet" Version="0.16.0-preview.2" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="$(EfCorePackageVersion)" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Tools" Version="$(EfCorePackageVersion)" />
   </ItemGroup>
@@ -41,13 +42,13 @@
     <!-- WHY: The owning adapters reference these packages explicitly. Central
          versions remain shared without adding transports to sibling providers. -->
     <PackageVersion Include="MySqlConnector" Version="2.6.2" />
-    <PackageVersion Include="Microsoft.Data.SqlClient" Version="6.1.8" />
+    <PackageVersion Include="Microsoft.Data.SqlClient" Version="7.1.2" />
   </ItemGroup>
 
   <ItemGroup Label="SQL Server transitive security floor">
     <!-- WHY: The SQL Server adapter explicitly publishes this minimum; a lockfile
          or development-only central promotion would not protect consumers. -->
-    <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="10.0.15" />
+    <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="11.0.0" />
   </ItemGroup>
 
   <ItemGroup Label="Build analyzers">

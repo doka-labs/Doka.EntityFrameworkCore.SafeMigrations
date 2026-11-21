@@ -1,6 +1,6 @@
 # SafeMigrations sample
 
-This runnable source-construction sample demonstrates the current .NET 10 API:
+This runnable source-construction sample demonstrates the current .NET 11 API:
 
 - a provider-neutral `SampleDbContext`;
 - a forward-only heterogeneous Core convergence baseline;

@@ -61,10 +61,17 @@ public class PostgreSqlColumnAttributionWorkload : IDisposable, IAsyncDisposable
 
     /// <summary>Runs paired plain and mixed-collation column generation benchmarks.</summary>
     /// <param name="args">The BenchmarkDotNet command-line arguments.</param>
+    /// <param name="cancellationToken">Cancels native discovery, execution and export.</param>
     /// <returns>The shared benchmark runner exit code.</returns>
-    internal static int Run(
-        string[] args
-    ) => BenchmarkProgram.Run(args, typeof(PostgreSqlColumnAttributionWorkload));
+    internal static Task<int> RunAsync(
+        string[] args,
+        CancellationToken cancellationToken
+    ) => BenchmarkProgram.RunAsync(
+        args,
+        [
+            typeof(PostgreSqlColumnAttributionWorkload),
+        ],
+        cancellationToken);
 
     /// <summary>Prepares ordered contracts and records exact SQL shapes outside timed generation.</summary>
     /// <returns>The setup and optional asynchronous structural evidence persistence.</returns>

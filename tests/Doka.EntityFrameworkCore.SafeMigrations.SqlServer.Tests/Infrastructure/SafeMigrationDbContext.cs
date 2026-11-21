@@ -46,6 +46,8 @@ public sealed class SafeMigrationDbContext : DbContext
         optionsBuilder.UseSqlServer(
             _connectionString ?? throw new InvalidOperationException("A SQL Server connection string is required."),
             provider => provider
+                // WHY: EF11 defaults to SQL Server 2022; this fixture also qualifies SQL Server 2019.
+                .UseCompatibilityLevel(150)
                 .MigrationsAssembly(typeof(SafeMigrationDbContext).Assembly.FullName)
 
                 // WHY: Live contracts use an explicit finite wait budget rather than a driver default.
