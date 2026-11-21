@@ -37,6 +37,10 @@ updates:
       - dependency-name: "Microsoft.Extensions.*"
         update-types:
           - version-update:semver-major
+      # WHY: dotnet-ef is a NuGet tool, outside the SDK and EF package wildcard.
+      - dependency-name: "dotnet-ef"
+        update-types:
+          - version-update:semver-major
     open-pull-requests-limit: 1
     commit-message:
       prefix: chore

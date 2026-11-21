@@ -76,7 +76,8 @@ Updating packages alone requires no schema migration or history rewrite.
   OCI manifest identities. Verify exact pinned image references before native
   and merged-coverage qualification, without tag fallback or weaker test gates.
 - Prevent routine Dependabot SDK and framework-major proposals on main as well
-  as maintained lines. Retain current-major servicing, independently versioned
+  as maintained lines, including the separately named `dotnet-ef` NuGet tool.
+  Retain current-major servicing, independently versioned
   tools/transports and the stricter maintenance/preview prerelease ceilings.
 - Allow qualification-only release-line rehearsals to use an unused canonical
   same-major version without changing a released source snapshot's version or
