@@ -1,4 +1,20 @@
 <Project>
+  <!-- WHY: EF's temporary bundle host references our executable test projects.
+       Only the host's own deps/runtimeconfig files are bundle-primary JSON.
+       Preserve the referenced executable's configurations as sidecars instead of
+       asking the SDK bundler to embed them (NETSDK1236). Updating only exported
+       items leaves standalone test builds and their own single-file publish intact. -->
+  <Target Name="PreserveReferencedTestExecutableConfiguration"
+          AfterTargets="AddDepsJsonAndRuntimeConfigToPublishItemsForReferencingProjects"
+          Condition="'$(IsTestProject)' == 'true' and '$(HasRuntimeOutput)' == 'true'">
+    <ItemGroup>
+      <AllPublishItemsFullPathWithTargetPath
+        Update="$(ProjectDepsFilePath);$(PublishDepsFilePath);$(ProjectRuntimeConfigFilePath)">
+        <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+      </AllPublishItemsFullPathWithTargetPath>
+    </ItemGroup>
+  </Target>
+
   <!-- WHY: All shipped adapters use Core internals. The pack SDK collects the actual
        referenced project's PackageVersion late, so constrain that own-package edge
        only after collection. External dependency ranges remain untouched. -->

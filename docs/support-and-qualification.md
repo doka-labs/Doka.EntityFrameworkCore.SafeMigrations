@@ -873,6 +873,14 @@ restore/build gates and original source-lock hashes remain enforced. Local
 tooling parity checks must also exercise the CI restore policy, for example
 with `GITHUB_ACTIONS=true` scoped to the harness command.
 
+EF's temporary bundle host references executable test projects. Their exported
+`deps.json` and `runtimeconfig.json` remain publish sidecars through exact
+`ExcludeFromSingleFile` metadata; only the host's own configuration is primary
+bundle JSON. This prevents SDK 11's NETSDK1236 filtering mismatch without warning
+suppression, removing test configuration or enabling all-content extraction.
+Direct single-file publication of a test executable still embeds its own
+configuration. See the [SDK's supported file-exclusion contract](https://learn.microsoft.com/en-us/dotnet/core/deploying/single-file/overview#exclude-files-from-being-embedded).
+
 SQL Server qualifies Strict/LegacyConvergence CLI, bundle, normal-script and
 idempotent-script targets with exact native schema/history and generated-value
 readback. ODBC callers explicitly enable quoted identifiers and use finite

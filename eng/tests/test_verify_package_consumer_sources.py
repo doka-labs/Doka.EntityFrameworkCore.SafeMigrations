@@ -1,4 +1,4 @@
-"""Exercise isolated consumer staging and native configuration without restores or product builds."""
+"""Exercise isolated consumer staging and SDK publishing without building product packages."""
 
 import json
 import os
@@ -82,8 +82,141 @@ def stage_sources(script_directory: Path, workspace: Path) -> subprocess.Complet
     )
 
 
+def stage_bundle_configuration_fixture(workspace: Path, *, test_owner: bool = True) -> tuple[Path, Path]:
+    """Use the actual build targets with package-free executable projects and the repository SDK."""
+    for name in ("global.json", "Directory.Build.targets"):
+        shutil.copy2(REPOSITORY_ROOT / name, workspace / name)
+
+    framework = ET.parse(REPOSITORY_ROOT / "Directory.Build.props").findtext(".//TargetFramework")
+    (workspace / "Directory.Build.props").write_text(
+        f'<Project><PropertyGroup><TargetFramework>{framework}</TargetFramework>'
+        '<SelfContained>false</SelfContained></PropertyGroup></Project>',
+        encoding="ascii",
+    )
+    (workspace / "NuGet.Config").write_text(
+        '<configuration><packageSources><clear /></packageSources></configuration>', encoding="ascii",
+    )
+    owner = workspace / "Owner/Owner.csproj"
+    host = workspace / "Host/Host.csproj"
+    for project in (owner, host):
+        project.parent.mkdir()
+
+    owner.write_text(
+        '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType>'
+        f'<IsTestProject>{str(test_owner).lower()}</IsTestProject></PropertyGroup></Project>', encoding="ascii",
+    )
+    (owner.parent / "Program.cs").write_text(
+        'public static class Owner { public static string Value => "bundle-owner-ok"; '
+        'public static void Main() => System.Console.WriteLine(Value); }', encoding="ascii",
+    )
+    host.write_text(
+        '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType></PropertyGroup>'
+        '<ItemGroup><ProjectReference Include="../Owner/Owner.csproj" /></ItemGroup></Project>', encoding="ascii",
+    )
+    (host.parent / "Program.cs").write_text('System.Console.WriteLine(Owner.Value);', encoding="ascii")
+
+    return owner, host
+
+
+def publish_configuration_fixture(project: Path, destination: Path) -> subprocess.CompletedProcess[str]:
+    """Publish through the real native SDK bundler without downloading third-party dependencies."""
+    rid = subprocess.run(
+        ["dotnet", "msbuild", str(project), "-getProperty:NETCoreSdkRuntimeIdentifier"],
+        cwd=project.parent, capture_output=True, text=True, check=True,
+    ).stdout.strip()
+
+    return subprocess.run(
+        ["dotnet", "publish", str(project), "-c", "Release", "-r", rid,
+         "-p:PublishSingleFile=true", "-p:SelfContained=false",
+         "-o", str(destination)],
+        cwd=project.parent, capture_output=True, text=True, check=False,
+    )
+
+
 class VerifyPackageConsumerSourcesTests(unittest.TestCase):
     """Keep linked consumer sources present across all isolated tooling profiles."""
+
+    def test_referenced_test_configuration_is_a_sidecar_not_a_bundle_primary(self) -> None:
+        """A test executable retains its configuration without poisoning its referencing bundle."""
+        # Arrange
+        with tempfile.TemporaryDirectory() as temporary_root:
+            workspace = Path(temporary_root)
+            owner, host = stage_bundle_configuration_fixture(workspace)
+            destination = workspace / "published"
+
+            # Act
+            result = publish_configuration_fixture(host, destination)
+            owner_assembly = next(owner.parent.glob("bin/Release/**/Owner.dll"))
+            standalone = subprocess.run(
+                ["dotnet", str(owner_assembly)],
+                capture_output=True, text=True, check=False,
+            )
+            executable = destination / ("Host.exe" if os.name == "nt" else "Host")
+            bundled = subprocess.run([str(executable)], capture_output=True, text=True, check=False)
+            exported = subprocess.run(
+                ["dotnet", "msbuild", str(owner), "-t:GetCopyToPublishDirectoryItems",
+                 "-getItem:AllPublishItemsFullPathWithTargetPath", "-p:Configuration=Release"],
+                cwd=workspace, capture_output=True, text=True, check=False,
+            )
+
+            # Assert
+            self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+            self.assertNotIn("NETSDK1236", result.stdout + result.stderr)
+            self.assertTrue((destination / "Owner.runtimeconfig.json").is_file())
+            self.assertFalse((destination / "Host.runtimeconfig.json").exists())
+            self.assertFalse((destination / "Host.deps.json").exists())
+            self.assertFalse((destination / "Owner.dll").exists())
+            self.assertEqual(0, standalone.returncode, standalone.stderr)
+            self.assertEqual("bundle-owner-ok", standalone.stdout.strip())
+            self.assertEqual(0, bundled.returncode, bundled.stderr)
+            self.assertEqual("bundle-owner-ok", bundled.stdout.strip())
+            self.assertEqual(0, exported.returncode, exported.stderr)
+            configurations = [
+                item for item in json.loads(exported.stdout)["Items"]["AllPublishItemsFullPathWithTargetPath"]
+                if item["TargetPath"] in ("Owner.deps.json", "Owner.runtimeconfig.json")
+            ]
+            self.assertEqual({"Owner.deps.json", "Owner.runtimeconfig.json"},
+                             {item["TargetPath"] for item in configurations})
+            self.assertTrue(all(item["ExcludeFromSingleFile"] == "true" for item in configurations))
+            self.assertTrue(all(item["CopyToPublishDirectory"] == "PreserveNewest" for item in configurations))
+
+    def test_test_executable_own_configuration_remains_embedded(self) -> None:
+        """The same producer still embeds its primary runtime configuration when published directly."""
+        # Arrange
+        with tempfile.TemporaryDirectory() as temporary_root:
+            workspace = Path(temporary_root)
+            owner, _ = stage_bundle_configuration_fixture(workspace)
+            destination = workspace / "published"
+
+            # Act
+            result = publish_configuration_fixture(owner, destination)
+            executable = destination / ("Owner.exe" if os.name == "nt" else "Owner")
+            bundled = subprocess.run([str(executable)], capture_output=True, text=True, check=False)
+
+            # Assert
+            self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+            self.assertNotIn("NETSDK1236", result.stdout + result.stderr)
+            self.assertFalse((destination / "Owner.runtimeconfig.json").exists())
+            self.assertFalse((destination / "Owner.deps.json").exists())
+            self.assertEqual(0, bundled.returncode, bundled.stderr)
+            self.assertEqual("bundle-owner-ok", bundled.stdout.strip())
+
+    def test_ordinary_executable_configuration_exclusions_are_not_silenced(self) -> None:
+        """The fix must not blanket-hide unrelated SDK bundle exclusions or modify normal producers."""
+        # Arrange
+        with tempfile.TemporaryDirectory() as temporary_root:
+            workspace = Path(temporary_root)
+            _, host = stage_bundle_configuration_fixture(workspace, test_owner=False)
+            destination = workspace / "published"
+
+            # Act
+            result = publish_configuration_fixture(host, destination)
+
+            # Assert
+            self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+            self.assertIn("NETSDK1236", result.stdout + result.stderr)
+            self.assertIn("Owner.runtimeconfig.json", result.stdout + result.stderr)
+            self.assertFalse((destination / "Host.runtimeconfig.json").exists())
 
     def test_generated_benchmark_driver_does_not_inherit_authored_workload_items(self) -> None:
         """A source-local native host must compile only its own driver, not shared workload sources."""

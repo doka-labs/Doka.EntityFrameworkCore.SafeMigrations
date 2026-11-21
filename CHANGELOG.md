@@ -39,6 +39,10 @@ the shared release identity described in [Release process](docs/release-process.
 - Prepare the main/11 source identity without activating hosted publication or
   maintenance/10.x. Full provider, CLI/script/bundle, package and native x64
   SQL Server qualification remain required before release.
+- Preserve referenced test-executable dependency/runtime configuration as
+  single-file publish sidecars. EF bundle generation no longer requests these
+  foreign configurations as primary bundle JSON (NETSDK1236); standalone test
+  output and each executable's own embedded configuration remain unchanged.
 
 ## [10.7.3] - 2026-11-20
 
