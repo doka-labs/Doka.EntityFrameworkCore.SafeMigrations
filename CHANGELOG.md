@@ -51,6 +51,8 @@ model-fingerprint approvals and SQL Server authentication dependencies.
 
 ### Fixed
 
+- Isolate pre-tag test line states from the product cutover policy. Retain the
+  inactive-line rejection and verify both prepared and active maintenance heads.
 - Restore implicit SDK support packages in isolated bundle probes from the
   reviewed NuGet sources, including an empty-cache regression. Preserve native
   bundle assertions and report publish failures before secondary missing files.

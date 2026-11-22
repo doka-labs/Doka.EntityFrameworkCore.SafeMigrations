@@ -86,9 +86,10 @@ The receiver rechecks head, base and run attempt before publishing success.
 The repository's strict up-to-date required-check policy covers later changes
 to `main`; keep that policy enabled or use an equivalent merge-queue contract.
 This workflow does not change repository settings. GitHub only activates the
-automatic `workflow_run` receiver once it is on `main`. For its first deployment,
-a maintainer can dispatch the existing CI workflow from the reviewed,
-same-repository PR head branch:
+automatic `workflow_run` receiver once it is on `main`; automatic runs continue
+using that branch's policy until a policy change is merged. For first deployment
+or reviewed receiver-policy changes, a maintainer can dispatch the existing CI
+workflow from the reviewed, same-repository PR head branch:
 
 ```bash
 gh workflow run ci.yml --ref <reviewed-pr-branch> -f dependency-review-pr=<pr-number>
