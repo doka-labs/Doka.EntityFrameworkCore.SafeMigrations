@@ -186,8 +186,7 @@ the [upgrade contract](../efcore-provider-upgrade-risk.md).
 
 ### SQL Server dependency-license exceptions
 
-Only the following version has a repository-specific license exception in the
-current .NET 11 dependency graph:
+The SQL Server stack retains this exact version-specific license exception:
 
 | NuGet package | Approved version | Reviewed vendor terms |
 | --- | --- | --- |
@@ -225,8 +224,8 @@ version, and decoded PURL; other versions or inconsistent metadata block the
 job. The guard recognizes the action's permissively parsed names before
 enforcing consistent metadata; percent-encoded or malformed PURLs cannot
 bypass the version check.
-Removing an older version does not require a new exception. Product lockfiles
-and positive/negative regression cases are checked by the engineering gate.
+Removing an older version does not require a new exception. Product and native
+execution lockfiles and positive/negative cases are checked by the engineering gate.
 A version change requires a new review of the exact package's terms and an
 explicit policy update; it is not automatically approved by this exception.
 
@@ -240,6 +239,24 @@ Primary implementation evidence, retrieved 2026-10-01:
 - [Pinned action's version-independent PURL matcher](https://github.com/actions/dependency-review-action/blob/a1d282b36b6f3519aa1f3fc636f609c47dddb294/src/purl.ts).
 - [GitHub dependency comparison response](https://docs.github.com/en/rest/dependency-graph/dependency-review#get-a-diff-of-the-dependencies-between-commits).
 - [GitHub CLI pagination and slurp contract](https://cli.github.com/manual/gh_api).
+
+### SQLite native package license classification
+
+The .NET 11 SQLite execution fixtures resolve NuGet `SQLite` 3.53.4 through
+SQLitePCLRaw 3.0.5. Its packaged `LICENSE.txt` declares SQLite Public Domain;
+the [vendor's copyright statement](https://sqlite.org/copyright.html) confirms
+the disposition of the delivered source and compiled library. The exact package
+license file has SHA-256
+`99464c3a88df7b708ce59e462cdcb85f72dfc9b1335b4fcc68be56131b634b95`.
+See [the reviewed package](https://www.nuget.org/packages/SQLite/3.53.4).
+
+GitHub classifies that file as `LicenseRef-github-OTHER`. Only
+`pkg:nuget/SQLite@3.53.4` is excepted, using the same mandatory paginated
+identity/version guard above. Other SQLite versions, SQLitePCLRaw packages and
+unrelated unknown licenses are not excepted. Neither `LicenseRef-github-OTHER`
+nor a generic Public Domain category is added to the global SPDX allowlist.
+The native package belongs to tests, benchmarks, the sample and the isolated
+consumer, not the shipped bundle-neutral SQLite adapter.
 
 Snapshot and handoff sources, verified 2026-10-21:
 

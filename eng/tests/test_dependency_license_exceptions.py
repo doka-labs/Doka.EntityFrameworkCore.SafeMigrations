@@ -15,6 +15,7 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 VERIFIER = REPOSITORY_ROOT / "eng/verify-dependency-license-exceptions.py"
 APPROVED_VERSIONS = {
     "Microsoft.Data.SqlClient.SNI.runtime": "7.1.2",
+    "SQLite": "3.53.4",
 }
 
 
@@ -278,7 +279,30 @@ class DependencyLicenseExceptionTests(unittest.TestCase):
 
         result = verify([entries])
 
-        self.assertEqual(set(APPROVED_VERSIONS), {entry["name"] for entry in entries})
+        # WHY: Native SQLite is selected by execution fixtures, never the bundle-neutral shipping adapter.
+        self.assertEqual(set(APPROVED_VERSIONS) - {"SQLite"}, {entry["name"] for entry in entries})
+        self.assertEqual(0, result.returncode, result.stderr)
+
+    def test_sqlite_exception_matches_all_native_execution_lockfiles(self):
+        """Retain the native exception only for the reviewed version in each independently restored graph."""
+        # Arrange
+        projects = (
+            "tests/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests",
+            "benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Benchmarks",
+            "samples/Doka.EntityFrameworkCore.SafeMigrations.Sample",
+            "eng/package-consumer/Sqlite",
+        )
+        entries = []
+        for project in projects:
+            lock = json.loads((REPOSITORY_ROOT / project / "packages.lock.json").read_text(encoding="ascii"))
+            entries.extend(dependency("SQLite", graph["SQLite"]["resolved"])
+                           for graph in lock["dependencies"].values() if "SQLite" in graph)
+
+        # Act
+        result = verify([entries])
+
+        # Assert
+        self.assertEqual(len(projects), len(entries))
         self.assertEqual(0, result.returncode, result.stderr)
 
     def test_workflow_keeps_other_gates_and_requires_paginated_version_validation(self):

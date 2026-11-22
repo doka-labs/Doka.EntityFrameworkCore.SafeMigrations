@@ -1,4 +1,4 @@
-"""Enforce the exact version of the SQL Server native transport license exception."""
+"""Enforce exact reviewed package identities for native dependency-license exceptions."""
 
 import json
 import re
@@ -9,6 +9,7 @@ from urllib.parse import unquote
 
 APPROVED_VERSIONS = {
     "microsoft.data.sqlclient.sni.runtime": "7.1.2",
+    "sqlite": "3.53.4",
 }
 
 

@@ -9,6 +9,7 @@ import tempfile
 import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
+from unittest import mock
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
@@ -83,18 +84,18 @@ def stage_sources(script_directory: Path, workspace: Path) -> subprocess.Complet
 
 
 def stage_bundle_configuration_fixture(workspace: Path, *, test_owner: bool = True) -> tuple[Path, Path]:
-    """Use the actual build targets with package-free executable projects and the repository SDK."""
+    """Use actual build/restore contracts with executable projects that have no authored package references."""
     for name in ("global.json", "Directory.Build.targets"):
         shutil.copy2(REPOSITORY_ROOT / name, workspace / name)
 
+    # WHY: Single-file publishing restores implicit SDK support packages even
+    # without authored references. An empty source list only works with a warm cache.
+    shutil.copy2(REPOSITORY_ROOT / "NuGet.config", workspace / "NuGet.Config")
     framework = ET.parse(REPOSITORY_ROOT / "Directory.Build.props").findtext(".//TargetFramework")
     (workspace / "Directory.Build.props").write_text(
         f'<Project><PropertyGroup><TargetFramework>{framework}</TargetFramework>'
         '<SelfContained>false</SelfContained></PropertyGroup></Project>',
         encoding="ascii",
-    )
-    (workspace / "NuGet.Config").write_text(
-        '<configuration><packageSources><clear /></packageSources></configuration>', encoding="ascii",
     )
     owner = workspace / "Owner/Owner.csproj"
     host = workspace / "Host/Host.csproj"
@@ -118,23 +119,64 @@ def stage_bundle_configuration_fixture(workspace: Path, *, test_owner: bool = Tr
     return owner, host
 
 
-def publish_configuration_fixture(project: Path, destination: Path) -> subprocess.CompletedProcess[str]:
-    """Publish through the real native SDK bundler without downloading third-party dependencies."""
+def publish_configuration_fixture(
+    project: Path, destination: Path, *, environment: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
+    """Publish with normal SDK analyzers and optional caller-owned restore caches; expose the first failure."""
     rid = subprocess.run(
         ["dotnet", "msbuild", str(project), "-getProperty:NETCoreSdkRuntimeIdentifier"],
-        cwd=project.parent, capture_output=True, text=True, check=True,
+        cwd=project.parent, env=environment, capture_output=True, text=True, check=True,
     ).stdout.strip()
 
-    return subprocess.run(
+    result = subprocess.run(
         ["dotnet", "publish", str(project), "-c", "Release", "-r", rid,
          "-p:PublishSingleFile=true", "-p:SelfContained=false",
          "-o", str(destination)],
-        cwd=project.parent, capture_output=True, text=True, check=False,
+        cwd=project.parent, env=environment, capture_output=True, text=True, check=False,
     )
+
+    # WHY: A restore/publish failure must not be masked by a later missing DLL or executable.
+    if result.returncode != 0:
+        raise AssertionError(f"Native SDK publish failed: exit code {result.returncode}\n"
+                             + result.stdout + result.stderr)
+
+    return result
 
 
 class VerifyPackageConsumerSourcesTests(unittest.TestCase):
     """Keep linked consumer sources present across all isolated tooling profiles."""
+
+    def test_bundle_fixture_uses_repository_restore_configuration(self) -> None:
+        """The native probe retains the reviewed sources and inherited-mapping isolation on fresh runners."""
+        # Arrange
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory)
+
+            # Act
+            stage_bundle_configuration_fixture(workspace)
+
+            # Assert
+            self.assertEqual((REPOSITORY_ROOT / "NuGet.config").read_bytes(),
+                             (workspace / "NuGet.Config").read_bytes())
+
+    def test_bundle_publish_reports_restore_failure_before_output_discovery(self) -> None:
+        """Keep SDK diagnostics and cache ownership observable instead of secondary missing-file failures."""
+        # Arrange
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory)
+            owner, _ = stage_bundle_configuration_fixture(workspace)
+            environment = {**os.environ, "NUGET_PACKAGES": str(workspace / "packages")}
+            responses = [subprocess.CompletedProcess([], 0, stdout="linux-x64\n"),
+                         subprocess.CompletedProcess([], 1, stdout="error NU1100: SDK package missing\n", stderr="")]
+
+            # Act / Assert
+            with mock.patch.object(subprocess, "run", side_effect=responses) as execute:
+                with self.assertRaisesRegex(AssertionError, "Native SDK publish failed:.*") as failure:
+                    publish_configuration_fixture(owner, workspace / "published", environment=environment)
+
+            self.assertIn("error NU1100: SDK package missing", str(failure.exception))
+            self.assertEqual(2, execute.call_count)
+            self.assertTrue(all(call.kwargs["env"] is environment for call in execute.call_args_list))
 
     def test_referenced_test_configuration_is_a_sidecar_not_a_bundle_primary(self) -> None:
         """A test executable retains its configuration without poisoning its referencing bundle."""
@@ -143,20 +185,24 @@ class VerifyPackageConsumerSourcesTests(unittest.TestCase):
             workspace = Path(temporary_root)
             owner, host = stage_bundle_configuration_fixture(workspace)
             destination = workspace / "published"
+            package_cache = workspace / "packages"
+            package_cache.mkdir()
+            environment = {**os.environ, "NUGET_PACKAGES": str(package_cache),
+                           "NUGET_HTTP_CACHE_PATH": str(workspace / "http-cache")}
 
             # Act
-            result = publish_configuration_fixture(host, destination)
+            result = publish_configuration_fixture(host, destination, environment=environment)
             owner_assembly = next(owner.parent.glob("bin/Release/**/Owner.dll"))
             standalone = subprocess.run(
                 ["dotnet", str(owner_assembly)],
-                capture_output=True, text=True, check=False,
+                env=environment, capture_output=True, text=True, check=False,
             )
             executable = destination / ("Host.exe" if os.name == "nt" else "Host")
-            bundled = subprocess.run([str(executable)], capture_output=True, text=True, check=False)
+            bundled = subprocess.run([str(executable)], env=environment, capture_output=True, text=True, check=False)
             exported = subprocess.run(
                 ["dotnet", "msbuild", str(owner), "-t:GetCopyToPublishDirectoryItems",
                  "-getItem:AllPublishItemsFullPathWithTargetPath", "-p:Configuration=Release"],
-                cwd=workspace, capture_output=True, text=True, check=False,
+                cwd=workspace, env=environment, capture_output=True, text=True, check=False,
             )
 
             # Assert

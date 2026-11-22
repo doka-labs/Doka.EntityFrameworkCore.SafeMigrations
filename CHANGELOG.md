@@ -51,6 +51,11 @@ model-fingerprint approvals and SQL Server authentication dependencies.
 
 ### Fixed
 
+- Restore implicit SDK support packages in isolated bundle probes from the
+  reviewed NuGet sources, including an empty-cache regression. Preserve native
+  bundle assertions and report publish failures before secondary missing files.
+- Bound the native SQLite 3.53.4 Public Domain license-classification exception
+  to its exact package identity without admitting unknown licenses globally.
 - Preserve referenced test-executable dependency/runtime configuration as
   single-file publish sidecars. EF bundle generation no longer requests these
   foreign configurations as primary bundle JSON (NETSDK1236); standalone test
