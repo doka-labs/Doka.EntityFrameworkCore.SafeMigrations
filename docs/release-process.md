@@ -15,41 +15,28 @@ SafeMigrations publishes these package IDs at one version:
 - `Doka.EntityFrameworkCore.SafeMigrations.Sqlite`; and
 - `Doka.EntityFrameworkCore.SafeMigrations.SqlServer`.
 
-The current development source selects the 11.0.0 identity on .NET/EF Core 11.
-It does not claim publication or completed qualification. The
+Version 11.0.0 uses .NET/EF Core 11. The
 [11.0 upgrade](support-and-qualification.md#upgrade-to-1100) owns application
 compatibility; the [publication runbook](operations/release-publication.md)
 owns actual release status and historical evidence.
 
-Stable 10.4.6 introduced this five-package inventory; releases 10.4.2 through
-10.4.5 retain their historical four-package set. The earlier 10.7.3 line kept the shared
-.NET/EF Core 10 identity and corrects asynchronous work, cleanup and native
-tooling identity internally, without changing existing public APIs. Dependency
-floors advance, including SQL Server-only PKCS 10.0.15. Explicit cancellation
-arguments and opt-in BenchmarkDotNet engineering measurements remain. The
-[changelog](../CHANGELOG.md#1073---2026-11-20) and
-[upgrade notes](support-and-qualification.md#upgrade-to-1073) record current
-consumer requirements. The earlier removal of public optional-token defaults in
-10.7.0 is a deliberate source-breaking exception within 10.x, not a strictly
-SemVer-compatible minor change. Existing CLR method signatures, migration
-policies, report schemas and fingerprint formats remain. When upgrading from
-before 10.7.2, corrected captured numeric-default identities require renewed
-affected approvals, not an old digest
-or history rewrite. Applications upgrading from before 10.6.0 must still review its
-[computed/CHECK approval boundaries](support-and-qualification.md#upgrade-to-1060).
-Do not carry an obsolete contract approval forward or rewrite historical
-migrations. Timing comparisons stay informational; functional and evidence
-failures still block. Selecting another provider does not introduce SQL Server
-runtime dependencies.
+Stable 10.4.6 introduced this five-package inventory; 10.4.2 through 10.4.5
+retain their historical four-package set. Historical compatibility changes
+belong in the [changelog](../CHANGELOG.md) and
+[upgrade notes](support-and-qualification.md), not a rewrite of migration history.
+Provider dependencies remain isolated. Timing/allocation values stay informational;
+functional, integrity and evidence failures remain blocking.
 
 The workflow accepts a canonical lowercase NuGet version without a leading
 `v`. The version must belong to the source `VersionPrefix`, have exactly one
 dated changelog entry, be absent from all five NuGet package IDs, and be
 dispatched from the exact current protected source-line SHA before any release
 tag exists. [D-018](decisions/D-018-release-lines-and-monotonic-publication.md)
-defines exact registered release lines. The local .NET 11 branch prepares
-main/11 while maintenance/10.x remains inactive. Hosted activation requires the
-separate reviewed cutover; candidate-local policy never grants publication.
+defines exact registered release lines. One reviewed cutover PR transfers
+main to major 11 and major 10 to maintenance, together with six generated
+Dependabot entries. Maintenance is then qualified without publication before
+its separately approved environment grant. Candidate-local policy never grants
+publication. The runbook records actual hosted protection and activation status.
 
 ## Reversible qualification
 

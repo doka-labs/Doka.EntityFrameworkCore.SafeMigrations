@@ -5,31 +5,25 @@ five-package release pipeline. [D-018](../decisions/D-018-release-lines-and-mono
 records the contract. Framework migration and hosted line activation are
 separate operations.
 
-## Current configuration
+## Maintained lines
 
 The authority is [lines-policy.json](../../eng/release/lines-policy.json) on
-protected main. This .NET 11 feature branch carries a local preparation policy:
-main/11 is prepared; maintenance/10.x is inactive. The x is literal, not a branch
-wildcard. These files do not claim that protected-main authority, branch
-protection, deployment grants or hosted schedules have changed. No preview
-branch or additional publication route is activated. The five-package inventory,
-signed-tag publisher and existing nuget environment remain unchanged.
+protected main. Version 11.0.0 uses this paired target:
 
-Only active lines receive generated Dependabot targets. The preparation policy
-has no active lines; its generated configuration is therefore empty. Keep the
-retained template intact, and render targets again against the separately
-reviewed activation policy. Do not merge an unfinished preparation policy as a
-substitute for the complete protected main/11 and maintenance/10 cutover.
+| Branch | Framework | Package major | State |
+| --- | --- | --- | --- |
+| main | .NET / EF Core 11 | 11 | active |
+| maintenance/10.x | .NET / EF Core 10 | 10 | active |
 
-| State | Allowed behavior |
-| --- | --- |
-| inactive | Registered preparation PR checks, no release qualification or scheduling |
-| prepared | Own-line qualification-only, no publisher environment or NuGet credential |
-| active | Own-line qualification, scheduling and authorized publication |
+A feature checkout grants no authority. Only one active line owns each major.
+Each line has NuGet, GitHub Actions and SDK Dependabot targets with framework-major
+bounds; the existing five-package publisher and nuget environment remain shared.
 
-Only one active publisher may own a package major. When main eventually adopts a
-different major, a reviewed policy change may transfer the old major to its
-maintenance branch. Framework adoption and branch activation are separate work.
+As of 2026-11-22, the hosted authority still has main/10 active and maintenance
+inactive. The protected maintenance branch points to signed v10.7.3
+(`edb6114f90b24402b6e16af798d111e9844d5af9`); nuget permits main only.
+Its creation audit (rule suite `5290054122`, bypass) is retained separately and
+is not qualification evidence. No further bypass is part of this procedure.
 
 ## Normal candidate and publication
 
@@ -68,38 +62,32 @@ publishers, not maintainer policy edits. Complete an affected publication before
 disabling/reassigning a line. New validators cannot revoke old-SHA workflow code
 or override repository administrators.
 
-## Prepare and activate a maintenance line
+## Main/11 and maintenance/10 cutover
 
-This is a separately reviewed operation, not something the feature does now:
+1. Keep the protected maintenance source on v10.7.3 and its .NET 10 graph.
+   Do not recreate the branch, rewrite history or copy .NET 11 dependencies.
+2. Merge one reviewed cutover PR containing .NET 11, the paired target policy,
+   six Dependabot targets and the 11.0.0 release notes. All existing Required
+   Checks, reviews, native x64 SQL Server, coverage and package gates remain.
+   No separate bootstrap PR or intermediate policy merge is required.
+3. After merge, read back current authority and both protected heads. Keep the
+   maintenance nuget grant closed while running Release candidate on
+   `maintenance/10.x` with `qualification-only=true`, an empty
+   `finalize-run-id` and an unused same-major version such as `10.7.4-rc.1`.
+   This qualifies the exact unchanged source without tagging or publication.
+   Until both exact active-branch grants agree with authority, the existing
+   publisher environment gate rejects ordinary publication on either line.
+4. After successful full maintenance qualification and retained evidence,
+   separately approve its exact branch grant in the existing nuget environment.
+   Preserve reviewers, Trusted Publishing identity and package permissions.
+5. Use the ordinary publication procedure for 11.0.0 from main. It requires a
+   fresh complete release qualification, personal signed tag and explicit
+   environment approval; neither the PR nor a rehearsal authorizes publication.
 
-1. Prepare the exact registered branch from its reviewed source, with its own
-   unchanged compatible SDK/dependencies and line-aware workflows. Preserve full
-   Required Checks, branch protection and the existing signature policy.
-2. Change its state to prepared in the policy on protected main through review.
-   A candidate-local policy is not authority. Preparation PRs must pass
-   that branch's full CI and exact-base Dependency Review, including forks and
-   Dependabot. Qualify its own current commit with qualification-only true and
-   an unused same-major version. No patch/changelog bump or branch-specific
-   test-fixture patch is needed solely for this rehearsal.
-3. Separately approve activation and the exact branch's deployment permission in
-   the existing nuget environment. Retain reviewers, self-review policy,
-   administrator bypass and Trusted Publishing identity; do not create a new
-   environment, credential generation or long-lived key.
-4. Make a reviewed policy change to active, retaining one active publisher per
-   major, and update/check the maintained-line Dependabot targets. Verify real
-   hosted schedules, exact child commits, approvals and readbacks independently.
-
-For the main/11 cutover, first finish the intended 10.x release and record its
-exact reviewed commit. Create and protect `maintenance/10.x` from that commit;
-do not copy the new main SDK or framework dependencies onto maintenance. Complete
-the prepared qualification before switching protected main to its qualified
-11.x source. The reviewed activation policy must move main to major 11 and
-activate maintenance/10 together, so there is never a pair of active 10.x
-publishers. Render and check the six existing-ecosystem Dependabot targets
-against that target policy. Approve the exact maintenance deployment grant
-separately; Required Checks and existing reviewers remain in force. Missing
-qualification, source drift, absent permissions or incomplete hosted evidence
-stop the transition; they are not grounds for a bypass.
+Authority comes from protected main, not the candidate's local policy.
+Qualification-only cannot produce a publication admission. Scheduled maintenance
+and every later release still use their own branch-bound full qualification.
+Missing checks, permissions or source identity stop execution, not justify bypass.
 
 Use the repository-owned renderer/check for a reviewed target update:
 
@@ -124,8 +112,7 @@ transport packages remain eligible. Additional maintenance/preview targets use
 absolute NuGet ceilings, which exclude the next major's prereleases too, not only
 its GA version. Paired prerelease floors cover canonical numeric identifiers
 and Dependabot's accepted leading-hyphen ordering; current-major servicing
-remains eligible. Neither additional generated targets nor preview lines are active
-in the current configuration.
+remains eligible. The paired configuration has six targets and no preview line.
 CI checks the result without writing it back to a branch. Do not resurrect
 unrelated Docker-image update targets as part of line setup.
 

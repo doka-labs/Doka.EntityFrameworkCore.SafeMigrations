@@ -26,9 +26,8 @@ equivalent.
 
 ## Platform and packages
 
-- .NET 11 and EF Core 11; this development branch does not establish publication
-  or completed release qualification. Applications remaining on .NET/EF Core 10
-  must use the compatible 10.x line.
+- Version 11.0.0 targets .NET 11 and EF Core 11. Applications remaining on
+  .NET/EF Core 10 use the compatible 10.x line on `maintenance/10.x`.
 - `Doka.EntityFrameworkCore.SafeMigrations`: provider-neutral intent,
   definitions, planning, reports, and `MigrationBuilder` extensions
 - `Doka.EntityFrameworkCore.SafeMigrations.MySql`: MySQL and MariaDB adapter on
@@ -56,38 +55,36 @@ evidence. See [Support and qualification](docs/support-and-qualification.md).
 
 ## Installation
 
-Install one provider package. The core package is included transitively. The
-examples select the matching local development package exactly; build the five
-packages before using them. They do not claim that 11.0.0 is published.
+Install one provider package. The matching core package is included transitively.
 Release changes and compatibility notes belong in the
-[changelog](CHANGELOG.md#unreleased) and
+[changelog](CHANGELOG.md#1100---2026-11-22) and
 [.NET 11 upgrade notes](docs/support-and-qualification.md#upgrade-to-1100).
 Applications upgrading from before 10.7.0 must also review its
 [explicit cancellation-token requirement](docs/support-and-qualification.md#upgrade-to-1070).
 
 ```bash
-package_version='11.0.0-dev'
+package_version='11.0.0'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.MySql --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='11.0.0-dev'
+package_version='11.0.0'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.PostgreSql --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='11.0.0-dev'
+package_version='11.0.0'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.Sqlite --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='11.0.0-dev'
+package_version='11.0.0'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.SqlServer --version "$package_version"
 ```
 
@@ -1074,8 +1071,9 @@ Release with the exact ten package files, checksums, SPDX manifest, and
 `release-provenance.intoto.jsonl`. Candidates are marked prerelease and never
 replace the latest stable release.
 Maintained lines share the existing publisher, retain their own qualification
-and cannot move Latest backwards. This .NET 11 branch prepares main/11 locally;
-maintenance/10.x remains inactive and hosted cutover is separate.
+and cannot move Latest backwards. Main uses .NET/EF Core 11; `maintenance/10.x`
+retains .NET/EF Core 10. Both lines use the same publisher with independent
+qualification and framework-bounded Dependabot targets.
 See [Release lines](docs/operations/release-lines.md).
 See [Publication operations](docs/operations/release-publication.md) for the
 step-by-step maintainer guide and current readiness, and

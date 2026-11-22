@@ -1,7 +1,7 @@
 ---
 id: D-006
 status: implemented
-date: 2026-11-21
+date: 2026-11-22
 decision-makers: ["Dominic Kalkbrenner"]
 consulted: []
 informed: ["@doka-labs/core-maintainers"]
@@ -96,8 +96,10 @@ and the existing nuget environment. Prepared/qualification-only runs skip that
 environment-bearing job. All lines share one non-cancelling publication queue;
 same-run retries retain their original admission and bytes. Stable Latest is
 monotonic by canonical SemVer; historical verification does not require a release
-to remain Latest. The .NET 11 source branch prepares main/11 and leaves
-maintenance/10.x inactive; hosted activation is separately authorized.
+to remain Latest. The .NET 11 source branch prepares the complete main/11 and
+maintenance/10 active target with six Dependabot entries in one reviewed PR.
+Maintenance qualification precedes its separately approved environment grant;
+the complete release and evidence gates remain unchanged.
 Separate immutable workflow receipts do
 not expand the twelve provenance subjects or thirteen public Release assets.
 

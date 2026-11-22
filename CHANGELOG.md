@@ -6,9 +6,17 @@ the shared release identity described in [Release process](docs/release-process.
 
 ## [Unreleased]
 
+## [11.0.0] - 2026-11-22
+
+Version 11.0.0 targets .NET 11 and EF Core 11 across all five packages.
+Upgrade the application and provider graph together; .NET/EF Core 10 remains
+on the separately maintained 10.x line. Review the
+[upgrade notes](docs/support-and-qualification.md#upgrade-to-1100), including
+model-fingerprint approvals and SQL Server authentication dependencies.
+
 ### Changed
 
-- Move the development line to .NET/EF Core 11 with SDK 11.0.100, EF tooling
+- Target .NET/EF Core 11 with SDK 11.0.100, EF tooling
   11.0.0, published Doka 11.0.0 and Npgsql 11.0.0. Retain the existing five
   packages, exact matching own-Core dependency and provider separation.
   This major framework migration requires rebuilding applications against
@@ -36,9 +44,13 @@ the shared release identity described in [Release process](docs/release-process.
   0.16.0-preview.2 development dependency. Performance/allocation measurements
   remain explicitly requested and informational; no numeric performance gate
   is introduced. The temporary local-package EF11 opt-in profile is retired.
-- Prepare the main/11 source identity without activating hosted publication or
-  maintenance/10.x. Full provider, CLI/script/bundle, package and native x64
-  SQL Server qualification remain required before release.
+- Maintain main/11 and maintenance/10 through the existing publisher with six
+  framework-bounded Dependabot targets. One reviewed cutover PR transfers both
+  line identities; maintenance retains its .NET 10 graph and is independently
+  qualified before its separately approved publication grant.
+
+### Fixed
+
 - Preserve referenced test-executable dependency/runtime configuration as
   single-file publish sidecars. EF bundle generation no longer requests these
   foreign configurations as primary bundle JSON (NETSDK1236); standalone test
@@ -2689,7 +2701,8 @@ in [Support and qualification](docs/support-and-qualification.md).
   dedicated legacy safe constraint operation subclasses.
 - Any promise that preflight can be recorded as an applied EF migration.
 
-[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.7.3...HEAD
+[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v11.0.0...HEAD
+[11.0.0]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.7.3...v11.0.0
 [10.7.3]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.7.2...v10.7.3
 [10.7.2]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.7.1...v10.7.2
 [10.7.1]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.7.0...v10.7.1

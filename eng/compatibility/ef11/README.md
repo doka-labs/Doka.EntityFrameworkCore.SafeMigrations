@@ -1,6 +1,6 @@
 # EF11 integration verification
 
-.NET/EF Core 11 is the normal framework graph on this development branch.
+.NET/EF Core 11 is the framework graph for SafeMigrations 11.0.0.
 The repository uses published Doka 11.0.0; the former opt-in props, nested SDK
 selection and local-package prerequisite are removed. All provider projects,
 tooling consumers and benchmarks inherit the root SDK/framework contract.

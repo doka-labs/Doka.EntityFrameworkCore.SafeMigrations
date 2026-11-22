@@ -6,7 +6,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from eng.release import lines
+from eng.release import dependencies, lines
+
+
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def policy():
@@ -63,6 +66,37 @@ def inspect_declared_toolchains(root, actual, version):
 
 class ReleaseLineTests(unittest.TestCase):
     """Exercise positive identities and fail-closed aliases/lifecycle changes."""
+
+    def test_single_cutover_policy_assigns_distinct_majors_and_six_dependency_targets(self):
+        """The checked-in target transfers both majors together without an intermediate authority PR."""
+        # Arrange
+        actual = lines.load_policy()
+        template = (ROOT / ".github/dependabot-template.yml").read_text(encoding="ascii")
+
+        # Act
+        rendered = dependencies.render_configuration(actual, template)
+        selected = [lines.select_line(actual, ref, version) for ref, version in
+                    (("refs/heads/main", "11.0.0"), ("refs/heads/maintenance/10.x", "10.7.4-rc.1"))]
+
+        # Assert
+        self.assertEqual([(11, "active"), (10, "active")],
+                         [(entry["packageMajor"], entry["state"]) for entry in selected])
+        self.assertEqual(2, len(actual["lines"]))
+        self.assertEqual({(ecosystem, branch) for ecosystem in dependencies.ECOSYSTEMS
+                          for branch in ("main", "maintenance/10.x")},
+                         {(ecosystem, branch) for ecosystem, branch, _ in dependencies.entries(rendered)})
+
+    def test_single_cutover_does_not_allow_cross_major_qualification(self):
+        """A paired active policy must never let either branch borrow the other framework major."""
+        for ref, version in (("refs/heads/main", "10.7.4-rc.1"),
+                             ("refs/heads/maintenance/10.x", "11.0.0")):
+            with self.subTest(ref=ref, version=version):
+                # Arrange
+                actual = lines.load_policy()
+
+                # Act / Assert
+                with self.assertRaises(lines.LinePolicyError):
+                    lines.freeze_line(actual, ref, version)
 
     def test_initial_scenario_keeps_only_main_active(self):
         # Arrange

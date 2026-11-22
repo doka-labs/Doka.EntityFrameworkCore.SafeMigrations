@@ -1,7 +1,7 @@
 ---
 id: D-018
 status: implemented
-date: 2026-11-21
+date: 2026-11-22
 decision-makers: ["Dominic Kalkbrenner"]
 consulted: []
 informed: ["@doka-labs/core-maintainers"]
@@ -50,9 +50,11 @@ subsystem, package inventory or framework migration.
 The reviewed policy names exact refs, roles, package majors, channels and upstream
 stages. Lifecycle states are inactive, prepared and active. The original rollout
 kept main/10 active and maintenance/10.x inactive. The separately approved .NET 11
-source migration now prepares main/11 locally; maintenance/10.x remains inactive.
-The x is literal. The feature branch creates no hosted branch or deployment grant
-and does not activate a publisher. Current protected-main policy remains authority.
+cutover transfers main/11 and maintenance/10 together in one reviewed PR with
+six Dependabot entries. The x is literal. Maintenance qualification follows
+that merge before its separately approved environment grant; no intermediate
+policy PR is required. Current protected-main policy, never the feature
+checkout, remains authority. Existing source, review and release gates remain.
 
 The existing release-candidate workflow qualifies each admitted source using its
 branch-owned toolchain. Qualification-only and prepared runs do not request the
@@ -156,6 +158,10 @@ No additional active line or hosted configuration is implied by this decision.
   remains inactive in this branch. The generated Dependabot targets follow
   active lines only; retain the template for separately reviewed activation.
   No new publication path, credential, grant or required-check exemption is added.
+- 2026-11-22: The owner selected one fully checked cutover PR for main/11 and
+  maintenance/10, removing the intermediate policy PR. Qualification-only on the
+  protected maintenance source follows the merge before its publication grant;
+  every ordinary publication retains fresh qualification and explicit approval.
 
 ### Implementation References
 

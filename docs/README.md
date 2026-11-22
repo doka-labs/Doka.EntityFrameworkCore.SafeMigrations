@@ -1,6 +1,6 @@
 # Documentation
 
-This is the task-oriented entry point for the SafeMigrations 11.0 development line
+This is the task-oriented entry point for SafeMigrations 11.0.0
 covering all five packages. Start with the task table
 below; release changes and consumer upgrade notes belong in the
 [changelog](../CHANGELOG.md). The [diagnostics guide](diagnostics.md) explains

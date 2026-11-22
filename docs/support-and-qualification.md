@@ -2,12 +2,12 @@
 
 ## Support contract
 
-The 11.0 development line targets .NET 11 and EF Core 11 across all five
-packages. Published upstream GA packages exist for every provider; no provider
-RC is required. Upstream availability does not establish SafeMigrations native
-qualification or publication. The [11.0 upgrade](#upgrade-to-1100) describes the
-framework and dependency boundary; the 10.x sections below retain their
-historical contracts and evidence.
+Version 11.0.0 targets .NET 11 and EF Core 11 across all five packages, using GA
+upstream providers. The [11.0 upgrade](#upgrade-to-1100) describes the framework
+and dependency boundary. Applications staying on .NET/EF Core 10 use the 10.x
+line on `maintenance/10.x`; the sections below retain its historical contracts.
+Actual publication and qualification evidence belongs in the
+[publication runbook](operations/release-publication.md).
 
 ### Previous 10.x contracts
 
@@ -41,11 +41,11 @@ skips and offline SQL-shape tests are not substitutes for its x64 cells.
 ## Upgrade to 11.0.0
 
 Upgrade the application SDK/runtime and complete EF/provider graph together.
-All five SafeMigrations packages now target `net11.0`; do not load them into an
-EF Core 10 process. Keep the own-package versions identical, including local
-`11.0.0-dev` builds, because adapters consume Core's private ABI. The default
-development version is not a published stable release. Applications staying on
-.NET/EF Core 10 must remain on the compatible 10.x line.
+All five SafeMigrations packages target `net11.0`; do not load them into an
+EF Core 10 process. Keep the own-package versions identical at 11.0.0 because
+adapters consume Core's private ABI. Local `11.0.0-dev` builds likewise require
+exactly matching own-package versions. Applications staying on .NET/EF Core 10
+remain on the compatible 10.x line.
 
 The repository selects SDK 11.0.100, EF Core and dotnet-ef 11.0.0, Doka
 `[11.0.0,11.1.0)`, Npgsql EF `[11.0.0,12.0.0)` and dependency-injection
@@ -388,8 +388,8 @@ see the [publication runbook](operations/release-publication.md) for release
 status and evidence requirements.
 
 The earlier 10.x release-line preparation retained the same five packages and
-signed-tag publisher. The current branch prepares the .NET 11 identity without
-performing hosted cutover; see [release lines](operations/release-lines.md).
+signed-tag publisher. The 11.0.0 line retains that publisher alongside the
+independently maintained .NET 10 line; see [release lines](operations/release-lines.md).
 
 ## Dependencies and package identity
 
@@ -522,7 +522,7 @@ Bounded package ranges describe external compatibility. All 24 repository
 projects retain default source-mode locks for exact reviewed identities and
 content hashes; they do not prescribe the graph selected by an application.
 The four adapters additionally require their matching own-Core version because
-they share a private ABI: 11.0.0-dev requires Core `[11.0.0-dev]`, while candidate
+they share a private ABI: 11.0.0 requires Core `[11.0.0]`, while candidate
 adapters require the exact corresponding Core candidate identity.
 External dependency floors remain provider-owned;
 the Doka update above advances its independently bounded range. Historical

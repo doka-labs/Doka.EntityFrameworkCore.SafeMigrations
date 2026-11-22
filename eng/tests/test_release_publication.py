@@ -296,6 +296,73 @@ class AuthorityTests(unittest.TestCase):
         self.assertFalse(observed["qualifiedForPublication"])
         self.assertFalse(any("environments" in call for call in api.calls))
 
+    def test_single_cutover_qualifies_unchanged_maintenance_without_a_publisher_grant(self):
+        """The paired authority admits own-source rehearsal without a prior prepared-policy merge."""
+        # Arrange
+        policy = initial_policy()
+        policy["lines"][0]["packageMajor"] = 11
+        policy["lines"][1]["state"] = "active"
+        api = FakeGitHub(policy)
+        api.branch_name = "maintenance/10.x"
+        api.mode = "custom"
+        env = environment()
+        env["GITHUB_REF"] = "refs/heads/maintenance/10.x"
+        env["GITHUB_WORKFLOW_REF"] = f"{REPOSITORY}/{lines.WORKFLOW_PATH}@{env['GITHUB_REF']}"
+        result = subprocess.CompletedProcess([], 0, stdout=COMMIT + "\n")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_toolchain(root, major=10)
+
+            # Act
+            with mock.patch.object(publication.subprocess, "run", return_value=result):
+                observed = publication.create_qualification("10.7.4-rc.1", True, root, api, env)
+
+            # Assert
+            self.assertFalse(observed["qualifiedForPublication"])
+            self.assertEqual("active", observed["releaseLine"]["stateAtQualification"])
+            self.assertEqual("net10.0", observed["toolchain"]["targetFramework"])
+            self.assertEqual(COMMIT, observed["sourceCommit"])
+            self.assertEqual(env["GITHUB_REF"], observed["sourceRef"])
+            self.assertFalse(any("environments" in call for call in api.calls))
+
+    def test_single_cutover_main_only_grant_blocks_both_publishers(self):
+        """The interim grant mismatch must fail closed for either active major, not just maintenance."""
+        for ref, version in (("refs/heads/main", "11.0.0"),
+                             ("refs/heads/maintenance/10.x", "10.7.4-rc.1")):
+            with self.subTest(ref=ref):
+                # Arrange
+                policy = initial_policy()
+                policy["lines"][0]["packageMajor"] = 11
+                policy["lines"][1]["state"] = "active"
+                api = FakeGitHub(policy)
+                api.mode = "custom"
+                selected = lines.select_line(policy, ref, version)
+
+                # Act / Assert
+                with self.assertRaises(publication.PublicationAdmissionError):
+                    publication.validate_environment(REPOSITORY, selected, policy, api)
+
+    def test_single_cutover_exact_grants_preserve_both_environment_contracts(self):
+        """Only the exact paired grants satisfy the existing environment gate after qualification."""
+        for ref, version in (("refs/heads/main", "11.0.0"),
+                             ("refs/heads/maintenance/10.x", "10.7.4-rc.1")):
+            with self.subTest(ref=ref):
+                # Arrange
+                policy = initial_policy()
+                policy["lines"][0]["packageMajor"] = 11
+                policy["lines"][1]["state"] = "active"
+                api = FakeGitHub(policy)
+                api.mode = "custom"
+                api.grants.append({"id": 2, "name": "maintenance/10.x", "type": "branch"})
+                selected = lines.select_line(policy, ref, version)
+
+                # Act
+                result = publication.validate_environment(REPOSITORY, selected, policy, api)
+
+                # Assert
+                self.assertIsNone(result)
+                self.assertTrue(any("deployment-branch-policies" in call for call in api.calls))
+
     def test_prepared_line_cannot_request_publishable_qualification(self):
         # Arrange
         value = initial_policy()

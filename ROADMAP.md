@@ -127,6 +127,9 @@ literal ownership through existing public contracts. Its
 affected numeric-default approvals and unchanged report/fingerprint formats.
 Readable raw SQL and LF-stable source retain transport and safety limits;
 the patch does not claim a measured speedup or waive native qualification.
+Version 11.0.0 moves the five-package graph to .NET/EF Core 11; the compatible
+.NET 10 graph remains on `maintenance/10.x`. See the
+[upgrade contract](docs/support-and-qualification.md#upgrade-to-1100).
 These releases follow changed dependency conditions and confirmed correctness
 requirements; they are not deferred initial scope.
 
