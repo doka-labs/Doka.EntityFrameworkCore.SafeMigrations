@@ -51,6 +51,9 @@ model-fingerprint approvals and SQL Server authentication dependencies.
 
 ### Fixed
 
+- Run the explicit reviewed-head dependency check without repeating provider
+  qualification. Preserve normal CI, independent Required checks and isolated
+  cancellation; reject conflicting maintenance or measurement inputs.
 - Isolate pre-tag test line states from the product cutover policy. Retain the
   inactive-line rejection and verify both prepared and active maintenance heads.
 - Restore implicit SDK support packages in isolated bundle probes from the

@@ -101,10 +101,14 @@ repeats contributor restore hooks under manual-dispatch cache authority. Its
 helper requires the selected branch, executing commit and workflow commit to
 match the current open PR head. The original dispatch input and authoritative
 source/receiver run identities must agree; stale or mismatched runs cannot
-publish success. The normal full qualification still runs with read-only
-permissions. Only merge after the actual `dependency-review`, all other required
-checks and reviews pass for the current commit; never disable a required check,
-create a substitute success or grant contributor restore jobs write access.
+publish success. This explicit review-only dispatch does not repeat provider
+qualification or replace its independently required PR result. Ordinary PR,
+maintenance and other manual runs retain full qualification with read-only
+permissions. Review-only cancellation is isolated from qualification; combining
+review with maintenance or benchmark capture is rejected. Only merge after the
+actual `dependency-review`, all other required checks and reviews pass for the
+current commit; never disable a required check, create a substitute success or
+grant contributor restore jobs write access.
 A changed PR head requires a new dispatch from its newly reviewed commit.
 This manual entry deliberately rejects fork heads; after deployment to `main`,
 ordinary PR, Dependabot and fork runs use the automatic path and require no

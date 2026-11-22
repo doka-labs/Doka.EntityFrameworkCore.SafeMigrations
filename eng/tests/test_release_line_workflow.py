@@ -160,6 +160,7 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertNotIn("dotnet pack", publisher)
 
     def test_ordinary_ci_is_nonpublishing_and_scheduled_identity_is_a_dependency(self):
+        """Review-only routing cannot bypass the existing maintenance identity guard."""
         # Arrange
         source = ROOT / ".github/workflows/ci.yml"
 
@@ -168,7 +169,9 @@ class ReleaseWorkflowTests(unittest.TestCase):
 
         # Assert
         self.assertIn("needs: schedule-identity", blocks["quality-gates"])
-        self.assertNotIn("    if:", blocks["quality-gates"])
+        self.assertEqual(["${{ needs.schedule-identity.outputs.review_only != 'true' }}"],
+                         re.findall(r"^    if: (.+)$", blocks["quality-gates"], re.M))
+        self.assertIn("review_only: ${{ steps.mode.outputs.review_only }}", blocks["schedule-identity"])
         self.assertIn("if: ${{ !inputs.maintenance }}", blocks["schedule-identity"])
         self.assertIn("guard --workflow ci.yml", blocks["schedule-identity"])
         self.assertIn("INPUT_SOURCE_SHA: ${{ inputs.schedule-source-sha }}", blocks["schedule-identity"])

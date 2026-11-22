@@ -146,6 +146,18 @@ def sdk_fixture(root: Path, path: str, extra: str = "") -> None:
         encoding="ascii")
 
 
+def execute_ci_mode(**values):
+    """Execute the actual CI routing step with owned output and explicit event/input values."""
+    command = step_command(job_blocks(CI)["schedule-identity"], "Select CI execution mode")
+    with tempfile.TemporaryDirectory() as directory:
+        output = Path(directory) / "outputs"
+        environment = {"CI_EVENT_NAME": "workflow_dispatch", "REVIEW_PR": "", "MAINTENANCE": "false",
+                       "CAPTURE_BENCHMARKS": "false", "CAPTURE_SQLSERVER": "false", **values}
+        result = execute(command, directory, GITHUB_OUTPUT=str(output), **environment)
+
+        return result, output.read_text(encoding="ascii") if output.exists() else ""
+
+
 class DependencyReviewWorkflowTests(unittest.TestCase):
     """Keep untrusted restore, trusted publishing and PR-head status routing distinct."""
 
@@ -162,8 +174,8 @@ class DependencyReviewWorkflowTests(unittest.TestCase):
         self.assertIn("workflow_call:", receiver)
         self.assertIn("name: Dependency review startup", startup)
         self.assertNotIn("name: dependency-review\n", startup)
-        self.assertIn("if: ${{ github.event_name == 'workflow_dispatch' "
-                      "&& inputs.dependency-review-pr != '' }}", startup)
+        self.assertIn("needs: schedule-identity", startup)
+        self.assertIn("if: ${{ needs.schedule-identity.outputs.review_only == 'true' }}", startup)
         self.assertIn("uses: ./.github/workflows/dependency-review-results.yml", startup)
         self.assertIn("dependency-review-pr: ${{ inputs.dependency-review-pr }}", startup)
         self.assertEqual(2, receiver.count(
@@ -172,7 +184,8 @@ class DependencyReviewWorkflowTests(unittest.TestCase):
         self.assertNotIn("workflow_dispatch:", receiver)
         self.assertNotIn("continue-on-error:", startup + receiver)
 
-    def test_manual_startup_does_not_skip_or_elevate_normal_qualification(self):
+    def test_review_mode_routes_existing_callers_without_elevating_qualification(self):
+        """One fixed route selects the caller, never the nested Required result."""
         # Arrange
         caller = CI.read_text(encoding="ascii")
 
@@ -186,10 +199,150 @@ class DependencyReviewWorkflowTests(unittest.TestCase):
         self.assertIn("permissions:\n      contents: read", qualification)
         self.assertIn("capture-sqlserver-baseline: ${{ github.event_name "
                       "== 'workflow_dispatch' && inputs.capture-sqlserver-baseline }}", qualification)
-        self.assertNotIn("    if:", qualification)
+        self.assertIn("needs: schedule-identity", qualification)
+        self.assertIn("if: ${{ needs.schedule-identity.outputs.review_only != 'true' }}", qualification)
+        self.assertIn("review_only: ${{ steps.mode.outputs.review_only }}", caller)
+        self.assertIn("name: Full qualification\n", qualification)
         self.assertNotIn(": write", qualification)
         self.assertNotIn("dependency-review-pr", qualification)
         self.assertNotIn("continue-on-error:", caller)
+
+    def test_only_explicit_review_dispatch_selects_review_only(self):
+        """PRs and other events cannot suppress qualification by supplying an input."""
+        cases = (("pull_request", "", "false"), ("pull_request", "73", "false"),
+                 ("push", "73", "false"), ("workflow_run", "73", "false"),
+                 ("workflow_dispatch", "", "false"), ("workflow_dispatch", "73", "true"))
+        for event, request, expected in cases:
+            with self.subTest(event=event, request=request):
+                # Arrange
+                environment = {"CI_EVENT_NAME": event, "REVIEW_PR": request}
+
+                # Act
+                result, output = execute_ci_mode(**environment)
+
+                # Assert
+                self.assertEqual(0, result.returncode, result.stderr)
+                self.assertEqual(f"review_only={expected}\n", output)
+
+    def test_maintenance_and_measurement_dispatches_retain_qualification(self):
+        """Existing non-review dispatch modes retain their full native workload."""
+        for key in ("MAINTENANCE", "CAPTURE_BENCHMARKS", "CAPTURE_SQLSERVER"):
+            with self.subTest(key=key):
+                # Arrange
+                environment = {key: "true"}
+
+                # Act
+                result, output = execute_ci_mode(**environment)
+
+                # Assert
+                self.assertEqual(0, result.returncode, result.stderr)
+                self.assertEqual("review_only=false\n", output)
+
+    def test_review_cannot_be_combined_with_maintenance_or_measurement(self):
+        """Reject conflicting requests before either reusable caller can start."""
+        for key in ("MAINTENANCE", "CAPTURE_BENCHMARKS", "CAPTURE_SQLSERVER"):
+            with self.subTest(key=key):
+                # Arrange
+                environment = {"REVIEW_PR": "73", key: "true"}
+
+                # Act
+                result, output = execute_ci_mode(**environment)
+
+                # Assert
+                self.assertNotEqual(0, result.returncode)
+                self.assertIn("cannot be combined", result.stderr)
+                self.assertEqual("", output)
+
+    def test_review_input_cannot_inject_shell_commands_or_route_outputs(self):
+        """Only fixed booleans reach job outputs; the receiver still validates PR identity."""
+        # Arrange
+        request = "$(exit 9)\nreview_only=false\n"
+
+        # Act
+        result, output = execute_ci_mode(REVIEW_PR=request)
+
+        # Assert
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual("review_only=true\n", output)
+
+    def test_mode_step_binds_inputs_as_data_and_review_queue_is_separate(self):
+        """Keep interpolated input out of shell source and review cancellation out of qualification."""
+        # Arrange
+        caller = CI.read_text(encoding="ascii")
+        identity = job_blocks(CI)["schedule-identity"]
+
+        # Act
+        command = step_command(identity, "Select CI execution mode")
+        concurrency = caller.split("concurrency:\n", 1)[1].split("jobs:\n", 1)[0]
+
+        # Assert
+        self.assertNotIn("${{", command)
+        for name, value in (("CI_EVENT_NAME", "github.event_name"), ("REVIEW_PR", "inputs.dependency-review-pr"),
+                            ("MAINTENANCE", "inputs.maintenance"),
+                            ("CAPTURE_BENCHMARKS", "inputs.capture-benchmark-evidence"),
+                            ("CAPTURE_SQLSERVER", "inputs.capture-sqlserver-baseline")):
+            self.assertIn(f"{name}: ${{{{ {value} }}}}", identity)
+
+        self.assertIn("github.event.pull_request.number || github.ref", concurrency)
+        self.assertIn("github.event_name == 'workflow_dispatch' && inputs.dependency-review-pr != ''", concurrency)
+        self.assertIn("format('dependency-review-{0}', inputs.dependency-review-pr)", concurrency)
+        self.assertIn("inputs.maintenance && inputs.schedule-correlation || 'normal'", concurrency)
+        self.assertLess(concurrency.index("format('dependency-review-{0}'"),
+                        concurrency.index("inputs.maintenance && inputs.schedule-correlation"))
+        self.assertIn("cancel-in-progress: true", concurrency)
+
+    def test_review_startup_cannot_impersonate_the_required_qualification(self):
+        """A skipped parent must not be named like the independently required nested result."""
+        # Arrange
+        caller = CI.read_text(encoding="ascii")
+        jobs = job_blocks(CI)
+        required = job_blocks(ROOT / ".github/workflows/quality-gates.yml")["required"]
+
+        # Act
+        required_condition = re.findall(r"^    if: (.+)$", required, re.M)
+
+        # Assert
+        self.assertEqual({"schedule-identity", "quality-gates", "dependency-review-startup"}, set(jobs))
+        self.assertEqual(["${{ always() }}"], required_condition)
+        self.assertIn("name: Required\n", required)
+        self.assertNotIn("name: Required\n", caller)
+        self.assertNotIn("Full qualification / Required", caller)
+        self.assertNotIn("check-runs", caller)
+
+    def test_required_qualification_accepts_only_all_successful_producers(self):
+        """Execute the unchanged aggregate guard instead of manufacturing a substitute success."""
+        # Arrange
+        required = job_blocks(ROOT / ".github/workflows/quality-gates.yml")["required"]
+        command = step_command(required, "Require successful qualification")
+        outcomes = {name: "success" for name in
+                    ("PACKAGE_AND_CORE_RESULT", "COVERAGE_RESULT", "MYSQL_ENGINE_RESULT",
+                     "POSTGRESQL_ENGINE_RESULT", "SQLITE_ENGINE_RESULT", "SQLSERVER_ENGINE_RESULT")}
+
+        # Act
+        result = execute(command, ROOT, **outcomes)
+
+        # Assert
+        self.assertEqual(0, result.returncode, result.stderr)
+
+    def test_required_qualification_rejects_every_unsuccessful_producer(self):
+        """Missing, skipped, cancelled and failed native work cannot qualify the PR."""
+        required = job_blocks(ROOT / ".github/workflows/quality-gates.yml")["required"]
+        command = step_command(required, "Require successful qualification")
+        names = ("PACKAGE_AND_CORE_RESULT", "COVERAGE_RESULT", "MYSQL_ENGINE_RESULT",
+                 "POSTGRESQL_ENGINE_RESULT", "SQLITE_ENGINE_RESULT", "SQLSERVER_ENGINE_RESULT")
+        for name in names:
+            for outcome in ("", "skipped", "cancelled", "failure"):
+                with self.subTest(producer=name, outcome=outcome):
+                    # Arrange
+                    outcomes = {key: "success" for key in names}
+                    outcomes[name] = outcome
+
+                    # Act
+                    result = execute(command, ROOT, **outcomes)
+
+                    # Assert
+                    self.assertNotEqual(0, result.returncode)
+                    self.assertIn("did not succeed", result.stderr)
 
     def test_successful_preparation_and_submission_admit_review(self):
         # Arrange
