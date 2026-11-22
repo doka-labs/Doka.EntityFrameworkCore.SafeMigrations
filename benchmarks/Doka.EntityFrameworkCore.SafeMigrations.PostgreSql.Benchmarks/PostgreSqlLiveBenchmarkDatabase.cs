@@ -380,7 +380,8 @@ internal sealed class PostgreSqlLiveBenchmarkDatabase : IAsyncDisposable
             DbContextOptionsBuilder optionsBuilder
         )
         {
-            optionsBuilder.UseNpgsql(_connectionString);
+            // WHY: This workload also runs against the declared PostgreSQL 14 compatibility cell.
+            optionsBuilder.UseNpgsql(_connectionString, provider => provider.SetPostgresVersion(14, 0));
             optionsBuilder.UsePostgreSqlSafeMigrations<NativeContext>();
         }
     }

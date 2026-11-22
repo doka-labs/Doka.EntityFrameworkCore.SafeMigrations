@@ -3,6 +3,9 @@
 SafeMigrations diagnostics identify the authored operation, affected owner and
 established reason without changing the migration decision. No automatic
 preflight, data scan, new privilege or external logging service is required.
+The .NET/EF Core 11 migration retains this diagnostic contract; see the
+[11.0 upgrade](support-and-qualification.md#upgrade-to-1100) for framework and
+dependency changes. The version-specific notes below describe inherited behavior.
 Stable 10.5.0 introduced this diagnostic contract relative to 10.4.11.
 Version 10.7.3 retains its report schemas and exception transport. Owned
 work or cancellation remains the primary failure when cleanup also fails;

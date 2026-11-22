@@ -227,9 +227,8 @@ public sealed class BenchmarkProgramExecutionTests
         var benchmark = BenchmarkProgramTestEvidence
             .CreateCases()[0];
 
-        var generation = GenerateResult.Success(ArtifactsPaths.Empty, []);
-        var build = BuildResult.Failure(generation, "Synthetic build failure.");
-        var report = new BenchmarkReport(false, benchmark, generation, build, [], []);
+        var build = BuildResult.Failure(ArtifactsPaths.Empty, "Synthetic build failure.");
+        var report = new BenchmarkReport(false, benchmark, build, [], []);
         var summary = evidence.CreateSummary([report]);
 
         // Act
@@ -397,13 +396,14 @@ public sealed class BenchmarkProgramExecutionTests
 
     /// <summary>Rejects a missing argument vector before entering native configuration or execution.</summary>
     [Fact]
-    public void Run_RejectsNullArguments()
+    public async Task RunAsync_RejectsNullArguments()
     {
         // Arrange
         Type[] benchmarkTypes = [typeof(BenchmarkProgramOutcomeProbe)];
 
         // Act
-        var exception = Record.Exception(() => BenchmarkProgram.Run(null!, benchmarkTypes));
+        var exception = await Record.ExceptionAsync(() =>
+            BenchmarkProgram.RunAsync(null!, benchmarkTypes, CancellationToken.None));
 
         // Assert
         var argument = Assert.IsType<ArgumentNullException>(exception);
@@ -412,13 +412,14 @@ public sealed class BenchmarkProgramExecutionTests
 
     /// <summary>Rejects a missing workload inventory before entering native configuration or execution.</summary>
     [Fact]
-    public void Run_RejectsNullBenchmarkTypes()
+    public async Task RunAsync_RejectsNullBenchmarkTypes()
     {
         // Arrange
         string[] arguments = ["--list", "flat"];
 
         // Act
-        var exception = Record.Exception(() => BenchmarkProgram.Run(arguments, null!));
+        var exception = await Record.ExceptionAsync(() =>
+            BenchmarkProgram.RunAsync(arguments, null!, CancellationToken.None));
 
         // Assert
         var argument = Assert.IsType<ArgumentNullException>(exception);
@@ -427,16 +428,36 @@ public sealed class BenchmarkProgramExecutionTests
 
     /// <summary>Rejects an empty workload inventory before entering native configuration or execution.</summary>
     [Fact]
-    public void Run_RejectsEmptyBenchmarkTypes()
+    public async Task RunAsync_RejectsEmptyBenchmarkTypes()
     {
         // Arrange
         string[] arguments = ["--list", "flat"];
 
         // Act
-        var exception = Record.Exception(() => BenchmarkProgram.Run(arguments));
+        var exception = await Record.ExceptionAsync(() =>
+            BenchmarkProgram.RunAsync(arguments, [], CancellationToken.None));
 
         // Assert
         var argument = Assert.IsType<ArgumentException>(exception);
         Assert.Equal("benchmarkTypes", argument.ParamName);
+    }
+
+    /// <summary>Observes cancellation before entering native discovery or creating evidence.</summary>
+    [Fact]
+    public async Task RunAsync_RejectsCanceledInvocationBeforeNativeDiscovery()
+    {
+        // Arrange
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        // Act
+        var exception = await Record.ExceptionAsync(() => BenchmarkProgram.RunAsync(
+            ["--list", "flat"],
+            [typeof(BenchmarkProgramOutcomeProbe)],
+            cancellation.Token));
+
+        // Assert
+        var canceled = Assert.IsType<OperationCanceledException>(exception);
+        Assert.Equal(cancellation.Token, canceled.CancellationToken);
     }
 }

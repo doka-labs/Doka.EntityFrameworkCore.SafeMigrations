@@ -1281,7 +1281,8 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
         ) => optionsBuilder
             .UseNpgsql(
                 _connectionString,
-                options => options.MigrationsHistoryTable("__GeneratedScriptHistory"))
+                // WHY: This generated-column history also executes on the PostgreSQL14 qualification cell.
+                options => options.SetPostgresVersion(14, 0).MigrationsHistoryTable("__GeneratedScriptHistory"))
             .UsePostgreSqlSafeMigrations<GeneratedScriptDbContext>();
     }
 

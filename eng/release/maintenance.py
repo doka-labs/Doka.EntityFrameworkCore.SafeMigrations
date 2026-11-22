@@ -721,7 +721,8 @@ def solution_projects(root: Path) -> list[str]:
     expected = []
     for group in ("src", "tests", "benchmarks", "eng", "samples"):
         for path in (root / group).rglob("*.csproj"):
-            if any(part in ("bin", "obj", "artifacts") for part in path.relative_to(root).parts):
+            if any(part in ("bin", "obj", "artifacts", ".bdn", "BenchmarkDotNet.Artifacts")
+                   for part in path.relative_to(root).parts):
                 continue
 
             if path.is_symlink() or not path.is_file():

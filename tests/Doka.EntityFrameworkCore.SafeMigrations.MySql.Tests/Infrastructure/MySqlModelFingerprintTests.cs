@@ -27,9 +27,12 @@ public sealed class MySqlModelFingerprintTests
             StringComparison.Ordinal);
 
         Assert.Equal(64, firstFingerprint[(firstFingerprint.LastIndexOf(':') + 1)..].Length);
+
+        // WHY: The unchanged v1 encoding includes the inverse-navigation convention dictionary's
+        // generic type identity. Its framework assembly version advances from 10 to 11, not its schema facets.
         Assert.Equal(
             "safe-relational-model:v1:Doka.EntityFrameworkCore.MySql:sha256:"
-            + "a3d55db66df79776c8a0bda4f637d70c6fb9bb796aff1bcc7bf8afaf86109a98",
+            + "4fc050cbd0bd149d68235ae361c401999d0e0dcbadb8f81d05f040ea7f8dc20a",
             firstFingerprint);
     }
 

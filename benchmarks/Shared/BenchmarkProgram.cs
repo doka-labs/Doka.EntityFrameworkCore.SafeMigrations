@@ -9,12 +9,14 @@ internal static class BenchmarkProgram
     /// <summary>Runs the selected workload family or a native discovery/help command.</summary>
     /// <param name="args">BenchmarkDotNet arguments, including optional filters, jobs and artifact directory.</param>
     /// <param name="benchmarkTypes">The isolated workload types available in this executable mode.</param>
+    /// <param name="cancellationToken">Cancels discovery, native execution and evidence export.</param>
     /// <returns>
     /// Zero for valid discovery or complete execution/export; one for configuration or execution failure.
     /// </returns>
-    internal static int Run(
+    internal static async Task<int> RunAsync(
         string[] args,
-        params Type[] benchmarkTypes
+        Type[] benchmarkTypes,
+        CancellationToken cancellationToken
     )
     {
         ArgumentNullException.ThrowIfNull(args);
@@ -24,6 +26,8 @@ internal static class BenchmarkProgram
         {
             throw new ArgumentException("At least one benchmark type is required.", nameof(benchmarkTypes));
         }
+
+        cancellationToken.ThrowIfCancellationRequested();
 
         var config = ManualConfig
             .Create(DefaultConfig.Instance)
@@ -45,13 +49,13 @@ internal static class BenchmarkProgram
             // terminal forms so an invalid measurement option cannot hide behind a help/list request.
             if (arguments is ["--help"] or ["-h"] or ["--version"])
             {
-                _ = switcher.Run(arguments, config);
+                _ = await switcher.RunAsync(arguments, config, cancellationToken);
 
                 return 0;
             }
 
             var (parsed, parsedConfig, options) = ConfigParser.Parse(arguments, ConsoleLogger.Default, config);
-            if (!parsed)
+            if (!parsed || parsedConfig is null || options is null)
             {
                 return 1;
             }
@@ -71,7 +75,7 @@ internal static class BenchmarkProgram
             if (options.PrintInformation
                 || options.ListBenchmarkCaseMode != ListBenchmarkCaseMode.Disabled)
             {
-                _ = switcher.Run(arguments, config);
+                _ = await switcher.RunAsync(arguments, config, cancellationToken);
 
                 return 0;
             }
@@ -89,12 +93,10 @@ internal static class BenchmarkProgram
                 return 1;
             }
 
-            var expectedCases = TypeFilter
-                .Filter(boundConfig, runnableTypes)
-                .Sum(static info => info.BenchmarksCases.Length);
+            var selected = await TypeFilter.FilterAsync(boundConfig, runnableTypes, cancellationToken);
+            var expectedCases = selected.Sum(static info => info.BenchmarksCases.Length);
 
-            var summaries = switcher
-                .RunAll(boundConfig)
+            var summaries = (await switcher.RunAllAsync(boundConfig, cancellationToken: cancellationToken))
 
                 // WHY: Retain fluent materialization and the resulting snapshot ownership.
                 // ReSharper disable once UseCollectionExpression
@@ -111,26 +113,15 @@ internal static class BenchmarkProgram
             {
                 // WHY: BDN's composite exporter logs and swallows export failures. Calling its native
                 // full exporter here keeps unwritable/missing evidence fatal without another JSON schema.
-                var paths = JsonExporter
-                    .Full
-                    .ExportToFiles(summary, ConsoleLogger.Default)
-
-                    // WHY: Retain fluent materialization and the resulting snapshot ownership.
-                    // ReSharper disable once UseCollectionExpression
-                    .ToArray();
-
-                if (paths.Length != 1)
-                {
-                    throw new InvalidDataException("BenchmarkDotNet did not export exactly one full JSON report.");
-                }
-
-                ValidateExport(paths[0], summary.Reports.Length);
+                var path = await ExportFullAsync(summary, ConsoleLogger.Default, cancellationToken);
+                ValidateExport(path, summary.Reports.Length);
             }
 
             // WHY: Duration, allocation, ratios and statistical warnings are evidence, never CI verdicts.
             return 0;
         }
-        catch (Exception exception)
+        catch (Exception exception) when (exception is not OperationCanceledException
+            || !cancellationToken.IsCancellationRequested)
         {
             Console.Error.WriteLine($"Benchmark execution or evidence failed ({exception.GetType().Name}).");
 
@@ -143,13 +134,36 @@ internal static class BenchmarkProgram
         }
     }
 
+    /// <summary>Exports native full JSON without accepting an older file after a failed overwrite.</summary>
+    /// <param name="summary">The native current-run summary.</param>
+    /// <param name="logger">The native export logger.</param>
+    /// <param name="cancellationToken">Cancels the native export.</param>
+    /// <returns>The native exporter's canonical current-run artifact path.</returns>
+    internal static async Task<string> ExportFullAsync(
+        Summary summary,
+        ILogger logger,
+        CancellationToken cancellationToken
+    )
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var exporter = (JsonExporter)JsonExporter.Full;
+        var path = exporter.GetArtifactFullName(summary);
+
+        // WHY: BDN may choose a fallback filename when overwrite fails. Removing the old file
+        // first either succeeds or fails loudly, so validation cannot mistake stale bytes for this export.
+        File.Delete(path);
+        await exporter.ExportAsync(summary, logger, cancellationToken);
+
+        return path;
+    }
+
     /// <summary>Rejects reuse of old measurements and build options that can disclose inherited credentials.</summary>
     /// <param name="options">The options validated by BenchmarkDotNet's own parser.</param>
     /// <returns>
     /// Whether execution can retain complete current-run evidence without environment-bearing build logs.
     /// </returns>
     internal static bool IsSafeInvocation(
-        CommandLineOptions options
+        CommandLineOptions? options
     ) => options is { Resume: false, LogBuildOutput: false, GenerateMSBuildBinLog: false }
 
         // WHY: BDN job variables override inherited values and are displayed in reports. Keep owned

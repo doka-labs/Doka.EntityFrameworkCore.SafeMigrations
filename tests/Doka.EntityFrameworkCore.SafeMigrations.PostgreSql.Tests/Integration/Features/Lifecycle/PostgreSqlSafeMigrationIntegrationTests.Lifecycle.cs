@@ -166,6 +166,7 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests : PostgreSqlSafe
             .UseNpgsql(
                 connectionString,
                 provider => provider
+                    .SetPostgresVersion(14, 0)
                     .MigrationsAssembly(typeof(SafeMigrationDbContext).Assembly.FullName)
                     .MigrationsHistoryTable("__ApplicationDbContextMigrationsHistory"))
             .UsePostgreSqlSafeMigrations()

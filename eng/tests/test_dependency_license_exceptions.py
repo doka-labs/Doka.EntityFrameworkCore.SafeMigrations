@@ -14,8 +14,8 @@ from pathlib import Path
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 VERIFIER = REPOSITORY_ROOT / "eng/verify-dependency-license-exceptions.py"
 APPROVED_VERSIONS = {
-    "Microsoft.Data.SqlClient.SNI.runtime": "6.0.3",
-    "Microsoft.Identity.Client.NativeInterop": "0.20.6",
+    "Microsoft.Data.SqlClient.SNI.runtime": "7.1.2",
+    "SQLite": "3.53.4",
 }
 
 
@@ -141,7 +141,7 @@ class DependencyLicenseExceptionTests(unittest.TestCase):
         result = verify(pages)
 
         self.assertNotEqual(0, result.returncode)
-        self.assertIn("license exception requires NuGet microsoft.data.sqlclient.sni.runtime 6.0.3", result.stderr)
+        self.assertIn("license exception requires NuGet microsoft.data.sqlclient.sni.runtime 7.1.2", result.stderr)
 
     def test_rejects_inconsistent_or_missing_excepted_metadata(self):
         mutations = (
@@ -279,7 +279,30 @@ class DependencyLicenseExceptionTests(unittest.TestCase):
 
         result = verify([entries])
 
-        self.assertEqual(set(APPROVED_VERSIONS), {entry["name"] for entry in entries})
+        # WHY: Native SQLite is selected by execution fixtures, never the bundle-neutral shipping adapter.
+        self.assertEqual(set(APPROVED_VERSIONS) - {"SQLite"}, {entry["name"] for entry in entries})
+        self.assertEqual(0, result.returncode, result.stderr)
+
+    def test_sqlite_exception_matches_all_native_execution_lockfiles(self):
+        """Retain the native exception only for the reviewed version in each independently restored graph."""
+        # Arrange
+        projects = (
+            "tests/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests",
+            "benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Benchmarks",
+            "samples/Doka.EntityFrameworkCore.SafeMigrations.Sample",
+            "eng/package-consumer/Sqlite",
+        )
+        entries = []
+        for project in projects:
+            lock = json.loads((REPOSITORY_ROOT / project / "packages.lock.json").read_text(encoding="ascii"))
+            entries.extend(dependency("SQLite", graph["SQLite"]["resolved"])
+                           for graph in lock["dependencies"].values() if "SQLite" in graph)
+
+        # Act
+        result = verify([entries])
+
+        # Assert
+        self.assertEqual(len(projects), len(entries))
         self.assertEqual(0, result.returncode, result.stderr)
 
     def test_workflow_keeps_other_gates_and_requires_paginated_version_validation(self):
@@ -321,7 +344,7 @@ class DependencyLicenseWorkflowTests(unittest.TestCase):
         self.assertIn("restricted to the approved versions", result.stdout)
 
     def test_unapproved_version_on_a_later_page_blocks_the_step(self):
-        pages = [[], [dependency("Microsoft.Identity.Client.NativeInterop", "99.0.0")]]
+        pages = [[], [dependency("Microsoft.Data.SqlClient.SNI.runtime", "99.0.0")]]
 
         result = run_workflow_guard(pages)
 

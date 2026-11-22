@@ -5,7 +5,23 @@ untagged authorized source-line commit first, then waits at the protected `nuget
 Only after that wait begins does the operator create the signed tag and approve
 publication. Run every command separately and stop on the first failure.
 
-The release target is stable 10.7.3 for all five package IDs, retaining the
+## 11.0.0 readiness
+
+As of 2026-11-22, source and release notes select 11.0.0; ordinary local builds
+retain the `11.0.0-dev` package identity. The local target has active main/11
+and maintenance/10 with six Dependabot entries. Hosted main still owns major 10;
+maintenance is protected at v10.7.3 but inactive in authority, and nuget permits
+main only. The creation audit is retained separately, not qualification evidence.
+
+Complete the [single-PR cutover](release-lines.md#main11-and-maintenance10-cutover),
+then qualify maintenance without publication before separately granting its
+environment access. The complete 11.x native matrix, x64 SQL Server, coverage,
+package/provenance and public readback remain release gates. No 11.0.0
+publication or completed hosted qualification is claimed by these documents.
+
+## Historical 10.7.3 preparation evidence
+
+The previous release target was stable 10.7.3 for all five package IDs, retaining the
 inventory introduced in 10.4.6. Review the
 [10.7.3 compatibility notes](../../CHANGELOG.md#1073---2026-11-20) and
 [upgrade procedure](../support-and-qualification.md#upgrade-to-1073), including
@@ -82,11 +98,10 @@ Configure these controls before the first release:
 
 Do not configure a long-lived NuGet API key. The protected job exchanges its
 GitHub OIDC token for a short-lived key immediately before publication.
-Only main/10 is active. The registered maintenance/10.x line remains inactive;
-this implementation creates no branch, grant or .NET 11 support. Additional
-line preparation/activation requires the separate review in
-[Release lines](release-lines.md). It does not require a new environment or
-credential generation.
+The paired main/11 and maintenance/10 policy uses this same environment. Grant
+the exact maintenance branch only after its successful qualification-only run;
+see [Release lines](release-lines.md). No new environment or credential
+generation is required.
 
 ## Publication procedure
 
@@ -130,7 +145,7 @@ the workflow.
 ### 3. Start the untagged candidate and wait
 
 In GitHub Actions, start **Release candidate**. Select the authorized source
-branch (`main` in the current active configuration) and enter:
+branch (`main` for 11.x or `maintenance/10.x` for 10.x) and enter:
 
 ```text
 version: <release_version>
@@ -152,7 +167,7 @@ approve it yet.
 For a prepared line or a nonpublishing rehearsal, set qualification-only true.
 Only this mode may select an unused canonical same-major version without a
 matching source patch/changelog entry; see the
-[maintenance bootstrap procedure](release-lines.md#prepare-and-activate-a-maintenance-line).
+[maintenance qualification procedure](release-lines.md#main11-and-maintenance10-cutover).
 The selected version still binds the qualified package and evidence bytes,
 and all tag/package absence and protected-source checks remain mandatory.
 The complete reversible qualification and attestation run, but the publisher job

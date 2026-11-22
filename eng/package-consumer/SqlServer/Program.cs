@@ -74,7 +74,8 @@ internal sealed class PackageScaffoldingDbContext : DbContext
     )
     {
         optionsBuilder.UseSqlServer(
-            "Server=127.0.0.1,1;Database=package;User ID=sa;Password=PackageConsumer123!;TrustServerCertificate=True");
+            "Server=127.0.0.1,1;Database=package;User ID=sa;Password=PackageConsumer123!;TrustServerCertificate=True",
+            provider => provider.UseCompatibilityLevel(150));
 
         optionsBuilder.UseSqlServerSafeMigrations();
     }

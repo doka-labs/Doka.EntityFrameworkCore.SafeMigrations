@@ -22,7 +22,11 @@ expect_failure() {
         exit 1
     fi
 
-    grep -Fxq "$expected_message" "$fixture_root/$name.stderr"
+    if ! grep -Fxq "$expected_message" "$fixture_root/$name.stderr"; then
+        echo "Pre-tag case '$name' did not report: $expected_message" >&2
+        cat "$fixture_root/$name.stderr" >&2
+        exit 1
+    fi
 }
 
 git init --quiet --bare "$remote"
@@ -36,6 +40,19 @@ mkdir -p "$repository/eng/release"
 cp "$validator" "$repository/eng/pre-tag-check.sh"
 cp "$repo_root/eng/release/lines.py" "$repository/eng/release/lines.py"
 cp "$repo_root/eng/release/lines-policy.json" "$repository/eng/release/lines-policy.json"
+# WHY: The rejection fixture owns its line state; a product cutover must not
+# silently turn this inactive-line negative control into an active-line probe.
+python3 - "$repository/eng/release/lines-policy.json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+policy = json.loads(path.read_text(encoding="ascii"))
+line = next(entry for entry in policy["lines"] if entry["sourceRef"] == "refs/heads/maintenance/10.x")
+line["state"] = "inactive"
+path.write_text(json.dumps(policy, indent=2) + "\n", encoding="ascii")
+PY
 printf 'fixture\n' >"$repository/tracked.txt"
 git -C "$repository" add eng tracked.txt
 git -C "$repository" commit --quiet -m "Create release fixture"
@@ -86,26 +103,39 @@ expect_failure inactive-line \
     "  [FAIL] Branch: expected an eligible exact release line, found maintenance/10.x."
 git -C "$repository" switch --quiet main
 
-# WHY: A prepared line may qualify without granting any publication permission.
-# Mutate only the isolated Git fixture; the repository policy stays inactive.
+# WHY: Both eligible states must qualify, while the inactive control above
+# remains rejected. All state changes belong to the isolated Git fixture.
 git -C "$repository" switch --quiet maintenance/10.x
-python3 - "$repository/eng/release/lines-policy.json" <<'PY'
+for state in prepared active; do
+    python3 - "$repository/eng/release/lines-policy.json" "$state" <<'PY'
 import json
 import sys
 from pathlib import Path
 
 path = Path(sys.argv[1])
 policy = json.loads(path.read_text(encoding="ascii"))
-policy["lines"][1]["state"] = "prepared"
+line = next(entry for entry in policy["lines"] if entry["sourceRef"] == "refs/heads/maintenance/10.x")
+line["state"] = sys.argv[2]
 path.write_text(json.dumps(policy, indent=2) + "\n", encoding="ascii")
 PY
-git -C "$repository" add eng/release/lines-policy.json
-git -C "$repository" commit --quiet -m "Prepare isolated maintenance fixture"
-git -C "$repository" push --quiet --set-upstream origin maintenance/10.x
-bash "$repository/eng/pre-tag-check.sh" \
-    >"$fixture_root/prepared.stdout" 2>"$fixture_root/prepared.stderr"
-grep -Fxq "  [PASS] Branch: maintenance/10.x" "$fixture_root/prepared.stdout"
-test ! -s "$fixture_root/prepared.stderr"
+    git -C "$repository" add eng/release/lines-policy.json
+    git -C "$repository" commit --quiet -m "Set isolated maintenance fixture to $state"
+    git -C "$repository" push --quiet --set-upstream origin maintenance/10.x
+    if ! bash "$repository/eng/pre-tag-check.sh" \
+        >"$fixture_root/$state.stdout" 2>"$fixture_root/$state.stderr"; then
+        echo "Pre-tag case '$state' unexpectedly failed." >&2
+        cat "$fixture_root/$state.stdout" "$fixture_root/$state.stderr" >&2
+        exit 1
+    fi
+
+    maintenance_commit="$(git -C "$repository" rev-parse HEAD)"
+    grep -Fxq "  [PASS] Branch: maintenance/10.x" "$fixture_root/$state.stdout"
+    grep -Fxq "  [PASS] Source commit: $maintenance_commit matches origin/maintenance/10.x" \
+        "$fixture_root/$state.stdout"
+    grep -Fxq "Ready to start Release candidate for $maintenance_commit." "$fixture_root/$state.stdout"
+    test ! -s "$fixture_root/$state.stderr"
+done
+
 git -C "$repository" switch --quiet main
 
 release_tag=v10.0.0-rc.2

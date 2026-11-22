@@ -113,6 +113,48 @@ def dispatch_fixture(workflow="ci.yml"):
 
 
 class MaintenanceTests(unittest.TestCase):
+    def test_solution_inventory_ignores_only_exact_generated_benchmark_directories(self):
+        """Native BDN hosts do not become additional maintained source projects."""
+        for name in (".bdn", "BenchmarkDotNet.Artifacts"):
+            with self.subTest(directory=name), tempfile.TemporaryDirectory() as temporary_root:
+                # Arrange
+                root = Path(temporary_root)
+                project = root / "benchmarks/Owned/Owned.csproj"
+                project.parent.mkdir(parents=True)
+                project.write_text("<Project />", encoding="ascii")
+                (root / "Doka.EntityFrameworkCore.SafeMigrations.slnx").write_text(
+                    '<Solution><Project Path="benchmarks/Owned/Owned.csproj" /></Solution>', encoding="ascii")
+                generated = project.parent / name / "invocation/gen.csproj"
+                generated.parent.mkdir(parents=True)
+                generated.write_text("<Project />", encoding="ascii")
+
+                # Act
+                projects = maintenance.solution_projects(root)
+
+                # Assert
+                self.assertEqual([str(project.resolve())], projects)
+
+    def test_solution_inventory_rejects_unlisted_benchmark_directory_lookalikes(self):
+        """A similar-looking ordinary path must remain subject to complete project coverage."""
+        # Arrange
+        with tempfile.TemporaryDirectory() as temporary_root:
+            root = Path(temporary_root)
+            project = root / "benchmarks/Owned/Owned.csproj"
+            project.parent.mkdir(parents=True)
+            project.write_text("<Project />", encoding="ascii")
+            (root / "Doka.EntityFrameworkCore.SafeMigrations.slnx").write_text(
+                '<Solution><Project Path="benchmarks/Owned/Owned.csproj" /></Solution>', encoding="ascii")
+            unlisted = project.parent / ".bdn-lookalike/Other.csproj"
+            unlisted.parent.mkdir()
+            unlisted.write_text("<Project />", encoding="ascii")
+
+            # Act
+            with self.assertRaises(maintenance.MaintenanceError) as failure:
+                maintenance.solution_projects(root)
+
+            # Assert
+            self.assertIn("complete branch-native project graph", str(failure.exception))
+
     """Reject substituted evidence rather than trusting dispatch or process success."""
 
     def test_clean_audit_covers_the_complete_project_set(self):

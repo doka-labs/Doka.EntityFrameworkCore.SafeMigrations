@@ -1,4 +1,4 @@
-"""Enforce exact versions for the repository's two package-license exceptions."""
+"""Enforce exact reviewed package identities for native dependency-license exceptions."""
 
 import json
 import re
@@ -8,8 +8,8 @@ from urllib.parse import unquote
 
 
 APPROVED_VERSIONS = {
-    "microsoft.data.sqlclient.sni.runtime": "6.0.3",
-    "microsoft.identity.client.nativeinterop": "0.20.6",
+    "microsoft.data.sqlclient.sni.runtime": "7.1.2",
+    "sqlite": "3.53.4",
 }
 
 

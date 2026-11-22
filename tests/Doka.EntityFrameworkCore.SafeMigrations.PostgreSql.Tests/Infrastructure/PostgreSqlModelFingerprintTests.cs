@@ -25,9 +25,12 @@ public sealed class PostgreSqlModelFingerprintTests
             StringComparison.Ordinal);
 
         Assert.Equal(64, firstFingerprint[(firstFingerprint.LastIndexOf(':') + 1)..].Length);
+
+        // WHY: The unchanged v1 encoding includes the inverse-navigation convention dictionary's
+        // generic type identity. Its framework assembly version advances from 10 to 11, not its schema facets.
         Assert.Equal(
             "safe-relational-model:v1:Npgsql.EntityFrameworkCore.PostgreSQL:sha256:"
-            + "2654dc3b5f9db76cd83374dc360b4d912c6bda461653206bab4c2bb2820f3e26",
+            + "75910589c5d53a83f1712f806cee925164bb7e7bffb817e62cda88d1b1830f20",
             firstFingerprint);
     }
 

@@ -24,7 +24,7 @@ PROVIDER_DEPENDENCIES = {
 }
 TRANSPORT_DEPENDENCIES = {
     ".MySql": ("MySqlConnector", "2.6.2"),
-    ".SqlServer": ("Microsoft.Data.SqlClient", "6.1.8"),
+    ".SqlServer": ("Microsoft.Data.SqlClient", "7.1.2"),
 }
 
 
@@ -39,11 +39,12 @@ def write_packages(
     core_versions: dict[str, str | None] | None = None,
     package_version: str = PACKAGE_VERSION,
     annotation_leak: tuple[str, str] | None = None,
+    target_framework: str = "net11.0",
 ) -> None:
     """Create the exact five-package fixture without restoring or loading code."""
     for suffix, provider in PROVIDER_DEPENDENCIES.items():
         package_id = CORE_ID + suffix
-        dependencies = [(provider, "[10.0.15,10.1.0)")]
+        dependencies = [(provider, "[11.0.0,11.1.0)")]
         if suffix:
             core_version = (core_versions or {}).get(suffix, f"[{package_version}]")
             if core_version is not None:
@@ -61,7 +62,7 @@ def write_packages(
             dependencies.append((transport_leak[1], minimum))
 
         if (suffix == ".SqlServer" and pkcs_version is not None) or suffix == leak:
-            dependencies.append((PKCS_ID, pkcs_version or "10.0.15"))
+            dependencies.append((PKCS_ID, pkcs_version or "11.0.0"))
 
         if benchmark_leak is not None and suffix == benchmark_leak[0]:
             dependencies.append((benchmark_leak[1], "0.15.8"))
@@ -76,7 +77,7 @@ def write_packages(
             f'<package><metadata><id>{package_id}</id><version>{package_version}</version>'
             '<readme>README.md</readme><repository type="git" '
             'url="https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations" />'
-            f'<dependencies><group targetFramework="net10.0">{dependency_xml}'
+            f'<dependencies><group targetFramework="{target_framework}">{dependency_xml}'
             '</group></dependencies></metadata></package>'
         )
 
@@ -84,10 +85,10 @@ def write_packages(
             package.writestr(f"{package_id}.nuspec", nuspec)
             package.writestr("README.md", (REPOSITORY_ROOT / "README.md").read_bytes())
             package.writestr("LICENSE", (REPOSITORY_ROOT / "LICENSE").read_bytes())
-            package.writestr(f"lib/net10.0/{package_id}.dll", b"synthetic fixture, never loaded")
-            package.writestr(f"lib/net10.0/{package_id}.xml", "<doc />")
+            package.writestr(f"lib/{target_framework}/{package_id}.dll", b"synthetic fixture, never loaded")
+            package.writestr(f"lib/{target_framework}/{package_id}.xml", "<doc />")
             if annotation_leak is not None and suffix == annotation_leak[0] and annotation_leak[1] == "runtime":
-                package.writestr("lib/net10.0/JetBrains.Annotations.dll", b"synthetic runtime asset")
+                package.writestr(f"lib/{target_framework}/JetBrains.Annotations.dll", b"synthetic runtime asset")
 
             if suffix:
                 package.writestr(f"buildTransitive/{package_id}.props", "<Project />")
@@ -97,7 +98,7 @@ def write_packages(
                         package.writestr(f"schemas/{schema.name}", schema.read_bytes())
 
         with zipfile.ZipFile(directory / f"{package_id}.{package_version}.snupkg", "w") as symbols:
-            symbols.writestr(f"lib/net10.0/{package_id}.pdb", b"synthetic fixture, never loaded")
+            symbols.writestr(f"lib/{target_framework}/{package_id}.pdb", b"synthetic fixture, never loaded")
 
 
 def verify(
@@ -110,12 +111,14 @@ def verify(
     core_versions: dict[str, str | None] | None = None,
     package_version: str = PACKAGE_VERSION,
     annotation_leak: tuple[str, str] | None = None,
+    target_framework: str = "net11.0",
 ) -> subprocess.CompletedProcess[str]:
     """Exercise the real package gate against isolated archives, not a duplicate validator."""
     with tempfile.TemporaryDirectory() as temporary_root:
         directory = Path(temporary_root)
         write_packages(directory, pkcs_version, leak, omitted_schema, transport_versions,
-                       transport_leak, benchmark_leak, core_versions, package_version, annotation_leak)
+                       transport_leak, benchmark_leak, core_versions, package_version, annotation_leak,
+                       target_framework)
 
         return subprocess.run(
             ["bash", str(VERIFIER), "--package-dir", str(directory), "--version", package_version],
@@ -156,6 +159,19 @@ def verify_consumer_graph(
 class VerifyPackageContentsTests(unittest.TestCase):
     """Prove the security floor reaches consumers without crossing provider boundaries."""
 
+    def test_rejects_foreign_framework_assets_and_dependency_group(self) -> None:
+        """An older, platform-specific or next-major archive cannot satisfy the NET11 contract."""
+        for framework in ("net10.0", "net11.0-windows", "net12.0"):
+            with self.subTest(framework=framework):
+                # Arrange
+                target_framework = framework
+
+                # Act
+                result = verify("11.0.0", target_framework=target_framework)
+
+                # Assert
+                self.assertNotEqual(0, result.returncode)
+
     def test_accepts_exact_matching_core_for_stable_and_prerelease_packages(self) -> None:
         """Own-package ABI identity follows the complete stable or prerelease version."""
         for version in ("10.6.0", "10.6.0-dev", "10.6.0-rc.2"):
@@ -164,7 +180,7 @@ class VerifyPackageContentsTests(unittest.TestCase):
                 package_version = version
 
                 # Act
-                result = verify("10.0.15", package_version=package_version)
+                result = verify("11.0.0", package_version=package_version)
 
                 # Assert
                 self.assertEqual(0, result.returncode, result.stderr)
@@ -178,7 +194,7 @@ class VerifyPackageContentsTests(unittest.TestCase):
                     versions = {suffix: core_version}
 
                     # Act
-                    result = verify("10.0.15", core_versions=versions)
+                    result = verify("11.0.0", core_versions=versions)
 
                     # Assert
                     self.assertNotEqual(0, result.returncode)
@@ -193,7 +209,7 @@ class VerifyPackageContentsTests(unittest.TestCase):
                     leak = (suffix, kind)
 
                     # Act
-                    result = verify("10.0.15", annotation_leak=leak)
+                    result = verify("11.0.0", annotation_leak=leak)
 
                     # Assert
                     self.assertNotEqual(0, result.returncode)
@@ -208,7 +224,7 @@ class VerifyPackageContentsTests(unittest.TestCase):
                     leak = (suffix, name)
 
                     # Act
-                    result = verify("10.0.15", benchmark_leak=leak)
+                    result = verify("11.0.0", benchmark_leak=leak)
 
                     # Assert
                     self.assertNotEqual(0, result.returncode)
@@ -216,7 +232,7 @@ class VerifyPackageContentsTests(unittest.TestCase):
 
     def test_accepts_published_fixed_minimum(self) -> None:
         """Keep the patched minimum compatible with the full five-package contract."""
-        result = verify("10.0.15")
+        result = verify("11.0.0")
 
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertIn("package contents verified", result.stdout)
@@ -230,8 +246,8 @@ class VerifyPackageContentsTests(unittest.TestCase):
 
     def test_rejects_outdated_or_exactly_locked_published_minimum(self) -> None:
         """Reject stale servicing floors and exact locks that reject future patches."""
-        for version in ("9.0.11", "9.0.20", "9.0.21", "9.0.22", "9.0.23", "10.0.13", "10.0.14",
-                        "[9.0.11,10.0.0)", "[9.0.22]", "[9.0.23]", "[10.0.15]"):
+        for version in ("9.0.11", "9.0.20", "9.0.21", "9.0.22", "9.0.23", "10.0.13", "10.0.14", "10.0.15",
+                        "[9.0.11,10.0.0)", "[9.0.22]", "[9.0.23]", "[11.0.0]"):
             with self.subTest(version=version):
                 result = verify(version)
 
@@ -242,7 +258,7 @@ class VerifyPackageContentsTests(unittest.TestCase):
         """Central pinning must not introduce SQL Server assets into sibling packages."""
         for suffix in ("", ".MySql", ".PostgreSql", ".Sqlite"):
             with self.subTest(provider=CORE_ID + suffix):
-                result = verify("10.0.15", leak=suffix)
+                result = verify("11.0.0", leak=suffix)
 
                 self.assertNotEqual(0, result.returncode)
                 self.assertIn("SQL Server-only PKCS dependency", result.stderr)
@@ -250,14 +266,14 @@ class VerifyPackageContentsTests(unittest.TestCase):
     def test_rejects_missing_stale_or_exactly_locked_transport_minimums(self) -> None:
         """Transport updates must reach the nuspec as minimums, not only repository locks."""
         for name, minimum, previous in (("MySqlConnector", "2.6.2", "2.6.1"),
-                                        ("Microsoft.Data.SqlClient", "6.1.8", "6.1.7")):
+                                        ("Microsoft.Data.SqlClient", "7.1.2", "7.1.1")):
             for version in (None, previous, f"[{minimum}]"):
                 with self.subTest(package=name, version=version):
                     # Arrange
                     versions = {name: version}
 
                     # Act
-                    result = verify("10.0.15", transport_versions=versions)
+                    result = verify("11.0.0", transport_versions=versions)
 
                     # Assert
                     self.assertNotEqual(0, result.returncode)
@@ -275,7 +291,7 @@ class VerifyPackageContentsTests(unittest.TestCase):
                     leak = (suffix, name)
 
                     # Act
-                    result = verify("10.0.15", transport_leak=leak)
+                    result = verify("11.0.0", transport_leak=leak)
 
                     # Assert
                     self.assertNotEqual(0, result.returncode)
@@ -292,13 +308,13 @@ class VerifyPackageContentsTests(unittest.TestCase):
 
         for schema in schemas:
             with self.subTest(schema=schema):
-                result = verify("10.0.15", omitted_schema=schema)
+                result = verify("11.0.0", omitted_schema=schema)
 
                 self.assertNotEqual(0, result.returncode)
 
     def test_accepts_fixed_isolated_consumer_package(self) -> None:
         """The consumer guard must accept the patched package identity and kind."""
-        libraries = {f"{PKCS_ID}/10.0.15": {"type": "package"}}
+        libraries = {f"{PKCS_ID}/11.0.0": {"type": "package"}}
 
         result = verify_consumer_graph(libraries)
 
@@ -314,9 +330,10 @@ class VerifyPackageContentsTests(unittest.TestCase):
             {f"{PKCS_ID}/9.0.23": {"type": "package"}},
             {f"{PKCS_ID}/10.0.13": {"type": "package"}},
             {f"{PKCS_ID}/10.0.14": {"type": "package"}},
+            {f"{PKCS_ID}/10.0.15": {"type": "package"}},
             {f"{PKCS_ID}/9.0.22": {"type": "project"}},
             {f"{PKCS_ID}/9.0.23": {"type": "project"}},
-            {f"{PKCS_ID}/10.0.15": {"type": "project"}},
+            {f"{PKCS_ID}/11.0.0": {"type": "project"}},
         )
 
         for libraries in variants:
@@ -341,7 +358,7 @@ class VerifyPackageContentsTests(unittest.TestCase):
     def test_rejects_missing_stale_or_non_package_transport_consumer_assets(self) -> None:
         """Missing, previous-version or project substitutes cannot satisfy package qualification."""
         for name, minimum, previous in (("MySqlConnector", "2.6.2", "2.6.1"),
-                                        ("Microsoft.Data.SqlClient", "6.1.8", "6.1.7")):
+                                        ("Microsoft.Data.SqlClient", "7.1.2", "7.1.1")):
             variants = ({}, {f"{name}/{previous}": {"type": "package"}},
                         {f"{name}/{minimum}": {"type": "project"}})
 

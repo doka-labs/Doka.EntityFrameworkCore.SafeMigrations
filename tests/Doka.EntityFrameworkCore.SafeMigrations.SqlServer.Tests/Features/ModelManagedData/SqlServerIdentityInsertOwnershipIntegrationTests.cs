@@ -488,7 +488,8 @@ public sealed class SqlServerIdentityInsertOwnershipIntegrationTests : SqlServer
             beforeConfirmation: true);
 
         var options = new DbContextOptionsBuilder()
-            .UseSqlServer(session)
+            // WHY: This independently configured live context also executes on SQL Server 2019.
+            .UseSqlServer(session, provider => provider.UseCompatibilityLevel(150))
             .UseSqlServerSafeMigrations()
             .AddInterceptors(pause)
             .Options;
@@ -541,7 +542,8 @@ public sealed class SqlServerIdentityInsertOwnershipIntegrationTests : SqlServer
     private static DbContext CreateRetainedContext(
         SqlConnection session
     ) => new(new DbContextOptionsBuilder()
-        .UseSqlServer(session)
+        // WHY: Retained-session recovery is qualified on SQL Server 2019 as well as newer engines.
+        .UseSqlServer(session, provider => provider.UseCompatibilityLevel(150))
         .UseSqlServerSafeMigrations()
         .Options);
 

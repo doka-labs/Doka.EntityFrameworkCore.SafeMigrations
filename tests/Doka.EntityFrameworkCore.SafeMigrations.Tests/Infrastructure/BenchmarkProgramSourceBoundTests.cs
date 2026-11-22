@@ -3,14 +3,59 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 /// <summary>Pins native job, filter and artifact behavior while binding only source-project discovery.</summary>
 public sealed class BenchmarkProgramSourceBoundTests
 {
+    /// <summary>Preserves native asynchronous validation, including unsupported runtime settings.</summary>
+    /// <param name="unsupportedJit">Whether the native configuration selects the rejected legacy JIT.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SourceBoundToolchain_PreservesNativeValidation(
+        bool unsupportedJit
+    )
+    {
+        // Arrange
+        var native = CsProjCoreToolchain.NetCoreApp11_0;
+        var config = ManualConfig.Create(DefaultConfig.Instance);
+        config.AddJob(unsupportedJit
+            ? Job.Dry.WithJit(Jit.LegacyJit)
+            : Job.Dry);
+
+        var selected = await BenchmarkConverter.TypeToBenchmarksAsync(
+            typeof(BenchmarkProgramOutcomeProbe),
+            config,
+            CancellationToken.None);
+
+        var benchmark = selected.BenchmarksCases[0];
+        var resolver = new CompositeResolver(EnvironmentResolver.Instance, EngineResolver.Instance);
+        var expected = new List<(bool Critical, string Message)>();
+        await foreach (var error in native.ValidateAsync(benchmark, resolver)
+                           .WithCancellation(CancellationToken.None))
+        {
+            expected.Add((error.IsCritical, error.Message));
+        }
+
+        var bound = new SourceBoundToolchain(native, (CsProjBuilder)native.Builder);
+        var actual = new List<(bool Critical, string Message)>();
+
+        // Act
+        await foreach (var error in bound.ValidateAsync(benchmark, resolver)
+                           .WithCancellation(CancellationToken.None))
+        {
+            actual.Add((error.IsCritical, error.Message));
+        }
+
+        // Assert
+        Assert.Equal(expected, actual);
+        Assert.Equal(unsupportedJit, actual.Any(static error => error.Critical));
+    }
+
     /// <summary>Preserves native job expansion and every configured leaf characteristic except the toolchain.</summary>
     /// <param name="arguments">The native CLI selection of job and runtime.</param>
     [Theory]
     [InlineData("--job", "Default")]
     [InlineData("--job", "Dry")]
     [InlineData("--job", "Short")]
-    [InlineData("--runtimes", "net10.0")]
-    [InlineData("--job", "Dry", "--runtimes", "net10.0")]
+    [InlineData("--runtimes", "net11.0")]
+    [InlineData("--job", "Dry", "--runtimes", "net11.0")]
     public void SourceBoundConfig_PreservesNativeExpandedJob(
         params string[] arguments
     )
@@ -18,6 +63,8 @@ public sealed class BenchmarkProgramSourceBoundTests
         // Arrange
         var baseConfig = ManualConfig.Create(DefaultConfig.Instance);
         var (parsed, parsedConfig, _) = ConfigParser.Parse(arguments, NullLogger.Instance, baseConfig);
+        ArgumentNullException.ThrowIfNull(parsedConfig);
+
         var nativeConfig = ImmutableConfigBuilder.Create(ManualConfig.Union(baseConfig, parsedConfig));
         var nativeJob = nativeConfig
             .GetJobs()
@@ -25,10 +72,12 @@ public sealed class BenchmarkProgramSourceBoundTests
 
         var nativeToolchain = nativeJob.Infrastructure.TryGetToolchain(out var selected)
             ? selected
-            : CsProjCoreToolchain.NetCoreApp10_0;
+            : CsProjCoreToolchain.NetCoreApp11_0;
 
-        var nativeGenerator = (CsProjGenerator)nativeToolchain.Generator;
-        var nativeSettings = JobSettings(nativeJob);
+        var nativeGenerator = (CsProjBuilder)nativeToolchain.Builder;
+        // WHY: BDN 0.16 couples an explicit toolchain to its runtime. Compare the native
+        // resolved assignment, not a raw job whose implicit runtime has not been materialized.
+        var nativeSettings = JobSettings(nativeJob.WithToolchain(nativeToolchain));
 
         // Act
         IConfig boundConfig = new SourceBoundConfig(baseConfig, parsedConfig);
@@ -45,14 +94,14 @@ public sealed class BenchmarkProgramSourceBoundTests
         var boundJob = Assert.Single(boundJobs);
         Assert.Equal(nativeSettings, Assert.Single(boundSettings));
         var boundToolchain = Assert.IsType<SourceBoundToolchain>(boundJob.Infrastructure.Toolchain);
-        Assert.Equal(nativeToolchain.Name, boundToolchain.Name);
-        Assert.Same(nativeToolchain.Builder, boundToolchain.Builder);
+        Assert.Equal(nativeToolchain.ToString(), boundToolchain.ToString());
+        Assert.Same(nativeToolchain.Runtime, boundToolchain.Runtime);
         Assert.Same(nativeToolchain.Executor, boundToolchain.Executor);
-        var boundGenerator = Assert.IsType<CsProjGenerator>(boundToolchain.Generator, exactMatch: false);
-        Assert.Equal(nativeGenerator.TargetFrameworkMoniker, boundGenerator.TargetFrameworkMoniker);
-        Assert.Equal(nativeGenerator.CliPath, boundGenerator.CliPath);
-        Assert.Equal(nativeGenerator.PackagesPath, boundGenerator.PackagesPath);
-        Assert.Equal(nativeGenerator.RuntimeFrameworkVersion, boundGenerator.RuntimeFrameworkVersion);
+        Assert.Same(((IHasSettings)nativeToolchain).Settings, ((IHasSettings)boundToolchain).Settings);
+        var boundGenerator = Assert.IsType<CsProjBuilder>(boundToolchain.Builder, exactMatch: false);
+        Assert.Same(nativeGenerator.Settings, boundGenerator.Settings);
+        Assert.Equal(nativeGenerator.EntryPointType, boundGenerator.EntryPointType);
+        Assert.Equal(nativeGenerator.BenchmarkRunCallType, boundGenerator.BenchmarkRunCallType);
     }
 
     /// <summary>Keeps native in-process toolchains and job settings without wrapping their generator.</summary>
@@ -68,6 +117,8 @@ public sealed class BenchmarkProgramSourceBoundTests
         // Arrange
         var baseConfig = ManualConfig.Create(DefaultConfig.Instance);
         var (parsed, parsedConfig, _) = ConfigParser.Parse(arguments, NullLogger.Instance, baseConfig);
+        ArgumentNullException.ThrowIfNull(parsedConfig);
+
         var nativeConfig = ImmutableConfigBuilder.Create(ManualConfig.Union(baseConfig, parsedConfig));
         var nativeJob = nativeConfig
             .GetJobs()
@@ -89,6 +140,7 @@ public sealed class BenchmarkProgramSourceBoundTests
         Assert.True(parsed);
         var boundJob = Assert.Single(boundJobs);
         Assert.Equal(nativeSettings, Assert.Single(boundSettings));
+        Assert.NotNull(boundJob.Infrastructure.Toolchain);
         Assert.True(boundJob.Infrastructure.Toolchain.IsInProcess);
         Assert.Same(nativeJob.Infrastructure.Toolchain, boundJob.Infrastructure.Toolchain);
     }
@@ -112,6 +164,7 @@ public sealed class BenchmarkProgramSourceBoundTests
             ["--filter", "*", option, evidence.DirectoryPath],
             NullLogger.Instance,
             baseConfig);
+        ArgumentNullException.ThrowIfNull(parsedConfig);
 
         // Act
         var boundConfig = new SourceBoundConfig(baseConfig, parsedConfig);
@@ -144,6 +197,7 @@ public sealed class BenchmarkProgramSourceBoundTests
             ["--filter", filter, "--job", "Dry"],
             NullLogger.Instance,
             baseConfig);
+        ArgumentNullException.ThrowIfNull(parsedConfig);
 
         var boundConfig = new SourceBoundConfig(baseConfig, parsedConfig);
         var (validTypes, runnableTypes) = TypeFilter.GetTypesWithRunnableBenchmarks(
@@ -205,7 +259,7 @@ public sealed class BenchmarkProgramSourceBoundTests
     {
         // Arrange
         var benchmarkRoot = Path.Combine(RepositoryRoot(), "benchmarks");
-        var sharedPath = Path.Combine(benchmarkRoot, "Directory.Build.props");
+        var sharedPath = Path.Combine(benchmarkRoot, "Shared", "BenchmarkProject.props");
         var projectPath = Path.Combine(benchmarkRoot, projectName, projectName + ".csproj");
 
         // Act
@@ -229,18 +283,20 @@ public sealed class BenchmarkProgramSourceBoundTests
         Assert.Null(reference.Attribute("ExcludeAssets"));
         Assert.Null(reference.Element("ExcludeAssets"));
         Assert.Empty(localOverrides);
+        var import = Assert.Single(project.Descendants("Import"));
+        Assert.Equal("../Shared/BenchmarkProject.props", (string?)import.Attribute("Project"));
     }
 
-    /// <summary>Isolates generator instances with identical assembly, partition and program names.</summary>
+    /// <summary>Isolates builder instances with identical assembly, partition and program names.</summary>
     [Fact]
-    public void SourceBoundGenerator_IsolatesIdenticalNativeBuildPartitionAcrossInvocations()
+    public void SourceBoundBuilder_IsolatesIdenticalNativeBuildPartitionAcrossInvocations()
     {
         // Arrange
         var partition = CreateBuildPartition();
-        var firstGenerator = CreateSourceBoundGenerator();
-        var secondGenerator = CreateSourceBoundGenerator();
+        var firstGenerator = CreateSourceBoundBuilder();
+        var secondGenerator = CreateSourceBoundBuilder();
         var nativePath = BuildDirectory(
-            CsProjCoreToolchain.NetCoreApp10_0.Generator,
+            new NativeProjectControlBuilder((CsProjBuilder)CsProjCoreToolchain.NetCoreApp11_0.Builder),
             partition,
             partition.ProgramName);
 
@@ -256,13 +312,13 @@ public sealed class BenchmarkProgramSourceBoundTests
         Assert.StartsWith(nativePath + "-", secondPath, StringComparison.Ordinal);
     }
 
-    /// <summary>Keeps the build directory stable for repeated calculations on the same generator.</summary>
+    /// <summary>Keeps the build directory stable for repeated calculations on the same builder.</summary>
     [Fact]
-    public void SourceBoundGenerator_ReusesOwnBuildDirectoryForSamePartitionAndProgram()
+    public void SourceBoundBuilder_ReusesOwnBuildDirectoryForSamePartitionAndProgram()
     {
         // Arrange
         var partition = CreateBuildPartition();
-        var generator = CreateSourceBoundGenerator();
+        var generator = CreateSourceBoundBuilder();
 
         // Act
         var firstPath = BuildDirectory(generator, partition, partition.ProgramName);
@@ -275,7 +331,7 @@ public sealed class BenchmarkProgramSourceBoundTests
 
     /// <summary>Isolates generated builds even though separate report roots do not change native build paths.</summary>
     [Fact]
-    public void SourceBoundGenerator_IsolatesBuildsIndependentlyOfReportArtifactDirectories()
+    public void SourceBoundBuilder_IsolatesBuildsIndependentlyOfReportArtifactDirectories()
     {
         // Arrange
         using var evidence = new BenchmarkProgramTestEvidence();
@@ -289,10 +345,11 @@ public sealed class BenchmarkProgramSourceBoundTests
 
         var firstPartition = CreateBuildPartition(firstConfig);
         var secondPartition = CreateBuildPartition(secondConfig);
-        var firstGenerator = CreateSourceBoundGenerator();
-        var secondGenerator = CreateSourceBoundGenerator();
+        var firstGenerator = CreateSourceBoundBuilder();
+        var secondGenerator = CreateSourceBoundBuilder();
         const string programName = "same-assembly-Dry-1";
-        var nativeGenerator = CsProjCoreToolchain.NetCoreApp10_0.Generator;
+        var nativeGenerator = new NativeProjectControlBuilder(
+            (CsProjBuilder)CsProjCoreToolchain.NetCoreApp11_0.Builder);
 
         // Act
         var firstNativePath = BuildDirectory(nativeGenerator, firstPartition, programName);
@@ -302,7 +359,12 @@ public sealed class BenchmarkProgramSourceBoundTests
 
         // Assert
         Assert.NotEqual(firstConfig.ArtifactsPath, secondConfig.ArtifactsPath);
-        Assert.Equal(firstNativePath, secondNativePath);
+        // WHY: BDN 0.16 assigns distinct partition IDs even when only report roots differ.
+        // Both native paths must still share the source-local build root, not either report root.
+        Assert.NotEqual(firstNativePath, secondNativePath);
+        Assert.Equal(Path.GetDirectoryName(firstNativePath), Path.GetDirectoryName(secondNativePath));
+        var sourceProjectDirectory = Assert.IsType<string>(Path.GetDirectoryName(ExpectedTestProjectPath()));
+        Assert.Equal(Path.Combine(sourceProjectDirectory, ".bdn"), Path.GetDirectoryName(firstNativePath));
         Assert.NotEqual(firstPath, secondPath);
         Assert.True(Path.IsPathFullyQualified(firstPath));
         Assert.True(Path.IsPathFullyQualified(secondPath));
@@ -323,27 +385,43 @@ public sealed class BenchmarkProgramSourceBoundTests
             .TypeToBenchmarks(typeof(BenchmarkProgramOutcomeProbe), config)
             .BenchmarksCases[0];
 
-        var info = new BenchmarkBuildInfo(benchmark, benchmark.Config, 0);
+        var info = new BenchmarkBuildInfo(benchmark, benchmark.Config, 0, new CompositeInProcessDiagnoser([]));
 
         return new BuildPartition([info], EngineResolver.Instance);
     }
 
-    /// <summary>Creates an independent source-bound generator for the same native toolchain.</summary>
-    /// <returns>A generator with its own invocation-scoped build-directory identity.</returns>
-    private static IGenerator CreateSourceBoundGenerator()
+    /// <summary>Creates an independent source-bound builder for the same native toolchain.</summary>
+    /// <returns>A builder with its own invocation-scoped build-directory identity.</returns>
+    private static IBuilder CreateSourceBoundBuilder()
     {
-        var native = CsProjCoreToolchain.NetCoreApp10_0;
+        var native = CsProjCoreToolchain.NetCoreApp11_0;
 
-        return new SourceBoundToolchain(native, (CsProjGenerator)native.Generator).Generator;
+        return new SourceBoundToolchain(native, (CsProjBuilder)native.Builder).Builder;
+    }
+
+    /// <summary>Isolates native path calculation from its unrelated recursive project-name search.</summary>
+    private sealed class NativeProjectControlBuilder : CsProjBuilder
+    {
+        /// <summary>Keeps native path and build settings while selecting the independently known source.</summary>
+        /// <param name="native">The native builder whose immutable settings remain authoritative.</param>
+        internal NativeProjectControlBuilder(
+            CsProjBuilder native
+        ) : base(native.Settings) { }
+
+        /// <inheritdoc />
+        protected override FileInfo GetProjectFilePath(
+            Type benchmarkTarget,
+            ILogger logger
+        ) => new(ExpectedTestProjectPath());
     }
 
     /// <summary>Invokes only the protected path calculation, including native behavior as a control.</summary>
-    /// <param name="generator">The native or source-bound generator.</param>
+    /// <param name="generator">The native or source-bound builder.</param>
     /// <param name="partition">The same native build input used for the compared invocations.</param>
     /// <param name="programName">The deliberately identical native program name.</param>
     /// <returns>The calculated directory without creating files or launching benchmark children.</returns>
     private static string BuildDirectory(
-        IGenerator generator,
+        IBuilder generator,
         BuildPartition partition,
         string programName
     )
@@ -353,10 +431,10 @@ public sealed class BenchmarkProgramSourceBoundTests
                 .GetMethod(
                     "GetBuildArtifactsDirectoryPath",
                     BindingFlags.Instance | BindingFlags.NonPublic)
-            ?? throw new MissingMethodException("Native generator build-directory calculation is unavailable.");
+            ?? throw new MissingMethodException("Native builder build-directory calculation is unavailable.");
 
         return method.Invoke(generator, [partition, programName]) as string
-            ?? throw new InvalidDataException("Native generator did not return a build directory.");
+            ?? throw new InvalidDataException("Native builder did not return a build directory.");
     }
 
     /// <summary>Captures all configured leaf values except the one intentionally changed by source binding.</summary>

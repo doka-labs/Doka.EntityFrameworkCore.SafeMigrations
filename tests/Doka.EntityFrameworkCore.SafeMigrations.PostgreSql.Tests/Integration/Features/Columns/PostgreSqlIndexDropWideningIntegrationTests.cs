@@ -799,7 +799,8 @@ public sealed class PostgreSqlIndexDropWideningIntegrationTests : PostgreSqlInte
         ) => optionsBuilder
             .UseNpgsql(
                 _connectionString,
-                options => options.MigrationsHistoryTable("__IntegerUpgradeHistory"))
+                // WHY: The same widening history must remain executable on PostgreSQL14.
+                options => options.SetPostgresVersion(14, 0).MigrationsHistoryTable("__IntegerUpgradeHistory"))
             .UsePostgreSqlSafeMigrations<IntegerUpgradeDbContext>();
     }
 

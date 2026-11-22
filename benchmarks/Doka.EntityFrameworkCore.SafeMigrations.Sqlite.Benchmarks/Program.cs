@@ -1,13 +1,16 @@
 if (args is ["--maintenance-attribution", .. var maintenanceArgs])
 {
-    return SqliteMaintenanceAttribution.Run(maintenanceArgs);
+    return await SqliteMaintenanceAttribution.RunAsync(maintenanceArgs, CancellationToken.None);
 }
 
-return BenchmarkProgram.Run(
+return await BenchmarkProgram.RunAsync(
     args,
-    typeof(SqliteGenerationBenchmarks),
-    typeof(SqliteMigrationBenchmarks),
-    typeof(SqliteModelManagedDataAnalysisBenchmarks));
+    [
+        typeof(SqliteGenerationBenchmarks),
+        typeof(SqliteMigrationBenchmarks),
+        typeof(SqliteModelManagedDataAnalysisBenchmarks),
+    ],
+    CancellationToken.None);
 
 internal sealed class SqliteGenerationContext : DbContext
 {

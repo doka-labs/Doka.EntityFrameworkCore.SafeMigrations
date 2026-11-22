@@ -481,7 +481,8 @@ public sealed class PostgreSqlTablesIntegrationTests : PostgreSqlSafeMigrationIn
             cancellationToken: CancellationToken.None);
 
         var options = new DbContextOptionsBuilder<StandaloneForeignKeyContext>()
-            .UseNpgsql(connectionString)
+            // WHY: Standalone contexts bypass the shared fixture's PostgreSQL14 dialect selection.
+            .UseNpgsql(connectionString, provider => provider.SetPostgresVersion(14, 0))
             .UsePostgreSqlSafeMigrations()
             .Options;
 

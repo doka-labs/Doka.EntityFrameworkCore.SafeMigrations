@@ -18,9 +18,11 @@ The maintainer approved implementation of the standards remediation on November
 product. Those decisions do not remove established SafeMigrations functionality,
 qualification, package, security or publishing requirements.
 
-The baseline remains .NET 10 and EF Core 10. The approved xUnit 2 test platform
-and its assembly-owned container framework remain in use. .NET 11, a different
-test platform and additional release lines require separate authorization.
+The baseline is .NET 11 and EF Core 11 under the separately approved migration
+of November 21, 2026. The approved xUnit 2 test platform and its assembly-owned
+container framework remain in use. A different test platform and actual hosted
+release-line activation still require separate authorization. The earlier
+standards-adoption evidence below remains historical .NET 10 evidence.
 
 Corrections use existing internal contracts. They do not add public overloads,
 options or consumer responsibilities merely to simplify their implementation.

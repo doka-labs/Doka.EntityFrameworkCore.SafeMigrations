@@ -349,9 +349,9 @@ verify_consumer() {
 
             # This consumer has no repository central pin; the package itself
             # must select the patched dependency in every tooling profile.
-            jq -e '.libraries["System.Security.Cryptography.Pkcs/10.0.15"].type == "package"' \
+            jq -e '.libraries["System.Security.Cryptography.Pkcs/11.0.0"].type == "package"' \
                 "$assets_file" >/dev/null
-            jq -e '.libraries["Microsoft.Data.SqlClient/6.1.8"].type == "package"' \
+            jq -e '.libraries["Microsoft.Data.SqlClient/7.1.2"].type == "package"' \
                 "$assets_file" >/dev/null
 
             if grep -Fq 'Doka.EntityFrameworkCore.SafeMigrations.MySql/' "$assets_file" \

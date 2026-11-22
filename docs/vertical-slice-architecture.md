@@ -179,7 +179,7 @@ the production row/cell batching limits and persist command/allocation evidence.
 Statistical native catalog and runtime measurements live in explicitly selected
 provider BenchmarkDotNet modes.
 
-The five isolated benchmark executables use BenchmarkDotNet 0.15.8 rather than
+The five isolated benchmark executables use BenchmarkDotNet 0.16.0-preview.2 rather than
 a shared handwritten timer or budget evaluator. Shared configuration and
 execution/export validation are compile-linked, not a cross-provider runtime
 dependency. Explicitly requested Dry runs verify execution and native full JSON;

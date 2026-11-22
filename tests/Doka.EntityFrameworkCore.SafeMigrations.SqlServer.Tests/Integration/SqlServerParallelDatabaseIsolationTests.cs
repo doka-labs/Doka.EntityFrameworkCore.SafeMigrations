@@ -77,7 +77,7 @@ public sealed class SqlServerParallelDatabaseIsolationTests : SqlServerIntegrati
 
                 await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: cancellationToken);
                 await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: cancellationToken);
-                await context.Database.ExecuteSqlInterpolatedAsync(
+                await context.Database.ExecuteSqlAsync(
                     $"INSERT dbo.parallel_isolation (Id) VALUES ({id});",
                     cancellationToken);
 

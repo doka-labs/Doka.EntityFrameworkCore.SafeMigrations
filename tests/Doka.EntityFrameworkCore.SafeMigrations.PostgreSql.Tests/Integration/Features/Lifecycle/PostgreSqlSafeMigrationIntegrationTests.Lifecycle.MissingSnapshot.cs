@@ -170,7 +170,8 @@ public sealed class PostgreSqlLifecycleMissingSnapshotIntegrationTests : Postgre
     )
     {
         var options = new DbContextOptionsBuilder<SnapshotFreeContext>()
-            .UseNpgsql(connectionString)
+            // WHY: Even the snapshot-free path must retain the oldest matrix engine's SQL dialect.
+            .UseNpgsql(connectionString, provider => provider.SetPostgresVersion(14, 0))
             .UsePostgreSqlSafeMigrations()
             .Options;
 

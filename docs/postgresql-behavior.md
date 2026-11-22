@@ -1,5 +1,10 @@
 # PostgreSQL behavior
 
+The current source line targets .NET/EF Core 11 and Npgsql 11. Npgsql's default
+PostgreSQL target is now 16; explicitly select an older target for PostgreSQL
+14/15. See the [11.0 upgrade](support-and-qualification.md#upgrade-to-1100).
+Historical 10.x evidence below does not qualify a new 11.x package.
+
 Version 10.7.3 preserves the temporal and relation-aware expression/index/collation
 corrections from 10.7.2 and fixes owned asynchronous work/cleanup lifetimes.
 Certified generated/CHECK contracts and native generated-source DROP guards
@@ -39,7 +44,7 @@ fast paths remain; native timing comparisons are informational.
 
 ## Operational summary
 
-The PostgreSQL adapter composes Npgsql's EF Core 10 provider. It classifies
+The PostgreSQL adapter composes Npgsql's EF Core 11 provider. It classifies
 SafeMigrations operations through parameterized catalog queries and renders
 guarded operations through the configured Npgsql migrations SQL generator.
 PostgreSQL 14 through 18 are qualified independently; the exact pinned matrix
@@ -206,8 +211,8 @@ migration source. See [model-managed-data ownership](model-managed-data-ownershi
 
 The adapter requires explicit stored generation in the qualified engine matrix:
 configure `HasComputedColumnSql(expression, stored: true)` or the equivalent
-expected definition. Npgsql 10 treats an omitted storage flag as virtual, not
-as a stored default. Virtual generation remains
+expected definition. Do not rely on an omitted storage flag to request stored
+generation. Virtual generation remains
 `Unsupported / virtual_generated_column`, including
 on a newer server that offers additional native capabilities. No storage form
 is silently substituted. EF-captured computed SQL and CHECKs retain the bounded

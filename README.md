@@ -10,7 +10,7 @@
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/badge)](https://scorecard.dev/viewer/?uri=github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations)
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/14265/badge)](https://www.bestpractices.dev/projects/14265)
 
-SafeMigrations is a fail-closed EF Core 10 migration library for databases whose
+SafeMigrations is a fail-closed EF Core 11 migration library for databases whose
 starting schema may differ between application instances. It supports one
 canonical migration sequence across MySQL, MariaDB, PostgreSQL, SQLite, and
 SQL Server without assuming a common legacy migration history or deleting
@@ -26,18 +26,19 @@ equivalent.
 
 ## Platform and packages
 
-- .NET 10 and EF Core 10
+- Version 11.0.0 targets .NET 11 and EF Core 11. Applications remaining on
+  .NET/EF Core 10 use the compatible 10.x line on `maintenance/10.x`.
 - `Doka.EntityFrameworkCore.SafeMigrations`: provider-neutral intent,
   definitions, planning, reports, and `MigrationBuilder` extensions
 - `Doka.EntityFrameworkCore.SafeMigrations.MySql`: MySQL and MariaDB adapter on
-  the public `Doka.EntityFrameworkCore.MySql` 10.7 operation-handler (minimum 10.7.0) and
+  the public `Doka.EntityFrameworkCore.MySql` 11.0 operation-handler (minimum 11.0.0) and
   typed migration-metadata SPI
 - `Doka.EntityFrameworkCore.SafeMigrations.PostgreSql`: PostgreSQL adapter on
-  Npgsql 10
+  Npgsql 11
 - `Doka.EntityFrameworkCore.SafeMigrations.Sqlite`: SQLite adapter on the
-  bundle-neutral official EF Core SQLite 10 provider core
+  bundle-neutral official EF Core SQLite 11 provider core
 - `Doka.EntityFrameworkCore.SafeMigrations.SqlServer`: SQL Server adapter on
-  the official EF Core SQL Server 10 provider
+  the official EF Core SQL Server 11 provider
 
 The declared release-qualification matrix is:
 
@@ -54,37 +55,36 @@ evidence. See [Support and qualification](docs/support-and-qualification.md).
 
 ## Installation
 
-Install one provider package. The core package is included transitively. The
-examples target version 10.7.3 and select that version exactly, so
-restore does not move to another version implicitly. Release changes and
-compatibility notes belong in the [10.7.3 changelog](CHANGELOG.md#1073---2026-11-20)
-and [upgrade notes](docs/support-and-qualification.md#upgrade-to-1073).
+Install one provider package. The matching core package is included transitively.
+Release changes and compatibility notes belong in the
+[changelog](CHANGELOG.md#1100---2026-11-22) and
+[.NET 11 upgrade notes](docs/support-and-qualification.md#upgrade-to-1100).
 Applications upgrading from before 10.7.0 must also review its
 [explicit cancellation-token requirement](docs/support-and-qualification.md#upgrade-to-1070).
 
 ```bash
-package_version='10.7.3'
+package_version='11.0.0'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.MySql --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.7.3'
+package_version='11.0.0'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.PostgreSql --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.7.3'
+package_version='11.0.0'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.Sqlite --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.7.3'
+package_version='11.0.0'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.SqlServer --version "$package_version"
 ```
 
@@ -1071,8 +1071,10 @@ Release with the exact ten package files, checksums, SPDX manifest, and
 `release-provenance.intoto.jsonl`. Candidates are marked prerelease and never
 replace the latest stable release.
 Maintained lines share the existing publisher, retain their own qualification
-and cannot move Latest backwards. Only main/10 is active; additional lines stay
-inactive and no .NET 11 adoption is implied. See [Release lines](docs/operations/release-lines.md).
+and cannot move Latest backwards. Main uses .NET/EF Core 11; `maintenance/10.x`
+retains .NET/EF Core 10. Both lines use the same publisher with independent
+qualification and framework-bounded Dependabot targets.
+See [Release lines](docs/operations/release-lines.md).
 See [Publication operations](docs/operations/release-publication.md) for the
 step-by-step maintainer guide and current readiness, and
 [Release process](docs/release-process.md) for the qualification contract.

@@ -22,6 +22,8 @@ public sealed class SqlServerIntegerUpgradeContext : DbContext
         optionsBuilder.UseSqlServer(
             _connectionString,
             provider => provider
+                // WHY: Keep the upgrade's generated SQL valid for the SQL Server 2019 qualification cell.
+                .UseCompatibilityLevel(150)
                 .MigrationsAssembly(typeof(SqlServerIntegerUpgradeContext).Assembly.FullName)
                 .CommandTimeout(SafeMigrationDbContext.CommandTimeoutSeconds));
 

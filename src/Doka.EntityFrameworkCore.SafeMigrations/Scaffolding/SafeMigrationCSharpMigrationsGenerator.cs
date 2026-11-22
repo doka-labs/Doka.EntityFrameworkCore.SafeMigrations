@@ -5,8 +5,8 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// SafeMigrations-owned migration source.
 /// </summary>
 /// <remarks>
-/// Snapshot and metadata generation remain provider-owned so provider-specific
-/// namespace discovery and model rendering cannot be bypassed.
+/// Snapshot and metadata rendering remain provider-owned. Only the shared migration type name
+/// is normalized so EF11's timestamp identity remains unique without a generated underscore prefix.
 /// </remarks>
 internal sealed class SafeMigrationCSharpMigrationsGenerator : IMigrationsCodeGenerator
 {
@@ -79,7 +79,7 @@ internal sealed class SafeMigrationCSharpMigrationsGenerator : IMigrationsCodeGe
 
         var source = _providerGenerator.GenerateMigration(
             migrationNamespace,
-            migrationName,
+            GetMigrationTypeName(migrationName),
             effectiveUpOperations,
             effectiveDownOperations);
 
@@ -105,21 +105,39 @@ internal sealed class SafeMigrationCSharpMigrationsGenerator : IMigrationsCodeGe
     ) => _providerGenerator.GenerateMetadata(
         migrationNamespace,
         contextType,
-        migrationName,
+        GetMigrationTypeName(migrationName),
         migrationId,
         targetModel);
 
+    /// <summary>Retains EF11's timestamp uniqueness while normalizing only its canonical type-name separator.</summary>
+    /// <param name="migrationName">The framework-supplied migration name or canonical timestamp-prefixed ID.</param>
+    /// <returns>The provider class-name input; the separate migration-history identity is never changed.</returns>
+    // WHY: EF11 passes the full ID to both class renderers. Prefixing its timestamp with a word avoids
+    // CA1707 without dropping uniqueness, suppressing diagnostics or rewriting provider-generated source.
+    private string GetMigrationTypeName(
+        string migrationName
+    ) => !_configuration.IsEnabled
+        || migrationName.Length <= 15
+        || migrationName[14] != '_'
+        || migrationName.AsSpan(0, 14).ContainsAnyExceptInRange('0', '9')
+            ? migrationName
+            : string.Concat("Migration", migrationName.AsSpan(0, 14), migrationName.AsSpan(15));
+
+    // WHY: EF11 carries the latest migration identity into the provider-owned snapshot.
+    // Keep snapshot generation provider-owned, including its latest-migration annotation.
     /// <inheritdoc />
     public string GenerateSnapshot(
         string? modelSnapshotNamespace,
         Type contextType,
         string modelSnapshotName,
-        IModel model
+        IModel model,
+        string? latestMigrationId = null
     ) => _providerGenerator.GenerateSnapshot(
         modelSnapshotNamespace,
         contextType,
         modelSnapshotName,
-        model);
+        model,
+        latestMigrationId);
 
     private static IReadOnlyList<MigrationOperation> ConsumeDesignTimeServicesGuard(
         IReadOnlyList<MigrationOperation> operations,
@@ -245,6 +263,7 @@ internal sealed class SafeMigrationCSharpMigrationsGenerator : IMigrationsCodeGe
     /// <summary>
     /// Converts the one validated block-scoped namespace emitted by EF Core to
     /// a file-scoped namespace without reformatting the generated migration body.
+    /// EF11's already file-scoped output is preserved unchanged.
     /// </summary>
     /// <param name="source">The complete EF Core-generated migration source.</param>
     /// <param name="formattedNamespace">The escaped namespace identifier.</param>
@@ -263,6 +282,23 @@ internal sealed class SafeMigrationCSharpMigrationsGenerator : IMigrationsCodeGe
         var blockHeader = string.Concat(declaration, newline, "{", newline);
         var headerIndex = source.IndexOf(blockHeader, StringComparison.Ordinal);
         var footer = string.Concat("}", newline);
+
+        // WHY: EF11 already emits file-scoped namespaces. Preserve its exact body,
+        // but do not accept duplicate or mixed declarations as an identity fast path.
+        var fileDeclaration = declaration + ";";
+        var fileHeaderIndex = FindExactLineStart(source, fileDeclaration, newline, startIndex: 0);
+        if (fileHeaderIndex >= 0)
+        {
+            if (headerIndex >= 0
+                || FindExactLineStart(
+                    source, fileDeclaration, newline, fileHeaderIndex + fileDeclaration.Length + newline.Length) >= 0)
+            {
+                throw new InvalidOperationException(
+                    "The EF Core C# migrations generator emitted duplicate or mixed namespace declarations.");
+            }
+
+            return source;
+        }
 
         if (headerIndex < 0
             || source.IndexOf(blockHeader, headerIndex + blockHeader.Length, StringComparison.Ordinal) >= 0

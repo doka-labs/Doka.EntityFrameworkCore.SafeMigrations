@@ -29,9 +29,12 @@
                       Version="$(EfCorePackageVersion)" />
   </ItemGroup>
 
+  <!-- WHY: EF11 Tools no longer carries Design transitively. CLI and scaffolding
+       need an explicit Design reference in both supported tooling profiles. -->
   <ItemGroup Label="Source - EF Design"
              Condition="'$(SafeMigrationsPackageConsumerMode)' == 'Source'
-                        And '$(SafeMigrationsEfToolingReference)' == 'Design'">
+                        And ('$(SafeMigrationsEfToolingReference)' == 'Design'
+                             Or '$(SafeMigrationsEfToolingReference)' == 'Tools')">
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design"
                       PrivateAssets="all"
                       IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive; compile" />
@@ -48,7 +51,8 @@
   <ItemGroup Label="Package qualification - EF Design"
              Condition="'$(SafeMigrationsPackageConsumerMode)' == 'Package'
                         And ('$(SafeMigrationsEfToolingReference)' == 'Design'
-                             Or '$(SafeMigrationsEfToolingReference)' == 'DesignWithoutSafeBuildAssets')">
+                             Or '$(SafeMigrationsEfToolingReference)' == 'DesignWithoutSafeBuildAssets'
+                             Or '$(SafeMigrationsEfToolingReference)' == 'Tools')">
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design"
                       Version="$(EfCorePackageVersion)"
                       PrivateAssets="all"

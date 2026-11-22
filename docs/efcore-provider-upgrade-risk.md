@@ -4,6 +4,15 @@ SafeMigrations integrates with multiple public provider boundaries. An
 upgrade is accepted only after locked publishable-package restore, package,
 engine, and tooling gates pass; compilation alone is insufficient.
 
+## .NET 11 migration boundary
+
+The current source line consumes EF/Doka/Npgsql 11 GA packages. The
+[upgrade guide](support-and-qualification.md#upgrade-to-1100) records exact
+dependency ranges, provider targeting and the SqlClient 7 authentication split.
+The historical integration changes below remain relevant behavior, not evidence
+that their original 10.x binaries qualify this 11.x branch. Re-run every required
+engine and CLI/script/bundle/package cell against actual candidate bytes.
+
 ## MySQL and MariaDB boundary
 
 The `.MySql` package consumes the public
@@ -58,7 +67,7 @@ string path and validates borrowed inputs without mutation. Doka also requires
 The latter is a low-level wire contract and does not replace the independently
 configurable model-level `Binary16`, `Char36` or MariaDB `Uuid` storage contract.
 
-The reviewed Doka 10.7 line retains UUID introduced in 10.5 only on MariaDB 10.7 or later, with
+The reviewed Doka 11 line retains UUID introduced in 10.5 only on MariaDB 10.7 or later, with
 unsized storage, text-bound Guid values and 16-byte physical budgets. It does
 not permit implicit GUID representation changes. It also changes implicit
 application-owned 16-byte binary mappings to `varbinary(17)` independently of
@@ -96,7 +105,7 @@ when a GUID property belongs only to a secondary Entity Splitting table. Shared
 SQL, computed and literal defaults are resolved through actual property mappings;
 explicit generation choices remain authoritative. This is a model-metadata
 correction, not a schema migration or a change to GUID storage defaults.
-The current 10.7.0 minimum retains those fixes and the MySqlConnector
+The current 11.0.0 minimum retains those fixes and the MySqlConnector
 minimum of 2.6.1 introduced in 10.6.3; direct consumer pins must satisfy that floor.
 SafeMigrations 10.6.1 additionally promotes the existing connector to minimum
 2.6.2 in its own MySQL/MariaDB package. The Doka upper bound remains in effect;
@@ -185,6 +194,14 @@ not sufficient. Unqualified safe operations require a `dbo` caller default
 schema. SQL Server services outside the container matrix remain unqualified.
 
 See [SQL Server behavior](sqlserver-behavior.md) for the operational contract.
+
+The current .NET 11 provider requires SqlClient at least 7.1.2 and PKCS at least
+11.0.0. Built-in Azure/Entra authentication now belongs to an optional
+`Microsoft.Data.SqlClient.Extensions.Azure` package selected by the application;
+it is not automatically added to SafeMigrations. See Microsoft's
+[release notes](https://learn.microsoft.com/en-us/sql/connect/ado-net/microsoft-data-sql-client-release-notes)
+and the [11.0 upgrade](support-and-qualification.md#upgrade-to-1100).
+The following 10.6.1 notes preserve the historical transport correction.
 
 SafeMigrations 10.6.1 promotes its existing SqlClient dependency to minimum
 6.1.8, retaining PKCS minimum 9.0.22, SNI 6.0.3 and NativeInterop 0.20.6.

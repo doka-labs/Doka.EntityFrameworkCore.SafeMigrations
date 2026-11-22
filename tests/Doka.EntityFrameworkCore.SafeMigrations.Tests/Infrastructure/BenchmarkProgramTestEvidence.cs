@@ -62,10 +62,9 @@ internal sealed class BenchmarkProgramTestEvidence : IDisposable
         params ExecuteResult[] executions
     )
     {
-        var generation = GenerateResult.Success(ArtifactsPaths.Empty, []);
-        var build = BuildResult.Success(generation);
+        var build = BuildResult.Success(ArtifactsPaths.Empty);
 
-        return new BenchmarkReport(success, benchmark, generation, build, executions, []);
+        return new BenchmarkReport(success, benchmark, build, executions, []);
     }
 
     /// <summary>Creates a native summary over the exact reports and validation messages supplied.</summary>

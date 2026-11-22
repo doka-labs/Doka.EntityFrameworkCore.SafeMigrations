@@ -1,5 +1,11 @@
 # SQL Server behavior
 
+The current source line targets .NET/EF Core 11 with SqlClient 7.1.2 minimum.
+Review the [11.0 upgrade](support-and-qualification.md#upgrade-to-1100), including
+optional Azure/Entra authentication packaging and explicit compatibility level
+150 for SQL Server 2019. Historical 10.x evidence below does not qualify a new
+11.x package; all three native x64 engine cells remain required.
+
 Version 10.7.3 fixes unproven application-lock results and owned scope cleanup
 without taking ownership of caller transactions or hiding primary failures.
 The scalar-predicate and CHECK parsing corrections from 10.7.2, UNKNOWN,
@@ -42,8 +48,8 @@ introduce SQL Server runtime dependencies.
 
 ## Supported engine boundary
 
-The declared first-release matrix is SQL Server 2019, 2022, and 2025 on
-the official EF Core 10 SQL Server provider. Each major has a separate,
+The declared qualification matrix is SQL Server 2019, 2022, and 2025 on
+the official EF Core 11 SQL Server provider. Each major has a separate,
 digest-pinned Linux/x86-64 live test cell. Azure SQL Database, Azure SQL
 Managed Instance, and Synapse are not qualified by those cells and are not
 part of the declared support contract.

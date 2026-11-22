@@ -412,11 +412,6 @@ public sealed partial class SafeMigrationModelManagedDataTests
 
         /// <inheritdoc />
         public CoreTypeMapping? FindMapping(
-            MemberInfo member
-        ) => null;
-
-        /// <inheritdoc />
-        public CoreTypeMapping? FindMapping(
             MemberInfo member,
             IModel model,
             bool useAttributes

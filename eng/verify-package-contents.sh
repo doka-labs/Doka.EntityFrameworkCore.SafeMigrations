@@ -86,14 +86,14 @@ for package_id in "${package_ids[@]}"; do
     grep -Fxq "$nuspec" <<<"$nupkg_entries"
     grep -Fxq "README.md" <<<"$nupkg_entries"
     grep -Fxq "LICENSE" <<<"$nupkg_entries"
-    grep -Fxq "lib/net10.0/$package_id.dll" <<<"$nupkg_entries"
-    grep -Fxq "lib/net10.0/$package_id.xml" <<<"$nupkg_entries"
-    grep -Fxq "lib/net10.0/$package_id.pdb" <<<"$snupkg_entries"
+    grep -Fxq "lib/net11.0/$package_id.dll" <<<"$nupkg_entries"
+    grep -Fxq "lib/net11.0/$package_id.xml" <<<"$nupkg_entries"
+    grep -Fxq "lib/net11.0/$package_id.pdb" <<<"$snupkg_entries"
 
     grep -Fq "<id>$package_id</id>" <<<"$nuspec_content"
     grep -Fq "<version>$package_version</version>" <<<"$nuspec_content"
     grep -Fq '<readme>README.md</readme>' <<<"$nuspec_content"
-    grep -Fq '<group targetFramework="net10.0">' <<<"$nuspec_content"
+    grep -Fq '<group targetFramework="net11.0">' <<<"$nuspec_content"
     grep -Fq '<repository type="git" url="https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations"' \
         <<<"$nuspec_content"
 
@@ -250,16 +250,16 @@ grep -Fxq 'buildTransitive/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.pro
 grep -Fq '<dependency id="Microsoft.EntityFrameworkCore.SqlServer"' <<<"$sqlserver_nuspec"
 grep -Fq '<dependency id="Doka.EntityFrameworkCore.SafeMigrations"' <<<"$sqlserver_nuspec"
 
-if ! grep -Fq '<dependency id="Microsoft.Data.SqlClient" version="6.1.8"' <<<"$sqlserver_nuspec"; then
-    echo "SQL Server package does not publish the SqlClient minimum 6.1.8." >&2
+if ! grep -Fq '<dependency id="Microsoft.Data.SqlClient" version="7.1.2"' <<<"$sqlserver_nuspec"; then
+    echo "SQL Server package does not publish the SqlClient minimum 7.1.2." >&2
     exit 1
 fi
 
 # The published minimum must protect an isolated consumer that cannot see our
 # central pin or lockfile. Do not replace the minimum with an exact package lock.
-if ! grep -Fq '<dependency id="System.Security.Cryptography.Pkcs" version="10.0.15"' \
+if ! grep -Fq '<dependency id="System.Security.Cryptography.Pkcs" version="11.0.0"' \
     <<<"$sqlserver_nuspec"; then
-    echo "SQL Server package does not publish the patched PKCS minimum 10.0.15." >&2
+    echo "SQL Server package does not publish the patched PKCS minimum 11.0.0." >&2
     exit 1
 fi
 

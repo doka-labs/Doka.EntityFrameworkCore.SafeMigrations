@@ -47,13 +47,18 @@ public class SqliteMaintenanceAttribution : IDisposable, IAsyncDisposable
 
     /// <summary>Runs the interleaved and contiguous SQLite attribution benchmark families.</summary>
     /// <param name="args">The BenchmarkDotNet command-line arguments.</param>
+    /// <param name="cancellationToken">Cancels native discovery, execution and export.</param>
     /// <returns>The shared benchmark runner exit code.</returns>
-    internal static int Run(
-        string[] args
-    ) => BenchmarkProgram.Run(
+    internal static Task<int> RunAsync(
+        string[] args,
+        CancellationToken cancellationToken
+    ) => BenchmarkProgram.RunAsync(
         args,
-        typeof(SqliteMaintenanceAttribution),
-        typeof(SqliteContiguousMaintenanceAttribution));
+        [
+            typeof(SqliteMaintenanceAttribution),
+            typeof(SqliteContiguousMaintenanceAttribution),
+        ],
+        cancellationToken);
 
     /// <summary>Opens embedded SQLite and validates snapshot freshness and operation-reference controls.</summary>
     /// <returns>The complete asynchronous fixture initialization.</returns>

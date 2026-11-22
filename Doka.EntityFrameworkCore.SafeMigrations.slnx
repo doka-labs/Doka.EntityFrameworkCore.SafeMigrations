@@ -17,6 +17,7 @@
   </Folder>
   <Folder Name="/config/benchmarks/">
     <File Path="benchmarks/Directory.Build.props" />
+    <File Path="benchmarks/Shared/BenchmarkProject.props" />
   </Folder>
   <Folder Name="/config/eng/">
     <File Path="eng/Directory.Build.props" />

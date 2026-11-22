@@ -70,7 +70,10 @@ internal sealed class PackageScaffoldingDbContext : DbContext
         DbContextOptionsBuilder optionsBuilder
     )
     {
-        optionsBuilder.UseNpgsql("Host=127.0.0.1;Username=package;Password=package;Database=package");
+        // WHY: Exercise the provider's supported PostgreSQL 14 floor, not its newer implicit default.
+        optionsBuilder.UseNpgsql(
+            "Host=127.0.0.1;Username=package;Password=package;Database=package",
+            provider => provider.SetPostgresVersion(14, 0));
         optionsBuilder.UsePostgreSqlSafeMigrations();
     }
 

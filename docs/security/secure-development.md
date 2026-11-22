@@ -86,9 +86,10 @@ The receiver rechecks head, base and run attempt before publishing success.
 The repository's strict up-to-date required-check policy covers later changes
 to `main`; keep that policy enabled or use an equivalent merge-queue contract.
 This workflow does not change repository settings. GitHub only activates the
-automatic `workflow_run` receiver once it is on `main`. For its first deployment,
-a maintainer can dispatch the existing CI workflow from the reviewed,
-same-repository PR head branch:
+automatic `workflow_run` receiver once it is on `main`; automatic runs continue
+using that branch's policy until a policy change is merged. For first deployment
+or reviewed receiver-policy changes, a maintainer can dispatch the existing CI
+workflow from the reviewed, same-repository PR head branch:
 
 ```bash
 gh workflow run ci.yml --ref <reviewed-pr-branch> -f dependency-review-pr=<pr-number>
@@ -100,10 +101,14 @@ repeats contributor restore hooks under manual-dispatch cache authority. Its
 helper requires the selected branch, executing commit and workflow commit to
 match the current open PR head. The original dispatch input and authoritative
 source/receiver run identities must agree; stale or mismatched runs cannot
-publish success. The normal full qualification still runs with read-only
-permissions. Only merge after the actual `dependency-review`, all other required
-checks and reviews pass for the current commit; never disable a required check,
-create a substitute success or grant contributor restore jobs write access.
+publish success. This explicit review-only dispatch does not repeat provider
+qualification or replace its independently required PR result. Ordinary PR,
+maintenance and other manual runs retain full qualification with read-only
+permissions. Review-only cancellation is isolated from qualification; combining
+review with maintenance or benchmark capture is rejected. Only merge after the
+actual `dependency-review`, all other required checks and reviews pass for the
+current commit; never disable a required check, create a substitute success or
+grant contributor restore jobs write access.
 A changed PR head requires a new dispatch from its newly reviewed commit.
 This manual entry deliberately rejects fork heads; after deployment to `main`,
 ordinary PR, Dependabot and fork runs use the automatic path and require no
@@ -148,7 +153,7 @@ Explicit submissions have precedence per manifest; the hosted warning header
 must still be empty before success is claimed. The comparison job reviews the
 pull-request delta with the official action, rejects new high-or-critical
 vulnerabilities and dependencies outside the approved SPDX license set or the
-two exact [package exceptions](#sql-server-dependency-license-exceptions), and
+exact [package exception](#sql-server-dependency-license-exceptions), and
 runs its bounded snapshot retry. The pinned action proceeds after its timeout
 even if a warning remains, so the workflow then checks the same GitHub compare
 endpoint and requires the snapshot-warning header to be present and empty.
@@ -175,7 +180,7 @@ fork completed the hosted handoff; the hosted comparison gate remains mandatory.
 
 An EF Design or Tools update also crosses the source-generation trust boundary.
 Re-run strict and legacy scaffolding for every provider, compile the generated
-source, exercise the direct-Design, Tools-only, runtime-only, and excluded
+source, exercise the direct-Design, Tools with explicit Design, runtime-only, and excluded
 SafeMigrations-build-assets package profiles, and retain negative tests for
 unexpected generator shapes and unmodeled provider annotations.
 
@@ -186,30 +191,32 @@ the [upgrade contract](../efcore-provider-upgrade-risk.md).
 
 ### SQL Server dependency-license exceptions
 
-Only the following versions have a repository-specific license exception:
+The SQL Server stack retains this exact version-specific license exception:
 
 | NuGet package | Approved version | Reviewed vendor terms |
 | --- | --- | --- |
-| Microsoft.Data.SqlClient.SNI.runtime | 6.0.3 | [Package license](https://www.nuget.org/packages/Microsoft.Data.SqlClient.SNI.runtime/6.0.3/License) |
-| Microsoft.Identity.Client.NativeInterop | 0.20.6 | [Package license](https://www.nuget.org/packages/Microsoft.Identity.Client.NativeInterop/0.20.6/License) |
+| Microsoft.Data.SqlClient.SNI.runtime | 7.1.2 | [Package license](https://www.nuget.org/packages/Microsoft.Data.SqlClient.SNI.runtime/7.1.2/License) |
 
-The 2026-10-20 EF Core 10.0.13 update resolves SqlClient 6.1.7 and SNI 6.0.3.
-The SNI 6.0.3 package's `LICENSE.txt` is byte-identical to the previously
-reviewed 6.0.2 file; both have SHA-256
+The 2026-11-21 .NET/EF Core 11 update resolves SqlClient 7.1.2 and SNI 7.1.2.
+The SNI 7.1.2 package's `LICENSE.txt` is byte-identical to the previously
+reviewed 6.0.3 file; both have SHA-256
 `9335e8bad875dd7be4eebd55d2335eb6433d1cea61aadb3817af7807bef8932a`.
 Only the exact SNI version changes; the exception's use and package-shape
 boundaries below remain unchanged. The earlier version is not retained as a
 second allowed version.
 
-The 10.6.1 SafeMigrations servicing baseline promotes SqlClient to 6.1.8.
-SNI.runtime remains 6.0.3 and Broker still resolves NativeInterop 0.20.6;
-neither exact exception nor the use/package-shape boundary is expanded.
+SqlClient 7 separates built-in Azure/Entra authentication into an optional
+extension package. That extension is not added to this graph, and the previous
+NativeInterop 0.20.6 exception is removed rather than retained as an unused
+waiver. Applications choosing additional authentication dependencies own their
+corresponding license and compatibility review. Historical 10.x graphs used
+SNI 6.0.3 and NativeInterop 0.20.6; those are not current exceptions.
 
 These transitive dependencies belong to the EF Core SQL Server / SqlClient
 stack, not Core or the other providers. Their vendor terms allow the
 repository's development and testing use. SafeMigrations publishes its own
 MIT-licensed code and dependency references; its SQL Server package does not
-bundle either vendor's managed or native binaries. This approval is for that
+bundle vendor managed or native binaries. This approval is for that
 use and package shape, not a grant of consumer binary-redistribution rights.
 Consumers remain subject to the terms of the SQL Server stack they choose.
 No vendor license text or binaries are added to the SafeMigrations package.
@@ -222,8 +229,8 @@ version, and decoded PURL; other versions or inconsistent metadata block the
 job. The guard recognizes the action's permissively parsed names before
 enforcing consistent metadata; percent-encoded or malformed PURLs cannot
 bypass the version check.
-Removing an older version does not require a new exception. Product lockfiles
-and positive/negative regression cases are checked by the engineering gate.
+Removing an older version does not require a new exception. Product and native
+execution lockfiles and positive/negative cases are checked by the engineering gate.
 A version change requires a new review of the exact package's terms and an
 explicit policy update; it is not automatically approved by this exception.
 
@@ -237,6 +244,24 @@ Primary implementation evidence, retrieved 2026-10-01:
 - [Pinned action's version-independent PURL matcher](https://github.com/actions/dependency-review-action/blob/a1d282b36b6f3519aa1f3fc636f609c47dddb294/src/purl.ts).
 - [GitHub dependency comparison response](https://docs.github.com/en/rest/dependency-graph/dependency-review#get-a-diff-of-the-dependencies-between-commits).
 - [GitHub CLI pagination and slurp contract](https://cli.github.com/manual/gh_api).
+
+### SQLite native package license classification
+
+The .NET 11 SQLite execution fixtures resolve NuGet `SQLite` 3.53.4 through
+SQLitePCLRaw 3.0.5. Its packaged `LICENSE.txt` declares SQLite Public Domain;
+the [vendor's copyright statement](https://sqlite.org/copyright.html) confirms
+the disposition of the delivered source and compiled library. The exact package
+license file has SHA-256
+`99464c3a88df7b708ce59e462cdcb85f72dfc9b1335b4fcc68be56131b634b95`.
+See [the reviewed package](https://www.nuget.org/packages/SQLite/3.53.4).
+
+GitHub classifies that file as `LicenseRef-github-OTHER`. Only
+`pkg:nuget/SQLite@3.53.4` is excepted, using the same mandatory paginated
+identity/version guard above. Other SQLite versions, SQLitePCLRaw packages and
+unrelated unknown licenses are not excepted. Neither `LicenseRef-github-OTHER`
+nor a generic Public Domain category is added to the global SPDX allowlist.
+The native package belongs to tests, benchmarks, the sample and the isolated
+consumer, not the shipped bundle-neutral SQLite adapter.
 
 Snapshot and handoff sources, verified 2026-10-21:
 

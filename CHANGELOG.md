@@ -6,6 +6,66 @@ the shared release identity described in [Release process](docs/release-process.
 
 ## [Unreleased]
 
+## [11.0.0] - 2026-11-22
+
+Version 11.0.0 targets .NET 11 and EF Core 11 across all five packages.
+Upgrade the application and provider graph together; .NET/EF Core 10 remains
+on the separately maintained 10.x line. Review the
+[upgrade notes](docs/support-and-qualification.md#upgrade-to-1100), including
+model-fingerprint approvals and SQL Server authentication dependencies.
+
+### Changed
+
+- Target .NET/EF Core 11 with SDK 11.0.100, EF tooling
+  11.0.0, published Doka 11.0.0 and Npgsql 11.0.0. Retain the existing five
+  packages, exact matching own-Core dependency and provider separation.
+  This major framework migration requires rebuilding applications against
+  the matching provider graph; .NET/EF Core 10 consumers remain on 10.x.
+- Raise SQL Server's explicit SqlClient minimum to 7.1.2 and PKCS minimum to
+  11.0.0. SqlClient 7 moves built-in Azure/Entra authentication into a separately
+  selected extension package; SafeMigrations does not force that optional
+  dependency on consumers. MySqlConnector minimum 2.6.2 and explicit 3.0.0
+  selection remain supported.
+- Integrate EF11 migration-assembly registration, latest-migration snapshot
+  identity and file-scoped generated source into the normal provider/test graph.
+  Retain canonical context ownership, duplicate rejection, replay and fail-closed
+  validation. Compare Doka's default charset/collation behavior with and without
+  SafeMigrations through the existing isolated native fixtures.
+- Normalize canonical EF11 generated migration class names consistently across
+  migration and metadata partials while retaining timestamp uniqueness and the
+  unchanged migration-history and snapshot IDs. No warning suppression or new
+  public overload is required.
+- Requalify model-fingerprint goldens for EF11 framework assembly identities in
+  closed generic convention annotations. The v1 format and schema/facet ordering
+  are unchanged, but persisted EF10 `ExpectedModelFingerprint` pins need review
+  against the intended EF11 baseline; do not disable validation or assume
+  cross-major hash equality. See the [upgrade notes](docs/support-and-qualification.md#upgrade-to-1100).
+- Move the existing BenchmarkDotNet toolchain to its .NET 11-capable
+  0.16.0-preview.2 development dependency. Performance/allocation measurements
+  remain explicitly requested and informational; no numeric performance gate
+  is introduced. The temporary local-package EF11 opt-in profile is retired.
+- Maintain main/11 and maintenance/10 through the existing publisher with six
+  framework-bounded Dependabot targets. One reviewed cutover PR transfers both
+  line identities; maintenance retains its .NET 10 graph and is independently
+  qualified before its separately approved publication grant.
+
+### Fixed
+
+- Run the explicit reviewed-head dependency check without repeating provider
+  qualification. Preserve normal CI, independent Required checks and isolated
+  cancellation; reject conflicting maintenance or measurement inputs.
+- Isolate pre-tag test line states from the product cutover policy. Retain the
+  inactive-line rejection and verify both prepared and active maintenance heads.
+- Restore implicit SDK support packages in isolated bundle probes from the
+  reviewed NuGet sources, including an empty-cache regression. Preserve native
+  bundle assertions and report publish failures before secondary missing files.
+- Bound the native SQLite 3.53.4 Public Domain license-classification exception
+  to its exact package identity without admitting unknown licenses globally.
+- Preserve referenced test-executable dependency/runtime configuration as
+  single-file publish sidecars. EF bundle generation no longer requests these
+  foreign configurations as primary bundle JSON (NETSDK1236); standalone test
+  output and each executable's own embedded configuration remain unchanged.
+
 ## [10.7.3] - 2026-11-20
 
 Version 10.7.3 corrects asynchronous resource ownership, cleanup and native
@@ -2651,7 +2711,8 @@ in [Support and qualification](docs/support-and-qualification.md).
   dedicated legacy safe constraint operation subclasses.
 - Any promise that preflight can be recorded as an applied EF migration.
 
-[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.7.3...HEAD
+[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v11.0.0...HEAD
+[11.0.0]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.7.3...v11.0.0
 [10.7.3]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.7.2...v10.7.3
 [10.7.2]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.7.1...v10.7.2
 [10.7.1]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.7.0...v10.7.1

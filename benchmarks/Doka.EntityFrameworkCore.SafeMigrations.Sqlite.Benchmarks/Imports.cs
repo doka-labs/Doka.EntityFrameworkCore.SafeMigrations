@@ -23,6 +23,7 @@ global using BenchmarkDotNet.Reports;
 global using BenchmarkDotNet.Running;
 global using BenchmarkDotNet.Toolchains;
 global using BenchmarkDotNet.Toolchains.CsProj;
+global using BenchmarkDotNet.Toolchains.NetCoreApp;
 global using BenchmarkDotNet.Validators;
 global using Doka.EntityFrameworkCore.SafeMigrations.Benchmarks;
 global using Doka.EntityFrameworkCore.SafeMigrations.Sqlite;

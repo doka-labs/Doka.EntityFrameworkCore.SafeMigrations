@@ -40,14 +40,43 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ inputs.maintenance && inputs.schedule-correlation || 'normal' }}
+  # Review-only dispatches must not cancel qualification on the same branch.
+  group: >-
+    ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{
+      github.event_name == 'workflow_dispatch' && inputs.dependency-review-pr != ''
+      && format('dependency-review-{0}', inputs.dependency-review-pr)
+      || inputs.maintenance && inputs.schedule-correlation || 'normal' }}
   cancel-in-progress: true
 
 jobs:
   schedule-identity:
     name: schedule-identity
     runs-on: ubuntu-26.04
+    outputs:
+      review_only: ${{ steps.mode.outputs.review_only }}
     steps:
+      - name: Select CI execution mode
+        id: mode
+        env:
+          CI_EVENT_NAME: ${{ github.event_name }}
+          REVIEW_PR: ${{ inputs.dependency-review-pr }}
+          MAINTENANCE: ${{ inputs.maintenance }}
+          CAPTURE_BENCHMARKS: ${{ inputs.capture-benchmark-evidence }}
+          CAPTURE_SQLSERVER: ${{ inputs.capture-sqlserver-baseline }}
+        run: |
+          review_only=false
+          if [[ "$CI_EVENT_NAME" == 'workflow_dispatch' && -n "$REVIEW_PR" ]]; then
+            if [[ "$MAINTENANCE" == 'true' || "$CAPTURE_BENCHMARKS" == 'true' ||
+                  "$CAPTURE_SQLSERVER" == 'true' ]]; then
+              printf 'Dependency review cannot be combined with maintenance or benchmark capture.\n' >&2
+              exit 1
+            fi
+
+            review_only=true
+          fi
+
+          printf 'review_only=%s\n' "$review_only" >> "$GITHUB_OUTPUT"
+
       - name: Ordinary feature and PR checks remain nonpublishing
         if: ${{ !inputs.maintenance }}
         run: 'true'
@@ -68,6 +97,8 @@ jobs:
   quality-gates:
     name: Full qualification
     needs: schedule-identity
+    # Skip the reusable caller, never its independently required nested result.
+    if: ${{ needs.schedule-identity.outputs.review_only != 'true' }}
     uses: ./.github/workflows/quality-gates.yml
     permissions:
       contents: read
@@ -80,9 +111,10 @@ jobs:
 
   dependency-review-startup:
     name: Dependency review startup
+    needs: schedule-identity
     # Only a maintainer's explicit dispatch opts in. Normal PR qualification
     # stays read-only, and this job cannot substitute a skipped required check.
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.dependency-review-pr != '' }}
+    if: ${{ needs.schedule-identity.outputs.review_only == 'true' }}
     uses: ./.github/workflows/dependency-review-results.yml
     permissions:
       contents: write

@@ -7,7 +7,7 @@ unredacted migration reports in issues, pull requests, or test fixtures.
 
 ## Prerequisites
 
-- .NET SDK 10.0.404, selected by `global.json`
+- .NET SDK 11.0.100, selected by `global.json`
 - Docker for MySQL, MariaDB, PostgreSQL, and SQL Server tests; SQLite tests run
   in-process
 - Bash, `jq`, `curl`, `unzip`, and `rsync` for engineering gates
@@ -246,13 +246,19 @@ dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.SqlServe
   --filter '*' --job Dry --artifacts artifacts/performance/sqlserver
 ```
 
-All five suites use BenchmarkDotNet 0.15.8 with native full JSON and managed
+All five suites use BenchmarkDotNet 0.16.0-preview.2 with native full JSON and managed
 allocation diagnostics. An explicitly requested `Dry` run checks selected-case
 execution/export, not statistical performance. For requested runs, invalid
 configuration, generated builds, execution, missing/failed cases and missing or
 invalid exports fail. Numeric duration and allocation values never determine
 success. Deterministic workload/configuration/export-shape controls stay in
 ordinary tests without launching the benchmark engine.
+
+Each authored benchmark project explicitly imports
+`benchmarks/Shared/BenchmarkProject.props` for its shared sources, package
+references and build-stamped project identity. Keep those items out of the
+parent `Directory.Build.props`: native generated hosts inherit that file from
+their `.bdn` directory and must not compile the authored workloads again.
 
 Functional tests must not assert sampled managed-allocation byte counts,
 including absolute caps, relative comparisons or zero-byte samples. Keep
@@ -288,7 +294,7 @@ directory, source revision and environment when comparing runs. A narrower
 `--filter` is supported for focused local work, but does not establish complete
 suite execution. Old handwritten, thread-local allocation reports are not
 directly comparable with BenchmarkDotNet's process-wide managed allocation
-measurements on .NET 10; neither measures native memory or peak live memory.
+measurements on .NET 11; neither measures native memory or peak live memory.
 See [measurement boundaries](docs/support-and-qualification.md#performance-and-memory).
 
 ### Maintenance attribution

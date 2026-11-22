@@ -3,7 +3,7 @@
 This guide explains the public inputs, outputs, and failure boundaries without
 requiring readers to study the implementation. The exact signatures, parameter
 documentation, and nullability annotations ship as XML documentation beside
-each `lib/net10.0` assembly. After installing the provider package, use IDE
+each `lib/net11.0` assembly. After installing the provider package, use IDE
 completion/Quick Documentation for the selected package version. The
 [Core](../src/Doka.EntityFrameworkCore.SafeMigrations/PublicAPI.Shipped.txt),
 [MySQL/MariaDB](../src/Doka.EntityFrameworkCore.SafeMigrations.MySql/PublicAPI.Shipped.txt),
@@ -12,7 +12,7 @@ completion/Quick Documentation for the selected package version. The
 and [SQL Server](../src/Doka.EntityFrameworkCore.SafeMigrations.SqlServer/PublicAPI.Shipped.txt)
 API baselines are review inventories, not substitutes for this guide or XML.
 This guide describes the current contract, not release history. Review the
-[upgrade notes](support-and-qualification.md#upgrade-to-1072) for caller changes,
+[upgrade notes](support-and-qualification.md#upgrade-to-1100) for caller changes,
 source-frozen migrations and approval renewal; the [changelog](../CHANGELOG.md)
 owns the chronological API and behavior history. All installed SafeMigrations
 packages must use matching versions because the adapters share Core's private ABI.

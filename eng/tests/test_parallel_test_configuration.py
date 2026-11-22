@@ -260,7 +260,8 @@ class ParallelTestConfigurationTests(unittest.TestCase):
                 compile_paths = {
                     path.relative_to(project_path.parent).as_posix()
                     for path in project_path.parent.rglob("*.cs")
-                    if not {"bin", "obj"}.intersection(path.relative_to(project_path.parent).parts)
+                    if not {"bin", "obj", ".bdn", "BenchmarkDotNet.Artifacts"}.intersection(
+                        path.relative_to(project_path.parent).parts)
                 }
                 mapping = partial_nesting(ET.parse(project_path).getroot(), compile_paths)
                 if mapping:
@@ -387,7 +388,8 @@ class ParallelTestConfigurationTests(unittest.TestCase):
         compile_paths = {
             path.relative_to(project_path.parent).as_posix()
             for path in project_path.parent.rglob("*.cs")
-            if not {"bin", "obj"}.intersection(path.relative_to(project_path.parent).parts)
+            if not {"bin", "obj", ".bdn", "BenchmarkDotNet.Artifacts"}.intersection(
+                path.relative_to(project_path.parent).parts)
         }
 
         mapping = partial_nesting(ET.parse(project_path).getroot(), compile_paths)
@@ -407,7 +409,8 @@ class ParallelTestConfigurationTests(unittest.TestCase):
         compile_paths = {
             path.relative_to(project_path.parent).as_posix()
             for path in project_path.parent.rglob("*.cs")
-            if not {"bin", "obj"}.intersection(path.relative_to(project_path.parent).parts)
+            if not {"bin", "obj", ".bdn", "BenchmarkDotNet.Artifacts"}.intersection(
+                path.relative_to(project_path.parent).parts)
         }
 
         mapping = partial_nesting(ET.parse(project_path).getroot(), compile_paths)

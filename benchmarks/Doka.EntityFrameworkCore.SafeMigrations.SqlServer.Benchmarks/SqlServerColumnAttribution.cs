@@ -256,7 +256,9 @@ public partial class SqlServerColumnAttribution : IDisposable, IAsyncDisposable
             DbContextOptionsBuilder optionsBuilder
         )
         {
-            optionsBuilder.UseSqlServer(_connectionString, sql => sql.CommandTimeout(CommandTimeoutSeconds));
+            // WHY: Preserve SQL Server 2019 compatibility after EF 11 raised its implicit level to 160.
+            optionsBuilder.UseSqlServer(
+                _connectionString, sql => sql.UseCompatibilityLevel(150).CommandTimeout(CommandTimeoutSeconds));
             optionsBuilder.UseSqlServerSafeMigrations<AttributionContext>();
         }
     }

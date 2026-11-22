@@ -53,7 +53,7 @@ public sealed class SafeMigrationDiagnosticTruncationTests
     {
         // Arrange
         var builder = new StringBuilder(1);
-        builder.Append(new string('x', 1020));
+        builder.Append('x', 1020);
         builder.Append('\\');
         builder.Append("u20AC");
         var chunkCount = 0;

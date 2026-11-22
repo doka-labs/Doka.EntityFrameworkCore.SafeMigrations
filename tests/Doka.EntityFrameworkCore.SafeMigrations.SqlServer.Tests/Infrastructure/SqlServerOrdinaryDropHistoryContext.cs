@@ -22,6 +22,8 @@ public sealed class SqlServerOrdinaryDropHistoryContext : DbContext
         optionsBuilder.UseSqlServer(
             _connectionString,
             provider => provider
+                // WHY: This real history is shared by the SQL Server 2019, 2022 and 2025 cells.
+                .UseCompatibilityLevel(150)
                 .MigrationsAssembly(typeof(SqlServerOrdinaryDropHistoryContext).Assembly.FullName)
                 .CommandTimeout(SafeMigrationDbContext.CommandTimeoutSeconds));
 
@@ -116,6 +118,8 @@ public sealed class SqlServerOrdinaryDropCheckHistoryContext : DbContext
         optionsBuilder.UseSqlServer(
             _connectionString,
             provider => provider
+                // WHY: This real history is shared by the SQL Server 2019, 2022 and 2025 cells.
+                .UseCompatibilityLevel(150)
                 .MigrationsAssembly(typeof(SqlServerOrdinaryDropCheckHistoryContext).Assembly.FullName)
                 .CommandTimeout(SafeMigrationDbContext.CommandTimeoutSeconds));
 
